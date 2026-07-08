@@ -1,0 +1,49 @@
+// apps/web/app/setup/actions.ts
+"use server";
+
+import { SETTINGS_SCHEMA, validateSettingValue } from "@netryx/shared-types";
+import { getSettingsRepo, type SettingsRepo } from "../../lib/settings-repo";
+
+export type SubmitSetupResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Resolves the value to write for a setting from the submitted form.
+ *
+ * If the field is present in the form (even as an empty string, e.g. an
+ * optional field like MAPBOX_TOKEN left blank), that submitted value wins.
+ * If the field is absent entirely — true for RETRIEVAL_MODEL/VERIFICATION_MODEL,
+ * which the wizard doesn't render per spec §14.2's four steps — fall back to
+ * the setting's defaultValue so setup can still complete (spec §15.3's
+ * "lumi-preview"/"laila" defaults).
+ */
+function resolveValue(formData: FormData, def: (typeof SETTINGS_SCHEMA)[number]): string {
+  const raw = formData.get(def.key);
+  if (raw !== null) return String(raw);
+  return def.defaultValue ?? "";
+}
+
+export async function submitSetup(
+  repo: Pick<SettingsRepo, "completeSetup">,
+  formData: FormData
+): Promise<SubmitSetupResult> {
+  const writes = SETTINGS_SCHEMA.map((def) => ({
+    key: def.key,
+    value: resolveValue(formData, def),
+    isSecret: def.isSecret,
+  }));
+
+  for (const def of SETTINGS_SCHEMA) {
+    try {
+      validateSettingValue(def.key, resolveValue(formData, def));
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  await repo.completeSetup(writes);
+  return { ok: true };
+}
+
+export async function submitSetupAction(formData: FormData) {
+  return submitSetup(getSettingsRepo(), formData);
+}
