@@ -1,0 +1,22 @@
+services:
+  db:
+    build:
+      context: ./docker/postgres
+    container_name: netryx-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-netryx}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-netryx_dev}
+    volumes:
+      - netryx-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-netryx} -d ${POSTGRES_DB:-netryx_dev}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  netryx-db-data:

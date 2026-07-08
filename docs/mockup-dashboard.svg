@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 460" font-family="Helvetica, Arial, sans-serif">
+  <rect width="900" height="460" fill="#0e0f11"/>
+  <rect x="0" y="0" width="600" height="460" fill="#15171a"/>
+  <text x="60" y="330" font-size="11" fill="#5a5c60">Eras de Renueva</text>
+  <text x="420" y="90" font-size="11" fill="#5a5c60">Puente Castro</text>
+  <circle cx="330" cy="230" r="110" fill="#1d9e75" fill-opacity="0.10" stroke="#1d9e75" stroke-width="1.5"/>
+  <circle cx="330" cy="230" r="50" fill="#1d9e75" fill-opacity="0.18" stroke="#5dcaa5" stroke-width="1.5"/>
+  <circle cx="330" cy="230" r="11" fill="#5dcaa5" stroke="#15171a" stroke-width="2"/>
+  <text x="326" y="234" font-size="10" fill="#04342c" font-weight="600">1</text>
+  <circle cx="375" cy="255" r="8" fill="#3d3f43" stroke="#15171a" stroke-width="1.5"/>
+  <text x="372" y="258" font-size="9" fill="#e8e8e6">2</text>
+  <circle cx="295" cy="260" r="8" fill="#3d3f43" stroke="#15171a" stroke-width="1.5"/>
+  <text x="292" y="263" font-size="9" fill="#e8e8e6">3</text>
+
+  <rect x="12" y="12" width="290" height="118" rx="8" fill="#1c1e22" fill-opacity="0.97"/>
+  <circle cx="30" cy="30" r="7" fill="none" stroke="#2a2c30" stroke-width="3"/>
+  <path d="M30 23 A7 7 0 1 1 23.6 33.5" fill="none" stroke="#5dcaa5" stroke-width="3"/>
+  <text x="42" y="34" font-size="12" fill="#ffffff" font-weight="600">87% Resultado 1</text>
+  <text x="24" y="56" font-size="11" fill="#c8c8c4">Este resultado sugiere que la ubicación</text>
+  <text x="24" y="70" font-size="11" fill="#c8c8c4">puede estar en <tspan fill="#ffffff" font-weight="600">Barrio del Húmedo, León</tspan>.</text>
+  <text x="24" y="88" font-size="11" fill="#5dcaa5">Alta confianza: 3 de 5 resultados en esta zona.</text>
+  <rect x="24" y="98" width="266" height="24" rx="4" fill="#e8e8e6"/>
+  <text x="36" y="114" font-size="11" fill="#15171a" font-weight="600">Refinar en Húmedo</text>
+  <path d="M270 106 l5 5 l5 -5" fill="none" stroke="#15171a" stroke-width="1.5"/>
+
+  <rect x="0" y="410" width="600" height="50" fill="#141518" fill-opacity="0.97"/>
+  <text x="16" y="428" font-size="9" fill="#7a7a76">IDENTIFICADO</text>
+  <text x="16" y="444" font-size="12" fill="#ffffff" font-weight="600">Barrio del Húmedo, León</text>
+  <text x="230" y="428" font-size="9" fill="#7a7a76">COORDENADAS</text>
+  <text x="230" y="444" font-size="12" fill="#ffffff">42.5987, -5.5671</text>
+  <text x="400" y="428" font-size="9" fill="#7a7a76">RADIO</text>
+  <text x="400" y="444" font-size="12" fill="#ffffff">~120 m</text>
+  <text x="500" y="428" font-size="9" fill="#7a7a76">MATCH</text>
+  <text x="500" y="448" font-size="16" fill="#5dcaa5" font-weight="700">87%</text>
+
+  <rect x="600" y="0" width="300" height="460" fill="#1a1b1e"/>
+  <rect x="614" y="14" width="272" height="56" rx="8" fill="#232427"/>
+  <rect x="622" y="22" width="40" height="40" rx="6" fill="#2c2d30"/>
+  <text x="672" y="38" font-size="11" fill="#ffffff" font-weight="600">query_0847.jpg</text>
+  <text x="672" y="52" font-size="10" fill="#85b7eb">Recortar imagen</text>
+
+  <text x="614" y="92" font-size="11" fill="#9a9a95">5 resultados</text>
+  <line x1="614" y1="100" x2="886" y2="100" stroke="#2c2d30" stroke-width="1"/>
+
+  <rect x="614" y="112" width="272" height="66" rx="6" fill="#20232a" stroke="#378add" stroke-width="1.5"/>
+  <text x="626" y="130" font-size="10" fill="#7a7a76">1</text>
+  <text x="640" y="130" font-size="11" fill="#ffffff" font-weight="600">Barrio del Húmedo</text>
+  <text x="640" y="144" font-size="10" fill="#9a9a95">León, España</text>
+  <rect x="800" y="120" width="76" height="16" rx="4" fill="#2c2d30"/>
+  <text x="808" y="132" font-size="9" fill="#9a9a95">Sin revisar</text>
+  <text x="626" y="166" font-size="9" fill="#7a7a76" font-family="monospace">42.5987, -5.5671</text>
+  <text x="860" y="166" font-size="11" fill="#378add" font-weight="600">87%</text>
+
+  <rect x="614" y="186" width="272" height="66" rx="6" fill="#1e1f22"/>
+  <text x="626" y="204" font-size="10" fill="#7a7a76">2</text>
+  <text x="640" y="204" font-size="11" fill="#ffffff" font-weight="600">Calle Ancha</text>
+  <text x="640" y="218" font-size="10" fill="#9a9a95">León, España</text>
+  <rect x="800" y="194" width="76" height="16" rx="4" fill="#2c2d30"/>
+  <text x="808" y="206" font-size="9" fill="#9a9a95">Sin revisar</text>
+  <text x="626" y="240" font-size="9" fill="#85b7eb">Precisión de calle disponible</text>
+  <text x="860" y="240" font-size="11" fill="#c8c8c4" font-weight="600">74%</text>
+
+  <rect x="614" y="260" width="272" height="66" rx="6" fill="#1e1f22"/>
+  <text x="626" y="278" font-size="10" fill="#7a7a76">3</text>
+  <text x="640" y="278" font-size="11" fill="#ffffff" font-weight="600">Plaza San Marcelo</text>
+  <text x="640" y="292" font-size="10" fill="#9a9a95">León, España</text>
+  <rect x="800" y="268" width="76" height="16" rx="4" fill="#2c2d30"/>
+  <text x="808" y="280" font-size="9" fill="#9a9a95">Sin revisar</text>
+  <text x="860" y="314" font-size="11" fill="#7a7a76" font-weight="600">61%</text>
+</svg>
