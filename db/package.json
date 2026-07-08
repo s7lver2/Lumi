@@ -1,0 +1,17 @@
+{
+  "name": "@netryx/db",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "migrate:up": "cross-env TEST_DATABASE_URL=postgres://netryx:changeme@localhost:5432/netryx_dev node-pg-migrate up -d TEST_DATABASE_URL --envPath ../.env",
+    "migrate:up:test": "cross-env TEST_DATABASE_URL=postgres://netryx:changeme@localhost:5432/netryx_test node-pg-migrate up -d TEST_DATABASE_URL",
+    "test": "cross-env TEST_DATABASE_URL=postgres://netryx:changeme@localhost:5432/netryx_test vitest run"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "node-pg-migrate": "^7.6.1",
+    "pg": "^8.12.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
