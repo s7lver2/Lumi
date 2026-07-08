@@ -99,4 +99,52 @@ describe("init migration", () => {
     );
     expect(rows[0].value).toBe("false");
   });
+
+  // db/test/migrations.test.ts — reemplaza el test "adds points_failed..." por esto:
+
+  it("adds points_failed to areas with a default of 0", async () => {
+    const testId = "00000000-0000-0000-0000-000000000002";
+
+    // Limpieza defensiva: si un run anterior falló entre el INSERT y el DELETE
+    // final, esta fila quedó huérfana y choca con la PK en este run.
+    await client.query(`DELETE FROM areas WHERE id = $1`, [testId]);
+
+    try {
+      await client.query(
+        `INSERT INTO areas (id, geometry, area_km2)
+       VALUES ($1, ST_GeomFromText('POLYGON((0 0,0 1,1 1,1 0,0 0))', 4326), 1.0)`,
+        [testId]
+      );
+      const { rows } = await client.query(
+        `SELECT points_failed FROM areas WHERE id = $1`,
+        [testId]
+      );
+      expect(rows[0].points_failed).toBe(0);
+    } finally {
+      await client.query(`DELETE FROM areas WHERE id = $1`, [testId]);
+    }
+  });
+
+  it("adds points_failed to areas with a default of 0", async () => {
+    const testId = "00000000-0000-0000-0000-000000000002";
+
+    // Limpieza defensiva: si un run anterior falló entre el INSERT y el DELETE
+    // final, esta fila quedó huérfana y choca con la PK en este run.
+    await client.query(`DELETE FROM areas WHERE id = $1`, [testId]);
+
+    try {
+      await client.query(
+        `INSERT INTO areas (id, geometry, area_km2)
+       VALUES ($1, ST_GeomFromText('POLYGON((0 0,0 1,1 1,1 0,0 0))', 4326), 1.0)`,
+        [testId]
+      );
+      const { rows } = await client.query(
+        `SELECT points_failed FROM areas WHERE id = $1`,
+        [testId]
+      );
+      expect(rows[0].points_failed).toBe(0);
+    } finally {
+      await client.query(`DELETE FROM areas WHERE id = $1`, [testId]);
+    }
+  });
 });
