@@ -14,7 +14,8 @@
     "next": "14.2.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "pg": "^8.12.0"
+    "pg": "^8.12.0",
+    "@netryx/settings-repo": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
