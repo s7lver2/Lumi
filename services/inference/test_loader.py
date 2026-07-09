@@ -1,7 +1,7 @@
 # services/inference/test_loader.py
 import pytest
 from unittest.mock import MagicMock
-from loader import load_verification_model, UnknownModelError
+from loader import load_retrieval_model, load_verification_model, UnknownModelError
 
 
 def test_loads_lumi_preview_via_the_megaloc_torch_hub_repo(monkeypatch):
@@ -26,7 +26,10 @@ def test_load_verification_model_rejects_unknown_id():
 def test_load_verification_model_accepts_the_laila_id_shape():
     # We don't download RoMa weights in the unit test; we assert the id is
     # recognized (no UnknownModelError for the registered id) by monkeypatching
-    # the torch.hub call to a sentinel.
+    # the romatch.roma_outdoor loader to a sentinel and checking it comes back
+    # wrapped in a RomaMatcher exposing match_points (spec §15.2).
     import loader
-    loader._HUB_LOAD = lambda *a, **k: "ROMA_SENTINEL"  # injected hook, see impl
-    assert load_verification_model("laila") == "ROMA_SENTINEL"
+    loader._LOAD_ROMA_OUTDOOR = lambda *a, **k: "ROMA_SENTINEL"  # injected hook, see impl
+    model = load_verification_model("laila")
+    assert isinstance(model, loader.RomaMatcher)
+    assert model._roma_model == "ROMA_SENTINEL"

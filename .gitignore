@@ -4,3 +4,6 @@ dist/
 *.log
 .env
 apps/web/data/settings.key
+venv/
+__pycache__/
+data/

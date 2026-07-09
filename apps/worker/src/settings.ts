@@ -2,6 +2,7 @@
 import { createSettingsRepo, type SettingsRepo } from "@netryx/settings-repo";
 import { getPool } from "./db";
 
+
 let singleton: SettingsRepo | undefined;
 
 /**

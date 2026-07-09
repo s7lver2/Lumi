@@ -4,7 +4,7 @@ import { Pool } from "pg";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSettingsRepo } from "./settings-repo";
+import { createSettingsRepo } from "@netryx/settings-repo";
 
 const connectionString =
   process.env.TEST_DATABASE_URL ??

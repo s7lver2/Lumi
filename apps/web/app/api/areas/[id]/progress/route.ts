@@ -1,29 +1,10 @@
 // apps/web/app/api/areas/[id]/progress/route.ts
-import type { AreaStatus } from "@netryx/shared-types";
 import { getPool } from "../../../../../lib/db";
-
-interface AreaProgressRow {
-  status: AreaStatus;
-  points_estimated: number;
-  points_captured: number;
-  points_failed: number;
-  images_embedded: number;
-}
-
-export function isTerminalStatus(status: AreaStatus): boolean {
-  return status === "indexed" || status === "failed";
-}
-
-export function formatProgressEvent(row: AreaProgressRow): string {
-  const payload = {
-    status: row.status,
-    pointsEstimated: row.points_estimated,
-    pointsCaptured: row.points_captured,
-    pointsFailed: row.points_failed,
-    imagesEmbedded: row.images_embedded,
-  };
-  return `data: ${JSON.stringify(payload)}\n\n`;
-}
+import {
+  type AreaProgressRow,
+  formatProgressEvent,
+  isTerminalStatus,
+} from "./progress-format";
 
 const POLL_INTERVAL_MS = 1000;
 

@@ -1,6 +1,6 @@
 // apps/web/app/api/areas/[id]/progress/route.test.ts
 import { describe, it, expect } from "vitest";
-import { formatProgressEvent, isTerminalStatus } from "./route";
+import { formatProgressEvent, isTerminalStatus } from "./progress-format";
 
 describe("formatProgressEvent", () => {
   it("formats an areas row as an SSE data event", () => {

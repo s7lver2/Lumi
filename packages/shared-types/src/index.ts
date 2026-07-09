@@ -3,3 +3,4 @@ export * from "./settings";
 export * from "./models";
 export * from "./jobs";
 export * from "./areas";
+export * from "./search";

@@ -44,6 +44,14 @@ export async function submitSetup(
   return { ok: true };
 }
 
-export async function submitSetupAction(formData: FormData) {
-  return submitSetup(getSettingsRepo(), formData);
+// A function passed to <form action={...}> must return void | Promise<void>
+// (Next.js App Router constraint), so this wrapper cannot forward submitSetup's
+// SubmitSetupResult. On failure we throw so the error surfaces instead of being
+// silently swallowed; on success the protected gate (see (protected)/layout.tsx)
+// takes over once __setup_completed__ is written.
+export async function submitSetupAction(formData: FormData): Promise<void> {
+  const result = await submitSetup(getSettingsRepo(), formData);
+  if (!result.ok) {
+    throw new Error(result.error);
+  }
 }

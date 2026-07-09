@@ -1,5 +1,6 @@
 // apps/web/app/(protected)/layout.tsx
 import { redirect } from "next/navigation";
+import { AppShell } from "../components/AppShell";
 import { getSettingsRepo, type SettingsRepo } from "../../lib/settings-repo";
 
 export type GateDecision = { type: "allow" } | { type: "redirect"; to: string };
@@ -20,5 +21,5 @@ export default async function ProtectedLayout({
   if (decision.type === "redirect") {
     redirect(decision.to);
   }
-  return <>{children}</>;
+  return <AppShell>{children}</AppShell>;
 }
