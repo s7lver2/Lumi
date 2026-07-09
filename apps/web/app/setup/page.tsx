@@ -6,7 +6,7 @@ export default function SetupPage() {
   const streetView = SETTINGS_SCHEMA.filter((s) => s.key === "GOOGLE_MAPS_API_KEY");
   const mapbox = SETTINGS_SCHEMA.filter((s) => s.key === "MAPBOX_TOKEN");
   const limits = SETTINGS_SCHEMA.filter(
-    (s) => s.key !== "GOOGLE_MAPS_API_KEY" && s.key !== "MAPBOX_TOKEN"
+    (s) => s.key !== "GOOGLE_MAPS_API_KEY" && s.key !== "MAPBOX_TOKEN" && s.type !== "enum"
   );
 
   return (

@@ -1,6 +1,7 @@
 // apps/web/app/setup/actions.ts
 "use server";
 
+import { redirect } from "next/navigation";
 import { SETTINGS_SCHEMA, validateSettingValue } from "@netryx/shared-types";
 import { getSettingsRepo, type SettingsRepo } from "../../lib/settings-repo";
 
@@ -47,11 +48,14 @@ export async function submitSetup(
 // A function passed to <form action={...}> must return void | Promise<void>
 // (Next.js App Router constraint), so this wrapper cannot forward submitSetup's
 // SubmitSetupResult. On failure we throw so the error surfaces instead of being
-// silently swallowed; on success the protected gate (see (protected)/layout.tsx)
-// takes over once __setup_completed__ is written.
+// silently swallowed. On success we redirect to "/" ourselves — the
+// (protected)/layout.tsx gate only re-checks __setup_completed__ when a
+// request actually lands on it, so without an explicit redirect() here the
+// browser just sits on /setup with no error and no navigation.
 export async function submitSetupAction(formData: FormData): Promise<void> {
   const result = await submitSetup(getSettingsRepo(), formData);
   if (!result.ok) {
     throw new Error(result.error);
   }
+  redirect("/");
 }
