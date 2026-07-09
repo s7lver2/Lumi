@@ -147,4 +147,46 @@ describe("init migration", () => {
       await client.query(`DELETE FROM areas WHERE id = $1`, [testId]);
     }
   });
+  it("does not attempt an hnsw index on indexed_images.embedding (pgvector caps hnsw at 2000 dims, embedding is 8448-d)", async () => {
+    const { rows } = await client.query(
+      `SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_indexed_images_embedding'`
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it("creates indexed_points with a unique pano_id and an aggregate embedding column", async () => {
+    const testArea = "00000000-0000-0000-0000-0000000000a1";
+    await client.query(`DELETE FROM areas WHERE id = $1`, [testArea]);
+    try {
+      await client.query(
+        `INSERT INTO areas (id, geometry, area_km2)
+       VALUES ($1, ST_GeomFromText('POLYGON((0 0,0 1,1 1,1 0,0 0))', 4326), 1.0)`,
+        [testArea]
+      );
+      await client.query(
+        `INSERT INTO indexed_points (area_id, pano_id, location, embedding)
+       VALUES ($1, 'pano-agg-1', ST_GeogFromText('POINT(0.5 0.5)'), $2)`,
+        [testArea, `[${new Array(8448).fill(0).join(",")}]`]
+      );
+      // UNIQUE(pano_id) — a second insert of the same pano must conflict
+      await expect(
+        client.query(
+          `INSERT INTO indexed_points (area_id, pano_id, location, embedding)
+         VALUES ($1, 'pano-agg-1', ST_GeogFromText('POINT(0.5 0.5)'), $2)`,
+          [testArea, `[${new Array(8448).fill(0).join(",")}]`]
+        )
+      ).rejects.toThrow(/duplicate key|unique/i);
+    } finally {
+      await client.query(`DELETE FROM areas WHERE id = $1`, [testArea]);
+    }
+  });
+
+  it("adds a nullable image_path to indexed_images (spec §9.3 verification needs the bytes)", async () => {
+    const { rows } = await client.query(
+      `SELECT column_name, is_nullable FROM information_schema.columns
+     WHERE table_name = 'indexed_images' AND column_name = 'image_path'`
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].is_nullable).toBe("YES");
+  });
 });
