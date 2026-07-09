@@ -10,6 +10,7 @@ import { STREET_VIEW_HEADINGS } from "@netryx/shared-types";
 import { getSettingsRepo } from "../../../lib/settings-repo";
 import { getPool } from "../../../lib/db";
 import { enqueueIndexAreaJob } from "../../../lib/queue";
+import { assertWithinMonthlyBudget, BudgetExceededError, getMonthlySpendUsd } from "@netryx/api-usage";
 
 const SAMPLING_SPACING_METERS = 18;
 
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
   const pricePerImageUsd = Number(
     (await repo.getSetting("STREET_VIEW_PRICE_PER_IMAGE_USD")) ?? "0.007"
   );
+  const maxMonthlyBudgetUsd = Number((await repo.getSetting("MAX_MONTHLY_BUDGET_USD")) ?? "50");
 
   try {
     assertAreaWithinSizeLimit(body.areaKm2, maxAreaKm2);
@@ -44,7 +46,19 @@ export async function POST(request: Request) {
     );
   }
 
-  const lines = await fetchStreetGeometry(body.polygon);
+  let lines: Awaited<ReturnType<typeof fetchStreetGeometry>>;
+  try {
+    lines = await fetchStreetGeometry(body.polygon);
+  } catch (err) {
+    // Overpass is shared public infrastructure and does fail under load even
+    // after fetchStreetGeometry's own retries are exhausted — surface a
+    // clean, actionable error instead of an unhandled 500.
+    return NextResponse.json(
+      { error: `Could not reach the street data service — try again in a moment (${err instanceof Error ? err.message : String(err)})` },
+      { status: 502 }
+    );
+  }
+
   const points = samplePointsAlongStreets(lines, SAMPLING_SPACING_METERS);
   const estimatedCostUsd = estimateIndexingCostUsd(
     points.length,
@@ -53,6 +67,18 @@ export async function POST(request: Request) {
   );
 
   const pool = getPool();
+
+  // 🛠️ VALIDACIÓN DE PRESUPUESTO MENSUAL ANTES DE EFECTUAR LA OPERACIÓN
+  try {
+    const spent = await getMonthlySpendUsd(pool);
+    assertWithinMonthlyBudget(spent, estimatedCostUsd, maxMonthlyBudgetUsd);
+  } catch (err) {
+    if (err instanceof BudgetExceededError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err; // Burbujea cualquier error interno de base de datos no relacionado
+  }
+
   const polygonWkt = `POLYGON((${body.polygon.map(([lng, lat]) => `${lng} ${lat}`).join(", ")}))`;
   const { rows } = await pool.query(
     `INSERT INTO areas (name, geometry, area_km2, status, points_estimated, estimated_cost_usd)

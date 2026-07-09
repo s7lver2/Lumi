@@ -13,6 +13,9 @@ importers:
       '@mapbox/mapbox-gl-draw':
         specifier: ^1.4.3
         version: 1.5.1
+      '@netryx/api-usage':
+        specifier: workspace:*
+        version: link:../../packages/api-usage
       '@netryx/geo-sampling':
         specifier: workspace:*
         version: link:../../packages/geo-sampling

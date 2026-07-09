@@ -14,6 +14,7 @@
     "@netryx/geo-sampling": "workspace:*",
     "@netryx/settings-repo": "workspace:*",
     "@netryx/shared-types": "workspace:*",
+    "@netryx/api-usage": "workspace:*",
     "@turf/turf": "^7.3.5",
     "dotenv": "^17.4.2",
     "mapbox-gl": "^3.6.0",
