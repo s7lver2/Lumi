@@ -10,3 +10,4 @@ torchvision==0.18.1
 huggingface_hub
 numpy<2
 safetensors
+opencv-python-headless>=4.10

@@ -7,6 +7,22 @@ resolves a registry id to a torch.hub call.
 import torch
 from models.registry import RETRIEVAL_MODELS
 
+from models.registry import RETRIEVAL_MODELS, VERIFICATION_MODELS  # extend existing import
+
+# Indirection so tests can inject a fake instead of hitting the network.
+_HUB_LOAD = torch.hub.load
+
+
+def load_verification_model(model_id: str):
+    entry = next((m for m in VERIFICATION_MODELS if m["id"] == model_id), None)
+    if entry is None:
+        raise UnknownModelError(f"Unknown verification model id: {model_id}")
+
+    if model_id == "laila":
+        # Laila wraps frozen RoMa (spec §15.2). Outdoor weights.
+        return _HUB_LOAD("Parskatt/RoMa", "roma_outdoor")
+
+    raise UnknownModelError(f"No loader implemented for verification model id: {model_id}")
 
 class UnknownModelError(Exception):
     pass
