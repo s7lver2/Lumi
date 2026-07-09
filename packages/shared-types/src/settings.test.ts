@@ -2,6 +2,8 @@
 import { describe, it, expect } from "vitest";
 import { SETTINGS_SCHEMA, validateSettingValue } from "./settings";
 import { RETRIEVAL_MODELS, VERIFICATION_MODELS } from "./models";
+import { getSettingDefinition, validateSettingValue } from "./settings";
+
 
 describe("SETTINGS_SCHEMA", () => {
   it("lists every product-level setting from spec §14.1", () => {
@@ -91,5 +93,11 @@ describe("validateSettingValue", () => {
     expect(() => validateSettingValue("RETRIEVAL_MODEL", "not-a-model")).toThrow(
       /one of/i
     );
+  });
+  it("defines VERIFICATION_CONFIRM_THRESHOLD as a number setting with a sane default", () => {
+    const def = getSettingDefinition("VERIFICATION_CONFIRM_THRESHOLD");
+    expect(def.type).toBe("number");
+    expect(def.defaultValue).toBe("0.5");
+    expect(() => validateSettingValue("VERIFICATION_CONFIRM_THRESHOLD", "0.7")).not.toThrow();
   });
 });

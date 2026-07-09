@@ -79,6 +79,14 @@ export const SETTINGS_SCHEMA: SettingDefinition[] = [
     defaultValue: "laila",
     options: VERIFICATION_MODELS.map((m) => m.id),
   },
+  {
+    key: "VERIFICATION_CONFIRM_THRESHOLD",
+    label: "Auto-confirm threshold for verification score (0–1)",
+    type: "number",
+    isSecret: false,
+    required: true,
+    defaultValue: "0.5",
+  },
 ];
 
 export function getSettingDefinition(key: string): SettingDefinition {
