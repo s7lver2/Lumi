@@ -12,6 +12,7 @@ export interface IndexedImageInsert {
     lng: number;
     captureDate: string | null;
     embedding: number[];
+    imagePath: string;
 }
 
 export interface IndexAreaJobDeps {
@@ -31,6 +32,7 @@ export interface IndexAreaJobDeps {
     getSetting: (key: string) => Promise<string | null>;
     inferenceBaseUrl: string;
     insertIndexedPoints: (areaId: string, points: IndexedPointInsert[]) => Promise<void>;
+    saveCaptureImage: (panoId: string, heading: number, base64: string) => Promise<string>;
 }
 
 const SAMPLING_SPACING_METERS = 18; // midpoint of the spec's "every ~15-20m" (spec §4 step 2)
@@ -93,14 +95,24 @@ export async function runIndexAreaJob(
         return;
     }
 
-    const inserts: IndexedImageInsert[] = captures.map((capture, i) => ({
+    const inserts: IndexedImageInsert[] = [];
+    for (let i = 0; i < captures.length; i++) {
+      const capture = captures[i];
+      const imagePath = await deps.saveCaptureImage(
+        capture.panoId,
+        capture.heading,
+        capture.imageBase64
+      );
+      inserts.push({
         panoId: capture.panoId,
         heading: capture.heading,
         lat: capture.lat,
         lng: capture.lng,
         captureDate: capture.captureDate,
         embedding: embeddings[i],
-    }));
+        imagePath,
+      });
+    }
 
     await deps.insertIndexedImages(areaId, inserts);
 

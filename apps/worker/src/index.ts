@@ -1,6 +1,8 @@
 // apps/worker/src/index.ts
 import { config } from "dotenv";
 import { resolve } from "node:path";
+import { saveCaptureImage } from "./image-store";
+
 
 
 // This worker has its own package cwd (apps/worker) and, unlike apps/web,
@@ -53,6 +55,7 @@ async function main() {
       getSetting: (key) => settingsRepo.getSetting(key),
       inferenceBaseUrl,
       insertIndexedPoints: (areaId, points) => insertIndexedPoints(pool, areaId, points),
+      saveCaptureImage: (panoId, heading, base64) => saveCaptureImage(panoId, heading, base64),
     });
   });
   console.log(`netryx worker listening for "${INDEX_AREA_JOB_NAME}" jobs`);

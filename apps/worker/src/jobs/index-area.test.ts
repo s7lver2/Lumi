@@ -3,6 +3,7 @@ import { runIndexAreaJob, type IndexAreaJobDeps } from "./index-area";
 import type { AreaRow } from "@netryx/shared-types";
 
 // Extend the parameter type to handle the ad-hoc test overrides cleanly
+// apps/worker/src/jobs/index-area.test.ts — Línea 7 en adelante
 function makeDeps(
   overrides: Partial<IndexAreaJobDeps> & { captures?: any[]; embeddings?: any[] } = {}
 ): IndexAreaJobDeps {
@@ -45,6 +46,12 @@ function makeDeps(
     ),
     insertIndexedImages: vi.fn().mockResolvedValue(undefined),
     insertIndexedPoints: overrides.insertIndexedPoints ?? vi.fn().mockResolvedValue(undefined),
+    
+    // 🛠️ MOCK POR DEFECTO AÑADIDO AQUÍ PARA EVITAR EL TYPEERROR
+    saveCaptureImage: overrides.saveCaptureImage ?? vi.fn().mockImplementation(
+      async (panoId: string, heading: number) => `/imgs/${panoId}_${heading}.jpg`
+    ),
+    
     updateAreaProgress: vi.fn().mockResolvedValue(undefined),
     getSetting: vi.fn(async (key: string) => {
       const values: Record<string, string> = {
@@ -154,5 +161,26 @@ describe("runIndexAreaJob", () => {
     expect(insertIndexedPoints).toHaveBeenCalledTimes(1);
     const [, points] = insertIndexedPoints.mock.calls[0];
     expect(points).toHaveLength(2);
+  });
+  it("saves each capture image and records its path on the indexed_images insert (spec §9.3)", async () => {
+    const saveCaptureImage = vi
+      .fn()
+      .mockImplementation(async (panoId: string, heading: number) => `/imgs/${panoId}_${heading}.jpg`);
+    const insertIndexedImages = vi.fn().mockResolvedValue(undefined);
+
+    const deps = makeDeps({
+      captures: [
+        { panoId: "pano-a", heading: 0, lat: 1, lng: 2, captureDate: null, imageBase64: "AAECAw==" },
+      ],
+      embeddings: [[1, 0]],
+      saveCaptureImage,
+      insertIndexedImages,
+    });
+
+    await runIndexAreaJob({ areaId: "area-1" }, deps);
+
+    expect(saveCaptureImage).toHaveBeenCalledWith("pano-a", 0, "AAECAw==");
+    const [, images] = insertIndexedImages.mock.calls[0];
+    expect(images[0].imagePath).toBe("/imgs/pano-a_0.jpg");
   });
 });

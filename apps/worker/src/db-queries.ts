@@ -73,8 +73,8 @@ export async function insertIndexedImages(
     await client.query("BEGIN");
     for (const img of images) {
       await client.query(
-        `INSERT INTO indexed_images (area_id, pano_id, heading, location, street_view_date, embedding, embedded_at)
-         VALUES ($1, $2, $3, ST_GeogFromText($4), $5, $6, now())
+        `INSERT INTO indexed_images (area_id, pano_id, heading, location, street_view_date, embedding, image_path, embedded_at)
+         VALUES ($1, $2, $3, ST_GeogFromText($4), $5, $6, $7, now())
          ON CONFLICT (pano_id, heading) DO NOTHING`,
         [
           areaId,
@@ -83,6 +83,7 @@ export async function insertIndexedImages(
           `POINT(${img.lng} ${img.lat})`,
           img.captureDate ? `${img.captureDate}-01` : null,
           `[${img.embedding.join(",")}]`,
+          img.imagePath,
         ]
       );
     }
