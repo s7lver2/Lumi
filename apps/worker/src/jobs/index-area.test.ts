@@ -1,11 +1,10 @@
+// apps/worker/src/jobs/index-area.test.ts
 import { describe, it, expect, vi } from "vitest";
 import { runIndexAreaJob, type IndexAreaJobDeps } from "./index-area";
 import type { AreaRow } from "@netryx/shared-types";
 
-// Extend the parameter type to handle the ad-hoc test overrides cleanly
-// apps/worker/src/jobs/index-area.test.ts — Línea 7 en adelante
 function makeDeps(
-  overrides: Partial<IndexAreaJobDeps> & { captures?: any[]; embeddings?: any[] } = {}
+  overrides: Partial<IndexAreaJobDeps> & { captures?: any[]; embeddings?: any[]; points?: any[]; settings?: Record<string, string> } = {}
 ): IndexAreaJobDeps {
   const area: AreaRow = {
     id: "area-1",
@@ -26,12 +25,14 @@ function makeDeps(
     fetchStreetGeometry: vi.fn().mockResolvedValue([
       { type: "LineString", coordinates: [[0, 0], [0, 0.001]] },
     ]),
-    samplePointsAlongStreets: vi.fn().mockReturnValue([
-      { lat: 0, lng: 0 },
-      { lat: 0.0005, lng: 0 },
-    ]),
+    samplePointsAlongStreets: vi.fn().mockReturnValue(
+      overrides.points ?? [
+        { lat: 0, lng: 0 },
+        { lat: 0.0005, lng: 0 },
+      ]
+    ),
     loadExistingPanoHeadings: vi.fn().mockResolvedValue(new Set<string>()),
-    downloadCaptures: vi.fn().mockResolvedValue({
+    downloadCaptures: overrides.downloadCaptures ?? vi.fn().mockResolvedValue({
       captures: overrides.captures ?? [
         { panoId: "p1", heading: 0, lat: 0, lng: 0, captureDate: "2024-01", imageBase64: "aaa" },
         { panoId: "p2", heading: 90, lat: 0.0005, lng: 0, captureDate: "2024-01", imageBase64: "bbb" },
@@ -46,22 +47,25 @@ function makeDeps(
     ),
     insertIndexedImages: vi.fn().mockResolvedValue(undefined),
     insertIndexedPoints: overrides.insertIndexedPoints ?? vi.fn().mockResolvedValue(undefined),
-    
-    // 🛠️ MOCK POR DEFECTO AÑADIDO AQUÍ PARA EVITAR EL TYPEERROR
     saveCaptureImage: overrides.saveCaptureImage ?? vi.fn().mockImplementation(
       async (panoId: string, heading: number) => `/imgs/${panoId}_${heading}.jpg`
     ),
-    
     updateAreaProgress: vi.fn().mockResolvedValue(undefined),
     getSetting: vi.fn(async (key: string) => {
       const values: Record<string, string> = {
         GOOGLE_MAPS_API_KEY: "test-key",
         MAX_CONCURRENT_REQUESTS: "5",
         STREET_VIEW_PRICE_PER_IMAGE_USD: "0.007",
+        MAX_MONTHLY_BUDGET_USD: "50",
+        ...overrides.settings, // Permite inyectar configuraciones dinámicas desde los tests
       };
       return values[key] ?? null;
     }),
     inferenceBaseUrl: "http://localhost:8000",
+    
+    // 🛠️ MOCKS GLOBALES POR DEFECTO PARA EVITAR MÚLTIPLES TYPEERRORS
+    getMonthlySpendUsd: overrides.getMonthlySpendUsd ?? vi.fn().mockResolvedValue(0),
+    recordStreetViewUsage: overrides.recordStreetViewUsage ?? vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -162,6 +166,7 @@ describe("runIndexAreaJob", () => {
     const [, points] = insertIndexedPoints.mock.calls[0];
     expect(points).toHaveLength(2);
   });
+
   it("saves each capture image and records its path on the indexed_images insert (spec §9.3)", async () => {
     const saveCaptureImage = vi
       .fn()
@@ -182,5 +187,43 @@ describe("runIndexAreaJob", () => {
     expect(saveCaptureImage).toHaveBeenCalledWith("pano-a", 0, "AAECAw==");
     const [, images] = insertIndexedImages.mock.calls[0];
     expect(images[0].imagePath).toBe("/imgs/pano-a_0.jpg");
+  });
+
+  it("fails the area without downloading when the projected cost exceeds the monthly budget (spec §12.2)", async () => {
+    const downloadCaptures = vi.fn().mockResolvedValue({ captures: [], failedPoints: 0 });
+    const deps = makeDeps({
+      settings: { 
+        GOOGLE_MAPS_API_KEY: "k", 
+        MAX_MONTHLY_BUDGET_USD: "10", 
+        STREET_VIEW_PRICE_PER_IMAGE_USD: "0.007" 
+      },
+      points: new Array(1000).fill({ lat: 1, lng: 2 }), // 1000 puntos * 4 headings * 0.007 = $28 proyectados (Excede el límite de $10)
+      getMonthlySpendUsd: vi.fn().mockResolvedValue(0),
+      downloadCaptures,
+    });
+
+    await runIndexAreaJob({ areaId: "area-1" }, deps);
+
+    // Comprobamos que el pipeline se detuvo antes de consumir APIs externas
+    expect(downloadCaptures).not.toHaveBeenCalled();
+    const statuses = (deps.updateAreaProgress as any).mock.calls.map((c: any[]) => c[1].status).filter(Boolean);
+    expect(statuses).toContain("failed");
+  });
+
+  it("records served-image usage after a successful download (spec §12.3)", async () => {
+    const recordStreetViewUsage = vi.fn().mockResolvedValue(undefined);
+    const deps = makeDeps({
+      captures: [
+        { panoId: "p", heading: 0, lat: 1, lng: 2, captureDate: null, imageBase64: "x" },
+        { panoId: "p", heading: 90, lat: 1, lng: 2, captureDate: null, imageBase64: "y" },
+      ],
+      embeddings: [[1, 0], [0, 1]],
+      getMonthlySpendUsd: vi.fn().mockResolvedValue(0),
+      recordStreetViewUsage,
+    });
+
+    await runIndexAreaJob({ areaId: "area-1" }, deps);
+
+    expect(recordStreetViewUsage).toHaveBeenCalledWith(2, 0.007);
   });
 });

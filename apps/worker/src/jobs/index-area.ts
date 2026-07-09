@@ -1,9 +1,15 @@
+// apps/worker/src/jobs/index-area.ts
+
 import type { IndexAreaJobPayload, AreaRow, SampledPoint, StreetViewCapture } from "@netryx/shared-types";
 import { STREET_VIEW_HEADINGS } from "@netryx/shared-types";
 import type { LineStringGeoJSON } from "@netryx/geo-sampling";
 import type { AreaProgressUpdate } from "../progress";
 import { aggregatePanoDescriptors, type IndexedPointInsert } from "../aggregate";
-
+import {
+  projectedCostUsd,
+  assertWithinMonthlyBudget,
+  BudgetExceededError,
+} from "@netryx/api-usage";
 
 export interface IndexedImageInsert {
     panoId: string;
@@ -33,6 +39,8 @@ export interface IndexAreaJobDeps {
     inferenceBaseUrl: string;
     insertIndexedPoints: (areaId: string, points: IndexedPointInsert[]) => Promise<void>;
     saveCaptureImage: (panoId: string, heading: number, base64: string) => Promise<string>;
+    getMonthlySpendUsd: () => Promise<number>;
+    recordStreetViewUsage: (requests: number, pricePerImageUsd: number) => Promise<void>;
 }
 
 const SAMPLING_SPACING_METERS = 18; // midpoint of the spec's "every ~15-20m" (spec §4 step 2)
@@ -45,11 +53,13 @@ export async function runIndexAreaJob(
 
     await deps.updateAreaProgress(areaId, { status: "indexing" });
 
-    const [polygon, apiKey, maxConcurrentRaw, pricePerImageRaw, existingPanoHeadings] = await Promise.all([
+    // 3) Se incluye la lectura de "MAX_MONTHLY_BUDGET_USD" dentro de la resolución paralela inicial
+    const [polygon, apiKey, maxConcurrentRaw, pricePerImageRaw, maxBudgetRaw, existingPanoHeadings] = await Promise.all([
         deps.getAreaPolygon(areaId),
         deps.getSetting("GOOGLE_MAPS_API_KEY"),
         deps.getSetting("MAX_CONCURRENT_REQUESTS"),
         deps.getSetting("STREET_VIEW_PRICE_PER_IMAGE_USD"),
+        deps.getSetting("MAX_MONTHLY_BUDGET_USD"),
         deps.loadExistingPanoHeadings(),
     ]);
 
@@ -60,11 +70,26 @@ export async function runIndexAreaJob(
 
     const maxConcurrent = Number(maxConcurrentRaw ?? 10);
     const pricePerImageUsd = Number(pricePerImageRaw ?? 0.007);
+    const maxMonthlyBudgetUsd = Number(maxBudgetRaw ?? 50);
 
     const lines = await deps.fetchStreetGeometry(polygon);
     const points = deps.samplePointsAlongStreets(lines, SAMPLING_SPACING_METERS);
 
     await deps.updateAreaProgress(areaId, { pointsEstimated: points.length });
+
+    // 4) DESPUÉS de calcular los puntos y ANTES de realizar descargas de pago, se comprueba el presupuesto heredado
+    const projected = projectedCostUsd(points.length, STREET_VIEW_HEADINGS.length, pricePerImageUsd);
+    const spent = await deps.getMonthlySpendUsd();
+    
+    try {
+        assertWithinMonthlyBudget(spent, projected, maxMonthlyBudgetUsd);
+    } catch (err) {
+        if (err instanceof BudgetExceededError) {
+            await deps.updateAreaProgress(areaId, { status: "failed" });
+            return; // Aborta limpiamente previniendo peticiones costosas no autorizadas
+        }
+        throw err;
+    }
 
     const { captures, failedPoints } = await deps.downloadCaptures(points, STREET_VIEW_HEADINGS, {
         apiKey,
@@ -97,27 +122,30 @@ export async function runIndexAreaJob(
 
     const inserts: IndexedImageInsert[] = [];
     for (let i = 0; i < captures.length; i++) {
-      const capture = captures[i];
-      const imagePath = await deps.saveCaptureImage(
-        capture.panoId,
-        capture.heading,
-        capture.imageBase64
-      );
-      inserts.push({
-        panoId: capture.panoId,
-        heading: capture.heading,
-        lat: capture.lat,
-        lng: capture.lng,
-        captureDate: capture.captureDate,
-        embedding: embeddings[i],
-        imagePath,
-      });
+        const capture = captures[i];
+        const imagePath = await deps.saveCaptureImage(
+            capture.panoId,
+            capture.heading,
+            capture.imageBase64
+        );
+        inserts.push({
+            panoId: capture.panoId,
+            heading: capture.heading,
+            lat: capture.lat,
+            lng: capture.lng,
+            captureDate: capture.captureDate,
+            embedding: embeddings[i],
+            imagePath,
+        });
     }
 
     await deps.insertIndexedImages(areaId, inserts);
 
     const aggregatePoints = aggregatePanoDescriptors(captures, embeddings);
     await deps.insertIndexedPoints(areaId, aggregatePoints);
+
+    // 5) DESPUÉS de persistir exitosamente en disco y base de datos, registramos el consumo real efectuado
+    await deps.recordStreetViewUsage(captures.length, pricePerImageUsd);
 
     const actualCostUsd = captures.length * pricePerImageUsd;
 

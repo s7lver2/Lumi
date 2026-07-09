@@ -2,8 +2,7 @@
 import { config } from "dotenv";
 import { resolve } from "node:path";
 import { saveCaptureImage } from "./image-store";
-
-
+import { getMonthlySpendUsd, recordStreetViewUsage } from "@netryx/api-usage";
 
 // This worker has its own package cwd (apps/worker) and, unlike apps/web,
 // nothing auto-loads env files for a plain tsx/node process. apps/web and
@@ -56,6 +55,8 @@ async function main() {
       inferenceBaseUrl,
       insertIndexedPoints: (areaId, points) => insertIndexedPoints(pool, areaId, points),
       saveCaptureImage: (panoId, heading, base64) => saveCaptureImage(panoId, heading, base64),
+      getMonthlySpendUsd: () => getMonthlySpendUsd(pool),
+      recordStreetViewUsage: (requests, price) => recordStreetViewUsage(pool, requests, price),
     });
   });
   console.log(`netryx worker listening for "${INDEX_AREA_JOB_NAME}" jobs`);

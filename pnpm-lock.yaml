@@ -89,6 +89,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@netryx/api-usage':
+        specifier: workspace:*
+        version: link:../../packages/api-usage
       '@netryx/geo-sampling':
         specifier: workspace:*
         version: link:../../packages/geo-sampling
