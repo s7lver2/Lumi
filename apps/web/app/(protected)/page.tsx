@@ -1,7 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
+import { SearchDashboard } from "../components/SearchDashboard";
 
-import { MapCanvas } from "../components/MapCanvas";
-
-export default function TestPage() {
-  return <MapCanvas onReady={(map, prov) => console.log(`Mapa listo con: ${prov}`)} />;
+export default function HomePage() {
+  return <SearchDashboard />;
 }

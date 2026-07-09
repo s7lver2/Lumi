@@ -32,6 +32,28 @@ export function SearchDashboard() {
     setSearchResults(json, file.name);
   }
 
+  // apps/web/app/components/SearchDashboard.tsx — add inside the component
+  const { currentSearchId, setRefining, setRefineResults, selectRegion } = useSearchStore();
+
+  async function handleRefine(regionId: string) {
+    if (!currentSearchId) return;
+    selectRegion(regionId);
+    setRefining();
+    const res = await fetch(`/api/search/${currentSearchId}/refine`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ regionId }),
+    });
+    const json = await res.json();
+    if (!res.ok) return setError(json.error ?? "El refinado falló");
+    setRefineResults(regionId, json.candidates);
+    // Zoom to the refined region for the street-level view.
+    const region = regions.find((r) => r.id === regionId);
+    if (map && region) {
+      map.flyTo({ center: [region.centroid.lng, region.centroid.lat], zoom: 16, pitch: 55, duration: 900 });
+    }
+  }
+
   // Fit the map to the returned regions once results arrive.
   useEffect(() => {
     if (!map || regions.length === 0) return;
