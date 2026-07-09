@@ -2,6 +2,8 @@
 import type { Pool } from "pg";
 import type { AreaRow } from "@netryx/shared-types";
 import type { IndexedImageInsert } from "./jobs/index-area";
+import type { IndexedPointInsert } from "./aggregate";
+
 
 export async function getArea(pool: Pool, areaId: string): Promise<AreaRow> {
   const { rows } = await pool.query(
@@ -24,6 +26,31 @@ export async function getArea(pool: Pool, areaId: string): Promise<AreaRow> {
     estimatedCostUsd: r.estimated_cost_usd === null ? null : Number(r.estimated_cost_usd),
     actualCostUsd: r.actual_cost_usd === null ? null : Number(r.actual_cost_usd),
   };
+}
+
+export async function insertIndexedPoints(
+  pool: Pool,
+  areaId: string,
+  points: IndexedPointInsert[]
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const p of points) {
+      await client.query(
+        `INSERT INTO indexed_points (area_id, pano_id, location, embedding)
+         VALUES ($1, $2, ST_GeogFromText($3), $4)
+         ON CONFLICT (pano_id) DO NOTHING`,
+        [areaId, p.panoId, `POINT(${p.lng} ${p.lat})`, `[${p.embedding.join(",")}]`]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function getAreaPolygon(pool: Pool, areaId: string): Promise<[number, number][]> {

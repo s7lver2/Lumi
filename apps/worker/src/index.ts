@@ -2,6 +2,7 @@
 import { config } from "dotenv";
 import { resolve } from "node:path";
 
+
 // This worker has its own package cwd (apps/worker) and, unlike apps/web,
 // nothing auto-loads env files for a plain tsx/node process. apps/web and
 // apps/worker must read the SAME root .env so SETTINGS_KEY_PATH resolves
@@ -18,7 +19,7 @@ import { downloadCaptures } from "./street-view";
 import { embedImages } from "./inference-client";
 import { updateAreaProgress, loadExistingPanoHeadings } from "./progress";
 import { fetchStreetGeometry, samplePointsAlongStreets } from "@netryx/geo-sampling";
-import { getArea, getAreaPolygon, insertIndexedImages } from "./db-queries";
+import { getArea, getAreaPolygon, insertIndexedImages, insertIndexedPoints } from "./db-queries";
 
 function isIndexAreaJobPayload(data: unknown): data is IndexAreaJobPayload {
   return (
@@ -51,6 +52,7 @@ async function main() {
       updateAreaProgress: (areaId, update) => updateAreaProgress(pool, areaId, update),
       getSetting: (key) => settingsRepo.getSetting(key),
       inferenceBaseUrl,
+      insertIndexedPoints: (areaId, points) => insertIndexedPoints(pool, areaId, points),
     });
   });
   console.log(`netryx worker listening for "${INDEX_AREA_JOB_NAME}" jobs`);
