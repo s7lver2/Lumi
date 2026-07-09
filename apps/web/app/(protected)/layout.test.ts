@@ -1,6 +1,6 @@
 // apps/web/app/(protected)/layout.test.ts
 import { describe, it, expect, vi } from "vitest";
-import { resolveGateDecision } from "./layout";
+import { resolveGateDecision } from "./gate";
 
 describe("resolveGateDecision", () => {
   it("redirects to /setup when setup is not completed", async () => {

@@ -1,4 +1,3 @@
-// apps/web/app/(protected)/index/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -7,6 +6,10 @@ import { IndexingDrawTool } from "../../components/IndexingDrawTool";
 import { FloatingCard } from "../../components/FloatingCard";
 import { JobProgressBar } from "../../components/JobProgressBar";
 import { useIndexingStore } from "../../stores/useIndexingStore";
+
+// Componentes del Task 4 importados
+import { AreasNotification } from "../../components/AreasNotification";
+import { AreasPopup } from "../../components/AreasPopup";
 
 // 🛠️ IMPORTACIÓN TEMPORAL PARA LA VERIFICACIÓN DE DROPZONE
 import { ImageDropzone } from "../../components/ImageDropzone";
@@ -17,15 +20,33 @@ export default function IndexPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Estados para el control y despliegue del historial de áreas (Task 4)
+  const [areasOpen, setAreasOpen] = useState(false);
+  const [areasCount, setAreasCount] = useState<number>(0);
+  const [areasIndexing, setAreasIndexing] = useState<number>(0);
+
   // Estado para almacenar y controlar el límite de presupuesto consumido en el mes
   const [usage, setUsage] = useState<{ monthlySpendUsd: number; monthlyBudgetUsd: number } | null>(null);
 
-  // Carga los datos de consumo al montar el componente
+  // Carga los datos de consumo e inicializa el conteo de áreas creadas
   useEffect(() => {
     fetch("/api/usage")
       .then((r) => r.json())
       .then(setUsage)
       .catch(() => setUsage(null));
+
+    // Consumir el endpoint para obtener el total de áreas para la notificación
+    fetch("/api/areas")
+      .then((r) => r.json())
+      .then((data) => {
+        const areas = Array.isArray(data) ? data : data?.areas ?? [];
+        setAreasCount(areas.length);
+        setAreasIndexing(areas.filter((a: any) => a.status === "indexing").length);
+      })
+      .catch(() => {
+        setAreasCount(0);
+        setAreasIndexing(0);
+      });
   }, []);
 
   async function handleEstimate() {
@@ -55,12 +76,43 @@ export default function IndexPage() {
     setBusy(false);
     if (!res.ok) return setError(json.error);
     startJob(json.areaId);
+    
+    // Actualizar el contador incremental tras registrar una nueva zona
+    setAreasCount((prev) => prev + 1);
+  }
+
+  // Helper de eventos para pintar el polígono y los puntos guardados
+  async function handleShowAreaOnMap(id: string) {
+    try {
+      const res = await fetch(`/api/areas/${id}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      
+      if (map && data?.area?.geometry && data?.points) {
+        if (map.isStyleLoaded()) {
+          renderAreaOnMap(map, data.area.geometry, data.points);
+        } else {
+          map.once("load", () => renderAreaOnMap(map, data.area.geometry, data.points));
+        }
+      }
+    } catch (err) {
+      console.error("Error al renderizar el área seleccionada:", err);
+    }
   }
 
   return (
     <>
       <MapCanvas onReady={(m) => setMap(m)} />
       {map && <IndexingDrawTool map={map} />}
+
+      {/* Botón/Toast de notificación flotante arriba a la derecha */}
+      <div className="absolute right-4 top-4 z-50 flex flex-col items-end space-y-3">
+        <AreasNotification
+          count={areasCount}
+          indexing={areasIndexing}
+          onOpen={() => setAreasOpen(true)}
+        />
+      </div>
 
       {drawnPolygon && (
         <div className="absolute left-4 top-4">
@@ -70,8 +122,8 @@ export default function IndexPage() {
         </div>
       )}
 
-      {/* CONTENEDOR DE INTERFAZ LATERAL */}
-      <div className="absolute right-4 top-4 w-72 space-y-4">
+      {/* CONTENEDOR DE INTERFAZ LATERAL (Desplazado abajo de la notificación) */}
+      <div className="absolute right-4 top-20 w-72 space-y-4">
         
         {/* 🛠️ TARJETA SCRATCH TEMPORAL PARA COMPROBAR EL DROPZONE */}
         <FloatingCard className="p-4 border border-dashed border-accent/40">
@@ -142,6 +194,52 @@ export default function IndexPage() {
           {error && <p className="mt-3 text-xs text-danger-fg">{error}</p>}
         </FloatingCard>
       </div>
+
+      {/* Renderizado condicional del Popup modal del Historial */}
+      {areasOpen && (
+        <AreasPopup 
+          onClose={() => setAreasOpen(false)} 
+          onShowArea={(id) => handleShowAreaOnMap(id)} 
+        />
+      )}
     </>
   );
+}
+
+// Helper puro de inyección GeoJSON en Mapbox/MapLibre colocado fuera del componente
+function renderAreaOnMap(map: any, areaGeometry: any, pointsGeometry: any) {
+  if (!map) return;
+
+  if (map.getLayer("area-poly-line")) map.removeLayer("area-poly-line");
+  if (map.getSource("area-poly")) map.removeSource("area-poly");
+  if (map.getLayer("area-points-dots")) map.removeLayer("area-points-dots");
+  if (map.getSource("area-points")) map.removeSource("area-points");
+
+  map.addSource("area-poly", { type: "geojson", data: areaGeometry });
+  map.addLayer({
+    id: "area-poly-line",
+    type: "line",
+    source: "area-poly",
+    paint: { "line-color": "#85b7eb", "line-width": 1.5 },
+  });
+
+  map.addSource("area-points", { type: "geojson", data: pointsGeometry });
+  map.addLayer({
+    id: "area-points-dots",
+    type: "circle",
+    source: "area-points",
+    paint: { "circle-radius": 2.5, "circle-color": "#5dcaa5", "circle-opacity": 0.8 },
+  });
+
+  if (areaGeometry.coordinates && areaGeometry.coordinates[0]) {
+    const coordinates = areaGeometry.coordinates[0];
+    const bounds = coordinates.reduce((acc: any, coord: any) => {
+      return [
+        [Math.min(acc[0][0], coord[0]), Math.min(acc[0][1], coord[1])],
+        [Math.max(acc[1][0], coord[0]), Math.max(acc[1][1], coord[1])],
+      ];
+    }, [[coordinates[0][0], coordinates[0][1]], [coordinates[0][0], coordinates[0][1]]]);
+
+    map.fitBounds(bounds, { padding: 40, maxZoom: 15 });
+  }
 }
