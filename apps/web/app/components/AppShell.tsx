@@ -2,9 +2,8 @@
 import Link from "next/link";
 
 const NAV = [
-  { href: "/", label: "Buscar", icon: "M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" },
-  { href: "/index", label: "Indexar", icon: "M12 2l9 4.5-9 4.5-9-4.5L12 2zM3 12l9 4.5 9-4.5M3 17l9 4.5 9-4.5" },
-  { href: "/areas", label: "Áreas", icon: "M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3V7z" },
+  { href: "/", label: "Uso", icon: "M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" },
+  { href: "/index", label: "Entrenamiento", icon: "M12 2l9 4.5-9 4.5-9-4.5L12 2zM3 12l9 4.5 9-4.5M3 17l9 4.5 9-4.5" },
 ];
 
 function RailIcon({ d }: { d: string }) {
