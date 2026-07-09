@@ -7,9 +7,10 @@ import { FloatingCard } from "../../components/FloatingCard";
 import { JobProgressBar } from "../../components/JobProgressBar";
 import { useIndexingStore } from "../../stores/useIndexingStore";
 
-// Componentes del Task 4 importados
+// Componentes del Task 4 e interfaces de dibujo avanzados importados
 import { AreasNotification } from "../../components/AreasNotification";
 import { AreasPopup } from "../../components/AreasPopup";
+import { DrawToolbar } from "../../components/DrawToolbar";
 
 // 🛠️ IMPORTACIÓN TEMPORAL PARA LA VERIFICACIÓN DE DROPZONE
 import { ImageDropzone } from "../../components/ImageDropzone";
@@ -25,6 +26,9 @@ export default function IndexPage() {
   const [areasCount, setAreasCount] = useState<number>(0);
   const [areasIndexing, setAreasIndexing] = useState<number>(0);
 
+  // Estado local para sincronizar el modo de dibujo de Mapbox Draw (Task 7/8)
+  const [drawMode, setDrawMode] = useState<string>("simple_select");
+
   // Estado para almacenar y controlar el límite de presupuesto consumido en el mes
   const [usage, setUsage] = useState<{ monthlySpendUsd: number; monthlyBudgetUsd: number } | null>(null);
 
@@ -35,7 +39,6 @@ export default function IndexPage() {
       .then(setUsage)
       .catch(() => setUsage(null));
 
-    // Consumir el endpoint para obtener el total de áreas para la notificación
     fetch("/api/areas")
       .then((r) => r.json())
       .then((data) => {
@@ -77,11 +80,9 @@ export default function IndexPage() {
     if (!res.ok) return setError(json.error);
     startJob(json.areaId);
     
-    // Actualizar el contador incremental tras registrar una nueva zona
     setAreasCount((prev) => prev + 1);
   }
 
-  // Helper de eventos para pintar el polígono y los puntos guardados
   async function handleShowAreaOnMap(id: string) {
     try {
       const res = await fetch(`/api/areas/${id}`);
@@ -100,10 +101,39 @@ export default function IndexPage() {
     }
   }
 
+  // Manejadores ficticios / puentes para las funciones de limpieza e historial
+  // Estas interactúan directamente a través de referencias o eventos con <IndexingDrawTool />
+  function handleClearPolygon() {
+    const clearBtn = document.querySelector(".mapbox-gl-draw_trash") as HTMLButtonElement;
+    if (clearBtn) clearBtn.click();
+    setEstimate(null);
+  }
+
+  function handleUndo() {
+    const event = new CustomEvent("draw-undo");
+    window.dispatchEvent(event);
+  }
+
+  function handleRedo() {
+    const event = new CustomEvent("draw-redo");
+    window.dispatchEvent(event);
+  }
+
+  function handleChangeMode(mode: string) {
+    setDrawMode(mode);
+    const event = new CustomEvent("draw-change-mode", { detail: { mode } });
+    window.dispatchEvent(event);
+  }
+
   return (
     <>
       <MapCanvas onReady={(m) => setMap(m)} />
-      {map && <IndexingDrawTool map={map} />}
+      {map && (
+        <IndexingDrawTool 
+          map={map} 
+          onModeChange={(currentMode) => setDrawMode(currentMode)}
+        />
+      )}
 
       {/* Botón/Toast de notificación flotante arriba a la derecha */}
       <div className="absolute right-4 top-4 z-50 flex flex-col items-end space-y-3">
@@ -114,16 +144,29 @@ export default function IndexPage() {
         />
       </div>
 
+      {/* Barra de herramientas flotante central inferior (se oculta si hay un Job activo) */}
+      {!activeJobId && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40">
+          <DrawToolbar 
+            mode={drawMode} 
+            onModeChange={handleChangeMode} 
+            onUndo={handleUndo} 
+            onRedo={handleRedo} 
+            onClear={handleClearPolygon} 
+          />
+        </div>
+      )}
+
       {drawnPolygon && (
-        <div className="absolute left-4 top-4">
+        <div className="absolute left-4 top-4 z-40">
           <FloatingCard className="px-3 py-2 text-xs text-fg">
             Área dibujada: {areaKm2.toFixed(1)} km²
           </FloatingCard>
         </div>
       )}
 
-      {/* CONTENEDOR DE INTERFAZ LATERAL (Desplazado abajo de la notificación) */}
-      <div className="absolute right-4 top-20 w-72 space-y-4">
+      {/* CONTENEDOR DE INTERFAZ LATERAL */}
+      <div className="absolute right-4 top-20 w-72 space-y-4 z-40">
         
         {/* 🛠️ TARJETA SCRATCH TEMPORAL PARA COMPROBAR EL DROPZONE */}
         <FloatingCard className="p-4 border border-dashed border-accent/40">
@@ -167,7 +210,6 @@ export default function IndexPage() {
                       ~${estimate.estimatedCostUsd.toFixed(2)}
                     </div>
                     
-                    {/* Línea de presupuesto renderizada dinámicamente debajo de la estimación */}
                     {usage && (
                       <div className="mt-2 text-[11px] text-subtle">
                         Presupuesto del mes: ${usage.monthlySpendUsd.toFixed(2)} / ${usage.monthlyBudgetUsd.toFixed(2)}
@@ -206,7 +248,6 @@ export default function IndexPage() {
   );
 }
 
-// Helper puro de inyección GeoJSON en Mapbox/MapLibre colocado fuera del componente
 function renderAreaOnMap(map: any, areaGeometry: any, pointsGeometry: any) {
   if (!map) return;
 

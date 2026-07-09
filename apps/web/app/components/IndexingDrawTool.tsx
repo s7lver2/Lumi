@@ -48,9 +48,16 @@ export function IndexingDrawTool({ map }: { map: any }) {
         map.off("draw.create", sync);
         map.off("draw.update", sync);
         map.off("draw.delete", clearPolygon);
-        
+
         if (drawRef.current) {
-          map.removeControl(drawRef.current);
+          try {
+            map.removeControl(drawRef.current);
+          } catch {
+            // map.remove() (MapCanvas's own unmount cleanup) already tears
+            // down every attached control internally — if that ran first,
+            // this control's onRemove already fired and its internal state
+            // is gone. Nothing left to clean up in that case.
+          }
           drawRef.current = null;
         }
       }
