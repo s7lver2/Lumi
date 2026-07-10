@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { MapCanvas } from "../../components/MapCanvas";
 import { IndexingDrawTool } from "../../components/IndexingDrawTool";
 import { FloatingCard } from "../../components/FloatingCard";
@@ -29,13 +29,8 @@ export default function IndexPage() {
   // Estado para almacenar y controlar el límite de presupuesto consumido en el mes
   const [usage, setUsage] = useState<{ monthlySpendUsd: number; monthlyBudgetUsd: number } | null>(null);
 
-  // Carga los datos de consumo e inicializa el conteo de áreas creadas
-  useEffect(() => {
-    fetch("/api/usage")
-      .then((r) => r.json())
-      .then(setUsage)
-      .catch(() => setUsage(null));
-
+  // SE EXTRAE: Función reutilizable y memorizada para consultar el conteo y estados de las áreas
+  const refetchAreaCounts = useCallback(() => {
     fetch("/api/areas")
       .then((r) => r.json())
       .then((data) => {
@@ -48,6 +43,16 @@ export default function IndexPage() {
         setAreasIndexing(0);
       });
   }, []);
+
+  // Carga los datos de consumo e inicializa el conteo de áreas creadas
+  useEffect(() => {
+    fetch("/api/usage")
+      .then((r) => r.json())
+      .then(setUsage)
+      .catch(() => setUsage(null));
+
+    refetchAreaCounts();
+  }, [refetchAreaCounts]);
 
   async function handleEstimate() {
     if (!drawnPolygon) return;
@@ -105,6 +110,7 @@ export default function IndexPage() {
     setEstimate(null);
   }
 
+  // Las funciones handleUndo y handleRedo quedan declaradas para uso del DrawToolbar
   function handleUndo() {
     const event = new CustomEvent("draw-undo");
     window.dispatchEvent(event);
@@ -131,13 +137,22 @@ export default function IndexPage() {
         />
       )}
 
-      {/* Botón/Toast de notificación flotante arriba a la derecha */}
+      {/* Botón/Toast de notificación flotante arriba a la derecha, con el
+          popup de historial en el MISMO contenedor flex (en flujo normal,
+          justo debajo) para que nunca se solapen. */}
       <div className="absolute right-4 top-4 z-50 flex flex-col items-end space-y-3">
         <AreasNotification
           count={areasCount}
           indexing={areasIndexing}
           onOpen={() => setAreasOpen(true)}
         />
+        {areasOpen && (
+          <AreasPopup
+            onClose={() => setAreasOpen(false)}
+            onShowArea={(id) => handleShowAreaOnMap(id)}
+            onChanged={refetchAreaCounts}
+          />
+        )}
       </div>
 
       {/* Barra de herramientas flotante central inferior (se oculta si hay un Job activo) */}
@@ -219,14 +234,6 @@ export default function IndexPage() {
           {error && <p className="mt-3 text-xs text-danger-fg">{error}</p>}
         </FloatingCard>
       </div>
-
-      {/* Renderizado condicional del Popup modal del Historial */}
-      {areasOpen && (
-        <AreasPopup 
-          onClose={() => setAreasOpen(false)} 
-          onShowArea={(id) => handleShowAreaOnMap(id)} 
-        />
-      )}
     </>
   );
 }
