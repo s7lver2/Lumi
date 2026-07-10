@@ -6,8 +6,9 @@ import { getSettingsRepo } from "../../../../../lib/settings-repo";
 // SECURITY BOUNDARY: this endpoint executes shell commands on the host. It is
 // only acceptable because the app is self-hosted on a trusted network with no
 // auth (spec §7.1, §10.3). Commands are fixed argv arrays keyed by step id —
-// never built from request input. Refuses to run once setup is complete unless
-// ?rerun=1 is present.
+// never built from request input.
+// The setup wizard always passes ?rerun=1 (setup is re-runnable from Settings),
+// so the completed-guard only blocks stray external callers, not the wizard.
 const REPO_ROOT = resolve(process.cwd(), "..", "..");
 const INFER = resolve(REPO_ROOT, "services", "inference");
 const STEPS: Record<string, { cmd: string; args: string[]; cwd: string }> = {

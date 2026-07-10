@@ -14,7 +14,7 @@ export function InstallItem({ stepId, label, engine, active, onDone }: {
   const reduce = useReducedMotion();
 
   useEffect(() => {
-    if (active && !started.current) { started.current = true; run(stepId); }
+    if (active && !started.current) { started.current = true; run(stepId, true); }
   }, [active, run, stepId]);
 
   useEffect(() => {

@@ -19,7 +19,7 @@ export function DatabaseStep({ onComplete }: { onComplete: () => void }) {
   const reported = useRef(false);
   const [showLog, setShowLog] = useState(false);
 
-  useEffect(() => { if (!started.current) { started.current = true; run("migrate"); } }, [run]);
+  useEffect(() => { if (!started.current) { started.current = true; run("migrate", true); } }, [run]);
   useEffect(() => { if (done && code === 0 && !reported.current) { reported.current = true; onComplete(); } }, [done, code, onComplete]);
 
   const finished = done && code === 0;
