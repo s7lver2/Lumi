@@ -35,6 +35,7 @@ export interface IndexAreaJobDeps {
             maxConcurrent: number;
             existingPanoHeadings: Set<string>;
             shouldCancel?: () => Promise<boolean> | boolean;
+            onPointDone?: (done: number, total: number) => void;
         }
     ) => Promise<{ captures: StreetViewCapture[]; failedPoints: number; cancelled: boolean }>;
     embedImages: (imagesBase64: string[], inferenceBaseUrl: string) => Promise<number[][]>;
@@ -118,11 +119,20 @@ export async function runIndexAreaJob(
             return;
         }
 
+        // SE ADICIONA: Cálculo de ratio e inyección del callback en downloadCaptures
+        const progressEveryN = Math.max(1, Math.floor(points.length / 50));
         const { captures, failedPoints, cancelled } = await deps.downloadCaptures(points, STREET_VIEW_HEADINGS, {
             apiKey,
             maxConcurrent,
             existingPanoHeadings,
             shouldCancel: () => deps.isCancelled(areaId),
+            onPointDone: (done, total) => {
+                if (done % progressEveryN === 0 || done === total) {
+                    // Fire-and-forget: don't block the download loop waiting on a DB write.
+                    // Caps writes at ~50 for the whole job regardless of area size.
+                    deps.updateAreaProgress(areaId, { pointsCaptured: done }).catch(() => {});
+                }
+            },
         });
 
         const pointsCaptured = points.length - failedPoints;

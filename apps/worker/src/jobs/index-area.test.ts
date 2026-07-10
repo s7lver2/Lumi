@@ -291,4 +291,30 @@ describe("runIndexAreaJob", () => {
     expect(statuses).not.toContain("failed");
     consoleErrorSpy.mockRestore();
   });
+    it("writes intermediate pointsCaptured updates during download, not just one at the end", async () => {
+    const downloadCaptures = vi.fn().mockImplementation(async (points, _headings, opts) => {
+      opts.onPointDone?.(1, 2);
+      opts.onPointDone?.(2, 2);
+      return {
+        captures: [{ panoId: "p1", heading: 0, lat: 0, lng: 0, captureDate: null, imageBase64: "aaa" }],
+        failedPoints: 0,
+        cancelled: false,
+      };
+    });
+    const deps = makeDeps({
+      points: [{ lat: 0, lng: 0 }, { lat: 0.0005, lng: 0 }],
+      downloadCaptures,
+      captures: [{ panoId: "p1", heading: 0, lat: 0, lng: 0, captureDate: null, imageBase64: "aaa" }],
+      embeddings: [[0.1, 0.2]],
+    });
+
+    await runIndexAreaJob({ areaId: "area-1" }, deps);
+
+    const pointsCapturedCalls = (deps.updateAreaProgress as any).mock.calls
+      .map((c: any[]) => c[1].pointsCaptured)
+      .filter((v: unknown) => v !== undefined);
+    // At least one intermediate value strictly between 0 and the final total,
+    // proving progress is reported before the download-complete update.
+    expect(pointsCapturedCalls.some((v: number) => v > 0 && v < 2)).toBe(true);
+  });
 });
