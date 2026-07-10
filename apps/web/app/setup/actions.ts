@@ -4,6 +4,7 @@
 import { redirect } from "next/navigation";
 import { SETTINGS_SCHEMA, validateSettingValue } from "@netryx/shared-types";
 import { getSettingsRepo, type SettingsRepo } from "../../lib/settings-repo";
+import { writeRuntimeMarker } from "../../lib/runtime-marker";
 
 export type SubmitSetupResult = { ok: true } | { ok: false; error: string };
 
@@ -42,6 +43,8 @@ export async function submitSetup(
   }
 
   await repo.completeSetup(writes);
+  const runtimeWrite = writes.find((w) => w.key === "INFERENCE_RUNTIME");
+  await writeRuntimeMarker(runtimeWrite?.value ?? "windows");
   return { ok: true };
 }
 

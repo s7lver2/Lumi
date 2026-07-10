@@ -8,6 +8,9 @@ function makeFormData(fields: Record<string, string>) {
   return fd;
 }
 
+vi.mock("../../lib/runtime-marker", () => ({ writeRuntimeMarker: vi.fn() }));
+import { writeRuntimeMarker } from "../../lib/runtime-marker";
+
 describe("submitSetup", () => {
   it("returns a field error and does not call completeSetup on invalid input", async () => {
     const repo = { completeSetup: vi.fn() };
@@ -38,8 +41,10 @@ describe("submitSetup", () => {
         MAX_MONTHLY_BUDGET_USD: "50",
         MAX_CONCURRENT_REQUESTS: "10",
         STREET_VIEW_PRICE_PER_IMAGE_USD: "0.007",
-        // note: no RETRIEVAL_MODEL / VERIFICATION_MODEL field — not part of
-        // the wizard's four steps (spec §14.2); they must still get written.
+        // note: no RETRIEVAL_MODEL / VERIFICATION_MODEL / VERIFICATION_CONFIRM_THRESHOLD /
+        // GOOGLE_FREE_MONTHLY_CREDIT_USD / GOOGLE_FREE_MONTHLY_IMAGES field — none
+        // are part of the wizard's four steps (spec §14.2); they must still get
+        // written from their schema defaults (spec §15.3, §9.3, §12).
       })
     );
 
@@ -53,6 +58,26 @@ describe("submitSetup", () => {
       { key: "STREET_VIEW_PRICE_PER_IMAGE_USD", value: "0.007", isSecret: false },
       { key: "RETRIEVAL_MODEL", value: "lumi-preview", isSecret: false },
       { key: "VERIFICATION_MODEL", value: "laila", isSecret: false },
+      { key: "VERIFICATION_CONFIRM_THRESHOLD", value: "0.5", isSecret: false },
+      { key: "GOOGLE_FREE_MONTHLY_CREDIT_USD", value: "0", isSecret: false },
+      { key: "GOOGLE_FREE_MONTHLY_IMAGES", value: "0", isSecret: false },
+      { key: "INFERENCE_RUNTIME", value: "windows", isSecret: false },
     ]);
+  });
+    it("writes the runtime marker file with the submitted INFERENCE_RUNTIME value", async () => {
+    const repo = { completeSetup: vi.fn() };
+    await submitSetup(
+      repo as any,
+      makeFormData({
+        GOOGLE_MAPS_API_KEY: "AIzaSyTest",
+        MAPBOX_TOKEN: "",
+        MAX_AREA_KM2: "5",
+        MAX_MONTHLY_BUDGET_USD: "50",
+        MAX_CONCURRENT_REQUESTS: "10",
+        STREET_VIEW_PRICE_PER_IMAGE_USD: "0.007",
+        INFERENCE_RUNTIME: "wsl",
+      })
+    );
+    expect(writeRuntimeMarker).toHaveBeenCalledWith("wsl");
   });
 });
