@@ -17,6 +17,7 @@
     "@netryx/shared-types": "workspace:*",
     "@turf/turf": "^7.3.5",
     "dotenv": "^17.4.2",
+    "framer-motion": "^11.11.0",
     "mapbox-gl": "^3.6.0",
     "mapbox-gl-draw-circle": "^1.1.2",
     "mapbox-gl-draw-rectangle-mode": "^1.0.4",
