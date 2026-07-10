@@ -101,8 +101,7 @@ export default function IndexPage() {
   // Manejadores ficticios / puentes para las funciones de limpieza e historial
   // Estas interactúan directamente a través de referencias o eventos con <IndexingDrawTool />
   function handleClearPolygon() {
-    const clearBtn = document.querySelector(".mapbox-gl-draw_trash") as HTMLButtonElement;
-    if (clearBtn) clearBtn.click();
+    window.dispatchEvent(new CustomEvent("draw-clear"));
     setEstimate(null);
   }
 
