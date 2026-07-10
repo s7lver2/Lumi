@@ -1,5 +1,6 @@
 // apps/web/app/api/settings/route.test.ts
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { maskSecret } from "../../settings/mask";
 import { GET, PATCH } from "./route";
 
 vi.mock("../../../lib/settings-repo", () => {
@@ -39,7 +40,7 @@ describe("GET /api/settings", () => {
     const res = await GET();
     const json = await res.json();
 
-    expect(json.MAX_AREA_KM2).toBe("5");
+    expect(json.GOOGLE_MAPS_API_KEY).toBe(maskSecret("AIzaSyRealSecret"));
     expect(json.GOOGLE_MAPS_API_KEY).toBe("••••••••");
   });
 

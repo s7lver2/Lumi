@@ -6,19 +6,18 @@ import {
   getSettingDefinition,
 } from "@netryx/shared-types";
 import { getSettingsRepo } from "../../../lib/settings-repo";
+import { maskSecret } from "../../settings/mask";
 
 const MASK = "••••••••";
 
 export async function GET() {
   const repo = getSettingsRepo();
   const result: Record<string, string> = {};
-
   for (const def of SETTINGS_SCHEMA) {
     const value = await repo.getSetting(def.key);
     if (value === null) continue;
-    result[def.key] = def.isSecret ? MASK : value;
+    result[def.key] = def.isSecret ? maskSecret(value) : value;
   }
-
   return NextResponse.json(result);
 }
 
