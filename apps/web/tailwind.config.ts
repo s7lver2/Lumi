@@ -14,7 +14,7 @@ const config: Config = {
         muted: "#9a9a95",
         subtle: "#6a6c70",
         fg: "#e8e8e6",
-        accent: { DEFAULT: "#1d9e75", fg: "#5dcaa5" },
+        accent: { DEFAULT: "#f2f3f5", fg: "#e8e8e6" },
         draw: { DEFAULT: "#378add", fg: "#85b7eb" },
         warning: { DEFAULT: "#ef9f27", fg: "#efb968" },
         danger: { DEFAULT: "#a33", fg: "#e88f8f" },
