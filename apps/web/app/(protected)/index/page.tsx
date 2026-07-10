@@ -12,9 +12,6 @@ import { AreasNotification } from "../../components/AreasNotification";
 import { AreasPopup } from "../../components/AreasPopup";
 import { DrawToolbar } from "../../components/DrawToolbar";
 
-// 🛠️ IMPORTACIÓN TEMPORAL PARA LA VERIFICACIÓN DE DROPZONE
-import { ImageDropzone } from "../../components/ImageDropzone";
-
 export default function IndexPage() {
   const [map, setMap] = useState<any>(null);
   const { drawnPolygon, areaKm2, estimate, activeJobId, setEstimate, startJob } = useIndexingStore();
@@ -167,19 +164,6 @@ export default function IndexPage() {
 
       {/* CONTENEDOR DE INTERFAZ LATERAL */}
       <div className="absolute right-4 top-20 w-72 space-y-4 z-40">
-        
-        {/* 🛠️ TARJETA SCRATCH TEMPORAL PARA COMPROBAR EL DROPZONE */}
-        <FloatingCard className="p-4 border border-dashed border-accent/40">
-          <h2 className="text-xs font-semibold text-accent-fg uppercase tracking-wider mb-2">
-            Test: Image Dropzone
-          </h2>
-          <ImageDropzone 
-            onImage={(file) => {
-              console.log("📸 [Dropzone Event] Archivo recibido en la página:");
-              console.log(`Nombre: ${file.name} | Tamaño: ${(file.size / 1024).toFixed(2)} KB`);
-            }} 
-          />
-        </FloatingCard>
 
         {/* PANEL ORIGINAL DE INDEXACIÓN */}
         <FloatingCard className="p-4">
