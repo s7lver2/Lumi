@@ -12,12 +12,24 @@ export interface DownloadOptions {
   existingPanoHeadings: Set<string>;
   retries?: number;
   retryBaseDelayMs?: number;
+  /**
+   * Checked once before starting each point (not per-heading, to bound the
+   * check to O(points) calls). Lets a user-cancelled job stop issuing new
+   * work within one point's worth of latency instead of running to
+   * completion — points already mid-flight when cancellation lands still
+   * finish, but no new points are started.
+   */
+  shouldCancel?: () => Promise<boolean> | boolean;
+  /** Invoked once per point as it finishes (success, no-coverage, or skipped-by-cancellation), for live progress reporting. */
+  onPointDone?: (done: number, total: number) => void;
 }
 
 export interface DownloadResult {
   captures: StreetViewCapture[];
   /** Points where every heading came back with no Street View coverage. */
   failedPoints: number;
+  /** True if the job was cancelled mid-download (some points were skipped, not "no coverage"). */
+  cancelled: boolean;
 }
 
 async function withRetry<T>(
@@ -94,9 +106,18 @@ export async function downloadCaptures(
   const retryBaseDelayMs = options.retryBaseDelayMs ?? 200;
   const seenThisRun = new Set(options.existingPanoHeadings);
 
+  // SE MODIFICA: Se añade el contador de progreso atómico
+  let doneCount = 0;
+
   const perPointResults = await Promise.all(
     points.map((point) =>
       limit(async () => {
+        if (await Promise.resolve(options.shouldCancel?.() ?? false)) {
+          doneCount += 1;
+          options.onPointDone?.(doneCount, points.length);
+          return { captures: [] as StreetViewCapture[], failed: false, skipped: true };
+        }
+
         const captures: StreetViewCapture[] = [];
         let anyCoverage = false;
 
@@ -133,13 +154,16 @@ export async function downloadCaptures(
           });
         }
 
-        return { captures, failed: !anyCoverage };
+        doneCount += 1;
+        options.onPointDone?.(doneCount, points.length);
+        return { captures, failed: !anyCoverage, skipped: false };
       })
     )
   );
 
   const captures = perPointResults.flatMap((r) => r.captures);
   const failedPoints = perPointResults.filter((r) => r.failed).length;
+  const cancelled = perPointResults.some((r) => r.skipped);
 
-  return { captures, failedPoints };
+  return { captures, failedPoints, cancelled };
 }

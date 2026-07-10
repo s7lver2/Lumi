@@ -132,4 +132,53 @@ describe("downloadCaptures", () => {
 
     expect(maxObservedInFlight).toBeLessThanOrEqual(2);
   }, 10000);
+
+  it("stops issuing new point work once shouldCancel returns true, and reports cancelled", async () => {
+    const points: SampledPoint[] = Array.from({ length: 4 }, (_, i) => ({ lat: i, lng: i }));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(metadataResponse("pano-x", false)));
+
+    const result = await downloadCaptures(points, [0], {
+      apiKey: "test-key",
+      maxConcurrent: 4,
+      existingPanoHeadings: new Set(),
+      shouldCancel: () => true,
+    });
+
+    expect(result.cancelled).toBe(true);
+    expect(result.captures).toHaveLength(0);
+    expect(result.failedPoints).toBe(0); // skipped points are not "no coverage" failures
+  });
+
+  it("reports cancelled: false when shouldCancel never fires", async () => {
+    const points: SampledPoint[] = [{ lat: 1, lng: 1 }];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(metadataResponse("pano-x", false)));
+
+    const result = await downloadCaptures(points, [0], {
+      apiKey: "test-key",
+      maxConcurrent: 1,
+      existingPanoHeadings: new Set(),
+      shouldCancel: () => false,
+    });
+
+    expect(result.cancelled).toBe(false);
+  });
+    it("calls onPointDone once per point as each one finishes, ending at total", async () => {
+    const points: SampledPoint[] = Array.from({ length: 4 }, (_, i) => ({ lat: i, lng: i }));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(metadataResponse("pano-x", false)));
+    const onPointDone = vi.fn();
+
+    await downloadCaptures(points, [0], {
+      apiKey: "test-key",
+      maxConcurrent: 4,
+      existingPanoHeadings: new Set(),
+      onPointDone,
+    });
+
+    expect(onPointDone).toHaveBeenCalledTimes(4);
+    for (const call of onPointDone.mock.calls) {
+      expect(call[1]).toBe(4); // total is always 4
+    }
+    const doneValues = onPointDone.mock.calls.map((c) => c[0]).sort((a, b) => a - b);
+    expect(doneValues).toEqual([1, 2, 3, 4]);
+  });
 });
