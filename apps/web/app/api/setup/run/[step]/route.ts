@@ -19,6 +19,16 @@ const STEPS: Record<string, { cmd: string; args: string[]; cwd: string }> = {
     args: ["-c", "import torch; torch.hub.load('gmberton/MegaLoc','get_trained_model'); import romatch; romatch.roma_outdoor(device='cpu')"],
     cwd: INFER,
   },
+  "weights-retrieval": {
+    cmd: resolve(INFER, "venv", "Scripts", "python.exe"),
+    args: ["-c", "import torch; torch.hub.load('gmberton/MegaLoc','get_trained_model')"],
+    cwd: INFER,
+  },
+  "weights-verification": {
+    cmd: resolve(INFER, "venv", "Scripts", "python.exe"),
+    args: ["-c", "import romatch; romatch.roma_outdoor(device='cpu')"],
+    cwd: INFER,
+  },
 };
 
 export async function POST(request: Request, { params }: { params: { step: string } }) {
