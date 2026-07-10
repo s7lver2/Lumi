@@ -14,19 +14,14 @@ const STEPS: Record<string, { cmd: string; args: string[]; cwd: string }> = {
   migrate: { cmd: "pnpm", args: ["migrate:up"], cwd: resolve(REPO_ROOT, "db") },
   "inference-venv": { cmd: "python", args: ["-m", "venv", "venv"], cwd: INFER },
   "inference-deps": { cmd: resolve(INFER, "venv", "Scripts", "pip.exe"), args: ["install", "-r", "requirements.txt"], cwd: INFER },
-  "inference-weights": {
-    cmd: resolve(INFER, "venv", "Scripts", "python.exe"),
-    args: ["-c", "import torch; torch.hub.load('gmberton/MegaLoc','get_trained_model'); import romatch; romatch.roma_outdoor(device='cpu')"],
-    cwd: INFER,
-  },
   "weights-retrieval": {
     cmd: resolve(INFER, "venv", "Scripts", "python.exe"),
-    args: ["-c", "import torch; torch.hub.load('gmberton/MegaLoc','get_trained_model')"],
+    args: ["download_weights.py", "retrieval"],
     cwd: INFER,
   },
   "weights-verification": {
     cmd: resolve(INFER, "venv", "Scripts", "python.exe"),
-    args: ["-c", "import romatch; romatch.roma_outdoor(device='cpu')"],
+    args: ["download_weights.py", "verification"],
     cwd: INFER,
   },
 };
