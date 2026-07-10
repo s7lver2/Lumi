@@ -253,7 +253,7 @@ function renderAreaOnMap(map: any, areaGeometry: any, pointsGeometry: any) {
     id: "area-points-dots",
     type: "circle",
     source: "area-points",
-    paint: { "circle-radius": 2.5, "circle-color": "#5dcaa5", "circle-opacity": 0.8 },
+    paint: { "circle-radius": 2.5, "circle-color": "#e8e8e6", "circle-opacity": 0.8 },
   });
 
   if (areaGeometry.coordinates && areaGeometry.coordinates[0]) {

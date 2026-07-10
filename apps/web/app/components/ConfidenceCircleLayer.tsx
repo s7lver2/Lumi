@@ -49,7 +49,7 @@ export function ConfidenceCircleLayer({ map }: { map: any }) {
         type: "fill",
         source: "lumi-conf-circles",
         paint: {
-          "fill-color": "#5dcaa5",
+          "fill-color": "#e8e8e6",
           "fill-opacity": ["case", ["get", "selected"], 0.16, 0.07],
         },
       });
@@ -58,7 +58,7 @@ export function ConfidenceCircleLayer({ map }: { map: any }) {
         type: "line",
         source: "lumi-conf-circles",
         paint: {
-          "line-color": "#5dcaa5",
+          "line-color": "#e8e8e6",
           "line-width": ["case", ["get", "selected"], 2, 1],
           "line-opacity": 0.7,
         },
@@ -73,7 +73,7 @@ export function ConfidenceCircleLayer({ map }: { map: any }) {
         paint: {
           "circle-radius": 13,
           "circle-color": "#15171a",
-          "circle-stroke-color": ["case", ["get", "selected"], "#5dcaa5", "#4a4c50"],
+          "circle-stroke-color": ["case", ["get", "selected"], "#e8e8e6", "#4a4c50"],
           "circle-stroke-width": 2,
         },
       });
