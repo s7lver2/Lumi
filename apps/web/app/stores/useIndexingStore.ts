@@ -22,7 +22,7 @@ interface IndexingState {
   jobProgress: JobProgress | null;
   setDrawnPolygon: (polygon: [number, number][], areaKm2: number) => void;
   clearPolygon: () => void;
-  setEstimate: (estimate: Estimate) => void;
+  setEstimate: (estimate: Estimate | null) => void;
   startJob: (areaId: string) => void;
   updateProgress: (progress: JobProgress) => void;
   reset: () => void;

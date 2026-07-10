@@ -27,4 +27,10 @@ describe("useIndexingStore", () => {
     });
     expect(useIndexingStore.getState().jobProgress?.pointsCaptured).toBe(1842);
   });
+  it("sets and clears the estimate", () => {
+    useIndexingStore.getState().setEstimate({ pointsEstimated: 100, estimatedCostUsd: 1.5 });
+    expect(useIndexingStore.getState().estimate?.pointsEstimated).toBe(100);
+    useIndexingStore.getState().setEstimate(null);
+    expect(useIndexingStore.getState().estimate).toBeNull();
+  });
 });
