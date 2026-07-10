@@ -66,6 +66,7 @@ function makeDeps(
     // 🛠️ MOCKS GLOBALES POR DEFECTO PARA EVITAR MÚLTIPLES TYPEERRORS
     getMonthlySpendUsd: overrides.getMonthlySpendUsd ?? vi.fn().mockResolvedValue(0),
     recordStreetViewUsage: overrides.recordStreetViewUsage ?? vi.fn().mockResolvedValue(undefined),
+    isCancelled: overrides.isCancelled ?? vi.fn().mockResolvedValue(false),
     ...overrides,
   };
 }
@@ -225,5 +226,69 @@ describe("runIndexAreaJob", () => {
     await runIndexAreaJob({ areaId: "area-1" }, deps);
 
     expect(recordStreetViewUsage).toHaveBeenCalledWith(2, 0.007);
+  });
+
+  it("bails out immediately, without touching status, when already cancelled before it starts", async () => {
+    const deps = makeDeps({ isCancelled: vi.fn().mockResolvedValue(true) });
+
+    await runIndexAreaJob({ areaId: "area-1" }, deps);
+
+    expect(deps.fetchStreetGeometry).not.toHaveBeenCalled();
+    expect(deps.downloadCaptures).not.toHaveBeenCalled();
+    expect(deps.updateAreaProgress).not.toHaveBeenCalled();
+  });
+
+  it("stops after a cancelled download without marking the area failed or indexed", async () => {
+    const downloadCaptures = vi.fn().mockResolvedValue({ captures: [], failedPoints: 0, cancelled: true });
+    const deps = makeDeps({ downloadCaptures });
+
+    await runIndexAreaJob({ areaId: "area-1" }, deps);
+
+    expect(deps.embedImages).not.toHaveBeenCalled();
+    const statuses = (deps.updateAreaProgress as any).mock.calls.map((c: any[]) => c[1].status).filter(Boolean);
+    expect(statuses).not.toContain("failed");
+    expect(statuses).not.toContain("indexed");
+  });
+
+  it("passes a shouldCancel callback into downloadCaptures backed by isCancelled", async () => {
+    const isCancelled = vi.fn().mockResolvedValue(false);
+    const downloadCaptures = vi.fn().mockResolvedValue({ captures: [], failedPoints: 0, cancelled: false });
+    const deps = makeDeps({ downloadCaptures, isCancelled });
+
+    await runIndexAreaJob({ areaId: "area-1" }, deps);
+
+    const opts = downloadCaptures.mock.calls[0][2];
+    expect(typeof opts.shouldCancel).toBe("function");
+    await opts.shouldCancel();
+    expect(isCancelled).toHaveBeenCalledWith("area-1");
+  });
+    it("catches an error from BEFORE downloadCaptures (e.g. fetchStreetGeometry/Overpass), logs it, and marks the area failed instead of leaving it stuck", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const deps = makeDeps({
+      fetchStreetGeometry: vi.fn().mockRejectedValue(new Error("Overpass 504")),
+    });
+
+    await expect(runIndexAreaJob({ areaId: "area-1" }, deps)).resolves.toBeUndefined();
+
+    const statuses = (deps.updateAreaProgress as any).mock.calls.map((c: any[]) => c[1].status).filter(Boolean);
+    expect(statuses).toContain("failed");
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("does not overwrite an already-cancelled area with failed when a later step throws", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const deps = makeDeps({
+      isCancelled: vi.fn().mockResolvedValue(false).mockResolvedValueOnce(false).mockResolvedValueOnce(false),
+      insertIndexedImages: vi.fn().mockRejectedValue(new Error("db write failed")),
+    });
+    // Simulate: cancelled flips true only by the time the outer catch checks it.
+    (deps.isCancelled as any).mockResolvedValue(true);
+
+    await runIndexAreaJob({ areaId: "area-1" }, deps);
+
+    const statuses = (deps.updateAreaProgress as any).mock.calls.map((c: any[]) => c[1].status).filter(Boolean);
+    expect(statuses).not.toContain("failed");
+    consoleErrorSpy.mockRestore();
   });
 });
