@@ -20,11 +20,15 @@ Compression=lzma2
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
+AppPublisher=Lumi
 WizardStyle=modern
 
 [Languages]
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Messages]
+FinishedLabel=Lumi se ha instalado. Al iniciarlo por primera vez se abrirá tu navegador en http://localhost:3000%n%nLa primera vez te llevará automáticamente al asistente de instalación (/setup), que instala los modelos y termina comprobando que el servicio de inferencia y el worker están realmente arrancados.
 
 [Files]
 Source: "__LUMI_STAGING_DIR__\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
