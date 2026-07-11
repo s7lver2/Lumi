@@ -36,6 +36,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # Directories copied in full (source), pruning BUNDLE_EXCLUDE_DIR_NAMES —
@@ -96,6 +97,45 @@ def _run(cmd: list[str], cwd: Path) -> None:
     subprocess.run(cmd, cwd=cwd, shell=(sys.platform == "win32"), check=True)
 
 
+def _copy_file_with_retry(src: Path, dst: Path, attempts: int = 8) -> None:
+    """Individual files under node_modules intermittently raise WinError 32
+    ("being used by another process") right after being (re)written — seen
+    live to affect an entire package's worth of files at once, consistent
+    with Windows Search's SearchProtocolHost indexing freshly-written .js
+    content out from under us. Confirmed NOT a persistent lock (the same
+    file deletes cleanly moments later), so a short per-file retry rides
+    through it — far cheaper than re-copying an entire tree on failure."""
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            shutil.copy2(src, dst)
+            return
+        except (PermissionError, OSError) as exc:
+            last_error = exc
+            if attempt < attempts:
+                time.sleep(0.5 * attempt)
+    raise last_error
+
+
+def _copytree_with_retry(src: Path, dst: Path, ignore_dirs: frozenset = frozenset()) -> None:
+    """Manual recursive copy (not shutil.copytree) so a transient per-file
+    lock only costs a retry on that one file, not the whole subtree."""
+    dst.mkdir(parents=True, exist_ok=True)
+    for entry in src.iterdir():
+        if entry.name in ignore_dirs:
+            continue
+        target = dst / entry.name
+        if entry.is_dir():
+            # is_dir() follows symlinks, so directory-symlinks (e.g. next's
+            # own node_modules/next -> pnpm store) are dereferenced and their
+            # real contents copied in, matching shutil.copytree's default
+            # (symlinks=False) behavior instead of trying to open a
+            # directory as a file.
+            _copytree_with_retry(entry, target, ignore_dirs)
+        elif not target.exists():
+            _copy_file_with_retry(entry, target)
+
+
 def stage_bundle(root: Path, staging_dir: Path) -> None:
     if staging_dir.exists():
         shutil.rmtree(staging_dir)
@@ -150,12 +190,89 @@ def build_web(root: Path) -> Path:
     return standalone
 
 
-# Packages Next's standalone file-tracer (@vercel/nft) doesn't pick up because
-# they're only reached through next's own require-hook at runtime, not a
-# statically-traceable `require(...)` — confirmed missing from
-# .next/standalone/node_modules even after adding them as a direct dependency
-# of apps/web (which is otherwise enough for regular hoisted-by-pnpm deps).
-RUNTIME_ONLY_DEPS = ["styled-jsx"]
+def _installed_package_names(node_modules: Path) -> list[str]:
+    """Lists direct entries of a node_modules dir as require()-able package
+    names, expanding scoped (@scope/name) packages one level down."""
+    names: list[str] = []
+    if not node_modules.exists():
+        return names
+    for entry in sorted(node_modules.iterdir()):
+        if not entry.is_dir() or entry.name in (".bin", ".pnpm"):
+            continue
+        if entry.name.startswith("@"):
+            for sub in sorted(entry.iterdir()):
+                if sub.is_dir():
+                    names.append(f"{entry.name}/{sub.name}")
+        else:
+            names.append(entry.name)
+    return names
+
+
+def _resolve_package_dir(root: Path, source_modules: Path, name: str) -> Path | None:
+    """Finds a package's real (non-symlink) directory: prefer apps/web's own
+    top-level copy — with .npmrc's package-import-method=copy this is a real
+    directory, not a symlink, so `.resolve()` on it is a no-op and can't be
+    used to hop into the pnpm store like it could pre-copy-mode — falling
+    back to scanning node_modules/.pnpm for a folder whose name starts with
+    '<encoded-name>@' (pnpm's on-disk key format, scopes encoded as '+') for
+    nested-only packages (e.g. styled-jsx, pg-types) that never get a
+    top-level entry of their own."""
+    top_level = source_modules / name
+    if top_level.exists():
+        return top_level.resolve() if top_level.is_symlink() else top_level
+
+    pnpm_store = root / "node_modules" / ".pnpm"
+    if not pnpm_store.exists():
+        return None
+    store_key_prefix = name.replace("/", "+") + "@"
+    for entry in pnpm_store.iterdir():
+        if entry.name.startswith(store_key_prefix):
+            candidate = entry / "node_modules" / name
+            if candidate.exists():
+                return candidate
+    return None
+
+
+def _ensure_complete_dependency_closure(root: Path, dest: Path) -> None:
+    """Next's standalone file-tracer (@vercel/nft) is unreliable on this
+    pnpm-managed monorepo in two ways, both confirmed live: it drops whole
+    sibling packages next/pg/etc. resolve via pnpm's virtual store rather
+    than a statically-traceable `require(...)` (styled-jsx, @swc/helpers,
+    @next/env, pg-types, ...), AND it drops individual files *within* an
+    already-copied package once a route touches a code path its static
+    analysis doesn't see (react-dom missing its own server.browser.js).
+    Rather than patch each missing name/file as it's discovered, merge in
+    the COMPLETE real content (dirs_exist_ok=True — adds/overwrites, never
+    deletes what nft did correctly include) for every direct dependency of
+    apps/web, then recurse into each package's own declared `dependencies`
+    the same way. Trades some shipped-but-unused bytes (e.g. client-only
+    libs like mapbox-gl also landing in node_modules) for not playing
+    whack-a-mole with nft's static analysis forever."""
+    source_modules = root / "apps" / "web" / "node_modules"
+    dest_modules = dest / "node_modules"
+    seen: set[str] = set()
+
+    def visit(name: str) -> None:
+        if name in seen:
+            return
+        seen.add(name)
+        real_dir = _resolve_package_dir(root, source_modules, name)
+        if real_dir is None or not real_dir.exists():
+            return
+
+        target = dest_modules / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        _copytree_with_retry(real_dir, target, ignore_dirs=frozenset({"node_modules"}))
+
+        pkg_json = real_dir / "package.json"
+        if not pkg_json.exists():
+            return
+        deps = json.loads(pkg_json.read_text(encoding="utf-8")).get("dependencies", {})
+        for dep_name in deps:
+            visit(dep_name)
+
+    for name in _installed_package_names(source_modules):
+        visit(name)
 
 
 def overlay_built_web(root: Path, standalone_dir: Path, staging_dir: Path) -> None:
@@ -173,27 +290,17 @@ def overlay_built_web(root: Path, standalone_dir: Path, staging_dir: Path) -> No
     if local_data.exists():
         shutil.rmtree(local_data)
 
-    shutil.copytree(standalone_dir, dest, dirs_exist_ok=True)
+    _copytree_with_retry(standalone_dir, dest)
 
     static_src = root / "apps" / "web" / ".next" / "static"
     if static_src.exists():
-        shutil.copytree(static_src, dest / ".next" / "static", dirs_exist_ok=True)
+        _copytree_with_retry(static_src, dest / ".next" / "static")
 
     public_src = root / "apps" / "web" / "public"
     if public_src.exists():
-        shutil.copytree(public_src, dest / "public", dirs_exist_ok=True)
+        _copytree_with_retry(public_src, dest / "public")
 
-    for package in RUNTIME_ONLY_DEPS:
-        target = dest / "node_modules" / package
-        if target.exists():
-            continue
-        source = root / "apps" / "web" / "node_modules" / package
-        if not source.exists():
-            raise FileNotFoundError(
-                f"{source} not found — add '{package}' as a direct dependency of "
-                "apps/web/package.json and run `pnpm install` first."
-            )
-        shutil.copytree(source, target, dirs_exist_ok=True)
+    _ensure_complete_dependency_closure(root, dest)
 
 
 def build_worker(root: Path, work_dir: Path) -> Path:
@@ -303,6 +410,14 @@ def main(argv: list[str] | None = None) -> int:
     version = read_version(root)
     dist_dir = root / "dist"
     staging_dir = dist_dir / f"lumi-{version}"
+
+    # Guards against a flaky local pnpm store: seen live where node_modules/
+    # .pnpm/next@... shrank to a near-empty stub between two otherwise
+    # identical `pnpm --filter @netryx/web build` runs, breaking the build
+    # with "Cannot find module './impl'" — `--force` re-links everything from
+    # the store before we rely on it being intact.
+    print("Reinstalling dependencies (pnpm install --force)...")
+    _run(["pnpm", "install", "--force"], cwd=root)
 
     print(f"Staging Lumi {version}...")
     stage_bundle(root, staging_dir)
