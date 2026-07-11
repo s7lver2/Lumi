@@ -4,30 +4,49 @@
 import { useEffect } from "react";
 import * as turf from "@turf/turf";
 import { useSearchStore } from "../stores/useSearchStore";
+import { flyToRegion } from "../lib/map-camera";
+
+// Once a region has been refined (its top candidate has a verificationScore),
+// RoMa/Laila has already geometrically pinned the location down — showing
+// the same fixed 150m clustering-bucket circle at that point would be the
+// same false-precision problem already fixed once for the "Radio" label
+// (see TopResultCard.tsx/BottomSummaryBar.tsx). Collapse to a small, fixed
+// radius "pin" instead, centered on the verified candidate's own lat/lng
+// (not the region's original, fuzzier centroid).
+const REFINED_RADIUS_KM = 0.003; // ~3m — reads as a precise point, not a search area
 
 export function ConfidenceCircleLayer({ map }: { map: any }) {
   const regions = useSearchStore((s) => s.regions);
+  const candidatesByRegion = useSearchStore((s) => s.candidatesByRegion);
   const selectedRegionId = useSearchStore((s) => s.selectedRegionId);
   const selectRegion = useSearchStore((s) => s.selectRegion);
 
   useEffect(() => {
     if (!map) return;
 
+    const regionGeometry = regions.map((r) => {
+      const top = candidatesByRegion[r.id]?.[0];
+      const refined = top?.verificationScore != null;
+      const center: [number, number] = refined ? [top!.lng, top!.lat] : [r.centroid.lng, r.centroid.lat];
+      const radiusKm = refined ? REFINED_RADIUS_KM : r.radiusM / 1000;
+      return { region: r, center, radiusKm, refined };
+    });
+
     const circles: GeoJSON.FeatureCollection = {
       type: "FeatureCollection",
-      features: regions.map((r, i) =>
-        turf.circle([r.centroid.lng, r.centroid.lat], r.radiusM / 1000, {
+      features: regionGeometry.map(({ region: r, center, radiusKm, refined }, i) =>
+        turf.circle(center, radiusKm, {
           units: "kilometers",
-          properties: { id: r.id, rank: i + 1, selected: r.id === selectedRegionId },
+          properties: { id: r.id, rank: i + 1, selected: r.id === selectedRegionId, refined },
         })
       ),
     };
     const centroids: GeoJSON.FeatureCollection = {
       type: "FeatureCollection",
-      features: regions.map((r, i) => ({
+      features: regionGeometry.map(({ region: r, center, refined }, i) => ({
         type: "Feature",
-        geometry: { type: "Point", coordinates: [r.centroid.lng, r.centroid.lat] },
-        properties: { id: r.id, rank: i + 1, selected: r.id === selectedRegionId },
+        geometry: { type: "Point", coordinates: center },
+        properties: { id: r.id, rank: i + 1, selected: r.id === selectedRegionId, refined },
       })),
     };
 
@@ -86,7 +105,10 @@ export function ConfidenceCircleLayer({ map }: { map: any }) {
       });
       map.on("click", "lumi-conf-centroids-circle", (e: any) => {
         const id = e.features?.[0]?.properties?.id;
-        if (id) selectRegion(id);
+        if (!id) return;
+        selectRegion(id);
+        const region = regions.find((r) => r.id === id);
+        if (region) flyToRegion(map, region);
       });
       map.on("mouseenter", "lumi-conf-centroids-circle", () => (map.getCanvas().style.cursor = "pointer"));
       map.on("mouseleave", "lumi-conf-centroids-circle", () => (map.getCanvas().style.cursor = ""));
@@ -94,7 +116,7 @@ export function ConfidenceCircleLayer({ map }: { map: any }) {
 
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
-  }, [map, regions, selectedRegionId, selectRegion]);
+  }, [map, regions, candidatesByRegion, selectedRegionId, selectRegion]);
 
   return null;
 }
