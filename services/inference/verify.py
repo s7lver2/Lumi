@@ -36,9 +36,9 @@ def calibrate_score(inliers: int, reproj_error: float, config: dict) -> float:
     return float(inlier_term * error_term)
 
 
-def _collect_matches(query_img, candidate_img, matcher):
-    q_tiles = multiscale_tiles(query_img)
-    c_tiles = multiscale_tiles(candidate_img)
+def _collect_matches(query_img, candidate_img, matcher, passes: int = 5):
+    q_tiles = multiscale_tiles(query_img, passes)
+    c_tiles = multiscale_tiles(candidate_img, passes)
     pts_q, pts_c = [], []
     # match tile-for-tile at the same scale/position index
     for qt, ct in zip(q_tiles, c_tiles):
@@ -54,9 +54,9 @@ def _collect_matches(query_img, candidate_img, matcher):
     return np.concatenate(pts_q), np.concatenate(pts_c)
 
 
-def verify_pair(query_img, candidate_img, matcher, config: dict | None = None) -> dict:
+def verify_pair(query_img, candidate_img, matcher, config: dict | None = None, passes: int = 5) -> dict:
     cfg = config or DEFAULT_VERIFY_CONFIG
-    src, dst = _collect_matches(query_img, candidate_img, matcher)
+    src, dst = _collect_matches(query_img, candidate_img, matcher, passes)
 
     if len(src) < 4:
         return {"inliers": int(len(src)), "reproj_error": float("inf"), "score": 0.0}

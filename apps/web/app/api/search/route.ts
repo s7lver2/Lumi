@@ -55,6 +55,16 @@ export async function POST(request: Request) {
     persist: (args) => persistSearch(pool, args),
   };
 
-  const result = await runSearch(deps, { imageBase64, imageBytes: bytes, imageExt });
-  return NextResponse.json(result, { status: 201 });
+  try {
+    const result = await runSearch(deps, { imageBase64, imageBytes: bytes, imageExt });
+    return NextResponse.json(result, { status: 201 });
+  } catch (err) {
+    // runSearch reaches the inference service and Postgres — either can be
+    // down. Return a JSON error the client can show instead of an unhandled
+    // 500 with an empty body (which crashes the client's JSON.parse).
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Search failed" },
+      { status: 502 }
+    );
+  }
 }

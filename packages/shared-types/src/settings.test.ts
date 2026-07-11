@@ -1,9 +1,8 @@
 // packages/shared-types/src/settings.test.ts
 import { describe, it, expect } from "vitest";
-import { SETTINGS_SCHEMA, validateSettingValue } from "./settings";
+import { SETTINGS_SCHEMA, validateSettingValue, getSettingDefinition } from "./settings";
+import { DEFAULT_CONFIRM_THRESHOLD } from "./search";
 import { RETRIEVAL_MODELS, VERIFICATION_MODELS } from "./models";
-import { getSettingDefinition, validateSettingValue } from "./settings";
-
 
 describe("SETTINGS_SCHEMA", () => {
   it("lists every product-level setting from spec §14.1", () => {
@@ -94,10 +93,24 @@ describe("validateSettingValue", () => {
       /one of/i
     );
   });
-  it("defines VERIFICATION_CONFIRM_THRESHOLD as a number setting with a sane default", () => {
+  it("defines VERIFICATION_CONFIRM_THRESHOLD as a 0-1 slider setting with a sane default", () => {
     const def = getSettingDefinition("VERIFICATION_CONFIRM_THRESHOLD");
-    expect(def.type).toBe("number");
+    expect(def.type).toBe("slider");
+    expect(def.min).toBe(0);
+    expect(def.max).toBe(1);
     expect(def.defaultValue).toBe("0.5");
     expect(() => validateSettingValue("VERIFICATION_CONFIRM_THRESHOLD", "0.7")).not.toThrow();
+  });
+  it("accepts a fractional slider value and rejects one outside min/max", () => {
+    expect(() => validateSettingValue("VERIFICATION_CONFIRM_THRESHOLD", "0.55")).not.toThrow();
+    expect(() => validateSettingValue("VERIFICATION_CONFIRM_THRESHOLD", "1.5")).toThrow(/between/i);
+  });
+  it("has a confirm threshold in (0, 1] (spec §9.3)", () => {
+    expect(DEFAULT_CONFIRM_THRESHOLD).toBeGreaterThan(0);
+    expect(DEFAULT_CONFIRM_THRESHOLD).toBeLessThanOrEqual(1);
+  });
+  it("defines Google free-tier settings defaulting to 0", () => {
+    expect(getSettingDefinition("GOOGLE_FREE_MONTHLY_CREDIT_USD").defaultValue).toBe("0");
+    expect(getSettingDefinition("GOOGLE_FREE_MONTHLY_IMAGES").defaultValue).toBe("0");
   });
 });

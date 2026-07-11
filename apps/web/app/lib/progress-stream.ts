@@ -3,7 +3,7 @@ import type { AreaStatus } from "@netryx/shared-types";
 import type { JobProgress } from "../stores/useIndexingStore";
 
 export function isTerminal(status: AreaStatus): boolean {
-  return status === "indexed" || status === "failed";
+  return status === "indexed" || status === "failed" || status === "cancelled";
 }
 
 export function parseProgressData(json: string): JobProgress {

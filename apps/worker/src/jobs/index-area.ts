@@ -25,7 +25,7 @@ export interface IndexAreaJobDeps {
     getArea: (areaId: string) => Promise<AreaRow>;
     getAreaPolygon: (areaId: string) => Promise<[number, number][]>;
     fetchStreetGeometry: (polygon: [number, number][]) => Promise<LineStringGeoJSON[]>;
-    samplePointsAlongStreets: (lines: LineStringGeoJSON[], spacingMeters: number) => SampledPoint[];
+    samplePointsAlongStreets: (lines: LineStringGeoJSON[], spacingMeters: number, polygon: [number, number][]) => SampledPoint[];
     loadExistingPanoHeadings: () => Promise<Set<string>>;
     downloadCaptures: (
         points: SampledPoint[],
@@ -52,6 +52,14 @@ export interface IndexAreaJobDeps {
 }
 
 const SAMPLING_SPACING_METERS = 18; // midpoint of the spec's "every ~15-20m" (spec §4 step 2)
+
+// Embedding one giant batch (e.g. 356 images for an 89-point area) OOMs the
+// CPU-bound inference service — confirmed live: "not enough memory: you
+// tried to allocate 6375342080 bytes" from a single /embed call. Chunking
+// keeps each request small AND, as a side effect, lets us insert rows into
+// indexed_images progressively instead of all at once at the very end — so
+// the map can show points appearing as they're indexed, not in one jump.
+const EMBED_CHUNK_SIZE = 16;
 
 export async function runIndexAreaJob(
     payload: IndexAreaJobPayload,
@@ -100,7 +108,7 @@ export async function runIndexAreaJob(
         const freeImages = Number(freeImagesRaw ?? "0");
 
         const lines = await deps.fetchStreetGeometry(polygon);
-        const points = deps.samplePointsAlongStreets(lines, SAMPLING_SPACING_METERS);
+        const points = deps.samplePointsAlongStreets(lines, SAMPLING_SPACING_METERS, polygon);
 
         // SE ADICIONA: Log informativo sobre el inicio de la tarea
         console.log(`[index-area] iniciando área ${areaId} (${points.length} puntos)`);
@@ -156,41 +164,59 @@ export async function runIndexAreaJob(
         // finished but before embedding (the expensive next stage) started.
         if (await deps.isCancelled(areaId)) return;
 
-        let embeddings: number[][];
-        try {
-            embeddings = await deps.embedImages(
-                captures.map((c) => c.imageBase64),
-                deps.inferenceBaseUrl
-            );
-        } catch (err) {
-            // No silenciar: sin esto, un área marcada "failed" no da ninguna
-            // pista de si el servicio de inferencia está caído, tardó demasiado,
-            // o devolvió un error — hay que verlo en la terminal del worker.
-            console.error(`[index-area] embedImages falló para el área ${areaId}:`, err);
-            await deps.updateAreaProgress(areaId, { status: "failed", pointsFailed: failedPoints });
-            return;
-        }
-
+        const embeddings: number[][] = [];
         const inserts: IndexedImageInsert[] = [];
-        for (let i = 0; i < captures.length; i++) {
-            const capture = captures[i];
-            const imagePath = await deps.saveCaptureImage(
-                capture.panoId,
-                capture.heading,
-                capture.imageBase64
-            );
-            inserts.push({
-                panoId: capture.panoId,
-                heading: capture.heading,
-                lat: capture.lat,
-                lng: capture.lng,
-                captureDate: capture.captureDate,
-                embedding: embeddings[i],
-                imagePath,
-            });
-        }
 
-        await deps.insertIndexedImages(areaId, inserts);
+        for (let start = 0; start < captures.length; start += EMBED_CHUNK_SIZE) {
+            const chunk = captures.slice(start, start + EMBED_CHUNK_SIZE);
+            let chunkEmbeddings: number[][];
+            try {
+                chunkEmbeddings = await deps.embedImages(
+                    chunk.map((c) => c.imageBase64),
+                    deps.inferenceBaseUrl
+                );
+            } catch (err) {
+                // No silenciar: sin esto, un área marcada "failed" no da ninguna
+                // pista de si el servicio de inferencia está caído, tardó demasiado,
+                // se quedó sin memoria, o devolvió un error — hay que verlo en la
+                // terminal del worker.
+                console.error(`[index-area] embedImages falló para el área ${areaId}:`, err);
+                await deps.updateAreaProgress(areaId, {
+                    status: "failed",
+                    pointsFailed: failedPoints,
+                    imagesEmbedded: inserts.length,
+                });
+                return;
+            }
+            embeddings.push(...chunkEmbeddings);
+
+            const chunkInserts: IndexedImageInsert[] = [];
+            for (let i = 0; i < chunk.length; i++) {
+                const capture = chunk[i];
+                const imagePath = await deps.saveCaptureImage(
+                    capture.panoId,
+                    capture.heading,
+                    capture.imageBase64
+                );
+                chunkInserts.push({
+                    panoId: capture.panoId,
+                    heading: capture.heading,
+                    lat: capture.lat,
+                    lng: capture.lng,
+                    captureDate: capture.captureDate,
+                    embedding: chunkEmbeddings[i],
+                    imagePath,
+                });
+            }
+
+            // Insertado lote a lote (no acumulado hasta el final): así el mapa,
+            // sondeando /api/areas/:id, puede ir mostrando los puntos en cuanto
+            // cada lote se escribe en vez de todos de golpe al terminar.
+            await deps.insertIndexedImages(areaId, chunkInserts);
+            inserts.push(...chunkInserts);
+
+            await deps.updateAreaProgress(areaId, { imagesEmbedded: inserts.length });
+        }
 
         const aggregatePoints = aggregatePanoDescriptors(captures, embeddings);
         await deps.insertIndexedPoints(areaId, aggregatePoints);

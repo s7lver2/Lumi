@@ -13,6 +13,7 @@ import { fadeRise } from "../lib/motion";
 const DEFAULT_COLLECTED: Record<string, string> = {
   MAX_AREA_KM2: "5", MAX_MONTHLY_BUDGET_USD: "50",
   GOOGLE_FREE_MONTHLY_CREDIT_USD: "0", GOOGLE_FREE_MONTHLY_IMAGES: "0",
+  INFERENCE_RUNTIME: "windows",
 };
 const SUBTITLE: Record<StepId, string> = {
   install: "descarga el entorno y los modelos.",
@@ -33,7 +34,13 @@ export function SetupWizard() {
   const prev = prevStep(current);
 
   const panel = {
-    install: <InstallStep onComplete={() => mark("install")} />,
+    install: (
+      <InstallStep
+        onComplete={() => mark("install")}
+        runtime={collected.INFERENCE_RUNTIME === "wsl" ? "wsl" : "windows"}
+        onRuntimeChange={(r) => setField("INFERENCE_RUNTIME", r)}
+      />
+    ),
     database: <DatabaseStep onComplete={() => mark("database")} />,
     credentials: <CredentialsStep values={collected} onChange={setField} onComplete={() => mark("credentials")} />,
     confirm: <ConfirmStep values={collected} />,

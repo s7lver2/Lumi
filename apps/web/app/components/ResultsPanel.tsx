@@ -7,6 +7,7 @@ import { Badge } from "./Badge";
 import { formatCoords } from "../lib/coords";
 import { useReverseGeocode } from "../lib/useReverseGeocode";
 import { streetViewMapsUrl } from "../lib/street-view-maps-url";
+import { RefinedCandidateCard } from "./RefinedCandidateCard";
 import type { SearchCandidate } from "@netryx/shared-types";
 
 function ResultRow({
@@ -99,8 +100,11 @@ export function ResultsPanel({
   onSelectRegion?: (regionId: string) => void;
   refining?: boolean;
 }) {
-  const { queryImageName, regions, candidatesByRegion } = useSearchStore();
+  const { queryImageName, regions, candidatesByRegion, currentSearchId, selectedRegionId } = useSearchStore();
   const all = regions.flatMap((r) => candidatesByRegion[r.id] ?? []);
+  const confirmed = selectedRegionId
+    ? candidatesByRegion[selectedRegionId]?.find((c) => c.status === "confirmed")
+    : undefined;
 
   return (
     <div className="flex h-full w-80 flex-col border-l border-border bg-panel/80 backdrop-blur-md">
@@ -109,6 +113,9 @@ export function ResultsPanel({
         <span className="truncate font-mono text-xs text-muted">{queryImageName}</span>
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto p-4">
+        {confirmed && currentSearchId && (
+          <RefinedCandidateCard searchId={currentSearchId} candidate={confirmed} />
+        )}
         <div className="text-xs text-muted">
           {all.length} candidatos{all.every((c) => c.status !== "confirmed") ? " (sin verificar)" : ""}
         </div>

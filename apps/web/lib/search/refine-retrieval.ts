@@ -10,8 +10,16 @@ export interface RegionCandidate {
 }
 
 /**
- * All indexed images within a region's radius of its centroid (spec §9.3 step 3),
- * using PostGIS ST_DWithin on the geography column (metres).
+ * The actual Pass-1 candidates already clustered into this region
+ * (search_candidates.region_id — spec §9.3 step 3), NOT a fresh geographic
+ * radius query. This used to re-query ST_DWithin(img.location, r.centroid,
+ * r.radius_m) against the whole indexed_images table, which pulls in every
+ * indexed image within the fixed clustering radius (150m by default)
+ * regardless of whether it was ever a retrieved candidate — confirmed live:
+ * a region with 72 actual candidates triggered a "verify 500 images" refine
+ * because a dense area easily has hundreds of indexed images (street-view
+ * points sampled every ~18m) within 150m of the centroid. Refining must only
+ * re-verify the candidates the user is actually looking at.
  */
 export async function expandRegionCandidates(
   pool: Pool,
@@ -22,10 +30,9 @@ export async function expandRegionCandidates(
             ST_Y(img.location::geometry) AS lat,
             ST_X(img.location::geometry) AS lng,
             img.image_path
-     FROM search_regions r
-     JOIN indexed_images img
-       ON ST_DWithin(img.location, r.centroid, r.radius_m)
-     WHERE r.id = $1`,
+     FROM search_candidates sc
+     JOIN indexed_images img ON img.id = sc.indexed_image_id
+     WHERE sc.region_id = $1`,
     [regionId]
   );
 

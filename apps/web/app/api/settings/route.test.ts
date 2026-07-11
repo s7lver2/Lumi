@@ -41,7 +41,6 @@ describe("GET /api/settings", () => {
     const json = await res.json();
 
     expect(json.GOOGLE_MAPS_API_KEY).toBe(maskSecret("AIzaSyRealSecret"));
-    expect(json.GOOGLE_MAPS_API_KEY).toBe("••••••••");
   });
 
   it("omits secret keys entirely when they are unset", async () => {

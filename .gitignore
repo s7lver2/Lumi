@@ -5,5 +5,10 @@ dist/
 .env
 apps/web/data/settings.key
 venv/
+venv-wsl/
+.pip-cache/
+.pip-cache-wsl/
 __pycache__/
 data/
+*.exe
+*.zip

@@ -228,6 +228,40 @@ describe("runIndexAreaJob", () => {
     expect(recordStreetViewUsage).toHaveBeenCalledWith(2, 0.007);
   });
 
+  it("embeds and inserts in chunks instead of one giant batch (avoids OOM on large areas), inserting progressively", async () => {
+    const totalCaptures = 20; // more than EMBED_CHUNK_SIZE (16), forces 2 chunks
+    const captures = Array.from({ length: totalCaptures }, (_, i) => ({
+      panoId: `p${i}`,
+      heading: 0,
+      lat: i,
+      lng: i,
+      captureDate: null,
+      imageBase64: `img${i}`,
+    }));
+    const embedImages = vi.fn().mockImplementation(async (images: string[]) => images.map(() => [0.1, 0.2]));
+    const insertIndexedImages = vi.fn().mockResolvedValue(undefined);
+    const deps = makeDeps({
+      points: captures.map((c) => ({ lat: c.lat, lng: c.lng })),
+      downloadCaptures: vi.fn().mockResolvedValue({ captures, failedPoints: 0, cancelled: false }),
+      embedImages,
+      insertIndexedImages,
+    });
+
+    await runIndexAreaJob({ areaId: "area-1" }, deps);
+
+    expect(embedImages.mock.calls.length).toBe(2);
+    expect(embedImages.mock.calls[0][0]).toHaveLength(16);
+    expect(embedImages.mock.calls[1][0]).toHaveLength(4);
+
+    expect(insertIndexedImages.mock.calls.length).toBe(2);
+    expect(insertIndexedImages.mock.calls[0][1]).toHaveLength(16);
+    expect(insertIndexedImages.mock.calls[1][1]).toHaveLength(4);
+
+    const finalUpdate = (deps.updateAreaProgress as any).mock.calls.at(-1)[1];
+    expect(finalUpdate.status).toBe("indexed");
+    expect(finalUpdate.imagesEmbedded).toBe(20);
+  });
+
   it("bails out immediately, without touching status, when already cancelled before it starts", async () => {
     const deps = makeDeps({ isCancelled: vi.fn().mockResolvedValue(true) });
 
@@ -317,4 +351,5 @@ describe("runIndexAreaJob", () => {
     // proving progress is reported before the download-complete update.
     expect(pointsCapturedCalls.some((v: number) => v > 0 && v < 2)).toBe(true);
   });
+  
 });

@@ -5,6 +5,7 @@ import type { AreaStatus } from "@netryx/shared-types";
 export interface Estimate {
   pointsEstimated: number;
   estimatedCostUsd: number;
+  reusableImages: number;
 }
 export interface JobProgress {
   status: AreaStatus;
@@ -38,7 +39,12 @@ const INITIAL = {
 
 export const useIndexingStore = create<IndexingState>((set) => ({
   ...INITIAL,
-  setDrawnPolygon: (drawnPolygon, areaKm2) => set({ drawnPolygon, areaKm2, estimate: null }),
+  // Drawing a new polygon always means "start a new area" — forget any
+  // previous job reference (in particular a finished/failed/cancelled one)
+  // so the side panel switches back to the estimate/confirm flow instead of
+  // staying stuck showing the old job's outcome forever.
+  setDrawnPolygon: (drawnPolygon, areaKm2) =>
+    set({ drawnPolygon, areaKm2, estimate: null, activeJobId: null, jobProgress: null }),
   clearPolygon: () => set({ ...INITIAL }),
   setEstimate: (estimate) => set({ estimate }),
   startJob: (activeJobId) => set({ activeJobId }),

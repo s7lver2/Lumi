@@ -1,7 +1,7 @@
 services:
   db:
     build:
-      context: ./docker/postgres
+      context: ./db/docker/postgres
     container_name: netryx-db
     restart: unless-stopped
     ports:

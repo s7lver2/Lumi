@@ -4,6 +4,13 @@ import type { SearchRegion, SearchCandidate, SearchResponse } from "@netryx/shar
 
 export type RefineStatus = "idle" | "searching" | "refining" | "done" | "error";
 
+/** Live progress for an in-flight refine (Pass 2), from the refine route's SSE stream. */
+export interface RefineProgress {
+  verified: number;
+  total: number;
+  etaMs: number | null;
+}
+
 interface SearchState {
   currentSearchId: string | null;
   queryImageName: string | null;
@@ -11,12 +18,14 @@ interface SearchState {
   candidatesByRegion: Record<string, SearchCandidate[]>;
   selectedRegionId: string | null;
   refineStatus: RefineStatus;
+  refineProgress: RefineProgress | null;
   error: string | null;
   setSearching: (imageName: string) => void;
   setSearchResults: (res: SearchResponse, imageName: string) => void;
   selectRegion: (regionId: string) => void;
   setRefineResults: (regionId: string, candidates: SearchCandidate[]) => void;
   setRefining: () => void;
+  setRefineProgress: (progress: RefineProgress) => void;
   setError: (message: string) => void;
   reset: () => void;
 }
@@ -28,6 +37,7 @@ const INITIAL = {
   candidatesByRegion: {} as Record<string, SearchCandidate[]>,
   selectedRegionId: null as string | null,
   refineStatus: "idle" as RefineStatus,
+  refineProgress: null as RefineProgress | null,
   error: null as string | null,
 };
 
@@ -43,16 +53,19 @@ export const useSearchStore = create<SearchState>((set) => ({
       candidatesByRegion: res.candidatesByRegion,
       selectedRegionId: regions[0]?.id ?? null,
       refineStatus: "done",
+      refineProgress: null,
       error: null,
     });
   },
   selectRegion: (selectedRegionId) => set({ selectedRegionId }),
-  setRefining: () => set({ refineStatus: "refining" }),
+  setRefining: () => set({ refineStatus: "refining", refineProgress: null }),
+  setRefineProgress: (refineProgress) => set({ refineProgress }),
   setRefineResults: (regionId, candidates) =>
     set((s) => ({
       candidatesByRegion: { ...s.candidatesByRegion, [regionId]: candidates },
       refineStatus: "done",
+      refineProgress: null,
     })),
-  setError: (error) => set({ error, refineStatus: "error" }),
+  setError: (error) => set({ error, refineStatus: "error", refineProgress: null }),
   reset: () => set({ ...INITIAL }),
 }));

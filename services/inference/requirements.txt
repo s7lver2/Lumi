@@ -1,13 +1,35 @@
 # services/inference/requirements.txt
+#
+# --extra-index-url below is REQUIRED for torch/torchvision to resolve to a
+# CUDA build. Without it, `pip install torch==X.Y.Z` silently grabs PyPI's
+# CPU-only wheel (its actual version string is "X.Y.Z+cpu", not "X.Y.Z") —
+# confirmed live: RoMa (Laila) verification fell back to CPU despite an
+# RTX 4070 SUPER being present, making /verify take ~45s per candidate
+# instead of a couple of seconds, reading as a hung request. The exact
+# "+cu121" local version pins below force pip to fetch the CUDA build from
+# this extra index rather than the ambiguous-but-matching CPU one on PyPI.
+#
+# torch is pinned to 2.5.1, not 2.3.1 — confirmed live: `pip install` warned
+# "romatch 0.1.2 requires torch>=2.5.1, but you have torch 2.3.1", so the
+# original 2.3.1 pin was already unsupported by romatch even before the CUDA
+# fix, just silently (pip only warns on this, it doesn't refuse to install).
+--extra-index-url https://download.pytorch.org/whl/cu121
+
 fastapi==0.111.0
 uvicorn[standard]==0.30.1
-torch==2.3.1
+torch==2.5.1+cu121
+torchvision==0.20.1+cu121
 psycopg2-binary==2.9.9
 pytest==8.2.2
 httpx==0.27.0
 Pillow==10.4.0
-torchvision==0.18.1
 huggingface_hub
 numpy<2
 safetensors
 opencv-python-headless>=4.10
+# Laila's matcher (spec §15.2) — was never actually listed here even though
+# main.py/loader.py/download_weights.py all `import romatch`; it happened to
+# be present in the Windows venv from an earlier manual install, so this
+# gap stayed invisible until a fresh WSL2 venv, installed strictly from this
+# file, exposed it: `ModuleNotFoundError: No module named 'romatch'`.
+romatch==0.1.2

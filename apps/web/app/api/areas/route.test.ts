@@ -38,6 +38,9 @@ vi.mock("../../../lib/db", () => ({
       if (sql.includes("SELECT") && sql.includes("FROM areas")) {
         return { rows: insertedAreas };
       }
+      if (sql.includes("api_usage")) {
+        return { rows: [{ spent: 0 }] };
+      }
       return { rows: [] };
     }),
   }),

@@ -4,6 +4,7 @@
 import { useSearchStore } from "../stores/useSearchStore";
 import { useReverseGeocode } from "../lib/useReverseGeocode";
 import { formatCoords } from "../lib/coords";
+import { streetViewMapsUrl } from "../lib/street-view-maps-url";
 
 export function BottomSummaryBar() {
   const { regions, selectedRegionId, candidatesByRegion } = useSearchStore();
@@ -23,13 +24,27 @@ export function BottomSummaryBar() {
         </div>
         <div>
           <div className="text-[10px] uppercase tracking-wider text-subtle">Coordenadas</div>
-          <div className="mt-0.5 font-mono text-sm text-fg">
-            {region ? formatCoords(region.centroid.lat, region.centroid.lng) : "—"}
-          </div>
+          {top ? (
+            <a
+              href={streetViewMapsUrl(top.panoId, top.heading)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-0.5 block font-mono text-sm text-fg hover:underline"
+              title="Abrir en Google Maps (Street View, mismo ángulo de la foto)"
+            >
+              {formatCoords(top.lat, top.lng)}
+            </a>
+          ) : (
+            <div className="mt-0.5 font-mono text-sm text-fg">
+              {region ? formatCoords(region.centroid.lat, region.centroid.lng) : "—"}
+            </div>
+          )}
         </div>
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-subtle">Radio</div>
-          <div className="mt-0.5 text-sm text-fg">~{(region.radiusM / 1000).toFixed(1)} km</div>
+          {/* radiusM is the fixed clustering-bucket radius, not a computed
+              confidence interval — see TopResultCard.tsx's comment. */}
+          <div className="text-[10px] uppercase tracking-wider text-subtle">Radio de búsqueda</div>
+          <div className="mt-0.5 text-sm text-fg">~{(region.radiusM / 1000).toFixed(2)} km</div>
         </div>
       </div>
       <div className="text-right">

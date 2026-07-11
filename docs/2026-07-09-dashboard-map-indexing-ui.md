@@ -20,8 +20,8 @@
   - **3D buildings on BOTH map providers:** a `fill-extrusion` buildings layer renders in 3D whether the map is Mapbox (Mapbox Streets `building` layer) or MapLibre + OpenFreeMap (OpenMapTiles `building` layer with `render_height`/`render_min_height`). Token or no token, buildings are 3D.
 - **Dark theme tokens (Tailwind, single source of truth):** surfaces `#0e0f11`/`#15171a`/`#1a1b1e`/`#202226`; border `#26282c`; text `#e8e8e6`/`#9a9a95`/`#6a6c70`; accent teal `#1d9e75` (fg `#5dcaa5`); draw blue `#378add` (fg `#85b7eb`); warning amber `#ef9f27`; danger `#e88f8f`. Monospace for coordinates.
 - **Map libraries are client-only** — every map component is loaded via `next/dynamic(..., { ssr: false })` (spec §5.2); MapLibre/Mapbox never import on the server.
-- **Route-export rule:** `route.ts` exports only HTTP handlers; helpers live in sibling modules (learned bug from `app/api/areas/[id]/progress/`).
-- **All new pages live under `app/(protected)/`** so they inherit the setup gate; the existing `(protected)/layout.tsx` `resolveGateDecision` stays untouched, but its default export is refactored to render inside `AppShell`.
+- **Route-export rule:** `route.ts` exports only HTTP handlers, and `layout.tsx`/`page.tsx` export only `default` + the fixed config names (`metadata`, `viewport`, ...) — no other named exports from either. Helpers live in sibling modules (learned bug from `app/api/areas/[id]/progress/`; confirmed to apply to `layout.tsx` too in Task 2).
+- **All new pages live under `app/(protected)/`** so they inherit the setup gate; `resolveGateDecision`/`GateDecision` move out of `(protected)/layout.tsx` into a sibling `gate.ts` (route-export rule, below) — the decision logic itself is unchanged, only its location.
 - **No path aliases** — use relative imports (matches existing `../../../lib/db`).
 - **`apps/web` reads the root `.env` via `next.config.js`** (already wired) — server code uses `getPool()`/`getSettingsRepo()` as-is.
 - **TDD where there's logic** (pure functions → vitest); **map/WebGL components are verified manually** (documented per task) since they can't run in jsdom. DRY, YAGNI, frequent commits.
@@ -361,15 +361,42 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 > Icon paths are inline SVG (no icon dependency). Keep them simple; refine visually during Step 6.
 
-- [ ] **Step 5: Wrap protected children in `AppShell`**
+- [ ] **Step 5: Move `resolveGateDecision` out of `layout.tsx`, then wrap children in `AppShell`**
 
-Modify `app/(protected)/layout.tsx` — keep `resolveGateDecision`/redirect logic exactly as-is, only change the returned JSX:
+**Route-export rule applies to `layout.tsx` too, not just `route.ts`** — confirmed by actually running `pnpm build`: Next.js App Router layout modules may only export `default` plus a fixed set of config names (`metadata`, `viewport`, ...); the pre-existing `export async function resolveGateDecision(...)` and `export type GateDecision` in `(protected)/layout.tsx` fail the build's type check (`next dev` doesn't catch it, which is why it went unnoticed). Move both into a sibling module first.
+
+```typescript
+// apps/web/app/(protected)/gate.ts
+import type { SettingsRepo } from "../../lib/settings-repo";
+
+export type GateDecision = { type: "allow" } | { type: "redirect"; to: string };
+
+export async function resolveGateDecision(
+  repo: Pick<SettingsRepo, "isSetupCompleted">
+): Promise<GateDecision> {
+  const completed = await repo.isSetupCompleted();
+  return completed ? { type: "allow" } : { type: "redirect", to: "/setup" };
+}
+```
+
+Update `(protected)/layout.test.ts`'s import from `./layout` to `./gate`.
+
+Then modify `app/(protected)/layout.tsx` — keep the redirect logic exactly as-is, only change the import and the returned JSX:
 
 ```tsx
-// apps/web/app/(protected)/layout.tsx — replace the final `return <>{children}</>;`
+// apps/web/app/(protected)/layout.tsx
+import { redirect } from "next/navigation";
 import { AppShell } from "../components/AppShell";
-// ... inside the component, after the redirect check:
+import { getSettingsRepo } from "../../lib/settings-repo";
+import { resolveGateDecision } from "./gate";
+
+export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
+  const decision = await resolveGateDecision(getSettingsRepo());
+  if (decision.type === "redirect") {
+    redirect(decision.to);
+  }
   return <AppShell>{children}</AppShell>;
+}
 ```
 
 - [ ] **Step 6: Manual verification**
@@ -812,7 +839,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const lines = await fetchStreetGeometry(body.polygon);
+  let lines: Awaited<ReturnType<typeof fetchStreetGeometry>>;
+  try {
+    lines = await fetchStreetGeometry(body.polygon);
+  } catch (err) {
+    // Overpass is shared public infrastructure and does fail under load even
+    // after fetchStreetGeometry's own built-in retries are exhausted (see
+    // the Indexing Pipeline plan's Task 4) — surface a clean, actionable
+    // error instead of an unhandled 500.
+    return NextResponse.json(
+      { error: `Could not reach the street data service — try again in a moment (${err instanceof Error ? err.message : String(err)})` },
+      { status: 502 }
+    );
+  }
+
   const points = samplePointsAlongStreets(lines, SAMPLING_SPACING_METERS);
   const estimatedCostUsd = estimateIndexingCostUsd(
     points.length,
@@ -974,7 +1014,19 @@ export function IndexingDrawTool({ map }: { map: any }) {
     attach();
     return () => {
       disposed = true;
-      if (draw && map) map.removeControl(draw);
+      if (draw && map) {
+        try {
+          map.removeControl(draw);
+        } catch {
+          // MapCanvas's own unmount cleanup calls map.remove(), which itself
+          // removes every attached control internally (calling its onRemove).
+          // If that ran first, this control's internal state (ctx.map) is
+          // already null and calling removeControl again throws — confirmed
+          // by actually navigating away from /index and hitting exactly this
+          // crash. Nothing left to clean up in that case; the map is being
+          // torn down regardless.
+        }
+      }
     };
   }, [map, setDrawnPolygon, clearPolygon]);
 
@@ -1686,6 +1738,7 @@ git commit -m "feat(web): /areas/[id] detail + reindex/delete + / redirect (spec
 - **Type consistency:** `JobProgress`/`Estimate` defined in `useIndexingStore` (Task 3), consumed by `progress-stream` (Task 8), `JobProgressBar` (Task 9). `AreaStatus` (shared-types) drives `statusTone` (Task 11) and badges. `map: any` is deliberate — MapLibre and Mapbox map types differ; the `provider` arg from `onReady` disambiguates where it matters.
 - **Assumption to verify during Task 4/6/10:** `lib/settings-repo` `getSettingsRepo` and `lib/queue` `enqueueIndexAreaJob` exist and are imported elsewhere (`app/api/areas/route.ts`) — confirmed from the Indexing Pipeline plan.
 - **Manual-verification honesty:** map/WebGL components have no unit tests (jsdom has no WebGL); every such task ends with an explicit manual step. Pure logic (area math, SSE parse, status tone, stores) is unit-tested.
+- **Bugs found and fixed during real execution of Task 9 Step 3 (already folded into the tasks above, not left for re-discovery):** (1) `overpass-api.de`'s front proxy 406s requests without a descriptive `User-Agent` — fixed in the Indexing Pipeline plan's `fetchStreetGeometry`, which `POST /api/areas/estimate` (Task 6) depends on. (2) `(protected)/layout.tsx`'s pre-existing named exports (`resolveGateDecision`, `GateDecision`) violate the route-export rule and fail `next build`'s type check though `next dev` doesn't catch it — fixed by moving them to `gate.ts` (Task 2 Step 5). (3) `IndexingDrawTool`'s unmount cleanup can call `removeControl` on a control `MapCanvas`'s own cleanup already tore down via `map.remove()` — fixed with a try/catch (Task 7 Step 6). (4) Confirmed live: `/api/areas/estimate` succeeded, then `POST /api/areas` 504'd moments later against the identical polygon — the public Overpass instance is shared infrastructure and does fail under load. Fixed with retry-with-backoff inside `fetchStreetGeometry` itself (Indexing Pipeline plan Task 4) plus a try/catch in both routes (Indexing Pipeline Task 14, this plan's Task 6) returning a clean `502` instead of an unhandled `500`.
 
 ---
 

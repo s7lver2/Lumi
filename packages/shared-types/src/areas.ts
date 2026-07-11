@@ -1,5 +1,5 @@
 // packages/shared-types/src/areas.ts
-export type AreaStatus = "pending" | "indexing" | "indexed" | "failed";
+export type AreaStatus = "pending" | "indexing" | "indexed" | "failed" | "cancelled";
 
 export interface AreaRow {
   id: string;

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "../components/AppShell";
-import { BootGate } from "../components/BootGate";
+import { BootGate } from "../components/LoadingScreen";
 import { getSettingsRepo } from "../../lib/settings-repo";
 import { resolveGateDecision } from "./gate";
 

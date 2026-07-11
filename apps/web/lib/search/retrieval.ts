@@ -63,7 +63,17 @@ export async function retrieveCandidates(
     [q, k]
   );
 
-  const byId = new Map<string, RetrievedCandidate>();
+  // Dedup by panoId, not by indexedImageId: the aggregate query above
+  // deliberately expands each matched pano to ALL of its heading images
+  // (spec intent: broaden recall around a promising point), but that means
+  // up to 4 near-duplicate "candidates" for the exact same physical
+  // location/panorama, just facing different directions. Surfacing all 4 as
+  // separate results inflates the candidate count (confirmed live: a single
+  // query photo produced 222 "resultados", most of them duplicate headings
+  // of the same handful of real locations) without adding any real location
+  // diversity. Keeping only the best-scoring heading per pano collapses
+  // those duplicates down to one candidate per physical place.
+  const byPano = new Map<string, RetrievedCandidate>();
   for (const r of [...perHeading.rows, ...aggregate.rows]) {
     const candidate: RetrievedCandidate = {
       indexedImageId: r.id,
@@ -74,11 +84,11 @@ export async function retrieveCandidates(
       similarity: Number(r.similarity),
       embedding: parseVector(r.embedding_text),
     };
-    const existing = byId.get(candidate.indexedImageId);
+    const existing = byPano.get(candidate.panoId);
     if (!existing || candidate.similarity > existing.similarity) {
-      byId.set(candidate.indexedImageId, candidate);
+      byPano.set(candidate.panoId, candidate);
     }
   }
 
-  return [...byId.values()].sort((a, b) => b.similarity - a.similarity);
+  return [...byPano.values()].sort((a, b) => b.similarity - a.similarity);
 }

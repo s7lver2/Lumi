@@ -27,4 +27,8 @@ describe("isTerminalStatus", () => {
     expect(isTerminalStatus("pending")).toBe(false);
     expect(isTerminalStatus("indexing")).toBe(false);
   });
+
+  it("treats cancelled as terminal", () => {
+    expect(isTerminalStatus("cancelled")).toBe(true);
+  });
 });

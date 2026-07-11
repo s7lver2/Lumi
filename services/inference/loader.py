@@ -76,7 +76,43 @@ def load_verification_model(model_id: str):
             _LOAD_ROMA_OUTDOOR = roma_outdoor
         device = "cuda" if torch.cuda.is_available() else "cpu"
         amp_dtype = torch.float16 if device == "cuda" else torch.float32
-        roma_model = _LOAD_ROMA_OUTDOOR(device=device, amp_dtype=amp_dtype)
+        # Visible at startup on purpose: RoMa on CPU is ~9s/tile-pair x 5
+        # tiles = ~45s PER CANDIDATE (confirmed live: 92 candidates reading as
+        # "stuck" for over an hour). If this ever prints "cpu" unexpectedly on
+        # a machine with a GPU, that — not a code bug — is almost certainly
+        # why /verify looks hung: check `torch.cuda.is_available()` in this
+        # venv (wrong torch build, driver mismatch, etc.).
+        # use_custom_corr=True (romatch's own default) needs a separate
+        # compiled CUDA extension called "local_corr" — it isn't part of
+        # romatch's own pip install (see requirements.txt), and romatch only
+        # checks "are we on Linux", not "is local_corr actually importable".
+        # Confirmed live under WSL2: /verify crashed with
+        # `ModuleNotFoundError: No module named 'local_corr'` the first time
+        # a real verification request reached this code path (never
+        # surfaced on native Windows, where romatch's own sys.platform check
+        # already disables use_custom_corr). local_corr ships as PyPI's
+        # `fused-local-corr` package (Linux-only, romatch's own declared
+        # extra) — NOT listed in requirements.txt because it hard-pins an
+        # exact torch version (torch==2.11.0 as of fused-local-corr 0.3.211)
+        # that conflicts with the cu121 torch pin fresh installs use here;
+        # it's an opt-in manual install into an existing WSL venv, not part
+        # of the standard setup flow. Detecting it at runtime means this
+        # works either way: the fast kernel when someone has manually
+        # installed fused-local-corr, the safe pure-PyTorch fallback
+        # (romatch's own shitty_native_torch_local_corr) everywhere else —
+        # same model weights either way, just a different code path for one
+        # internal correlation step.
+        try:
+            import local_corr  # noqa: F401
+
+            use_custom_corr = True
+        except ImportError:
+            use_custom_corr = False
+        print(
+            f"[loader] modelo de verificación (Laila/RoMa) cargado en "
+            f"device={device!r}, use_custom_corr={use_custom_corr!r}"
+        )
+        roma_model = _LOAD_ROMA_OUTDOOR(device=device, amp_dtype=amp_dtype, use_custom_corr=use_custom_corr)
         return RomaMatcher(roma_model, device)
 
     raise UnknownModelError(f"No loader implemented for verification model id: {model_id}")

@@ -16,7 +16,7 @@ export interface AreaProgressRow {
 }
 
 export function isTerminalStatus(status: AreaStatus): boolean {
-  return status === "indexed" || status === "failed";
+  return status === "indexed" || status === "failed" || status === "cancelled";
 }
 
 export function formatProgressEvent(row: AreaProgressRow): string {

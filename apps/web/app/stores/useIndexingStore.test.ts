@@ -28,9 +28,27 @@ describe("useIndexingStore", () => {
     expect(useIndexingStore.getState().jobProgress?.pointsCaptured).toBe(1842);
   });
   it("sets and clears the estimate", () => {
-    useIndexingStore.getState().setEstimate({ pointsEstimated: 100, estimatedCostUsd: 1.5 });
+    useIndexingStore.getState().setEstimate({ pointsEstimated: 100, estimatedCostUsd: 1.5, reusableImages: 0 });
     expect(useIndexingStore.getState().estimate?.pointsEstimated).toBe(100);
     useIndexingStore.getState().setEstimate(null);
     expect(useIndexingStore.getState().estimate).toBeNull();
+  });
+
+  it("drawing a new polygon forgets a previous (e.g. failed) job so a new area can be started", () => {
+    useIndexingStore.getState().startJob("area-1");
+    useIndexingStore.getState().updateProgress({
+      status: "failed",
+      pointsEstimated: 10,
+      pointsCaptured: 10,
+      pointsFailed: 0,
+      imagesEmbedded: 0,
+    });
+    expect(useIndexingStore.getState().activeJobId).toBe("area-1");
+
+    useIndexingStore.getState().setDrawnPolygon([[0, 0], [0, 1], [1, 1], [0, 0]], 2.1);
+
+    expect(useIndexingStore.getState().activeJobId).toBeNull();
+    expect(useIndexingStore.getState().jobProgress).toBeNull();
+    expect(useIndexingStore.getState().drawnPolygon).toEqual([[0, 0], [0, 1], [1, 1], [0, 0]]);
   });
 });

@@ -5,6 +5,15 @@ import type { IndexedImageInsert } from "./jobs/index-area";
 import type { IndexedPointInsert } from "./aggregate";
 
 
+/** Cooperative-cancellation check: has the web app flagged this area as cancelled? */
+export async function isAreaCancelled(pool: Pool, areaId: string): Promise<boolean> {
+  const { rows } = await pool.query<{ status: string }>(
+    `SELECT status FROM areas WHERE id = $1`,
+    [areaId]
+  );
+  return rows[0]?.status === "cancelled";
+}
+
 export async function getArea(pool: Pool, areaId: string): Promise<AreaRow> {
   const { rows } = await pool.query(
     `SELECT id, name, area_km2, status, points_estimated, points_captured,

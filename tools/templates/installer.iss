@@ -77,8 +77,8 @@ begin
     Message := 'No se encontró Docker Desktop, la forma más sencilla de tener Postgres ' +
       '+ pgvector + PostGIS (la base de datos de Lumi).' + #13#10#13#10 +
       'Puedes cancelar e instalar Docker Desktop primero, o continuar si ya tienes ' +
-      'un Postgres con esas extensiones configurado manualmente (editarás .env después).' +
-      #13#10#13#10 + '¿Continuar sin Docker?';
+      'un Postgres con esas extensiones configurado manualmente (editarás .env después).' + #13#10#13#10 +
+      '¿Continuar sin Docker?';
     if MsgBox(Message, mbConfirmation, MB_YESNO) = IDNO then
     begin
       Result := False;
@@ -107,6 +107,10 @@ begin
       Exec('cmd.exe', '/c docker compose up -d --build db', ExpandConstant('{app}'),
         SW_SHOW, ewWaitUntilTerminated, ResultCode);
 
-    Exec('cmd.exe', '/c pnpm install', ExpandConstant('{app}'), SW_SHOW, ewWaitUntilTerminated, ResultCode);
+    // apps/web and apps/worker ship pre-built (tools/build.py's next build
+    // --standalone + esbuild bundle) — only db/'s own small migration-runner
+    // dependency set (node-pg-migrate, pg, cross-env) still needs installing.
+    Exec('cmd.exe', '/c pnpm install --filter @netryx/db...', ExpandConstant('{app}'),
+      SW_SHOW, ewWaitUntilTerminated, ResultCode);
   end;
 end;

@@ -19,6 +19,13 @@ export async function verifyCandidates(
       query_image_base64: queryBase64,
       candidate_images_base64: candidateBase64,
     }),
+    // RoMa (dense pairwise matching) is slow but bounded per single candidate
+    // (run-refine.ts sends one at a time) — this is a safety net against a
+    // genuinely stuck request (e.g. the inference process crashed but the
+    // connection never closed), not a performance target. If this actually
+    // fires, run-refine.ts's own retry-then-fall-back-to-unscored handling
+    // (not a page reload) is what recovers the rest of the batch.
+    signal: AbortSignal.timeout(180_000),
   });
 
   if (!res.ok) {

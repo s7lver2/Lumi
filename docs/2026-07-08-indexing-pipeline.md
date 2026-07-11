@@ -660,6 +660,13 @@ export interface LineStringGeoJSON {
 
 const OVERPASS_ENDPOINT = "https://overpass-api.de/api/interpreter";
 
+// The free public overpass-api.de instance is shared infrastructure and
+// intermittently returns transient gateway errors under load — confirmed
+// live: a POST /api/areas 504'd moments after an identical polygon succeeded
+// against /api/areas/estimate. These codes are worth a retry; anything else
+// (4xx, malformed query) is not.
+const RETRYABLE_STATUS_CODES = new Set([502, 503, 504]);
+
 function buildQuery(polygon: [number, number][]): string {
   // Overpass "poly" filter wants "lat1 lon1 lat2 lon2 ..." (lat first).
   const poly = polygon.map(([lng, lat]) => `${lat} ${lng}`).join(" ");
@@ -670,18 +677,49 @@ function buildQuery(polygon: [number, number][]): string {
   `.trim();
 }
 
+async function postOverpassQuery(query: string): Promise<Response> {
+  // overpass-api.de's front proxy returns 406 Not Acceptable for requests with
+  // no (or a generic) User-Agent — confirmed directly against the live
+  // endpoint: an identical request succeeds with a descriptive UA and fails
+  // without one. This is also what Overpass's own usage policy asks clients
+  // to send. Form-encoding the query in a `data` field matches the shape
+  // Overpass's own curl/wget examples use.
+  return fetch(OVERPASS_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      "user-agent": "netryx-lumi/0.1 (+https://github.com/netryx-fork)",
+    },
+    body: new URLSearchParams({ data: query }).toString(),
+  });
+}
+
+export interface FetchStreetGeometryOptions {
+  retries?: number;
+  retryBaseDelayMs?: number;
+}
+
 /**
  * Queries Overpass for all `highway=*` ways inside `polygon` and returns them
  * as GeoJSON LineStrings ([lng, lat] order) ready for turf.js (spec §4 step 2).
+ * Retries with exponential backoff on transient gateway errors (502/503/504).
  */
 export async function fetchStreetGeometry(
-  polygon: [number, number][]
+  polygon: [number, number][],
+  options: FetchStreetGeometryOptions = {}
 ): Promise<LineStringGeoJSON[]> {
-  const res = await fetch(OVERPASS_ENDPOINT, {
-    method: "POST",
-    headers: { "content-type": "text/plain" },
-    body: buildQuery(polygon),
-  });
+  const retries = options.retries ?? 2;
+  const retryBaseDelayMs = options.retryBaseDelayMs ?? 500;
+  const query = buildQuery(polygon);
+
+  let res: Response;
+  for (let attempt = 0; ; attempt++) {
+    res = await postOverpassQuery(query);
+    if (res.ok || !RETRYABLE_STATUS_CODES.has(res.status) || attempt >= retries) {
+      break;
+    }
+    await new Promise((r) => setTimeout(r, retryBaseDelayMs * 2 ** attempt));
+  }
 
   if (!res.ok) {
     throw new Error(`Overpass request failed (${res.status})`);
@@ -2628,7 +2666,19 @@ export async function POST(request: Request) {
     );
   }
 
-  const lines = await fetchStreetGeometry(body.polygon);
+  let lines: Awaited<ReturnType<typeof fetchStreetGeometry>>;
+  try {
+    lines = await fetchStreetGeometry(body.polygon);
+  } catch (err) {
+    // Overpass is shared public infrastructure and does fail under load even
+    // after fetchStreetGeometry's own retries are exhausted — surface a
+    // clean, actionable error instead of an unhandled 500.
+    return NextResponse.json(
+      { error: `Could not reach the street data service — try again in a moment (${err instanceof Error ? err.message : String(err)})` },
+      { status: 502 }
+    );
+  }
+
   const points = samplePointsAlongStreets(lines, SAMPLING_SPACING_METERS);
   const estimatedCostUsd = estimateIndexingCostUsd(
     points.length,

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import DrawRectangle from "mapbox-gl-draw-rectangle-mode";
-import { DragCircleMode } from "mapbox-gl-draw-circle";
+import { CircleMode } from "../lib/draw-circle-mode";
 import { snapPoint } from "../lib/snap";
 import { useIndexingStore } from "../stores/useIndexingStore";
 import { polygonAreaKm2 } from "../lib/geo";
@@ -27,10 +27,23 @@ export function IndexingDrawTool({ map, onModeChange }: IndexingDrawToolProps) {
   const [streetFeatures, setStreetFeatures] = useState<any[]>([]);
   const drawRef = useRef<any>(null);
 
+  // `onModeChange` is an inline arrow in the parent, so it's a NEW reference
+  // on every render. Reading it through a ref (instead of a dependency of the
+  // init effect below) keeps the draw control from being torn down and
+  // rebuilt every time the parent re-renders after a mode change — which was
+  // resetting MapboxDraw back to simple_select the instant a mode was set.
+  const onModeChangeRef = useRef(onModeChange);
+  useEffect(() => {
+    onModeChangeRef.current = onModeChange;
+  });
+
   const sync = useCallback(() => {
     if (!drawRef.current) return;
     const fc = drawRef.current.getAll();
-    const feature = fc.features[0];
+    // El último feature (no el primero): si por lo que sea quedó más de uno
+    // en el store de MapboxDraw (ver el comentario en changeModeListener),
+    // esto evita leer un dibujo abandonado en vez del recién terminado.
+    const feature = fc.features[fc.features.length - 1];
     if (!feature) {
       clearPolygon();
       return;
@@ -46,7 +59,7 @@ export function IndexingDrawTool({ map, onModeChange }: IndexingDrawToolProps) {
 
     const draw = new MapboxDraw({
       displayControlsDefault: false,
-      modes: { ...MapboxDraw.modes, draw_rectangle: DrawRectangle, draw_circle: DragCircleMode },
+      modes: { ...MapboxDraw.modes, draw_rectangle: DrawRectangle, draw_circle: CircleMode },
     });
 
     drawRef.current = draw;
@@ -57,7 +70,7 @@ export function IndexingDrawTool({ map, onModeChange }: IndexingDrawToolProps) {
     map.on("draw.delete", clearPolygon);
 
     const handleMode = (e: any) => {
-      if (onModeChange) onModeChange(TO_SEMANTIC[e.mode] ?? e.mode);
+      onModeChangeRef.current?.(TO_SEMANTIC[e.mode] ?? e.mode);
     };
     map.on("draw.modechange", handleMode);
 
@@ -77,7 +90,11 @@ export function IndexingDrawTool({ map, onModeChange }: IndexingDrawToolProps) {
         }
       }
     };
-  }, [map, sync, clearPolygon, onModeChange]);
+    // onModeChange se lee vía onModeChangeRef a propósito: es una función
+    // nueva en cada render del padre, y si estuviera aquí como dependencia
+    // este efecto destruiría y recrearía el control de dibujo en cada cambio
+    // de modo, reseteándolo a simple_select justo después de activarlo.
+  }, [map, sync, clearPolygon]);
 
   // 2. Snapping en tiempo real durante draw.update
   useEffect(() => {
@@ -117,9 +134,19 @@ export function IndexingDrawTool({ map, onModeChange }: IndexingDrawToolProps) {
       const mode = (e as CustomEvent).detail?.mode;
       if (!drawRef.current || !mode) return;
       try {
+        // Empezar un modo de dibujo nuevo limpia cualquier forma anterior sin
+        // confirmar. mapbox-gl-draw-rectangle-mode (y en general cualquier
+        // dibujo previo sin borrar) se queda acumulado en el store interno
+        // de MapboxDraw; sync() podía entonces leer un dibujo VIEJO en vez
+        // del que se ve en pantalla — causa real de "se indexan zonas fuera
+        // del rectángulo" y de que "Área dibujada" mostrara 0.0 km² (el
+        // feature viejo/abandonado podía ser degenerado).
+        drawRef.current.deleteAll();
         drawRef.current.changeMode(TO_DRAW[mode] ?? mode);
-      } catch {
-        // Modo no soportado por el build de MapboxDraw; ignorar en vez de romper.
+      } catch (err) {
+        // No silenciar: si un modo falla, queremos verlo en la consola en vez
+        // de que el mapa se quede "trabado" en simple_select sin explicación.
+        console.error(`[IndexingDrawTool] changeMode("${mode}") falló:`, err);
       }
     };
 

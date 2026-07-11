@@ -9,8 +9,10 @@ import {
 import { STREET_VIEW_HEADINGS } from "@netryx/shared-types";
 import { getSettingsRepo } from "../../../lib/settings-repo";
 import { getPool } from "../../../lib/db";
+import { countReusableImages } from "../../../lib/reuse-estimate";
+import { polygonToWkt } from "../../../lib/polygon-wkt";
 import { enqueueIndexAreaJob } from "../../../lib/queue";
-import { assertWithinMonthlyBudget, BudgetExceededError, getMonthlySpendUsd } from "@netryx/api-usage";
+import { BudgetExceededError, getMonthlySpendUsd, freeAllowanceUsd, netCostBreakdown } from "@netryx/api-usage";
 
 const SAMPLING_SPACING_METERS = 18;
 
@@ -59,27 +61,29 @@ export async function POST(request: Request) {
     );
   }
 
-  const points = samplePointsAlongStreets(lines, SAMPLING_SPACING_METERS);
+  const points = samplePointsAlongStreets(lines, SAMPLING_SPACING_METERS, body.polygon);
+  const pool = getPool();
+  const reusableImages = await countReusableImages(pool, body.polygon);
   const estimatedCostUsd = estimateIndexingCostUsd(
     points.length,
     STREET_VIEW_HEADINGS.length,
-    pricePerImageUsd
+    pricePerImageUsd,
+    reusableImages
   );
 
-  const pool = getPool();
-
-  // 🛠️ VALIDACIÓN DE PRESUPUESTO MENSUAL ANTES DE EFECTUAR LA OPERACIÓN
-  try {
-    const spent = await getMonthlySpendUsd(pool);
-    assertWithinMonthlyBudget(spent, estimatedCostUsd, maxMonthlyBudgetUsd);
-  } catch (err) {
-    if (err instanceof BudgetExceededError) {
-      return NextResponse.json({ error: err.message }, { status: 400 });
-    }
-    throw err; // Burbujea cualquier error interno de base de datos no relacionado
+  const creditUsd = Number((await repo.getSetting("GOOGLE_FREE_MONTHLY_CREDIT_USD")) ?? "0");
+  const freeImages = Number((await repo.getSetting("GOOGLE_FREE_MONTHLY_IMAGES")) ?? "0");
+  const freeUsd = freeAllowanceUsd(creditUsd, freeImages, pricePerImageUsd);
+  const monthSpendUsd = await getMonthlySpendUsd(pool);
+  const net = netCostBreakdown({ monthSpendUsd, jobCostUsd: estimatedCostUsd, freeUsd });
+  if (net.netMonthTotalUsd > maxMonthlyBudgetUsd) {
+    return NextResponse.json(
+      { error: new BudgetExceededError(Math.max(0, monthSpendUsd - freeUsd), net.netJobUsd, maxMonthlyBudgetUsd).message },
+      { status: 400 }
+    );
   }
 
-  const polygonWkt = `POLYGON((${body.polygon.map(([lng, lat]) => `${lng} ${lat}`).join(", ")}))`;
+  const polygonWkt = polygonToWkt(body.polygon);
   const { rows } = await pool.query(
     `INSERT INTO areas (name, geometry, area_km2, status, points_estimated, estimated_cost_usd)
      VALUES ($1, ST_GeomFromText($2, 4326), $3, 'pending', $4, $5)
@@ -91,7 +95,7 @@ export async function POST(request: Request) {
   await enqueueIndexAreaJob({ areaId });
 
   return NextResponse.json(
-    { areaId, pointsEstimated: points.length, estimatedCostUsd },
+    { areaId, pointsEstimated: points.length, estimatedCostUsd, reusableImages },
     { status: 201 }
   );
 }

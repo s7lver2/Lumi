@@ -1,40 +1,70 @@
 // apps/web/app/setup/steps/InstallStep.tsx
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { InstallItem } from "./InstallItem";
 import { fetchJson } from "../../lib/fetch-json";
 import { fadeRise } from "../../lib/motion";
 
-const ITEMS = [
-  { id: "inference-venv", label: "Entorno Python", engine: "venv" },
-  { id: "inference-deps", label: "Dependencias PyTorch + CUDA", engine: "pip install" },
-  { id: "weights-retrieval", label: "Modelo de recuperación", engine: "Lumi Preview" },
-  { id: "weights-verification", label: "Modelo de verificación", engine: "Laila" },
-];
+const ITEMS_BY_RUNTIME = {
+  windows: [
+    { id: "inference-venv", label: "Entorno Python", engine: "venv" },
+    { id: "inference-deps", label: "Dependencias PyTorch + CUDA", engine: "pip install" },
+    { id: "weights-retrieval", label: "Modelo de recuperación", engine: "Lumi Preview" },
+    { id: "weights-verification", label: "Modelo de verificación", engine: "Laila" },
+    { id: "verify-services", label: "Arrancar y verificar servicios", engine: "uvicorn + worker" },
+  ],
+  wsl: [
+    { id: "inference-wsl-prereqs", label: "Dependencias del sistema (WSL2)", engine: "apt install" },
+    { id: "inference-venv-wsl", label: "Entorno Python (WSL2)", engine: "venv" },
+    { id: "inference-deps-wsl", label: "Dependencias PyTorch + CUDA (WSL2)", engine: "pip install" },
+    { id: "weights-retrieval-wsl", label: "Modelo de recuperación (WSL2)", engine: "Lumi Preview" },
+    { id: "weights-verification-wsl", label: "Modelo de verificación (WSL2)", engine: "Laila" },
+    { id: "verify-services", label: "Arrancar y verificar servicios", engine: "uvicorn + worker" },
+  ],
+} as const;
+
+type Runtime = keyof typeof ITEMS_BY_RUNTIME;
 interface Check { id: string; label: string; ok: boolean; detail: string }
 
-export function InstallStep({ onComplete }: { onComplete: () => void }) {
+export function InstallStep({
+  onComplete,
+  runtime = "windows",
+  onRuntimeChange,
+}: {
+  onComplete: () => void;
+  runtime?: Runtime;
+  onRuntimeChange?: (runtime: Runtime) => void;
+}) {
   const [started, setStarted] = useState(false);
   const [checks, setChecks] = useState<Check[] | null>(null);
   const [activeIdx, setActiveIdx] = useState(-1);
+  const items = ITEMS_BY_RUNTIME[runtime];
+
+  async function loadChecks() {
+    const { data } = await fetchJson<{ checks: Check[] }>("/api/setup/prereqs");
+    setChecks(data?.checks ?? []);
+  }
+  // Cargados al montar (no solo al pulsar Install) para que el interruptor
+  // WSL2 de la pantalla inicial ya sepa si está disponible antes de elegir.
+  useEffect(() => { loadChecks(); }, []);
 
   async function start() {
     setStarted(true);
-    const { data } = await fetchJson<{ checks: Check[] }>("/api/setup/prereqs");
-    const c = data?.checks ?? [];
-    setChecks(c);
-    if (c.find((x) => x.id === "postgres")?.ok) setActiveIdx(0);
+    await loadChecks();
+    setActiveIdx(0);
   }
   function onDone(ok: boolean) {
     if (!ok) return;
     setActiveIdx((x) => {
       const next = x + 1;
-      if (next >= ITEMS.length) onComplete();
+      if (next >= items.length) onComplete();
       return next;
     });
   }
   const postgresOk = checks?.find((c) => c.id === "postgres")?.ok ?? false;
+  const wslCheck = checks?.find((c) => c.id === "wsl");
+  const visibleChecks = checks?.filter((c) => c.id !== "wsl") ?? [];
 
   if (!started) {
     return (
@@ -44,6 +74,40 @@ export function InstallStep({ onComplete }: { onComplete: () => void }) {
         </div>
         <div className="text-base font-medium text-fg">Instalar dependencias locales</div>
         <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-muted">Verificaremos PostgreSQL y descargaremos el entorno de inferencia y los pesos de Lumi Preview y Laila. Ocupan ~2.5 GB y se guardan en tu equipo.</p>
+
+        {/* Interruptor opcional: WSL2 evita el fallback lento de romatch en
+            Windows (verificación RoMa/Laila mucho más lenta fuera de Linux).
+            No instala WSL2 — solo cambia dónde se instalan las dependencias. */}
+        <div className="mt-4 w-full max-w-sm rounded-card border border-white/10 bg-white/[.03] p-3 text-left">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-medium text-fg">Entorno de inferencia</span>
+            {wslCheck && (
+              <span className={`text-[10px] ${wslCheck.ok ? "text-fg" : "text-subtle"}`}>
+                WSL2 {wslCheck.ok ? "detectado" : "no detectado"}
+              </span>
+            )}
+          </div>
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => onRuntimeChange?.("windows")}
+              className={`flex-1 rounded-md px-2.5 py-1.5 text-[11px] ${runtime === "windows" ? "bg-accent text-black" : "border border-white/10 text-fg hover:bg-white/10"}`}
+            >
+              Windows (nativo)
+            </button>
+            <button
+              onClick={() => wslCheck?.ok && onRuntimeChange?.("wsl")}
+              disabled={!wslCheck?.ok}
+              title={wslCheck?.ok ? undefined : wslCheck?.detail}
+              className={`flex-1 rounded-md px-2.5 py-1.5 text-[11px] disabled:cursor-not-allowed disabled:opacity-40 ${runtime === "wsl" ? "bg-accent text-black" : "border border-white/10 text-fg hover:bg-white/10"}`}
+            >
+              WSL2 (más rápido)
+            </button>
+          </div>
+          {runtime === "wsl" && (
+            <p className="mt-2 text-[11px] text-subtle">La verificación (Laila/RoMa) corre notablemente más rápido en Linux — romatch desactiva su kernel optimizado en Windows.</p>
+          )}
+        </div>
+
         <button onClick={start} className="mt-4 rounded-[10px] bg-accent px-7 py-2.5 text-sm font-medium text-black hover:brightness-105">Install</button>
       </motion.div>
     );
@@ -52,14 +116,14 @@ export function InstallStep({ onComplete }: { onComplete: () => void }) {
   return (
     <motion.div variants={fadeRise} initial="hidden" animate="show">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-medium text-fg">Instalando…</span>
-        <span className="text-xs text-muted">{Math.max(activeIdx, 0)} / {ITEMS.length} completado</span>
+        <span className="text-sm font-medium text-fg">Instalando{runtime === "wsl" ? " (WSL2)" : ""}…</span>
+        <span className="text-xs text-muted">{Math.max(activeIdx, 0)} / {items.length} completado</span>
       </div>
       {checks && (
         <div className="mb-3 flex items-center gap-3 rounded-card border border-white/10 bg-white/[.045] px-3 py-2.5">
           <span className="text-xs text-fg/80">Prerequisitos</span>
           <div className="ml-auto flex items-center gap-3">
-            {checks.map((c) => (
+            {visibleChecks.map((c) => (
               <span key={c.id} className={`flex items-center gap-1 text-[11px] ${c.ok ? "text-fg" : "text-danger-fg"}`}>{c.ok ? "✓" : "✕"} {c.label}</span>
             ))}
           </div>
@@ -72,7 +136,7 @@ export function InstallStep({ onComplete }: { onComplete: () => void }) {
         </div>
       ) : (
         <div className="flex flex-col gap-2">
-          {ITEMS.map((it, i) => (
+          {items.map((it, i) => (
             <InstallItem key={it.id} stepId={it.id} label={it.label} engine={it.engine} active={i === activeIdx} onDone={onDone} />
           ))}
         </div>

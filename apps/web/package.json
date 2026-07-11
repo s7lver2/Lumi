@@ -18,8 +18,8 @@
     "@turf/turf": "^7.3.5",
     "dotenv": "^17.4.2",
     "framer-motion": "^11.11.0",
+    "jszip": "^3.10.1",
     "mapbox-gl": "^3.6.0",
-    "mapbox-gl-draw-circle": "^1.1.2",
     "mapbox-gl-draw-rectangle-mode": "^1.0.4",
     "maplibre-gl": "^4.7.1",
     "next": "14.2.5",
@@ -28,6 +28,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-easy-crop": "^5.1.0",
+    "styled-jsx": "5.1.1",
     "zustand": "^4.5.5"
   },
   "devDependencies": {

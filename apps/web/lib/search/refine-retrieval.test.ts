@@ -20,11 +20,15 @@ d("expandRegionCandidates", () => {
        VALUES ($1, ST_GeomFromText('POLYGON((0 0,0 1,1 1,1 0,0 0))',4326),1.0)`,
       [areaId]
     );
-    // one image ~0m from centroid (inside), one ~1km away (outside a 150m radius)
+    // "member" was clustered into this region as a Pass-1 candidate; "nearby"
+    // sits well within the same 150m radius but was NEVER retrieved as a
+    // candidate (e.g. a different, unrelated pano indexed by an overlapping
+    // area) — expandRegionCandidates must not pull it in just because it's
+    // geographically close.
     await pool.query(
       `INSERT INTO indexed_images (area_id, pano_id, heading, location, embedding, image_path, embedded_at)
-       VALUES ($1,'near',0, ST_GeogFromText('POINT(0.5 0.5)'), $2, '/imgs/near_0.jpg', now()),
-              ($1,'far',0,  ST_GeogFromText('POINT(0.52 0.5)'), $2, '/imgs/far_0.jpg', now())`,
+       VALUES ($1,'member',0, ST_GeogFromText('POINT(0.5 0.5)'), $2, '/imgs/member_0.jpg', now()),
+              ($1,'nearby',0, ST_GeogFromText('POINT(0.5001 0.5)'), $2, '/imgs/nearby_0.jpg', now())`,
       [areaId, `[${new Array(8448).fill(0).join(",")}]`]
     );
     await pool.query(
@@ -37,6 +41,12 @@ d("expandRegionCandidates", () => {
       [searchId]
     );
     regionId = r.rows[0].id;
+    const memberImage = await pool.query(`SELECT id FROM indexed_images WHERE pano_id = 'member'`);
+    await pool.query(
+      `INSERT INTO search_candidates (search_id, region_id, indexed_image_id, similarity_score, rank)
+       VALUES ($1, $2, $3, 0.9, 1)`,
+      [searchId, regionId, memberImage.rows[0].id]
+    );
   });
 
   afterAll(async () => {
@@ -45,11 +55,11 @@ d("expandRegionCandidates", () => {
     await pool.end();
   });
 
-  it("returns only images within the region radius, with their image paths", async () => {
+  it("returns only the region's actual persisted candidates, not every nearby image", async () => {
     const rows = await expandRegionCandidates(pool, regionId);
     const panos = rows.map((r) => r.panoId);
-    expect(panos).toContain("near");
-    expect(panos).not.toContain("far");
-    expect(rows.find((r) => r.panoId === "near")!.imagePath).toBe("/imgs/near_0.jpg");
+    expect(panos).toContain("member");
+    expect(panos).not.toContain("nearby");
+    expect(rows.find((r) => r.panoId === "member")!.imagePath).toBe("/imgs/member_0.jpg");
   });
 });

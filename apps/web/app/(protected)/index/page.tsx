@@ -6,6 +6,7 @@ import { IndexingDrawTool } from "../../components/IndexingDrawTool";
 import { FloatingCard } from "../../components/FloatingCard";
 import { JobProgressBar } from "../../components/JobProgressBar";
 import { useIndexingStore } from "../../stores/useIndexingStore";
+import { isTerminal } from "../../lib/progress-stream";
 
 // Componentes del Task 4 e interfaces de dibujo avanzados importados
 import { AreasNotification } from "../../components/AreasNotification";
@@ -14,7 +15,7 @@ import { DrawToolbar } from "../../components/DrawToolbar";
 
 export default function IndexPage() {
   const [map, setMap] = useState<any>(null);
-  const { drawnPolygon, areaKm2, estimate, activeJobId, setEstimate, startJob } = useIndexingStore();
+  const { drawnPolygon, areaKm2, estimate, activeJobId, jobProgress, setEstimate, startJob } = useIndexingStore();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,6 +55,37 @@ export default function IndexPage() {
     refetchAreaCounts();
   }, [refetchAreaCounts]);
 
+  // Mientras haya un job activo y no esté en un estado terminal, sondea los
+  // puntos ya indexados y los va pintando en el mapa — así se ven aparecer
+  // según se indexan en vez de todos de golpe al terminar (el worker ahora
+  // inserta en indexed_images lote a lote, no todo al final).
+  useEffect(() => {
+    if (!map || !activeJobId) return;
+    let cancelled = false;
+    let fitted = false;
+
+    async function tick() {
+      try {
+        const res = await fetch(`/api/areas/${activeJobId}`);
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (cancelled || !data?.area?.geometry || !data?.points) return;
+        renderAreaOnMap(map, data.area.geometry, data.points, { fit: !fitted });
+        fitted = true;
+      } catch {
+        // Un fallo de red puntual en el sondeo no debe romper la vista del mapa.
+      }
+    }
+
+    tick();
+    if (jobProgress && isTerminal(jobProgress.status)) return; // ya se hizo el tick final de arriba
+    const interval = setInterval(tick, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [map, activeJobId, jobProgress?.status]);
+
   async function handleEstimate() {
     if (!drawnPolygon) return;
     setBusy(true);
@@ -66,7 +98,11 @@ export default function IndexPage() {
     const json = await res.json();
     setBusy(false);
     if (!res.ok) return setError(json.error);
-    setEstimate({ pointsEstimated: json.pointsEstimated, estimatedCostUsd: json.estimatedCostUsd });
+    setEstimate({
+      pointsEstimated: json.pointsEstimated,
+      estimatedCostUsd: json.estimatedCostUsd,
+      reusableImages: json.reusableImages ?? 0,
+    });
   }
 
   async function handleConfirm() {
@@ -127,6 +163,10 @@ export default function IndexPage() {
     window.dispatchEvent(event);
   }
 
+  // Un job "corriendo de verdad" es el único caso en que se oculta la barra
+  // de dibujo: si terminó (indexed/failed/cancelled) se deja dibujar ya.
+  const jobRunning = !!activeJobId && !(jobProgress && isTerminal(jobProgress.status));
+
   return (
     <>
       <MapCanvas onReady={(m) => setMap(m)} />
@@ -155,8 +195,10 @@ export default function IndexPage() {
         )}
       </div>
 
-      {/* Barra de herramientas flotante central inferior (se oculta si hay un Job activo) */}
-      {!activeJobId && (
+      {/* Barra de herramientas flotante central inferior — oculta solo mientras
+          un job está realmente en curso; si terminó (indexed/failed/cancelled)
+          se deja dibujar otra área de inmediato. */}
+      {!jobRunning && (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40">
           <DrawToolbar 
             mode={drawMode} 
@@ -218,6 +260,12 @@ export default function IndexPage() {
                       {estimate.pointsEstimated.toLocaleString()} puntos ·{" "}
                       {(estimate.pointsEstimated * 4).toLocaleString()} imágenes
                     </div>
+                    {estimate.reusableImages > 0 && (
+                      <div className="mt-1 text-xs text-accent-fg">
+                        {estimate.reusableImages.toLocaleString()} imágenes ya indexadas de un área
+                        solapada — no se vuelven a pagar (estimado).
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={handleConfirm}
@@ -238,31 +286,40 @@ export default function IndexPage() {
   );
 }
 
-function renderAreaOnMap(map: any, areaGeometry: any, pointsGeometry: any) {
+function renderAreaOnMap(map: any, areaGeometry: any, pointsGeometry: any, opts: { fit?: boolean } = {}) {
   if (!map) return;
 
-  if (map.getLayer("area-poly-line")) map.removeLayer("area-poly-line");
-  if (map.getSource("area-poly")) map.removeSource("area-poly");
-  if (map.getLayer("area-points-dots")) map.removeLayer("area-points-dots");
-  if (map.getSource("area-points")) map.removeSource("area-points");
+  // Reutiliza la fuente si ya existe (setData) en vez de quitar/re-crear la
+  // capa cada vez — importante ahora que esto se llama cada ~2s mientras un
+  // job está en curso, para pintar los puntos según se van indexando sin
+  // parpadeo.
+  const polySource = map.getSource("area-poly");
+  if (polySource) {
+    polySource.setData(areaGeometry);
+  } else {
+    map.addSource("area-poly", { type: "geojson", data: areaGeometry });
+    map.addLayer({
+      id: "area-poly-line",
+      type: "line",
+      source: "area-poly",
+      paint: { "line-color": "#85b7eb", "line-width": 1.5 },
+    });
+  }
 
-  map.addSource("area-poly", { type: "geojson", data: areaGeometry });
-  map.addLayer({
-    id: "area-poly-line",
-    type: "line",
-    source: "area-poly",
-    paint: { "line-color": "#85b7eb", "line-width": 1.5 },
-  });
+  const pointsSource = map.getSource("area-points");
+  if (pointsSource) {
+    pointsSource.setData(pointsGeometry);
+  } else {
+    map.addSource("area-points", { type: "geojson", data: pointsGeometry });
+    map.addLayer({
+      id: "area-points-dots",
+      type: "circle",
+      source: "area-points",
+      paint: { "circle-radius": 2.5, "circle-color": "#e8e8e6", "circle-opacity": 0.8 },
+    });
+  }
 
-  map.addSource("area-points", { type: "geojson", data: pointsGeometry });
-  map.addLayer({
-    id: "area-points-dots",
-    type: "circle",
-    source: "area-points",
-    paint: { "circle-radius": 2.5, "circle-color": "#e8e8e6", "circle-opacity": 0.8 },
-  });
-
-  if (areaGeometry.coordinates && areaGeometry.coordinates[0]) {
+  if (opts.fit !== false && areaGeometry.coordinates && areaGeometry.coordinates[0]) {
     const coordinates = areaGeometry.coordinates[0];
     const bounds = coordinates.reduce((acc: any, coord: any) => {
       return [

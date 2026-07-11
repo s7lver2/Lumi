@@ -9,7 +9,8 @@ import { getMonthlySpendUsd, recordStreetViewUsage } from "@netryx/api-usage";
 // apps/worker must read the SAME root .env so SETTINGS_KEY_PATH resolves
 // to the same absolute path in both (spec §14.4) — see also
 // db/package.json's `--envPath ../.env` for the same convention.
-config({ path: resolve(import.meta.dirname, "../../../.env") });
+// FIX: Se cambia 'import.meta.dirname' por el estándar de CommonJS '__dirname'
+config({ path: resolve(__dirname, "../../../.env") });
 
 import type { IndexAreaJobPayload } from "@netryx/shared-types";
 import { getBoss, INDEX_AREA_JOB_NAME } from "./queue";
@@ -20,7 +21,7 @@ import { downloadCaptures } from "./street-view";
 import { embedImages } from "./inference-client";
 import { updateAreaProgress, loadExistingPanoHeadings } from "./progress";
 import { fetchStreetGeometry, samplePointsAlongStreets } from "@netryx/geo-sampling";
-import { getArea, getAreaPolygon, insertIndexedImages, insertIndexedPoints } from "./db-queries";
+import { getArea, getAreaPolygon, insertIndexedImages, insertIndexedPoints, isAreaCancelled } from "./db-queries";
 
 function isIndexAreaJobPayload(data: unknown): data is IndexAreaJobPayload {
   return (
@@ -45,7 +46,7 @@ async function main() {
       getArea: (id) => getArea(pool, id),
       getAreaPolygon: (id) => getAreaPolygon(pool, id),
       fetchStreetGeometry,
-      samplePointsAlongStreets: (lines, spacing) => samplePointsAlongStreets(lines, spacing),
+      samplePointsAlongStreets: (lines, spacing, polygon) => samplePointsAlongStreets(lines, spacing, polygon),
       loadExistingPanoHeadings: () => loadExistingPanoHeadings(pool),
       downloadCaptures,
       embedImages,
@@ -57,6 +58,7 @@ async function main() {
       saveCaptureImage: (panoId, heading, base64) => saveCaptureImage(panoId, heading, base64),
       getMonthlySpendUsd: () => getMonthlySpendUsd(pool),
       recordStreetViewUsage: (requests, price) => recordStreetViewUsage(pool, requests, price),
+      isCancelled: (areaId) => isAreaCancelled(pool, areaId),
     });
   });
   console.log(`netryx worker listening for "${INDEX_AREA_JOB_NAME}" jobs`);

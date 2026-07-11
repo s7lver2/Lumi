@@ -15,6 +15,7 @@ export function AreasPopup({
   const [areas, setAreas] = useState<AreaItem[]>([]);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => { fetchJson<{ areas: AreaItem[] }>("/api/areas").then((r) => setAreas(r.data?.areas ?? [])); }, []);
 
   async function cancelArea(id: string) {
@@ -29,11 +30,18 @@ export function AreasPopup({
 
   async function deleteArea(id: string) {
     setDeletingId(id);
-    const { ok } = await fetchJson(`/api/areas/${id}`, { method: "DELETE" });
+    setError(null);
+    const { ok, data } = await fetchJson<{ error?: string }>(`/api/areas/${id}`, { method: "DELETE" });
     setDeletingId(null);
     if (ok) {
       setAreas((prev) => prev.filter((a) => a.id !== id));
       onChanged?.();
+    } else {
+      // e.g. the area is still "pending"/"indexing" — the route now refuses
+      // to delete it out from under an active worker job (spec: confirmed
+      // live "violates foreign key constraint indexed_images_area_id_fkey"
+      // when this used to succeed silently mid-job). Cancel first.
+      setError(data?.error ?? "No se pudo borrar el área");
     }
   }
 
@@ -47,6 +55,7 @@ export function AreasPopup({
           <span className="text-sm font-medium text-fg">Áreas indexadas</span>
           <button onClick={onClose} className="text-subtle hover:text-fg" aria-label="Cerrar">✕</button>
         </div>
+        {error && <p className="mb-2 rounded-md bg-danger/10 px-2 py-1.5 text-xs text-danger-fg">{error}</p>}
         <div className="space-y-2">
           {areas.map((a) => {
             const cancellable = a.status === "pending" || a.status === "indexing";

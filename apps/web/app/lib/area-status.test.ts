@@ -8,5 +8,6 @@ describe("statusTone", () => {
     expect(statusTone("indexing")).toBe("draw");
     expect(statusTone("pending")).toBe("warning");
     expect(statusTone("failed")).toBe("danger");
+    expect(statusTone("cancelled")).toBe("muted");
   });
 });
