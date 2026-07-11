@@ -13,6 +13,7 @@ import { useSearchStore } from "../stores/useSearchStore";
 import { useMapStore } from "../stores/useMapStore";
 import { fetchJson } from "../lib/fetch-json";
 import { flyToRegion, flyToPoint } from "../lib/map-camera";
+import { MapArrivalPulse } from "./MapArrivalPulse";
 
 // Debe coincidir con el contrato `Selected` de UploadPopup ({ file, url }).
 interface SelectedFile {
@@ -46,6 +47,8 @@ export function SearchDashboard() {
 
   // Estado local para capturar el archivo arrastrado sobre el lienzo del mapa
   const [selected, setSelected] = useState<SelectedFile[]>([]);
+  // Estado local para el objetivo de la pulsación de llegada al mapa
+  const [pulsePoint, setPulsePoint] = useState<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
     setMode("search");
@@ -120,6 +123,7 @@ export function SearchDashboard() {
     ).find((c) => c.status === "confirmed");
     if (confirmed) {
       flyToPoint(map, confirmed);
+      setPulsePoint({ lat: confirmed.lat, lng: confirmed.lng });
     } else if (region) {
       flyToRegion(map, region);
     }
@@ -171,6 +175,7 @@ export function SearchDashboard() {
     <>
       <MapCanvas onReady={(m) => setMap(m)} />
       {map && <ConfidenceCircleLayer map={map} />}
+      {map && <MapArrivalPulse map={map} point={pulsePoint} />}
 
       {/* Se expone de forma permanente sobre el mapa en estado idle el capturador drag-and-drop */}
       {idle && <MapDropTarget onFiles={handleFilesDropped} />}
