@@ -12,17 +12,36 @@ import { BottomSummaryBar } from "./BottomSummaryBar";
 import { useSearchStore } from "../stores/useSearchStore";
 import { useMapStore } from "../stores/useMapStore";
 import { fetchJson } from "../lib/fetch-json";
+import { flyToRegion, flyToPoint } from "../lib/map-camera";
 
-// Estructura de tipado local requerida por el UploadPopup
+// Debe coincidir con el contrato `Selected` de UploadPopup ({ file, url }).
 interface SelectedFile {
-  id: string;
   file: File;
+  url: string;
+}
+
+function formatEta(etaMs: number | null): string {
+  if (etaMs === null) return "calculando…";
+  const totalSeconds = Math.round(etaMs / 1000);
+  if (totalSeconds < 60) return `~${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `~${minutes}m ${seconds}s`;
 }
 
 export function SearchDashboard() {
   const [map, setMap] = useState<any>(null);
   const [queryImageUrl, setQueryImageUrl] = useState<string | null>(null);
-  const { refineStatus, regions, error, setSearching, setSearchResults, setError } = useSearchStore();
+  const { 
+    refineStatus, 
+    refineProgress, 
+    regions, 
+    error, 
+    setSearching, 
+    setSearchResults, 
+    setError,
+    candidatesByRegion 
+  } = useSearchStore();
   const setMode = useMapStore((s) => s.setMode);
 
   // Estado local para capturar el archivo arrastrado sobre el lienzo del mapa
@@ -43,23 +62,66 @@ export function SearchDashboard() {
     setSearchResults(data, file.name);
   }
 
-  const { currentSearchId, setRefining, setRefineResults, selectRegion } = useSearchStore();
+  const { currentSearchId, setRefining, setRefineProgress, setRefineResults, selectRegion } = useSearchStore();
 
+  function handleSelectRegion(regionId: string) {
+    selectRegion(regionId);
+    const region = regions.find((r) => r.id === regionId);
+    if (region) flyToRegion(map, region);
+  }
+
+  // Streamed as SSE, not a single fetchJson call — refine can take minutes
+  // (RoMa verification is ~10-25s PER CANDIDATE), so the route reports
+  // progress/ETA per candidate as it goes (see the refine route's onProgress
+  // wiring). Same parsing shape as useCommandRun.ts's setup-wizard SSE
+  // consumer, just with refine-specific event types instead of log lines.
   async function handleRefine(regionId: string) {
     if (!currentSearchId) return;
     selectRegion(regionId);
     setRefining();
-    const { ok, data } = await fetchJson(`/api/search/${currentSearchId}/refine`, {
+
+    const res = await fetch(`/api/search/${currentSearchId}/refine`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ regionId }),
     });
-    if (!ok || !data) return setError(data?.error ?? "El refinado falló");
-    setRefineResults(regionId, data.candidates);
-    
+    if (!res.ok || !res.body) return setError(`El refinado falló (HTTP ${res.status})`);
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() ?? "";
+      for (const part of parts) {
+        const raw = part.replace(/^data: /, "");
+        if (!raw) continue;
+        const event = JSON.parse(raw) as
+
+          | { type: "progress"; verified: number; total: number; etaMs: number | null }
+          | { type: "done"; result: { candidates: import("@netryx/shared-types").SearchCandidate[] } }
+          | { type: "error"; message: string };
+        if (event.type === "progress") {
+          setRefineProgress({ verified: event.verified, total: event.total, etaMs: event.etaMs });
+        } else if (event.type === "done") {
+          setRefineResults(regionId, event.result.candidates);
+        } else if (event.type === "error") {
+          setError(event.message);
+        }
+      }
+    }
+
     const region = regions.find((r) => r.id === regionId);
-    if (map && region) {
-      map.flyTo({ center: [region.centroid.lng, region.centroid.lat], zoom: 16, pitch: 55, duration: 900 });
+    const confirmed = (
+      candidatesByRegion[regionId] ?? []
+    ).find((c) => c.status === "confirmed");
+    if (confirmed) {
+      flyToPoint(map, confirmed);
+    } else if (region) {
+      flyToRegion(map, region);
     }
   }
 
@@ -80,24 +142,30 @@ export function SearchDashboard() {
   // Interceptores de archivos arrojados en la zona global del mapa
   function handleFilesDropped(files: File[]) {
     if (files.length === 0) return;
-    // Mapeamos los archivos entrantes al formato de colección esperado por el popup
-    const formatted = files.map((file) => ({
-      id: `${file.name}-${Date.now()}`,
-      file,
-    }));
-    setSelected(formatted);
+    const formatted = files.map((file) => ({ file, url: URL.createObjectURL(file) }));
+    setSelected((prev) => [...prev, ...formatted]);
+  }
+
+  function handleRemove(index: number) {
+    setSelected((prev) => {
+      const next = [...prev];
+      const [removed] = next.splice(index, 1);
+      if (removed) URL.revokeObjectURL(removed.url);
+      return next;
+    });
   }
 
   function handleTriggerSearch() {
     if (selected.length === 0) return;
-    // Se ejecuta la búsqueda usando el primer elemento de la cola
+    // Backend is single-image: search the first selected file (documented limit).
     handleImage(selected[0].file);
-    // Limpiamos el overlay una vez enviada la petición
+    selected.forEach((s) => URL.revokeObjectURL(s.url));
     setSelected([]);
   }
 
   const idle = refineStatus === "idle";
   const searching = refineStatus === "searching";
+  const refining = refineStatus === "refining";
 
   return (
     <>
@@ -111,10 +179,10 @@ export function SearchDashboard() {
       {selected.length > 0 && (
         <UploadPopup
           files={selected}
-          onClose={() => setSelected([])}
+          onAddMore={handleFilesDropped}
+          onRemove={handleRemove}
           onSearch={handleTriggerSearch}
-          // 💡 Nota sobre Recorte: El asistente de recorte (crop helper) queda diferido
-          // o accesible de forma opcional vinculando un callback al hacer clic sobre el thumbnail.
+          busy={searching}
         />
       )}
 
@@ -126,18 +194,11 @@ export function SearchDashboard() {
 
       {regions.length > 0 && (
         <>
-          <TopResultCard onRefine={handleRefine} />
+          <TopResultCard onRefine={handleRefine} onSelectRegion={handleSelectRegion} refining={refining} />
           <div className="absolute right-0 top-0 h-full">
-            <ResultsPanel queryImageUrl={queryImageUrl} onRefine={handleRefine} />
+            <ResultsPanel queryImageUrl={queryImageUrl} onRefine={handleRefine} onSelectRegion={handleSelectRegion} refining={refining} />
           </div>
-          <BottomSummaryBar />
         </>
-      )}
-
-      {error && (
-        <div className="absolute left-1/2 top-4 -translate-x-1/2 rounded-card bg-danger/20 px-4 py-2 text-xs text-danger-fg z-50">
-          {error}
-        </div>
       )}
     </>
   );
