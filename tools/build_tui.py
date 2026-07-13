@@ -63,3 +63,113 @@ def build_service_specs(root: Path) -> list[ServiceSpec]:
         name="web", argv=["pnpm", "--filter", "@netryx/web", "dev"], cwd=root, shell=IS_WIN,
     )
     return [inference, worker, web]
+
+
+from textual.app import App, ComposeResult
+from textual.containers import Horizontal, Vertical
+from textual.widgets import Checkbox, Label, ListItem, ListView, RichLog
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from build import _popen_tagged  # noqa: E402 — reuse the shared, tee-aware spawner
+
+STATUS_DOT = {"running": "●", "stopped": "○", "crashed": "✕"}
+
+
+def _status_text(state: ServiceState) -> str:
+    if not state.spec.available:
+        return state.spec.unavailable_reason
+    return f"{STATUS_DOT[state.status]} {state.status}"
+
+
+class LumiDevApp(App):
+    CSS = """
+    Horizontal { height: 1fr; }
+    #sidebar { width: 34; border: solid $accent; }
+    #log-pane { border: solid $accent; }
+    """
+
+    def __init__(self, root: Path, specs: list[ServiceSpec]) -> None:
+        super().__init__()
+        self.root = root
+        self.states: dict[str, ServiceState] = {s.name: ServiceState(spec=s) for s in specs}
+        self.selected_name = specs[0].name
+
+    def compose(self) -> ComposeResult:
+        with Horizontal():
+            with Vertical(id="sidebar"):
+                yield ListView(
+                    *[
+                        ListItem(
+                            Checkbox(
+                                name, value=state.spec.available, disabled=not state.spec.available,
+                                id=f"checkbox-{name}",
+                            ),
+                            Label(_status_text(state), id=f"status-{name}"),
+                            id=f"row-{name}",
+                        )
+                        for name, state in self.states.items()
+                    ],
+                    id="service-list",
+                )
+            yield RichLog(id="log-pane", highlight=False)
+
+    def on_mount(self) -> None:
+        for state in self.states.values():
+            if state.spec.available:
+                self._start(state)
+        self._render_pane(self.selected_name)
+
+    def _append_line(self, name: str, line: str) -> None:
+        state = self.states[name]
+        state.buffer.append(line)
+        if name == self.selected_name:
+            self.query_one("#log-pane", RichLog).write(line)
+
+    def _start(self, state: ServiceState) -> None:
+        if state.proc is not None:
+            return
+        state.buffer = []
+        name = state.spec.name
+        state.proc = _popen_tagged(
+            state.spec.argv, state.spec.cwd, name,
+            shell=state.spec.shell, env=state.spec.env,
+            on_line=lambda line, n=name: self.call_from_thread(self._append_line, n, line),
+        )
+        state.status = "running"
+        self._refresh_status(name)
+        if name == self.selected_name:
+            self.query_one("#log-pane", RichLog).clear()
+
+    def _stop(self, state: ServiceState) -> None:
+        if state.proc is None:
+            return
+        state.proc.terminate()
+        try:
+            state.proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            state.proc.kill()
+        state.proc = None
+        state.status = "stopped"
+        self._refresh_status(state.spec.name)
+
+    def _refresh_status(self, name: str) -> None:
+        self.query_one(f"#status-{name}", Label).update(_status_text(self.states[name]))
+
+    def _render_pane(self, name: str) -> None:
+        log = self.query_one("#log-pane", RichLog)
+        log.clear()
+        for line in self.states[name].buffer:
+            log.write(line)
+
+    def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
+        name = event.checkbox.id.removeprefix("checkbox-")
+        state = self.states[name]
+        if event.value:
+            self._start(state)
+        else:
+            self._stop(state)
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        name = event.item.id.removeprefix("row-")
+        self.selected_name = name
+        self._render_pane(name)
