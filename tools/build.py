@@ -87,6 +87,16 @@ TEE_TO_FILE_TAGS = {"worker", "inference"}
 # rotating-log-handler — that's overkill for a ~50-line tail read.
 LOG_SIZE_CAP_BYTES = 5 * 1024 * 1024
 
+# How often (in lines written) _pump_tagged re-checks the size cap while its
+# loop is running. Without this, truncation only ever ran once, right before
+# the loop started — bounding growth across process restarts but NOT during
+# a single long-running process's lifetime (a worker/inference process that
+# stays up for days without restarting would still grow its log unbounded).
+# 500 is frequent enough to actually bound growth (worst case ~500 lines'
+# worth of overshoot past the cap) without adding meaningful per-line
+# overhead from the extra stat() call this triggers.
+LOG_TRUNCATE_CHECK_INTERVAL = 500
+
 
 def _log_file_path(tag: str) -> Path:
     log_dir = REPO_ROOT_FOR_LOGS / "data" / "logs"
@@ -125,12 +135,16 @@ def _pump_tagged(proc: subprocess.Popen, tag: str) -> None:
     also appends each line to data/logs/{tag}.log — apps/web's
     GET /api/health/logs tails this for the crash screen, since worker/
     inference are separate OS processes the web app can't otherwise read
-    output from."""
+    output from. Also re-checks the size cap every
+    LOG_TRUNCATE_CHECK_INTERVAL lines while the loop runs, so a single
+    long-running process (days without restarting) still gets its log
+    bounded — not just across process restarts."""
     assert proc.stdout is not None
     log_path = _log_file_path(tag) if tag in TEE_TO_FILE_TAGS else None
     if log_path is not None:
         _truncate_log_if_large(log_path)
     log_file = log_path.open("a", encoding="utf-8") if log_path is not None else None
+    lines_since_check = 0
     try:
         for line in proc.stdout:
             stripped = line.rstrip(chr(10))
@@ -139,6 +153,12 @@ def _pump_tagged(proc: subprocess.Popen, tag: str) -> None:
             if log_file is not None:
                 log_file.write(stripped + "\n")
                 log_file.flush()
+                lines_since_check += 1
+                if lines_since_check >= LOG_TRUNCATE_CHECK_INTERVAL:
+                    lines_since_check = 0
+                    log_file.close()
+                    _truncate_log_if_large(log_path)
+                    log_file = log_path.open("a", encoding="utf-8")
     finally:
         if log_file is not None:
             log_file.close()
