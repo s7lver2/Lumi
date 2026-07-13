@@ -17,6 +17,12 @@ body {
 @keyframes lumi-twinkle { 0%, 100% { opacity: .2; } 50% { opacity: .9; } }
 @keyframes lumi-shimmer { 0% { transform: translateX(-140%); } 100% { transform: translateX(360%); } }
 @keyframes lumi-spin { to { transform: rotate(360deg); } }
+@keyframes lumi-tumble-fall {
+  0%   { transform: rotate(224deg) translateY(-260px) rotate(-224deg); opacity: 1; }
+  10%  { transform: rotate(224deg) translateY(-260px) rotate(-224deg); opacity: 1; }
+  78%  { transform: rotate(224deg) translateY(-260px) translate(-96px, 150px); opacity: .5; }
+  100% { transform: rotate(224deg) translateY(-260px) translate(-150px, 250px); opacity: 0; }
+}
 @media (prefers-reduced-motion: reduce) {
   .lumi-anim { animation: none !important; }
 }
