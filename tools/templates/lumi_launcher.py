@@ -47,11 +47,44 @@ _PRINT_LOCK = threading.Lock()
 
 TEE_TO_FILE_TAGS = {"worker", "inference"}
 
+# Caps data/logs/{tag}.log from growing unboundedly across a long-lived
+# install (confirmed live: no rotation existed at all, so a multi-day
+# session could grow these to unbounded size, both wasting disk and making
+# apps/web's GET /api/health/logs tail slower/heavier over time). Coarse
+# "shrink when too big" truncation, not a proper rotating-log-handler —
+# that's overkill for a ~50-line tail read. Mirrors tools/build.py's
+# identical constant/helper exactly.
+LOG_SIZE_CAP_BYTES = 5 * 1024 * 1024
+
 
 def _log_file_path(tag: str, root: Path) -> Path:
     log_dir = root / "data" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir / f"{tag}.log"
+
+
+def _truncate_log_if_large(path: Path) -> None:
+    """If path already exceeds LOG_SIZE_CAP_BYTES, rewrites it to keep only
+    roughly the last half (read by seeking from the end) — called right
+    before opening for append so the file never grows past ~1.5x the cap.
+    A no-op for a missing or small-enough file."""
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return
+    if size <= LOG_SIZE_CAP_BYTES:
+        return
+    keep_bytes = LOG_SIZE_CAP_BYTES // 2
+    with path.open("rb") as f:
+        f.seek(size - keep_bytes)
+        tail = f.read()
+    # The seek almost certainly lands mid-line — drop that likely-partial
+    # first line so the kept tail starts on a real line boundary.
+    newline_index = tail.find(b"\n")
+    if newline_index != -1:
+        tail = tail[newline_index + 1:]
+    with path.open("wb") as f:
+        f.write(tail)
 
 
 def _pump_tagged(proc: subprocess.Popen, tag: str, root: Path) -> None:
@@ -61,7 +94,10 @@ def _pump_tagged(proc: subprocess.Popen, tag: str, root: Path) -> None:
     unlabeled stream. For tags in TEE_TO_FILE_TAGS, also appends each line
     to data/logs/{tag}.log for the web app's crash screen to read."""
     assert proc.stdout is not None
-    log_file = _log_file_path(tag, root).open("a", encoding="utf-8") if tag in TEE_TO_FILE_TAGS else None
+    log_path = _log_file_path(tag, root) if tag in TEE_TO_FILE_TAGS else None
+    if log_path is not None:
+        _truncate_log_if_large(log_path)
+    log_file = log_path.open("a", encoding="utf-8") if log_path is not None else None
     try:
         for line in proc.stdout:
             stripped = line.rstrip(chr(10))
