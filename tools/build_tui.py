@@ -66,6 +66,7 @@ def build_service_specs(root: Path) -> list[ServiceSpec]:
 
 
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Checkbox, Label, ListItem, ListView, RichLog
 
@@ -87,6 +88,16 @@ class LumiDevApp(App):
     #sidebar { width: 34; border: solid $accent; }
     #log-pane { border: solid $accent; }
     """
+
+    BINDINGS = [
+        Binding("space", "toggle_selected", "Alternar"),
+        Binding("r", "restart_selected", "Reiniciar"),
+        Binding("q", "quit_app", "Salir"),
+        # Textual's own App.BINDINGS binds ctrl+c to action_help_quit by
+        # default, which would bypass this app's subprocess teardown —
+        # explicitly override it to run the same graceful quit instead.
+        Binding("ctrl+c", "quit_app", "Salir", priority=True),
+    ]
 
     def __init__(self, root: Path, specs: list[ServiceSpec]) -> None:
         super().__init__()
@@ -118,6 +129,19 @@ class LumiDevApp(App):
             if state.spec.available:
                 self._start(state)
         self._render_pane(self.selected_name)
+        self.set_interval(1.0, self._poll_crashed)
+
+    def _poll_crashed(self) -> None:
+        """A service that exited on its own (not via a user-initiated
+        stop) should show as crashed, not silently sit at "running" with
+        nothing behind it — checked once a second via Popen.poll()."""
+        for name, state in self.states.items():
+            if state.proc is not None and state.proc.poll() is not None:
+                state.proc = None
+                state.status = "crashed"
+                self._refresh_status(name)
+                checkbox = self.query_one(f"#checkbox-{name}", Checkbox)
+                checkbox.value = False
 
     def _append_line(self, name: str, line: str) -> None:
         state = self.states[name]
@@ -173,3 +197,17 @@ class LumiDevApp(App):
         name = event.item.id.removeprefix("row-")
         self.selected_name = name
         self._render_pane(name)
+
+    def action_toggle_selected(self) -> None:
+        checkbox = self.query_one(f"#checkbox-{self.selected_name}", Checkbox)
+        checkbox.value = not checkbox.value
+
+    def action_restart_selected(self) -> None:
+        state = self.states[self.selected_name]
+        self._stop(state)
+        self._start(state)
+
+    def action_quit_app(self) -> None:
+        for state in self.states.values():
+            self._stop(state)
+        self.exit()
