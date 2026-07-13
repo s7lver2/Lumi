@@ -15,6 +15,7 @@ config({ path: resolve(__dirname, "../../../.env") });
 import type { IndexAreaJobPayload } from "@netryx/shared-types";
 import { getBoss, INDEX_AREA_JOB_NAME } from "./queue";
 import { getPool } from "./db";
+import { startHeartbeatLoop } from "./heartbeat";
 import { getSettingsRepo } from "./settings";
 import { runIndexAreaJob } from "./jobs/index-area";
 import { downloadCaptures } from "./street-view";
@@ -34,6 +35,7 @@ function isIndexAreaJobPayload(data: unknown): data is IndexAreaJobPayload {
 
 async function main() {
   const pool = getPool();
+  startHeartbeatLoop(pool);
   const settingsRepo = getSettingsRepo();
   const boss = await getBoss();
   const inferenceBaseUrl = process.env.INFERENCE_SERVICE_URL ?? "http://localhost:8000";
