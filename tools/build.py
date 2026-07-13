@@ -66,6 +66,7 @@ import threading
 import time
 import webbrowser
 from pathlib import Path
+from typing import Callable
 
 IS_WIN = sys.platform == "win32"
 
@@ -128,11 +129,16 @@ def _truncate_log_if_large(path: Path) -> None:
         f.write(tail)
 
 
-def _pump_tagged(proc: subprocess.Popen, tag: str) -> None:
+def _pump_tagged(proc: subprocess.Popen, tag: str, on_line: Callable[[str], None] | None = None) -> None:
     """Reprints proc's merged stdout/stderr line-by-line prefixed with
-    f"[{tag}]" until it exits. Assumes proc was opened with
-    stdout=PIPE, stderr=STDOUT, text=True. For tags in TEE_TO_FILE_TAGS,
-    also appends each line to data/logs/{tag}.log — apps/web's
+    f"[{tag}]" until it exits (default behavior, when on_line is None —
+    used by dev()'s plain non-interactive path). When on_line is supplied
+    (used by tools/build_tui.py's live dashboard, which can't have lines
+    printed directly to stdout without corrupting its own rendered
+    screen), each line is handed to on_line INSTEAD of being printed.
+    Assumes proc was opened with stdout=PIPE, stderr=STDOUT, text=True.
+    For tags in TEE_TO_FILE_TAGS, also appends each line to
+    data/logs/{tag}.log regardless of on_line — apps/web's
     GET /api/health/logs tails this for the crash screen, since worker/
     inference are separate OS processes the web app can't otherwise read
     output from. Also re-checks the size cap every
@@ -148,8 +154,11 @@ def _pump_tagged(proc: subprocess.Popen, tag: str) -> None:
     try:
         for line in proc.stdout:
             stripped = line.rstrip(chr(10))
-            with _PRINT_LOCK:
-                print(f"[{tag}] {stripped}")
+            if on_line is not None:
+                on_line(stripped)
+            else:
+                with _PRINT_LOCK:
+                    print(f"[{tag}] {stripped}")
             if log_file is not None:
                 log_file.write(stripped + "\n")
                 log_file.flush()
@@ -165,15 +174,20 @@ def _pump_tagged(proc: subprocess.Popen, tag: str) -> None:
     proc.stdout.close()
 
 
-def _popen_tagged(cmd: list[str], cwd: Path, tag: str, shell: bool = False, env: dict | None = None) -> subprocess.Popen:
+def _popen_tagged(
+    cmd: list[str], cwd: Path, tag: str, shell: bool = False, env: dict | None = None,
+    on_line: Callable[[str], None] | None = None,
+) -> subprocess.Popen:
     """Like subprocess.Popen, but starts a daemon thread that tags and
     reprints the child's output instead of leaving it to interleave
-    unlabeled with sibling processes in dev()."""
+    unlabeled with sibling processes in dev() — or, when on_line is
+    provided, hands each line to that callback instead of printing it
+    (see _pump_tagged)."""
     proc = subprocess.Popen(
         cmd, cwd=cwd, shell=shell, env=env,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
     )
-    threading.Thread(target=_pump_tagged, args=(proc, tag), daemon=True).start()
+    threading.Thread(target=_pump_tagged, args=(proc, tag, on_line), daemon=True).start()
     return proc
 
 # Directories copied in full (source), pruning BUNDLE_EXCLUDE_DIR_NAMES —
