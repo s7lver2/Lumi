@@ -83,10 +83,48 @@ def _status_text(state: ServiceState) -> str:
 
 
 class LumiDevApp(App):
+    # Plain text, no themed background fills — reads as a terminal program,
+    # not a colorful modern TUI. Selection/hover state is shown via reverse
+    # video (text-style) instead of a colored background block, and borders
+    # use plain ascii (+/-/|) instead of themed Unicode line art.
     CSS = """
+    Screen {
+        background: transparent;
+        scrollbar-size: 0 0;
+    }
     Horizontal { height: 1fr; }
-    #sidebar { width: 34; border: solid $accent; }
-    #log-pane { border: solid $accent; }
+    #sidebar { width: 34; border: ascii white; background: transparent; margin: 0 1 0 0; }
+    #log-pane { border: ascii white; background: transparent; }
+
+    ListView {
+        background: transparent !important;
+        scrollbar-size: 0 0;
+        & > ListItem {
+            background: transparent !important;
+            &.-hovered { background: transparent !important; text-style: underline; }
+            &.-highlight { background: transparent !important; text-style: bold reverse; }
+        }
+        &:focus > ListItem.-highlight { background: transparent !important; text-style: bold reverse; }
+    }
+
+    Checkbox {
+        border: none;
+        background: transparent !important;
+        & > .toggle--button { background: transparent !important; }
+        &:focus { border: none; background-tint: transparent; }
+    }
+
+    RichLog {
+        background: transparent !important;
+        scrollbar-size: 1 1;
+        scrollbar-color: white 40%;
+        scrollbar-color-hover: white 60%;
+        scrollbar-color-active: white;
+        scrollbar-background: transparent;
+        scrollbar-background-hover: transparent;
+        scrollbar-background-active: transparent;
+        scrollbar-corner-color: transparent;
+    }
     """
 
     BINDINGS = [
