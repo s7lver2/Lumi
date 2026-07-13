@@ -1,22 +1,22 @@
 import { describe, it, expect, beforeAll, afterAll, vi, beforeEach } from "vitest";
-import { mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, writeFile, rm, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const REPO_ROOT = resolve(process.cwd(), "..", "..");
 const LOG_DIR = resolve(REPO_ROOT, "data", "logs");
 
 // Flag to control mock behavior for testing error scenarios
-let simulateReadFileError: NodeJS.ErrnoException | null = null;
+let simulateOpenError: NodeJS.ErrnoException | null = null;
 
 vi.mock("node:fs/promises", async () => {
   const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
   return {
     ...actual,
-    readFile: vi.fn(async (path: string, encoding: BufferEncoding) => {
-      if (simulateReadFileError) {
-        throw simulateReadFileError;
+    open: vi.fn(async (path: string, flags: string) => {
+      if (simulateOpenError) {
+        throw simulateOpenError;
       }
-      return actual.readFile(path, encoding);
+      return actual.open(path, flags);
     }),
   };
 });
@@ -31,10 +31,11 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await rm(resolve(LOG_DIR, "inference.log"), { force: true });
+  await rm(resolve(LOG_DIR, "worker.log"), { force: true });
 });
 
 beforeEach(() => {
-  simulateReadFileError = null;
+  simulateOpenError = null;
 });
 
 function makeRequest(service: string | null) {
@@ -66,11 +67,37 @@ describe("GET /api/health/logs", () => {
     // Set up a permission error (EACCES code)
     const permissionError = new Error("Permission denied") as NodeJS.ErrnoException;
     permissionError.code = "EACCES";
-    simulateReadFileError = permissionError;
+    simulateOpenError = permissionError;
 
     const res = await GET(makeRequest("inference"));
     const json = await res.json();
     expect(res.status).toBe(500);
     expect(json.error).toBe("Failed to read log file");
+  });
+
+  it("bounds the read to the tail of a multi-megabyte log file and still returns exactly 50 correct lines", async () => {
+    const workerLogPath = resolve(LOG_DIR, "worker.log");
+    // Numbered lines padded out so the file comfortably exceeds a few
+    // hundred KB — big enough that reading the whole file would be a
+    // meaningfully larger read than the ~8KB tail this endpoint should
+    // actually perform, without needing a truly multi-MB fixture in tests.
+    const totalLines = 20000;
+    const padding = "x".repeat(20);
+    const content = Array.from({ length: totalLines }, (_, i) => `line ${i} ${padding}`).join("\n") + "\n";
+    await writeFile(workerLogPath, content);
+
+    const { size } = await stat(workerLogPath);
+    expect(size).toBeGreaterThan(8192); // sanity: the tail-bounded path is actually exercised
+
+    const res = await GET(makeRequest("worker"));
+    const json = await res.json();
+    expect(json.lines).toHaveLength(50);
+    // Every returned line must be a complete, uncorrupted line from the
+    // tail — no partial line from the middle of the file leaking through.
+    for (const line of json.lines) {
+      expect(line).toMatch(/^line \d+ x+$/);
+    }
+    expect(json.lines[49]).toBe(`line ${totalLines - 1} ${padding}`);
+    expect(json.lines[0]).toBe(`line ${totalLines - 50} ${padding}`);
   });
 });
