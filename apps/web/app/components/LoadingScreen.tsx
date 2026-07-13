@@ -1,6 +1,6 @@
 // apps/web/app/components/LoadingScreen.tsx
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PlanetBackground } from "./PlanetBackground";
 
 type ServiceStatus = "ready" | "loading" | "crashed";
@@ -62,9 +62,35 @@ function LoadingScene({ health }: { health: HealthResponse }) {
   );
 }
 
-function CrashScene({ health }: { health: HealthResponse }) {
+// Matches an obvious fatal-error marker: a Traceback header, an "Error:"/
+// "error:" prefix, or a Python exception class name immediately followed by
+// a colon (e.g. "ValueError:", "RuntimeError:", "ConnectionRefusedError:").
+const FATAL_LINE_PATTERN = /Traceback|Error:|error:|\b[A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception):/;
+
+/** Picks which line indices in a tailed log to highlight as "the fatal
+ * line" — every line matching a known error marker, or (if none match)
+ * just the last non-empty line, since that's often the actual terminating
+ * error even when it doesn't match a recognized pattern. */
+function fatalLineIndices(lines: string[]): Set<number> {
+  const indices = new Set<number>();
+  lines.forEach((line, i) => {
+    if (FATAL_LINE_PATTERN.test(line)) indices.add(i);
+  });
+  if (indices.size === 0) {
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (lines[i].trim().length > 0) {
+        indices.add(i);
+        break;
+      }
+    }
+  }
+  return indices;
+}
+
+function CrashScene({ health, onRetry }: { health: HealthResponse; onRetry: () => void }) {
   const crashedService = SERVICES.find((s) => health[s.key] === "crashed");
   const [logLines, setLogLines] = useState<string[]>([]);
+  const fatalIndices = useMemo(() => fatalLineIndices(logLines), [logLines]);
 
   useEffect(() => {
     if (!crashedService || crashedService.key === "web") return;
@@ -104,13 +130,19 @@ function CrashScene({ health }: { health: HealthResponse }) {
             <span className="rounded-full bg-[rgba(239,159,39,0.15)] px-2.5 py-0.5 text-[10.5px] font-medium text-warning-fg">proceso detenido</span>
           </div>
           <pre className="max-h-[190px] overflow-y-auto whitespace-pre-wrap break-words p-3.5 font-mono text-[11px] leading-relaxed text-muted">
-            {logLines.length > 0 ? logLines.join("\n") : "(sin líneas de log todavía)"}
+            {logLines.length > 0
+              ? logLines.map((line, i) => (
+                  <div key={i} className={fatalIndices.has(i) ? "font-medium text-danger-fg" : undefined}>
+                    {line}
+                  </div>
+                ))
+              : "(sin líneas de log todavía)"}
           </pre>
         </div>
       )}
 
       <div className="mt-4 flex gap-2.5">
-        <button onClick={() => window.location.reload()} className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-black">Reintentar</button>
+        <button onClick={onRetry} className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-black">Reintentar</button>
         <a href="/settings" className="flex items-center rounded-lg border border-white/15 px-4 py-2 text-xs text-fg hover:bg-white/10">Ver ajustes</a>
       </div>
     </div>
@@ -119,27 +151,36 @@ function CrashScene({ health }: { health: HealthResponse }) {
 
 export function BootGate({ children }: { children: React.ReactNode }) {
   const [health, setHealth] = useState<HealthResponse | null>(null);
+  // Guards setHealth against a poll() that resolves after unmount — a ref
+  // (not a useEffect-local `cancelled` const) since poll is also called
+  // directly by CrashScene's "Reintentar" button, outside the effect that
+  // owns the interval.
+  const cancelledRef = useRef(false);
+
+  const poll = useCallback(async () => {
+    try {
+      const res = await fetch("/api/health");
+      const data: HealthResponse = await res.json();
+      if (!cancelledRef.current) setHealth(data);
+    } catch {
+      // Network hiccup polling /api/health itself — keep the previous
+      // state (or null/loading) rather than flashing a crash screen.
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    async function poll() {
-      try {
-        const res = await fetch("/api/health");
-        const data: HealthResponse = await res.json();
-        if (!cancelled) setHealth(data);
-      } catch {
-        // Network hiccup polling /api/health itself — keep the previous
-        // state (or null/loading) rather than flashing a crash screen.
-      }
-    }
+    cancelledRef.current = false;
     poll();
     const interval = setInterval(poll, 2000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, []);
+    return () => { cancelledRef.current = true; clearInterval(interval); };
+  }, [poll]);
 
   if (!health || health.worker !== "ready" || health.inference !== "ready") {
     const anyCrashed = health && (health.worker === "crashed" || health.inference === "crashed");
-    return anyCrashed ? <CrashScene health={health} /> : <LoadingScene health={health ?? { web: "ready", worker: "loading", inference: "loading" }} />;
+    // "Reintentar" calls poll() directly for an immediate on-demand check
+    // instead of reloading the page — the 2s interval above keeps running
+    // regardless, this is just an extra check on top of it.
+    return anyCrashed ? <CrashScene health={health} onRetry={poll} /> : <LoadingScene health={health ?? { web: "ready", worker: "loading", inference: "loading" }} />;
   }
   return <>{children}</>;
 }
