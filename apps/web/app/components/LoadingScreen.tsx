@@ -68,10 +68,14 @@ function CrashScene({ health }: { health: HealthResponse }) {
 
   useEffect(() => {
     if (!crashedService || crashedService.key === "web") return;
+    let cancelled = false;
     fetch(`/api/health/logs?service=${crashedService.key}`)
       .then((r) => r.json())
-      .then((data) => setLogLines(data.lines ?? []))
+      .then((data) => {
+        if (!cancelled) setLogLines(data.lines ?? []);
+      })
       .catch(() => {});
+    return () => { cancelled = true; };
   }, [crashedService]);
 
   const serviceLabel = crashedService?.label ?? "un servicio";
