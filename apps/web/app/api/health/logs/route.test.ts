@@ -12,7 +12,7 @@ vi.mock("node:fs/promises", async () => {
   const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
   return {
     ...actual,
-    readFile: vi.fn(async (path: string, encoding: string) => {
+    readFile: vi.fn(async (path: string, encoding: BufferEncoding) => {
       if (simulateReadFileError) {
         throw simulateReadFileError;
       }
