@@ -17,7 +17,14 @@ export async function GET(request: Request) {
     const content = await readFile(logPath, "utf8");
     const lines = content.split("\n").filter((line) => line.length > 0);
     return NextResponse.json({ lines: lines.slice(-MAX_LINES) });
-  } catch {
-    return NextResponse.json({ lines: [] });
+  } catch (err) {
+    // Only treat file-not-found as "no lines yet"; propagate other errors as 500
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return NextResponse.json({ lines: [] });
+    }
+    return NextResponse.json(
+      { error: "Failed to read log file" },
+      { status: 500 }
+    );
   }
 }
