@@ -6,12 +6,19 @@ import { getPool } from "../../../../lib/db";
 
 const execFileAsync = promisify(execFile);
 
+const IS_WIN = process.platform === "win32";
+
 // Informational only — never blocks Install. Detects whether WSL2 is present
 // so the wizard can offer "install inference deps under WSL2" as an OPT-IN
 // speed knob (romatch disables its fast local-correlation kernel outside
 // Linux — confirmed live, RoMa/Laila verification is far slower on native
-// Windows even with CUDA). This does NOT install WSL2 itself.
+// Windows even with CUDA). This does NOT install WSL2 itself. Only
+// meaningful on a Windows host — on native Linux there's nothing to opt
+// into (you're already on Linux), and wsl.exe doesn't exist to spawn.
 async function checkWsl(): Promise<{ id: string; label: string; ok: boolean; detail: string }> {
+  if (!IS_WIN) {
+    return { id: "wsl", label: "WSL2 (opcional)", ok: false, detail: "no aplica en Linux" };
+  }
   try {
     await execFileAsync("wsl.exe", ["--status"], { timeout: 3000 });
     return { id: "wsl", label: "WSL2 (opcional)", ok: true, detail: "disponible" };
@@ -41,5 +48,7 @@ export async function GET() {
     checks.push({ id: "inference", label: "Servicio de inferencia", ok: false, detail: "no alcanzable (se instala/arranca en el paso de dependencias)" });
   }
   checks.push(await checkWsl());
-  return NextResponse.json({ checks });
+  // Lets the wizard's InstallStep pick which runtime UI/step list to show
+  // without re-deriving platform detection on the client.
+  return NextResponse.json({ checks, platform: IS_WIN ? "windows" : "linux" });
 }

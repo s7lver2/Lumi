@@ -206,13 +206,17 @@ export const SETTINGS_SCHEMA: SettingDefinition[] = [
     // NVIDIA CUDA passthrough driver, is out of scope — this only assumes
     // WSL2 already exists on the host when set to "wsl" (see the wizard's
     // prereqs check).
+    // "linux" is the native-host counterpart of "windows" for a machine
+    // that's already running Linux (e.g. Pop!_OS) — same venv-based install,
+    // just under venv/bin instead of venv/Scripts. See apps/web/app/api/
+    // setup/run/[step]/route.ts's IS_WIN-branched path helpers.
     key: "INFERENCE_RUNTIME",
     label: "Where the inference service's dependencies were installed",
     type: "enum",
     isSecret: false,
     required: true,
     defaultValue: "windows",
-    options: ["windows", "wsl"],
+    options: ["windows", "wsl", "linux"],
   },
 ];
 

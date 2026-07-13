@@ -37,7 +37,7 @@ export function SetupWizard() {
     install: (
       <InstallStep
         onComplete={() => mark("install")}
-        runtime={collected.INFERENCE_RUNTIME === "wsl" ? "wsl" : "windows"}
+        runtime={collected.INFERENCE_RUNTIME === "wsl" || collected.INFERENCE_RUNTIME === "linux" ? collected.INFERENCE_RUNTIME : "windows"}
         onRuntimeChange={(r) => setField("INFERENCE_RUNTIME", r)}
       />
     ),

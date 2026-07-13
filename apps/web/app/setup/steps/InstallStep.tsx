@@ -14,6 +14,15 @@ const ITEMS_BY_RUNTIME = {
     { id: "weights-verification", label: "Modelo de verificación", engine: "Laila" },
     { id: "verify-services", label: "Arrancar y verificar servicios", engine: "uvicorn + worker" },
   ],
+  // Native Linux (e.g. Pop!_OS) — same steps/ids as "windows", the server
+  // resolves venv/bin vs venv/Scripts per host (see run/[step]/route.ts).
+  linux: [
+    { id: "inference-venv", label: "Entorno Python", engine: "venv" },
+    { id: "inference-deps", label: "Dependencias PyTorch + CUDA", engine: "pip install" },
+    { id: "weights-retrieval", label: "Modelo de recuperación", engine: "Lumi Preview" },
+    { id: "weights-verification", label: "Modelo de verificación", engine: "Laila" },
+    { id: "verify-services", label: "Arrancar y verificar servicios", engine: "uvicorn + worker" },
+  ],
   wsl: [
     { id: "inference-wsl-prereqs", label: "Dependencias del sistema (WSL2)", engine: "apt install" },
     { id: "inference-venv-wsl", label: "Entorno Python (WSL2)", engine: "venv" },
@@ -38,16 +47,24 @@ export function InstallStep({
 }) {
   const [started, setStarted] = useState(false);
   const [checks, setChecks] = useState<Check[] | null>(null);
+  const [platform, setPlatform] = useState<"windows" | "linux" | null>(null);
   const [activeIdx, setActiveIdx] = useState(-1);
   const items = ITEMS_BY_RUNTIME[runtime];
 
   async function loadChecks() {
-    const { data } = await fetchJson<{ checks: Check[] }>("/api/setup/prereqs");
+    const { data } = await fetchJson<{ checks: Check[]; platform: "windows" | "linux" }>("/api/setup/prereqs");
     setChecks(data?.checks ?? []);
+    if (data?.platform) setPlatform(data.platform);
   }
   // Cargados al montar (no solo al pulsar Install) para que el interruptor
   // WSL2 de la pantalla inicial ya sepa si está disponible antes de elegir.
   useEffect(() => { loadChecks(); }, []);
+  // En Linux nativo no hay elección Windows/WSL2 que ofrecer — solo existe
+  // el runtime "linux" (ver ITEMS_BY_RUNTIME). Se fija en cuanto se conoce
+  // la plataforma real del host, sobreescribiendo el "windows" por defecto.
+  useEffect(() => {
+    if (platform === "linux" && runtime !== "linux") onRuntimeChange?.("linux");
+  }, [platform, runtime, onRuntimeChange]);
 
   async function start() {
     setStarted(true);
@@ -75,38 +92,50 @@ export function InstallStep({
         <div className="text-base font-medium text-fg">Instalar dependencias locales</div>
         <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-muted">Verificaremos PostgreSQL y descargaremos el entorno de inferencia y los pesos de Lumi Preview y Laila. Ocupan ~2.5 GB y se guardan en tu equipo.</p>
 
-        {/* Interruptor opcional: WSL2 evita el fallback lento de romatch en
-            Windows (verificación RoMa/Laila mucho más lenta fuera de Linux).
-            No instala WSL2 — solo cambia dónde se instalan las dependencias. */}
-        <div className="mt-4 w-full max-w-sm rounded-card border border-white/10 bg-white/[.03] p-3 text-left">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-medium text-fg">Entorno de inferencia</span>
-            {wslCheck && (
-              <span className={`text-[10px] ${wslCheck.ok ? "text-fg" : "text-subtle"}`}>
-                WSL2 {wslCheck.ok ? "detectado" : "no detectado"}
-              </span>
+        {platform === "linux" ? (
+          // Ya estás en Linux nativo — no hay nada que ofrecer entre
+          // "Windows" y "WSL2" (ambos son formas de llegar a Linux desde
+          // Windows). Solo se informa qué runtime se va a usar.
+          <div className="mt-4 w-full max-w-sm rounded-card border border-white/10 bg-white/[.03] p-3 text-left">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-fg">Entorno de inferencia</span>
+              <span className="text-[10px] text-fg">Linux (nativo)</span>
+            </div>
+          </div>
+        ) : (
+          /* Interruptor opcional: WSL2 evita el fallback lento de romatch en
+             Windows (verificación RoMa/Laila mucho más lenta fuera de Linux).
+             No instala WSL2 — solo cambia dónde se instalan las dependencias. */
+          <div className="mt-4 w-full max-w-sm rounded-card border border-white/10 bg-white/[.03] p-3 text-left">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-medium text-fg">Entorno de inferencia</span>
+              {wslCheck && (
+                <span className={`text-[10px] ${wslCheck.ok ? "text-fg" : "text-subtle"}`}>
+                  WSL2 {wslCheck.ok ? "detectado" : "no detectado"}
+                </span>
+              )}
+            </div>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => onRuntimeChange?.("windows")}
+                className={`flex-1 rounded-md px-2.5 py-1.5 text-[11px] ${runtime === "windows" ? "bg-accent text-black" : "border border-white/10 text-fg hover:bg-white/10"}`}
+              >
+                Windows (nativo)
+              </button>
+              <button
+                onClick={() => wslCheck?.ok && onRuntimeChange?.("wsl")}
+                disabled={!wslCheck?.ok}
+                title={wslCheck?.ok ? undefined : wslCheck?.detail}
+                className={`flex-1 rounded-md px-2.5 py-1.5 text-[11px] disabled:cursor-not-allowed disabled:opacity-40 ${runtime === "wsl" ? "bg-accent text-black" : "border border-white/10 text-fg hover:bg-white/10"}`}
+              >
+                WSL2 (más rápido)
+              </button>
+            </div>
+            {runtime === "wsl" && (
+              <p className="mt-2 text-[11px] text-subtle">La verificación (Laila/RoMa) corre notablemente más rápido en Linux — romatch desactiva su kernel optimizado en Windows.</p>
             )}
           </div>
-          <div className="flex gap-1.5">
-            <button
-              onClick={() => onRuntimeChange?.("windows")}
-              className={`flex-1 rounded-md px-2.5 py-1.5 text-[11px] ${runtime === "windows" ? "bg-accent text-black" : "border border-white/10 text-fg hover:bg-white/10"}`}
-            >
-              Windows (nativo)
-            </button>
-            <button
-              onClick={() => wslCheck?.ok && onRuntimeChange?.("wsl")}
-              disabled={!wslCheck?.ok}
-              title={wslCheck?.ok ? undefined : wslCheck?.detail}
-              className={`flex-1 rounded-md px-2.5 py-1.5 text-[11px] disabled:cursor-not-allowed disabled:opacity-40 ${runtime === "wsl" ? "bg-accent text-black" : "border border-white/10 text-fg hover:bg-white/10"}`}
-            >
-              WSL2 (más rápido)
-            </button>
-          </div>
-          {runtime === "wsl" && (
-            <p className="mt-2 text-[11px] text-subtle">La verificación (Laila/RoMa) corre notablemente más rápido en Linux — romatch desactiva su kernel optimizado en Windows.</p>
-          )}
-        </div>
+        )}
 
         <button onClick={start} className="mt-4 rounded-[10px] bg-accent px-7 py-2.5 text-sm font-medium text-black hover:brightness-105">Install</button>
       </motion.div>
@@ -116,7 +145,7 @@ export function InstallStep({
   return (
     <motion.div variants={fadeRise} initial="hidden" animate="show">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-medium text-fg">Instalando{runtime === "wsl" ? " (WSL2)" : ""}…</span>
+        <span className="text-sm font-medium text-fg">Instalando{runtime === "wsl" ? " (WSL2)" : runtime === "linux" ? " (Linux)" : ""}…</span>
         <span className="text-xs text-muted">{Math.max(activeIdx, 0)} / {items.length} completado</span>
       </div>
       {checks && (

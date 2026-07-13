@@ -3,6 +3,7 @@ import base64
 import binascii
 import io
 import os
+import threading
 import time
 
 
@@ -39,6 +40,15 @@ def _apply_custom_cache_dir() -> None:
 
 
 _apply_custom_cache_dir()
+
+# Confirmed live: repeated OOM/retry cycles on a memory-constrained (6GB)
+# GPU fragment PyTorch's caching allocator until even a single-image batch
+# fails to find a contiguous free block, despite enough memory being free
+# in aggregate. expandable_segments avoids that by growing one virtual
+# segment instead of carving out new fixed-size blocks per allocation —
+# exactly what the torch.OutOfMemoryError message itself suggests trying.
+# Must be set before `import torch` (read once at CUDA init).
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import numpy as np
 import psycopg2
@@ -87,9 +97,44 @@ class VerifyResponse(BaseModel):
     results: list[VerifyResult]
 
 
+_verification_load_lock = threading.Lock()
+
+
+def _load_verification_model_now() -> None:
+    """Loads RoMa/Laila and warms it up — the first time it's actually
+    needed, not at startup. See load_model_once() for why this got moved
+    out of eager startup loading."""
+    verification_model = load_verification_model(_model_holder["verification_model_id"])
+    _model_holder["verification_model"] = verification_model
+    print("[loader] modelo de verificación (Laila/RoMa) cargado bajo demanda (primer /verify)")
+
+    warmup_start = time.perf_counter()
+    try:
+        dummy_a = np.zeros((480, 640, 3), dtype=np.uint8)
+        dummy_b = np.zeros((480, 640, 3), dtype=np.uint8)
+        verification_model.match_points(dummy_a, dummy_b)
+        print(f"[loader] modelo de verificación calentado en {time.perf_counter() - warmup_start:.2f}s")
+    except Exception as exc:  # pragma: no cover - best-effort warmup, never fatal
+        print(f"[loader] no se pudo calentar el modelo de verificación: {exc}")
+
+
 def get_verification_model():
+    # Lazy, not loaded in load_model_once() alongside the retrieval model:
+    # holding both MegaLoc + RoMa resident on GPU at once leaves too little
+    # headroom on smaller cards. Confirmed live on a 6GB laptop GPU: with
+    # both loaded, even a single-image /embed call OOM'd inside MegaLoc's
+    # own aggregation layer ("CUDA out of memory... this process has 2.53
+    # GiB memory in use" with under 250MiB free). Indexing (/embed) never
+    # touches the verification model at all — deferring its load to the
+    # first real /verify call (the "Refinar" action, already an on-demand,
+    # not hot-path, request) frees that memory for every /embed call
+    # indexing makes instead.
     if "verification_model" not in _model_holder:
-        raise HTTPException(status_code=503, detail="Verification model not loaded yet")
+        if "verification_model_id" not in _model_holder:
+            raise HTTPException(status_code=503, detail="Verification model not configured yet")
+        with _verification_load_lock:
+            if "verification_model" not in _model_holder:
+                _load_verification_model_now()
     return _model_holder["verification_model"]
 
 
@@ -140,26 +185,12 @@ def load_model_once() -> None:
     retrieval_model.eval()
     print(f"[loader] modelo de recuperación (Lumi Preview/MegaLoc) cargado en device={retrieval_device!r}")
     _model_holder["model"] = retrieval_model
-    _model_holder["verification_model"] = load_verification_model(verification_model_id)
+    # Verification (RoMa/Laila) is NOT loaded here — see get_verification_model()'s
+    # lazy-load docstring for why holding both models resident at once is a
+    # real GPU-memory problem on smaller cards.
+    _model_holder["verification_model_id"] = verification_model_id
     print(f"[loader] pasadas de verificación (VERIFICATION_TILE_PASSES) = {_model_holder['verification_tile_passes']}")
     print(f"[loader] calibración de verificación = {_model_holder['verify_config']}")
-
-    # Warm up RoMa/Laila's CUDA kernels (local_corr's kernel autotuning,
-    # cuDNN algorithm search for these specific tile shapes) with a
-    # throwaway match BEFORE serving real traffic. Confirmed live: the first
-    # real /verify candidate after a fresh startup took ~24s vs ~9s once
-    # warmed up (see loader.py's use_custom_corr comment) — without this,
-    # every server restart makes the FIRST user's search pay that one-time
-    # cost. Best-effort: if warmup fails for any reason, startup still
-    # succeeds and the first real request just pays the cost instead.
-    try:
-        warmup_start = time.perf_counter()
-        dummy_a = np.zeros((480, 640, 3), dtype=np.uint8)
-        dummy_b = np.zeros((480, 640, 3), dtype=np.uint8)
-        _model_holder["verification_model"].match_points(dummy_a, dummy_b)
-        print(f"[loader] modelo de verificación calentado en {time.perf_counter() - warmup_start:.2f}s")
-    except Exception as exc:  # pragma: no cover - best-effort warmup, never fatal
-        print(f"[loader] no se pudo calentar el modelo de verificación: {exc}")
 
 
 def _decode_image(image_base64: str) -> np.ndarray:

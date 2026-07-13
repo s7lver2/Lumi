@@ -102,14 +102,30 @@ Resultado final: coordenadas exactas + score + imagen(es) de referencia
 
 ## Instalación rápida
 
-Si recibiste un bundle (`lumi-<version>.zip`): descomprimilo y ejecutá
-**`LumiInstaller.exe`** en la raíz. Verifica que tengas Node.js + pnpm,
-Python 3 y Docker Desktop, crea `.env` desde `.env.example`, corre
-`pnpm install`, levanta Postgres vía `docker compose`, y abre el navegador
-en `/setup` para el wizard de primer arranque (dependencias de Python,
-descarga de pesos del modelo, esquema de base de datos, API key).
+Si recibiste un instalador (`dist/LumiSetup-<version>.exe` en Windows,
+`dist/LumiSetup-<version>.sh` en Linux/Pop!_OS): ejecutalo. Verifica que
+tengas Node.js + pnpm y Docker (Docker Desktop en Windows, Docker Engine en
+Linux — avisa y te deja seguir sin él si falta), copia archivos, crea `.env`
+desde `.env.example`, levanta Postgres vía `docker compose`, corre
+`pnpm install --filter @netryx/db...`, y deja un acceso directo (`lumi.exe` /
+`lumi`, más entrada en el menú de aplicaciones en Linux) que abre el
+navegador en `/setup` para el wizard de primer arranque (dependencias de
+Python, descarga de pesos del modelo, esquema de base de datos, API key).
 
-### Manual (sin instalador)
+### Modo desarrollo (fuentes, sin instalador)
+
+```bash
+cp .env.example .env   # una vez
+python3 tools/build.py
+```
+
+Levanta todo el stack con las fuentes en modo dev: Postgres (Docker),
+migraciones pendientes, el servicio de inferencia si ya corriste `/setup`
+(uvicorn con `--reload`), el worker, y `next dev` — abre el navegador en
+`http://localhost:3000` y corta todo con Ctrl+C. Funciona igual en Windows y
+en Linux (usa `venv/Scripts/...` o `venv/bin/...` según el host).
+
+Si preferís levantar cada pieza a mano en vez de `tools/build.py`:
 
 ```bash
 # 1. Variables de entorno
@@ -124,19 +140,20 @@ pnpm install
 
 # 4. Servicio de inferencia (en otra terminal)
 cd services/inference
-python -m venv venv
-venv/Scripts/pip.exe install -r requirements.txt   # Windows
-# ./venv/bin/pip install -r requirements.txt       # Linux/Mac
-venv/Scripts/python.exe -m uvicorn main:app         # o el equivalente uvicorn de tu venv
+python3 -m venv venv                                # "python" en Windows
+venv/bin/pip install -r requirements.txt             # venv/Scripts/pip.exe en Windows
+venv/bin/python -m uvicorn main:app                  # venv/Scripts/python.exe en Windows
 
 # 5. Web + worker
 pnpm --filter @netryx/web dev
-pnpm --filter @netryx/worker dev
+pnpm --filter @netryx/worker start
 ```
 
 La primera vez, la app te lleva a `/setup` — un wizard que valida
 prerequisitos, descarga los pesos de los modelos y te pide la API key de
-Street View antes de dejarte indexar ninguna área.
+Street View antes de dejarte indexar ninguna área. En Linux, el wizard
+detecta el host automáticamente y no ofrece el toggle WSL2 (solo tiene
+sentido arrancando desde Windows).
 
 ### Otros comandos útiles
 
@@ -148,17 +165,23 @@ pnpm test        # tests de todo el monorepo
 pnpm build       # build de todo el monorepo
 ```
 
-## Empaquetar un bundle distribuible (para mantainers)
+## Empaquetar un instalador distribuible (para maintainers)
 
 ```bash
-services/inference/venv/Scripts/pip.exe install pyinstaller   # una vez
-services/inference/venv/Scripts/python.exe tools/build.py
+services/inference/venv/bin/pip install pyinstaller   # una vez — Scripts/pip.exe en Windows
+python3 tools/build.py release
 ```
 
-Genera `dist/lumi-<version>.zip`: una copia limpia del proyecto (código,
-docs, configs — sin `node_modules`, entornos virtuales de Python, cachés de
-pesos de modelo ni historial de `.git`) con `LumiInstaller.exe` compilado
-en la raíz.
+Compila `apps/web` (`next build --standalone`) y `apps/worker` (esbuild),
+los empaqueta junto con el resto del proyecto (sin `node_modules` propios,
+entornos virtuales de Python, cachés de pesos de modelo ni historial de
+`.git`), y genera el instalador nativo de la plataforma en la que corriste
+el comando: `dist/LumiSetup-<version>.exe` (Inno Setup) en Windows,
+`dist/LumiSetup-<version>.sh` (script bash autoextraíble, sin dependencias
+externas) en Linux. Ver el docstring de `tools/build.py` para las flags de
+`release` (`--version`, `--keep-staging`; `--nopublish`/`--versionnotes`
+están reservadas para un futuro flujo de publicación a GitHub Releases,
+todavía no implementado).
 
 ## Documentación
 

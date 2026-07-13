@@ -1,13 +1,16 @@
 # tools/templates/lumi_launcher.py
 """
-Compiled by tools/build.py (PyInstaller --onefile) into lumi.exe — the icon
-the Inno Setup installer places on the Desktop and Start Menu. This is NOT
-the installer: by the time this ever runs, Inno Setup has already copied
+Compiled by tools/build.py (PyInstaller --onefile) into lumi.exe on Windows
+(Inno Setup places it on the Desktop and Start Menu) or a plain "lumi" ELF
+binary on Linux (tools/templates/installer.sh.tmpl places a symlink to it in
+~/.local/bin and a .desktop entry in the app menu). This is NOT the
+installer: by the time this ever runs, the installer has already copied
 files, installed db/'s tiny dependency set, written .env, and started
-Postgres (see tools/templates/installer.iss's CurStepChanged). lumi.exe's
-only job: start the inference service (skipped with a message if its
-/setup step hasn't run yet), the pre-bundled worker, and the pre-built web
-server, then open the browser — closing this window stops everything.
+Postgres (see tools/templates/installer.iss's CurStepChanged, or
+installer.sh.tmpl's equivalent). lumi's only job: start the inference
+service (skipped with a message if its /setup step hasn't run yet), the
+pre-bundled worker, and the pre-built web server, then open the browser —
+closing this window stops everything.
 
 Both apps/web and apps/worker are shipped PRE-BUILT (tools/build.py runs
 `next build` with output:"standalone" for the web app, and bundles the
@@ -24,6 +27,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import traceback
 import urllib.error
@@ -33,6 +37,24 @@ from pathlib import Path
 
 INFERENCE_PORT = 8000
 WEB_PORT = 3000
+
+# Postgres, inference, worker and the web server all log to this same
+# terminal when lumi is launched from one (double-clicking the desktop
+# shortcut has no terminal to write to either way) — without a tag there's
+# no way to tell whose line is whose. _PRINT_LOCK keeps concurrent taggers
+# from interleaving mid-line when two processes log at once.
+_PRINT_LOCK = threading.Lock()
+
+
+def _pump_tagged(proc: subprocess.Popen, tag: str) -> None:
+    """Reprints proc's merged stdout/stderr line-by-line prefixed with
+    f"[{tag}]" until it exits. Assumes proc was opened with
+    stdout=PIPE, stderr=STDOUT, text=True."""
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        with _PRINT_LOCK:
+            print(f"[{tag}] {line.rstrip(chr(10))}")
+    proc.stdout.close()
 
 
 def project_root() -> Path:
@@ -62,16 +84,24 @@ def load_env_file(env_path: Path) -> dict[str, str]:
     return values
 
 
+def default_runtime() -> str:
+    """Native-host runtime name for whatever OS this launcher itself is
+    running on — "windows" or "linux" (see packages/shared-types/src/
+    settings.ts's INFERENCE_RUNTIME enum, which mirrors this pair)."""
+    return "windows" if sys.platform == "win32" else "linux"
+
+
 def read_runtime_marker(root: Path) -> str:
     """Mirrors apps/web/lib/runtime-marker.ts's output exactly — written once
-    setup completes. Defaults to "windows" if setup hasn't run yet."""
+    setup completes. Falls back to this host's native runtime if setup
+    hasn't run yet or wrote an unrecognized value."""
     marker_path = root / "data" / "runtime-config.json"
     try:
         data = json.loads(marker_path.read_text(encoding="utf-8"))
         runtime = data.get("inferenceRuntime")
-        return runtime if runtime in ("windows", "wsl") else "windows"
+        return runtime if runtime in ("windows", "wsl", "linux") else default_runtime()
     except (OSError, ValueError):
-        return "windows"
+        return default_runtime()
 
 
 def _win_path_to_wsl(win_path: Path) -> str:
@@ -96,7 +126,14 @@ def inference_command(root: Path, runtime: str) -> list[str] | None:
     venv = infer / "venv"
     if not venv.exists():
         return None
-    python_exe = venv / "Scripts" / "python.exe"
+    # Native venv layout differs by host: Windows puts executables under
+    # venv/Scripts/*.exe, everything else (Linux, incl. Pop!_OS) under
+    # venv/bin/*. Mirrors apps/web/app/api/setup/run/[step]/route.ts's
+    # venvPython() exactly.
+    if sys.platform == "win32":
+        python_exe = venv / "Scripts" / "python.exe"
+    else:
+        python_exe = venv / "bin" / "python"
     return [str(python_exe), "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", str(INFERENCE_PORT)]
 
 
@@ -113,20 +150,31 @@ def wait_for_http_ok(url: str, timeout_s: float, poll_interval_s: float = 1.0) -
     return False
 
 
-def start_detached(cmd: list[str], cwd: Path, env: dict[str, str] | None = None) -> subprocess.Popen:
-    # CREATE_NEW_PROCESS_GROUP so closing lumi.exe's console doesn't send
-    # Ctrl+C/Ctrl+Break to these children — they're meant to keep running.
+def start_detached(cmd: list[str], cwd: Path, tag: str, env: dict[str, str] | None = None) -> subprocess.Popen:
+    # CREATE_NEW_PROCESS_GROUP (Windows) / start_new_session (POSIX) so
+    # closing lumi's console doesn't send Ctrl+C/SIGINT to these children —
+    # they're meant to keep running after this launcher exits. Piping
+    # stdout/stderr (instead of the previous DEVNULL) and pumping them
+    # through a tagged reader thread is what actually surfaces inference/
+    # worker output in the console at all — it used to be silently dropped.
     creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
-    return subprocess.Popen(
+    proc = subprocess.Popen(
         cmd, cwd=cwd, shell=(sys.platform == "win32" and cmd[0] not in ("wsl.exe",)),
-        creationflags=creationflags, env=env,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        creationflags=creationflags, start_new_session=(sys.platform != "win32"), env=env,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
     )
+    threading.Thread(target=_pump_tagged, args=(proc, tag), daemon=True).start()
+    return proc
 
 
-def run_foreground(cmd: list[str], cwd: Path, env: dict[str, str] | None = None) -> int:
+def run_foreground(cmd: list[str], cwd: Path, tag: str, env: dict[str, str] | None = None) -> int:
     print(f"$ {' '.join(cmd)}")
-    return subprocess.call(cmd, cwd=cwd, shell=(sys.platform == "win32"), env=env)
+    proc = subprocess.Popen(
+        cmd, cwd=cwd, shell=(sys.platform == "win32"), env=env,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
+    )
+    _pump_tagged(proc, tag)
+    return proc.wait()
 
 
 def main() -> int:
@@ -146,8 +194,9 @@ def main() -> int:
     node_env = {**os.environ, **load_env_file(root / ".env")}
     node_env.setdefault("PORT", str(WEB_PORT))
 
-    if run_foreground(["docker", "compose", "up", "-d", "--build", "db"], cwd=root) != 0:
-        print("No se pudo arrancar Postgres — abre Docker Desktop y vuelve a intentarlo.")
+    if run_foreground(["docker", "compose", "up", "-d", "--build", "db"], cwd=root, tag="docker") != 0:
+        print("No se pudo arrancar Postgres — asegúrate de que Docker esté corriendo "
+              "(Docker Desktop en Windows, el servicio docker en Linux) y vuelve a intentarlo.")
         return 1
 
     runtime = read_runtime_marker(root)
@@ -157,7 +206,7 @@ def main() -> int:
               f"(completa /setup y vuelve a abrir Lumi).")
     else:
         print(f"Arrancando servicio de inferencia ({runtime})...")
-        start_detached(infer_cmd, root / "services" / "inference")
+        start_detached(infer_cmd, root / "services" / "inference", "inference")
         if wait_for_http_ok(f"http://localhost:{INFERENCE_PORT}/docs", timeout_s=45):
             print("Servicio de inferencia: listo.")
         else:
@@ -165,12 +214,12 @@ def main() -> int:
 
     print("Arrancando worker...")
     worker_js = root / "apps" / "worker" / "worker.js"
-    start_detached(["node", str(worker_js)], root, env=node_env)
+    start_detached(["node", str(worker_js)], root, "worker", env=node_env)
 
     print(f"\nAbriendo Lumi en http://localhost:{WEB_PORT} ...")
     webbrowser.open(f"http://localhost:{WEB_PORT}")
     web_dir = root / "apps" / "web"
-    return run_foreground(["node", "server.js"], cwd=web_dir, env=node_env)
+    return run_foreground(["node", "server.js"], cwd=web_dir, tag="web", env=node_env)
 
 
 def _run_and_pause() -> int:

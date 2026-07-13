@@ -13,7 +13,28 @@ import { winPathToWsl } from "../../../../lib/wsl-path";
 // so the completed-guard only blocks stray external callers, not the wizard.
 const REPO_ROOT = resolve(process.cwd(), "..", "..");
 const INFER = resolve(REPO_ROOT, "services", "inference");
-const INFER_WSL = winPathToWsl(INFER);
+// winPathToWsl() throws on anything that isn't a Windows drive-letter path
+// (see wsl-path.ts) — only ever call it when the host itself is Windows.
+// The *-wsl steps below (and inferenceArgvFor's "wsl" branch) are the only
+// consumers, and both only make sense on a Windows host in the first place.
+const IS_WIN = process.platform === "win32";
+const INFER_WSL = IS_WIN ? winPathToWsl(INFER) : "";
+
+// Native (non-WSL) venv layout differs by host: Windows venvs put
+// executables under venv/Scripts/*.exe, everything else (Linux, incl.
+// Pop!_OS) under venv/bin/*. This is the one thing distinguishing
+// runtime "windows" from runtime "linux" — both are otherwise the same
+// "install directly on this host" path, just resolved per sys.platform
+// like tools/templates/lumi_launcher.py's inference_command() does.
+function venvBin(venvDir: string): string {
+  return resolve(venvDir, IS_WIN ? "Scripts" : "bin");
+}
+function venvPython(venvDir: string): string {
+  return resolve(venvBin(venvDir), IS_WIN ? "python.exe" : "python");
+}
+function venvPip(venvDir: string): string {
+  return resolve(venvBin(venvDir), IS_WIN ? "pip.exe" : "pip");
+}
 
 // Model weight caches (several GB) default to living INSIDE the repo clone
 // (<repo>/data/models-cache, already .gitignore'd) instead of the user's
@@ -77,9 +98,11 @@ function wslPipCacheExport(): string {
 
 const STEPS: Record<string, { cmd: string; args: string[]; cwd: string; shell?: boolean; env?: NodeJS.ProcessEnv }> = {
   migrate: { cmd: "pnpm", args: ["migrate:up"], cwd: resolve(REPO_ROOT, "db") },
-  "inference-venv": { cmd: "python", args: ["-m", "venv", "venv"], cwd: INFER },
+  // "python" on Windows; Debian/Ubuntu-based distros (Pop!_OS included) only
+  // guarantee "python3" on PATH unless python-is-python3 is installed.
+  "inference-venv": { cmd: IS_WIN ? "python" : "python3", args: ["-m", "venv", "venv"], cwd: INFER },
   "inference-deps": {
-    cmd: resolve(INFER, "venv", "Scripts", "pip.exe"),
+    cmd: venvPip(resolve(INFER, "venv")),
     args: ["install", "-r", "requirements.txt"],
     cwd: INFER,
     // pip's own wheel cache defaults to %LocalAppData%, not next to the
@@ -88,44 +111,56 @@ const STEPS: Record<string, { cmd: string; args: string[]; cwd: string; shell?: 
     env: { ...process.env, PIP_CACHE_DIR: resolve(INFER, ".pip-cache") },
   },
   "weights-retrieval": {
-    cmd: resolve(INFER, "venv", "Scripts", "python.exe"),
+    cmd: venvPython(resolve(INFER, "venv")),
     args: ["download_weights.py", "retrieval"],
     cwd: INFER,
     env: cacheEnvFor(),
   },
   "weights-verification": {
-    cmd: resolve(INFER, "venv", "Scripts", "python.exe"),
+    cmd: venvPython(resolve(INFER, "venv")),
     args: ["download_weights.py", "verification"],
     cwd: INFER,
     env: cacheEnvFor(),
   },
-  // WSL2 variants (opt-in, spec: setup lets you choose where inference deps
-  // are installed) — same repo checkout, just entered via `wsl.exe` instead
-  // of the Windows shell. `requirements.txt`'s --extra-index-url hosts both
-  // platforms' wheels, so pip resolves the Linux cu121 build automatically
-  // when run from inside WSL. Requires WSL2 to already exist on the host
-  // (checked, not installed, by /api/setup/prereqs).
-  //
-  // "sudo -n" (non-interactive) is used on purpose: this pipe has no way to
-  // prompt for or forward a sudo password, so if the distro's user needs one,
-  // this fails fast with a clear "sudo: a password is required" in the
-  // console instead of hanging forever waiting for input that can never
-  // arrive. If that happens, run `sudo visudo` once inside WSL to allow
-  // passwordless apt for this user, or just install python3-venv manually.
-  //
-  // No DEBIAN_FRONTEND=noninteractive prefix — confirmed live: default
-  // sudoers policy rejects passing THROUGH arbitrary env vars ("sudo: sorry,
-  // you are not allowed to set the following environment variables:
-  // DEBIAN_FRONTEND"), even under `sudo -n`. `-y` alone is enough for these
-  // packages (no debconf prompts to suppress).
-  "inference-wsl-prereqs": wslStep(
-    "sudo -n apt-get update && sudo -n apt-get install -y python3 python3-venv python3-pip"
-  ),
-  "inference-venv-wsl": wslStep(`cd '${INFER_WSL}' && python3 -m venv venv-wsl`),
-  "inference-deps-wsl": wslStep(`${wslPipCacheExport()}cd '${INFER_WSL}' && venv-wsl/bin/pip install -r requirements.txt`),
-  "weights-retrieval-wsl": wslStep(`${wslCacheExport()}cd '${INFER_WSL}' && venv-wsl/bin/python download_weights.py retrieval`),
-  "weights-verification-wsl": wslStep(`${wslCacheExport()}cd '${INFER_WSL}' && venv-wsl/bin/python download_weights.py verification`),
 };
+
+// WSL2 variants (opt-in, spec: setup lets you choose where inference deps
+// are installed) — same repo checkout, just entered via `wsl.exe` instead
+// of the Windows shell. `requirements.txt`'s --extra-index-url hosts both
+// platforms' wheels, so pip resolves the Linux cu121 build automatically
+// when run from inside WSL. Requires WSL2 to already exist on the host
+// (checked, not installed, by /api/setup/prereqs).
+//
+// Only registered when IS_WIN: wslCacheExport()/wslPipCacheExport() call
+// winPathToWsl(), which throws on anything that isn't a Windows drive-letter
+// path (see wsl-path.ts) — MODELS_CACHE_DIR/INFER are POSIX paths on Linux,
+// so building these entries unconditionally (they used to sit directly in
+// the STEPS object literal) crashed the whole module — and therefore every
+// step, WSL or not — the moment a Linux host imported this route. Confirmed
+// live: "Not an absolute Windows path: /home/.../data/models-cache" on a
+// plain POST to /api/setup/run/inference-venv.
+//
+// "sudo -n" (non-interactive) is used on purpose: this pipe has no way to
+// prompt for or forward a sudo password, so if the distro's user needs one,
+// this fails fast with a clear "sudo: a password is required" in the
+// console instead of hanging forever waiting for input that can never
+// arrive. If that happens, run `sudo visudo` once inside WSL to allow
+// passwordless apt for this user, or just install python3-venv manually.
+//
+// No DEBIAN_FRONTEND=noninteractive prefix — confirmed live: default
+// sudoers policy rejects passing THROUGH arbitrary env vars ("sudo: sorry,
+// you are not allowed to set the following environment variables:
+// DEBIAN_FRONTEND"), even under `sudo -n`. `-y` alone is enough for these
+// packages (no debconf prompts to suppress).
+if (IS_WIN) {
+  STEPS["inference-wsl-prereqs"] = wslStep(
+    "sudo -n apt-get update && sudo -n apt-get install -y python3 python3-venv python3-pip"
+  );
+  STEPS["inference-venv-wsl"] = wslStep(`cd '${INFER_WSL}' && python3 -m venv venv-wsl`);
+  STEPS["inference-deps-wsl"] = wslStep(`${wslPipCacheExport()}cd '${INFER_WSL}' && venv-wsl/bin/pip install -r requirements.txt`);
+  STEPS["weights-retrieval-wsl"] = wslStep(`${wslCacheExport()}cd '${INFER_WSL}' && venv-wsl/bin/python download_weights.py retrieval`);
+  STEPS["weights-verification-wsl"] = wslStep(`${wslCacheExport()}cd '${INFER_WSL}' && venv-wsl/bin/python download_weights.py verification`);
+}
 
 // "verify-services" is not a fixed-argv one-shot command like everything in
 // STEPS above — it starts the inference service + worker as DETACHED
@@ -146,7 +181,7 @@ function inferenceArgvFor(runtime: string): { cmd: string; args: string[]; cwd: 
   }
   const venv = resolve(INFER, "venv");
   if (!existsSync(venv)) return null;
-  return { cmd: resolve(venv, "Scripts", "python.exe"), args: ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"], cwd: INFER, shell: false };
+  return { cmd: venvPython(venv), args: ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"], cwd: INFER, shell: false };
 }
 
 async function waitForInferenceReady(timeoutMs: number): Promise<boolean> {
@@ -164,7 +199,7 @@ async function waitForInferenceReady(timeoutMs: number): Promise<boolean> {
 }
 
 async function runVerifyServices(send: (e: object) => void): Promise<number> {
-  const runtime = (await getSettingsRepo().getSetting("INFERENCE_RUNTIME")) ?? "windows";
+  const runtime = (await getSettingsRepo().getSetting("INFERENCE_RUNTIME")) ?? (IS_WIN ? "windows" : "linux");
 
   if (!verifyServicesStarted.inference) {
     const argv = inferenceArgvFor(runtime);
