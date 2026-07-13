@@ -81,8 +81,15 @@ async def test_selecting_a_different_service_switches_the_visible_pane():
         await asyncio.sleep(0.2)
         assert app.selected_name == "inference"  # first spec in the list
 
-        app.selected_name = "worker"
-        app._render_pane("worker")
+        list_view = app.query_one("#service-list")
+        list_view.focus()
+        await pilot.pause()
+        await pilot.press("down")  # move highlight from inference (0) to worker (1)
+        await pilot.pause()
+        await pilot.press("enter")  # fire the actual Selected event
+        await pilot.pause()
+
+        assert app.selected_name == "worker"
         log = app.query_one("#log-pane")
         assert any("worker-line" in str(line) for line in log.lines)
 
