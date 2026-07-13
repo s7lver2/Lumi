@@ -150,7 +150,7 @@ class LumiDevApp(App):
             self.query_one("#log-pane", RichLog).write(line)
 
     def _start(self, state: ServiceState) -> None:
-        if state.proc is not None:
+        if state.proc is not None or not state.spec.available:
             return
         state.buffer = []
         name = state.spec.name
@@ -199,11 +199,16 @@ class LumiDevApp(App):
         self._render_pane(name)
 
     def action_toggle_selected(self) -> None:
+        state = self.states[self.selected_name]
+        if not state.spec.available:
+            return
         checkbox = self.query_one(f"#checkbox-{self.selected_name}", Checkbox)
         checkbox.value = not checkbox.value
 
     def action_restart_selected(self) -> None:
         state = self.states[self.selected_name]
+        if not state.spec.available:
+            return
         self._stop(state)
         self._start(state)
 

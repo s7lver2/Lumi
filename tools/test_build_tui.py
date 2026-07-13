@@ -109,3 +109,41 @@ async def test_quit_action_stops_every_running_service():
         await pilot.pause()
         assert app.states["worker"].proc is None
         assert app.states["web"].proc is None
+
+
+@pytest.mark.asyncio
+async def test_restart_on_unavailable_service_is_a_noop():
+    # inference is unavailable (no venv) and is specs[0], so it's the
+    # default-selected row on startup — pressing "r" here used to call
+    # _start() on a spec with argv == [], crashing with IndexError from
+    # subprocess.Popen([]) inside _popen_tagged.
+    app = LumiDevApp(Path("."), _dummy_specs())
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert app.selected_name == "inference"
+        assert app.states["inference"].spec.available is False
+
+        app.action_restart_selected()
+        await pilot.pause()
+
+        assert app.states["inference"].proc is None
+
+        for state in app.states.values():
+            app._stop(state)
+
+
+@pytest.mark.asyncio
+async def test_toggle_on_unavailable_service_is_a_noop():
+    app = LumiDevApp(Path("."), _dummy_specs())
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert app.selected_name == "inference"
+        assert app.states["inference"].spec.available is False
+
+        app.action_toggle_selected()
+        await pilot.pause()
+
+        assert app.states["inference"].proc is None
+
+        for state in app.states.values():
+            app._stop(state)
