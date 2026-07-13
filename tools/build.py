@@ -76,15 +76,37 @@ IS_WIN = sys.platform == "win32"
 # interleaving mid-line when two processes log at once.
 _PRINT_LOCK = threading.Lock()
 
+REPO_ROOT_FOR_LOGS = Path(__file__).resolve().parent.parent
+TEE_TO_FILE_TAGS = {"worker", "inference"}
+
+
+def _log_file_path(tag: str) -> Path:
+    log_dir = REPO_ROOT_FOR_LOGS / "data" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir / f"{tag}.log"
+
 
 def _pump_tagged(proc: subprocess.Popen, tag: str) -> None:
     """Reprints proc's merged stdout/stderr line-by-line prefixed with
     f"[{tag}]" until it exits. Assumes proc was opened with
-    stdout=PIPE, stderr=STDOUT, text=True."""
+    stdout=PIPE, stderr=STDOUT, text=True. For tags in TEE_TO_FILE_TAGS,
+    also appends each line to data/logs/{tag}.log — apps/web's
+    GET /api/health/logs tails this for the crash screen, since worker/
+    inference are separate OS processes the web app can't otherwise read
+    output from."""
     assert proc.stdout is not None
-    for line in proc.stdout:
-        with _PRINT_LOCK:
-            print(f"[{tag}] {line.rstrip(chr(10))}")
+    log_file = _log_file_path(tag).open("a", encoding="utf-8") if tag in TEE_TO_FILE_TAGS else None
+    try:
+        for line in proc.stdout:
+            stripped = line.rstrip(chr(10))
+            with _PRINT_LOCK:
+                print(f"[{tag}] {stripped}")
+            if log_file is not None:
+                log_file.write(stripped + "\n")
+                log_file.flush()
+    finally:
+        if log_file is not None:
+            log_file.close()
     proc.stdout.close()
 
 
