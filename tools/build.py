@@ -656,6 +656,39 @@ def dev(root: Path) -> int:
                 child.kill()
 
 
+def dev_tui(root: Path) -> int:
+    """`python3 tools/build.py --tui`: same non-toggleable startup sequence
+    as dev() (env/.env, Postgres, migrations), then hands off to the
+    interactive dashboard instead of starting inference/worker/web
+    unconditionally — see tools/build_tui.py."""
+    env_file = root / ".env"
+    env_example = root / ".env.example"
+    if not env_file.exists() and env_example.exists():
+        print("Creando .env desde .env.example...")
+        shutil.copy2(env_example, env_file)
+
+    print("Arrancando Postgres (docker compose up -d --build db)...")
+    try:
+        _run(["docker", "compose", "up", "-d", "--build", "db"], cwd=root, tag="docker")
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print("No se pudo arrancar Postgres — asegúrate de que Docker esté corriendo y reintenta.")
+        return 1
+
+    print("Aplicando migraciones pendientes...")
+    try:
+        _run(["pnpm", "--filter", "@netryx/db", "migrate:up"], cwd=root, tag="migrate")
+    except subprocess.CalledProcessError:
+        print("Aviso: las migraciones fallaron (o ya estaban al día) — revisa el log si es inesperado.")
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from build_tui import LumiDevApp, build_service_specs
+
+    specs = build_service_specs(root)
+    app = LumiDevApp(root, specs)
+    app.run()
+    return 0
+
+
 def release(args: argparse.Namespace) -> int:
     root = Path(__file__).resolve().parent.parent
     version = args.version or read_version(root)
@@ -721,6 +754,12 @@ def release(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Lumi dev runner / release builder.")
+    parser.add_argument(
+        "--tui", action="store_true",
+        help="Launch the interactive dashboard (checkboxes to start/stop inference/worker/web, "
+             "per-service log panes) instead of the plain scrolling-log dev mode. Requires a real "
+             "terminal — not for scripts/CI. Needs `pip install textual` (dev-only dependency).",
+    )
     subparsers = parser.add_subparsers(dest="command")
 
     release_parser = subparsers.add_parser("release", help="Build a full installer (.exe on Windows, .sh on Linux).")
@@ -736,6 +775,8 @@ def main(argv: list[str] | None = None) -> int:
         return release(args)
 
     root = Path(__file__).resolve().parent.parent
+    if args.tui:
+        return dev_tui(root)
     return dev(root)
 
 

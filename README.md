@@ -117,6 +117,7 @@ Python, descarga de pesos del modelo, esquema de base de datos, API key).
 ```bash
 cp .env.example .env   # una vez
 python3 tools/build.py
+python3 tools/build.py --tui   # dashboard interactivo (requiere `pip install textual`)
 ```
 
 Levanta todo el stack con las fuentes en modo dev: Postgres (Docker),
