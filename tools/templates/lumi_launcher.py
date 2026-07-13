@@ -45,16 +45,34 @@ WEB_PORT = 3000
 # from interleaving mid-line when two processes log at once.
 _PRINT_LOCK = threading.Lock()
 
+TEE_TO_FILE_TAGS = {"worker", "inference"}
 
-def _pump_tagged(proc: subprocess.Popen, tag: str) -> None:
-    """Reprints proc's merged stdout/stderr line-by-line prefixed with
-    f"[{tag}]" until it exits. Assumes proc was opened with
-    stdout=PIPE, stderr=STDOUT, text=True."""
+
+def _log_file_path(tag: str, root: Path) -> Path:
+    log_dir = root / "data" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir / f"{tag}.log"
+
+
+def _pump_tagged(proc: subprocess.Popen, tag: str, root: Path) -> None:
+    """Reprints proc's merged stdout/stderr line-by-line, prefixed with
+    f"[{tag}]", so a terminal running the packaged binary can tell which
+    of docker/inference/worker/web a line came from instead of one
+    unlabeled stream. For tags in TEE_TO_FILE_TAGS, also appends each line
+    to data/logs/{tag}.log for the web app's crash screen to read."""
     assert proc.stdout is not None
-    for line in proc.stdout:
-        with _PRINT_LOCK:
-            print(f"[{tag}] {line.rstrip(chr(10))}")
-    proc.stdout.close()
+    log_file = _log_file_path(tag, root).open("a", encoding="utf-8") if tag in TEE_TO_FILE_TAGS else None
+    try:
+        for line in proc.stdout:
+            stripped = line.rstrip(chr(10))
+            with _PRINT_LOCK:
+                print(f"[{tag}] {stripped}")
+            if log_file is not None:
+                log_file.write(stripped + "\n")
+                log_file.flush()
+    finally:
+        if log_file is not None:
+            log_file.close()
 
 
 def project_root() -> Path:
@@ -150,7 +168,7 @@ def wait_for_http_ok(url: str, timeout_s: float, poll_interval_s: float = 1.0) -
     return False
 
 
-def start_detached(cmd: list[str], cwd: Path, tag: str, env: dict[str, str] | None = None) -> subprocess.Popen:
+def start_detached(cmd: list[str], cwd: Path, tag: str, root: Path, env: dict[str, str] | None = None) -> subprocess.Popen:
     # CREATE_NEW_PROCESS_GROUP (Windows) / start_new_session (POSIX) so
     # closing lumi's console doesn't send Ctrl+C/SIGINT to these children —
     # they're meant to keep running after this launcher exits. Piping
@@ -163,17 +181,17 @@ def start_detached(cmd: list[str], cwd: Path, tag: str, env: dict[str, str] | No
         creationflags=creationflags, start_new_session=(sys.platform != "win32"), env=env,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
     )
-    threading.Thread(target=_pump_tagged, args=(proc, tag), daemon=True).start()
+    threading.Thread(target=_pump_tagged, args=(proc, tag, root), daemon=True).start()
     return proc
 
 
-def run_foreground(cmd: list[str], cwd: Path, tag: str, env: dict[str, str] | None = None) -> int:
+def run_foreground(cmd: list[str], cwd: Path, tag: str, root: Path, env: dict[str, str] | None = None) -> int:
     print(f"$ {' '.join(cmd)}")
     proc = subprocess.Popen(
         cmd, cwd=cwd, shell=(sys.platform == "win32"), env=env,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
     )
-    _pump_tagged(proc, tag)
+    _pump_tagged(proc, tag, root)
     return proc.wait()
 
 
@@ -194,7 +212,7 @@ def main() -> int:
     node_env = {**os.environ, **load_env_file(root / ".env")}
     node_env.setdefault("PORT", str(WEB_PORT))
 
-    if run_foreground(["docker", "compose", "up", "-d", "--build", "db"], cwd=root, tag="docker") != 0:
+    if run_foreground(["docker", "compose", "up", "-d", "--build", "db"], cwd=root, tag="docker", root=root) != 0:
         print("No se pudo arrancar Postgres — asegúrate de que Docker esté corriendo "
               "(Docker Desktop en Windows, el servicio docker en Linux) y vuelve a intentarlo.")
         return 1
@@ -206,7 +224,7 @@ def main() -> int:
               f"(completa /setup y vuelve a abrir Lumi).")
     else:
         print(f"Arrancando servicio de inferencia ({runtime})...")
-        start_detached(infer_cmd, root / "services" / "inference", "inference")
+        start_detached(infer_cmd, root / "services" / "inference", "inference", root)
         if wait_for_http_ok(f"http://localhost:{INFERENCE_PORT}/docs", timeout_s=45):
             print("Servicio de inferencia: listo.")
         else:
@@ -214,12 +232,12 @@ def main() -> int:
 
     print("Arrancando worker...")
     worker_js = root / "apps" / "worker" / "worker.js"
-    start_detached(["node", str(worker_js)], root, "worker", env=node_env)
+    start_detached(["node", str(worker_js)], root, "worker", root, env=node_env)
 
     print(f"\nAbriendo Lumi en http://localhost:{WEB_PORT} ...")
     webbrowser.open(f"http://localhost:{WEB_PORT}")
     web_dir = root / "apps" / "web"
-    return run_foreground(["node", "server.js"], cwd=web_dir, tag="web", env=node_env)
+    return run_foreground(["node", "server.js"], cwd=web_dir, tag="web", root=root, env=node_env)
 
 
 def _run_and_pause() -> int:
