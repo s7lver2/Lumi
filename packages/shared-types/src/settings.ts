@@ -218,6 +218,15 @@ export const SETTINGS_SCHEMA: SettingDefinition[] = [
     defaultValue: "windows",
     options: ["windows", "wsl", "linux"],
   },
+  {
+    key: "INFERENCE_LOW_VRAM_MODE",
+    label: "Modo bajo VRAM",
+    type: "enum",
+    isSecret: false,
+    required: true,
+    defaultValue: "auto",
+    options: ["auto", "on", "off"],
+  },
 ];
 
 export function getSettingDefinition(key: string): SettingDefinition {

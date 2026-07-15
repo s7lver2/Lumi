@@ -114,3 +114,14 @@ describe("validateSettingValue", () => {
     expect(getSettingDefinition("GOOGLE_FREE_MONTHLY_IMAGES").defaultValue).toBe("0");
   });
 });
+
+describe("INFERENCE_LOW_VRAM_MODE setting", () => {
+  it("is a non-secret enum with auto/on/off options, defaulting to auto", () => {
+    const def = SETTINGS_SCHEMA.find((s) => s.key === "INFERENCE_LOW_VRAM_MODE")!;
+    expect(def).toBeDefined();
+    expect(def.type).toBe("enum");
+    expect(def.isSecret).toBe(false);
+    expect(def.options).toEqual(["auto", "on", "off"]);
+    expect(def.defaultValue).toBe("auto");
+  });
+});

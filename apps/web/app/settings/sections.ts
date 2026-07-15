@@ -31,6 +31,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       "VERIFICATION_ERROR_SCALE_PX",
       "VERIFICATION_MAGSAC_THRESHOLD_PX",
       "INFERENCE_RUNTIME",
+      "INFERENCE_LOW_VRAM_MODE",
     ],
   },
 ];
