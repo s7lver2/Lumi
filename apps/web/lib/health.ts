@@ -40,3 +40,22 @@ export async function checkWorkerHeartbeatFresh(pool: Pool, staleAfterMs: number
   const ageMs = Date.now() - new Date(rows[0].updated_at).getTime();
   return ageMs < staleAfterMs;
 }
+
+export interface ModelStatus {
+  loading: "retrieval" | "verification" | null;
+  lowVramMode: boolean;
+}
+
+/** Proxies the inference service's /model-status endpoint, falling back to
+ * "nothing loading" on any failure (network error or non-ok response) —
+ * an unreachable inference service isn't this route's concern (the boot
+ * health screen already covers that). */
+export async function fetchModelStatus(baseUrl: string): Promise<ModelStatus> {
+  try {
+    const res = await fetch(`${baseUrl}/model-status`, { signal: AbortSignal.timeout(2000) });
+    if (!res.ok) throw new Error(`inference /model-status returned ${res.status}`);
+    return (await res.json()) as ModelStatus;
+  } catch {
+    return { loading: null, lowVramMode: false };
+  }
+}

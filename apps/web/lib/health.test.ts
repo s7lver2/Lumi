@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { Pool } from "pg";
-import { resolveServiceStatus, checkInferenceReady, checkWorkerHeartbeatFresh } from "./health";
+import { resolveServiceStatus, checkInferenceReady, checkWorkerHeartbeatFresh, fetchModelStatus } from "./health";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -34,6 +34,38 @@ describe("checkInferenceReady", () => {
 
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
     expect(await checkInferenceReady("http://localhost:8000")).toBe(false);
+  });
+});
+
+describe("fetchModelStatus", () => {
+  it("resolves with the inference service's /model-status body when it responds ok", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ loading: "retrieval", lowVramMode: true }),
+      })
+    );
+    expect(await fetchModelStatus("http://localhost:8000")).toEqual({
+      loading: "retrieval",
+      lowVramMode: true,
+    });
+  });
+
+  it("falls back to loading: null, lowVramMode: false when the response is non-ok", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    expect(await fetchModelStatus("http://localhost:8000")).toEqual({
+      loading: null,
+      lowVramMode: false,
+    });
+  });
+
+  it("falls back to loading: null, lowVramMode: false when the fetch throws", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
+    expect(await fetchModelStatus("http://localhost:8000")).toEqual({
+      loading: null,
+      lowVramMode: false,
+    });
   });
 });
 

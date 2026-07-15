@@ -1,15 +1,17 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-afterEach(() => {
-  vi.unstubAllGlobals();
+vi.mock("../../../lib/health", () => ({
+  fetchModelStatus: vi.fn(),
+}));
+
+beforeEach(() => {
+  vi.clearAllMocks();
 });
 
 describe("GET /api/model-status", () => {
-  it("proxies the inference service's /model-status response", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ loading: "retrieval", lowVramMode: true }),
-    }));
+  it("proxies whatever fetchModelStatus resolves with", async () => {
+    const health = await import("../../../lib/health");
+    (health.fetchModelStatus as any).mockResolvedValue({ loading: "retrieval", lowVramMode: true });
 
     const { GET } = await import("./route");
     const res = await GET();
@@ -18,8 +20,9 @@ describe("GET /api/model-status", () => {
     expect(json).toEqual({ loading: "retrieval", lowVramMode: true });
   });
 
-  it("reports loading: null, lowVramMode: false when the inference service is unreachable", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
+  it("passes through the loading: null, lowVramMode: false fallback", async () => {
+    const health = await import("../../../lib/health");
+    (health.fetchModelStatus as any).mockResolvedValue({ loading: null, lowVramMode: false });
 
     const { GET } = await import("./route");
     const res = await GET();
