@@ -4,6 +4,7 @@
 import { useSearchStore } from "../stores/useSearchStore";
 import { RingGauge } from "./RingGauge";
 import { Badge } from "./Badge";
+import { ModelLoadingNotice } from "./ModelLoadingNotice";
 import { formatCoords } from "../lib/coords";
 import { useReverseGeocode } from "../lib/useReverseGeocode";
 import { streetViewMapsUrl } from "../lib/street-view-maps-url";
@@ -85,6 +86,7 @@ function ResultRow({
           {refining && selected ? "Refinando…" : selected ? "Refinar aquí" : "Precisión de calle disponible"}
         </button>
       )}
+      <ModelLoadingNotice active={refining && Boolean(selected)} />
     </div>
   );
 }
