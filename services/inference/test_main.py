@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 import main
 from main import *
 import pytest
+from fastapi import HTTPException
 
 
 class _FakeModel:
@@ -140,3 +141,73 @@ def test_verify_scores_each_candidate_in_order(monkeypatch):
         assert all("score" in r and "inliers" in r for r in results)
     finally:
         main.app.dependency_overrides.clear()
+
+def _reset_model_holder(**overrides):
+    main._model_holder.clear()
+    main._model_holder.update(overrides)
+    main._active_kind = None
+    main._loading_kind = None
+
+
+def test_ensure_active_model_off_mode_never_unloads(monkeypatch):
+    # Off mode: both kinds stay cached forever once loaded (today's exact
+    # existing behavior) — switching kinds must NOT delete the other.
+    _reset_model_holder(low_vram_mode=False, retrieval_model_id="lumi-preview", verification_model_id="laila")
+    monkeypatch.setattr(main, "load_retrieval_model", lambda model_id: "retrieval-instance")
+    monkeypatch.setattr(main, "load_verification_model", lambda model_id: "verification-instance")
+
+    r = main._ensure_active_model("retrieval")
+    v = main._ensure_active_model("verification")
+    r_again = main._ensure_active_model("retrieval")
+
+    assert r == "retrieval-instance"
+    assert v == "verification-instance"
+    assert r_again == "retrieval-instance"
+    assert "model" in main._model_holder
+    assert "verification_model" in main._model_holder
+
+
+def test_ensure_active_model_same_kind_never_reloads(monkeypatch):
+    _reset_model_holder(low_vram_mode=True, retrieval_model_id="lumi-preview", verification_model_id="laila")
+    calls = []
+    monkeypatch.setattr(main, "load_retrieval_model", lambda model_id: calls.append(model_id) or "retrieval-instance")
+
+    main._ensure_active_model("retrieval")
+    main._ensure_active_model("retrieval")
+    main._ensure_active_model("retrieval")
+
+    assert calls == ["lumi-preview"]  # loaded exactly once across 3 same-kind calls
+
+
+def test_ensure_active_model_on_mode_unloads_previous_kind_on_switch(monkeypatch):
+    _reset_model_holder(low_vram_mode=True, retrieval_model_id="lumi-preview", verification_model_id="laila")
+    monkeypatch.setattr(main, "load_retrieval_model", lambda model_id: "retrieval-instance")
+    monkeypatch.setattr(main, "load_verification_model", lambda model_id: "verification-instance")
+
+    main._ensure_active_model("retrieval")
+    assert "model" in main._model_holder
+
+    main._ensure_active_model("verification")
+    assert "model" not in main._model_holder  # unloaded on switch
+    assert "verification_model" in main._model_holder
+
+
+def test_ensure_active_model_raises_503_on_oom(monkeypatch):
+    _reset_model_holder(low_vram_mode=True, retrieval_model_id="lumi-preview", verification_model_id="laila")
+
+    def _raise_oom(model_id):
+        raise torch.cuda.OutOfMemoryError("CUDA out of memory")
+
+    monkeypatch.setattr(main, "load_retrieval_model", _raise_oom)
+
+    with pytest.raises(HTTPException) as exc_info:
+        main._ensure_active_model("retrieval")
+    assert exc_info.value.status_code == 503
+    assert "No hay memoria de GPU suficiente" in exc_info.value.detail
+
+
+def test_model_status_reports_low_vram_mode_and_no_loading_when_idle():
+    _reset_model_holder(low_vram_mode=True)
+    res = _module_client.get("/model-status")
+    assert res.status_code == 200
+    assert res.json() == {"loading": None, "lowVramMode": True}

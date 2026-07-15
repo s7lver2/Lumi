@@ -5,6 +5,8 @@ import io
 import os
 import threading
 import time
+from vram import resolve_low_vram_mode, describe_gpu
+from settings import get_low_vram_mode_setting
 
 
 def _apply_custom_cache_dir() -> None:
@@ -58,11 +60,13 @@ from PIL import Image
 from pydantic import BaseModel
 
 from loader import load_retrieval_model, load_verification_model
+from vram import resolve_low_vram_mode, describe_gpu
 from settings import (
     DEFAULT_VERIFICATION_TILE_PASSES,
     get_active_model_ids,
     get_verification_tile_passes,
     get_verify_config,
+    get_low_vram_mode_setting,
 )
 from tta import augment_variants, mean_normalize
 from verify import verify_pair
@@ -71,6 +75,9 @@ from verify import verify_pair
 app = FastAPI(title="netryx-fork inference service")
 
 _model_holder: dict = {}
+
+_active_kind: str | None = None  # "retrieval" | "verification" | None — which kind _ensure_active_model most recently returned
+_loading_kind: str | None = None  # set only WHILE a model is actively being loaded — read by GET /model-status
 
 
 class EmbedRequest(BaseModel):
@@ -87,6 +94,11 @@ class VerifyRequest(BaseModel):
     candidate_images_base64: list[str]
 
 
+class ModelStatusResponse(BaseModel):
+    loading: str | None
+    lowVramMode: bool
+
+
 class VerifyResult(BaseModel):
     inliers: int
     reproj_error: float
@@ -97,56 +109,88 @@ class VerifyResponse(BaseModel):
     results: list[VerifyResult]
 
 
-_verification_load_lock = threading.Lock()
+_OOM_MESSAGE = (
+    "No hay memoria de GPU suficiente para cargar el modelo. "
+    "Cierra otras aplicaciones que usen la GPU e inténtalo de nuevo."
+)
 
 
-def _load_verification_model_now() -> None:
-    """Loads RoMa/Laila and warms it up — the first time it's actually
-    needed, not at startup. See load_model_once() for why this got moved
-    out of eager startup loading."""
-    verification_model = load_verification_model(_model_holder["verification_model_id"])
-    _model_holder["verification_model"] = verification_model
-    print("[loader] modelo de verificación (Laila/RoMa) cargado bajo demanda (primer /verify)")
-
-    warmup_start = time.perf_counter()
-    try:
-        dummy_a = np.zeros((480, 640, 3), dtype=np.uint8)
-        dummy_b = np.zeros((480, 640, 3), dtype=np.uint8)
-        verification_model.match_points(dummy_a, dummy_b)
-        print(f"[loader] modelo de verificación calentado en {time.perf_counter() - warmup_start:.2f}s")
-    except Exception as exc:  # pragma: no cover - best-effort warmup, never fatal
-        print(f"[loader] no se pudo calentar el modelo de verificación: {exc}")
+def _load_kind(kind: str):
+    if kind == "retrieval":
+        model = load_retrieval_model(_model_holder["retrieval_model_id"])
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model = model.to(device)
+        model.eval()
+        return model
+    return load_verification_model(_model_holder["verification_model_id"])
 
 
-def get_verification_model():
-    # Lazy, not loaded in load_model_once() alongside the retrieval model:
-    # holding both MegaLoc + RoMa resident on GPU at once leaves too little
-    # headroom on smaller cards. Confirmed live on a 6GB laptop GPU: with
-    # both loaded, even a single-image /embed call OOM'd inside MegaLoc's
-    # own aggregation layer ("CUDA out of memory... this process has 2.53
-    # GiB memory in use" with under 250MiB free). Indexing (/embed) never
-    # touches the verification model at all — deferring its load to the
-    # first real /verify call (the "Refinar" action, already an on-demand,
-    # not hot-path, request) frees that memory for every /embed call
-    # indexing makes instead.
-    if "verification_model" not in _model_holder:
-        if "verification_model_id" not in _model_holder:
-            raise HTTPException(status_code=503, detail="Verification model not configured yet")
-        with _verification_load_lock:
-            if "verification_model" not in _model_holder:
-                _load_verification_model_now()
-    return _model_holder["verification_model"]
+def _unload_kind(kind: str) -> None:
+    key = "model" if kind == "retrieval" else "verification_model"
+    if key in _model_holder:
+        del _model_holder[key]
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+_swap_lock = threading.Lock()
+
+
+def _ensure_active_model(kind: str):
+    """
+    Both get_retrieval_model() and get_verification_model() route through
+    here (spec: docs/superpowers/specs/2026-07-13-low-vram-mode-design.md,
+    "Runtime behavior"). When low_vram_mode is False this reproduces
+    today's exact pre-existing behavior: whichever kind is already cached
+    in _model_holder is returned as-is, nothing is ever unloaded, and a
+    kind that isn't cached yet gets loaded once and kept forever. When
+    low_vram_mode is True, switching kinds unloads whichever one was
+    active first (del + torch.cuda.empty_cache()) before loading the new
+    one — swapping happens ONLY on a kind switch, never on a repeated
+    same-kind call (the ~553 chunks of one indexing job never re-pay a
+    load), which is why the very first check below is an early return.
+    """
+    global _active_kind, _loading_kind
+
+    key = "model" if kind == "retrieval" else "verification_model"
+
+    with _swap_lock:
+        if key in _model_holder and _active_kind == kind:
+            return _model_holder[key]
+
+        low_vram = _model_holder.get("low_vram_mode", False)
+        if low_vram and _active_kind is not None and _active_kind != kind:
+            _unload_kind(_active_kind)
+
+        if key not in _model_holder:
+            _loading_kind = kind
+            try:
+                _model_holder[key] = _load_kind(kind)
+            except torch.cuda.OutOfMemoryError as exc:
+                raise HTTPException(status_code=503, detail=_OOM_MESSAGE) from exc
+            finally:
+                _loading_kind = None
+
+        _active_kind = kind
+        return _model_holder[key]
 
 
 def get_retrieval_model():
     """
-    Overridden in tests via app.dependency_overrides. In production this is
-    populated once at startup by the lifespan handler below — never per
-    request (spec §6.2, §14.5, §15.4).
+    Overridden in tests via app.dependency_overrides. In production,
+    retrieval_model_id is populated once at startup by the lifespan
+    handler below — raising 503 here means startup never ran (spec §6.2,
+    §14.5, §15.4), not "still loading" (that's what /model-status is for).
     """
-    if "model" not in _model_holder:
+    if "retrieval_model_id" not in _model_holder:
         raise HTTPException(status_code=503, detail="Retrieval model not loaded yet")
-    return _model_holder["model"]
+    return _ensure_active_model("retrieval")
+
+
+def get_verification_model():
+    if "verification_model_id" not in _model_holder:
+        raise HTTPException(status_code=503, detail="Verification model not configured yet")
+    return _ensure_active_model("verification")
 
 
 @app.on_event("startup")
@@ -168,27 +212,41 @@ def load_model_once() -> None:
         retrieval_model_id, verification_model_id = get_active_model_ids(conn)
         _model_holder["verification_tile_passes"] = get_verification_tile_passes(conn)
         _model_holder["verify_config"] = get_verify_config(conn)
+        low_vram_setting = get_low_vram_mode_setting(conn)
     finally:
         conn.close()
 
-    # Inicialización en caliente de los modelos dentro del contenedor persistente
-    retrieval_model = load_retrieval_model(retrieval_model_id)
-    # load_retrieval_model() (loader.py) never moves MegaLoc off the CPU it's
-    # loaded on by default — unlike load_verification_model(), which already
-    # does this for RoMa. Confirmed live: /embed was running the retrieval
-    # backbone on CPU even with an RTX 4070 SUPER present, making each
-    # embedding chunk take much longer than it should. Moved here (not in
-    # loader.py) so test_loader.py's MagicMock-returned "fake-model-instance"
-    # string stand-in doesn't need a real .to()/.eval() to keep passing.
-    retrieval_device = "cuda" if torch.cuda.is_available() else "cpu"
-    retrieval_model = retrieval_model.to(retrieval_device)
-    retrieval_model.eval()
-    print(f"[loader] modelo de recuperación (Lumi Preview/MegaLoc) cargado en device={retrieval_device!r}")
-    _model_holder["model"] = retrieval_model
-    # Verification (RoMa/Laila) is NOT loaded here — see get_verification_model()'s
-    # lazy-load docstring for why holding both models resident at once is a
-    # real GPU-memory problem on smaller cards.
+    cuda_available = torch.cuda.is_available()
+    device_props = torch.cuda.get_device_properties(0) if cuda_available else None
+    total_memory = device_props.total_memory if device_props else 0
+    device_name = device_props.name if device_props else None
+    low_vram_mode = resolve_low_vram_mode(low_vram_setting, cuda_available, total_memory)
+    _model_holder["low_vram_mode"] = low_vram_mode
+    _model_holder["retrieval_model_id"] = retrieval_model_id
     _model_holder["verification_model_id"] = verification_model_id
+    print(f"[loader] modo bajo VRAM: {'activo' if low_vram_mode else 'inactivo'} ({describe_gpu(cuda_available, device_name, total_memory)})")
+
+    if low_vram_mode:
+        # Extends today's "verification loads on demand" discipline to
+        # retrieval too — neither model is eager-loaded here; the first
+        # /embed or /verify call triggers _ensure_active_model's load path.
+        print("[loader] modo bajo VRAM activo — los modelos se cargan bajo demanda, uno a la vez")
+    else:
+        # Inicialización en caliente de los modelos dentro del contenedor persistente
+        retrieval_model = load_retrieval_model(retrieval_model_id)
+        # load_retrieval_model() (loader.py) never moves MegaLoc off the CPU it's
+        # loaded on by default — unlike load_verification_model(), which already
+        # does this for RoMa. Confirmed live: /embed was running the retrieval
+        # backbone on CPU even with an RTX 4070 SUPER present, making each
+        # embedding chunk take much longer than it should. Moved here (not in
+        # loader.py) so test_loader.py's MagicMock-returned "fake-model-instance"
+        # string stand-in doesn't need a real .to()/.eval() to keep passing.
+        retrieval_device = "cuda" if cuda_available else "cpu"
+        retrieval_model = retrieval_model.to(retrieval_device)
+        retrieval_model.eval()
+        print(f"[loader] modelo de recuperación (Lumi Preview/MegaLoc) cargado en device={retrieval_device!r}")
+        _model_holder["model"] = retrieval_model
+
     print(f"[loader] pasadas de verificación (VERIFICATION_TILE_PASSES) = {_model_holder['verification_tile_passes']}")
     print(f"[loader] calibración de verificación = {_model_holder['verify_config']}")
 
@@ -296,3 +354,11 @@ def verify(request: VerifyRequest, model=Depends(get_verification_model)) -> Ver
         print(f"[verify] {i + 1}/{total} candidatos verificados ({elapsed:.2f}s)")
     print(f"[verify] request completa: {total} candidatos en {time.perf_counter() - request_start:.2f}s")
     return VerifyResponse(results=results)
+
+
+@app.get("/model-status", response_model=ModelStatusResponse)
+def model_status() -> ModelStatusResponse:
+    return ModelStatusResponse(
+        loading=_loading_kind,
+        lowVramMode=_model_holder.get("low_vram_mode", False),
+    )
