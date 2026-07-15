@@ -7,6 +7,7 @@ import { useAreaProgress } from "../lib/useAreaProgress";
 import { ProgressMeter } from "./ProgressMeter";
 import { Badge } from "./Badge";
 import { fetchJson } from "../lib/fetch-json";
+import { ModelLoadingNotice } from "./ModelLoadingNotice";
 
 const TONE = {
   failed: "danger",
@@ -69,6 +70,8 @@ export function JobProgressBar() {
   // solapada anterior y se omiten a propósito (spec §4 step 4, dedupe global).
   const dedupedSomeImages = status === "indexed" && imagesEmbedded < imagesMax;
 
+  const awaitingFirstProgress = status === "pending" && (p?.pointsCaptured ?? 0) === 0;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -86,6 +89,7 @@ export function JobProgressBar() {
           )}
         </div>
       </div>
+      <ModelLoadingNotice active={awaitingFirstProgress} />
       <ProgressMeter
         label="Puntos de captura"
         value={p?.pointsCaptured ?? 0}
