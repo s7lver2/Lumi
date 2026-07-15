@@ -12,6 +12,7 @@ service free of any dependency on the Node-side AES-256-GCM key file.
 DEFAULT_RETRIEVAL_MODEL = "lumi-preview"
 DEFAULT_VERIFICATION_MODEL = "laila"
 DEFAULT_VERIFICATION_TILE_PASSES = 5
+DEFAULT_LOW_VRAM_MODE = "auto"
 
 
 def get_active_model_ids(conn) -> tuple[str, str]:
@@ -78,3 +79,16 @@ def get_verify_config(conn) -> dict:
         except ValueError:
             config[config_key] = default
     return config
+
+
+def get_low_vram_mode_setting(conn) -> str:
+    """Raw INFERENCE_LOW_VRAM_MODE value ("auto"/"on"/"off") — resolving it
+    against actual hardware happens in vram.py's resolve_low_vram_mode(),
+    called once from load_model_once() alongside this, same "read once at
+    startup" convention as every other model-affecting setting here."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT value FROM system_settings WHERE key = 'INFERENCE_LOW_VRAM_MODE'")
+        row = cur.fetchone()
+    if row is None or row[0] is None:
+        return DEFAULT_LOW_VRAM_MODE
+    return row[0]
