@@ -149,20 +149,46 @@ def _reset_model_holder(**overrides):
     main._loading_kind = None
 
 
+class _FakeTorchModel:
+    """Stand-in for a real torch model in _ensure_active_model tests.
+
+    _load_kind() calls .to(device)/.eval() unconditionally on whatever
+    load_retrieval_model() returns, so a bare string mock (as used for
+    load_verification_model, which _load_kind never calls .to()/.eval()
+    on) can't stand in here — this supports the same chainable API a real
+    torch.nn.Module has while still comparing equal by name for asserts.
+    """
+
+    def __init__(self, name):
+        self.name = name
+
+    def to(self, device):
+        return self
+
+    def eval(self):
+        return self
+
+    def __eq__(self, other):
+        return isinstance(other, _FakeTorchModel) and self.name == other.name
+
+    def __repr__(self):
+        return f"_FakeTorchModel({self.name!r})"
+
+
 def test_ensure_active_model_off_mode_never_unloads(monkeypatch):
     # Off mode: both kinds stay cached forever once loaded (today's exact
     # existing behavior) — switching kinds must NOT delete the other.
     _reset_model_holder(low_vram_mode=False, retrieval_model_id="lumi-preview", verification_model_id="laila")
-    monkeypatch.setattr(main, "load_retrieval_model", lambda model_id: "retrieval-instance")
+    monkeypatch.setattr(main, "load_retrieval_model", lambda model_id: _FakeTorchModel("retrieval-instance"))
     monkeypatch.setattr(main, "load_verification_model", lambda model_id: "verification-instance")
 
     r = main._ensure_active_model("retrieval")
     v = main._ensure_active_model("verification")
     r_again = main._ensure_active_model("retrieval")
 
-    assert r == "retrieval-instance"
+    assert r == _FakeTorchModel("retrieval-instance")
     assert v == "verification-instance"
-    assert r_again == "retrieval-instance"
+    assert r_again == _FakeTorchModel("retrieval-instance")
     assert "model" in main._model_holder
     assert "verification_model" in main._model_holder
 
@@ -170,7 +196,11 @@ def test_ensure_active_model_off_mode_never_unloads(monkeypatch):
 def test_ensure_active_model_same_kind_never_reloads(monkeypatch):
     _reset_model_holder(low_vram_mode=True, retrieval_model_id="lumi-preview", verification_model_id="laila")
     calls = []
-    monkeypatch.setattr(main, "load_retrieval_model", lambda model_id: calls.append(model_id) or "retrieval-instance")
+    monkeypatch.setattr(
+        main,
+        "load_retrieval_model",
+        lambda model_id: calls.append(model_id) or _FakeTorchModel("retrieval-instance"),
+    )
 
     main._ensure_active_model("retrieval")
     main._ensure_active_model("retrieval")
@@ -181,7 +211,7 @@ def test_ensure_active_model_same_kind_never_reloads(monkeypatch):
 
 def test_ensure_active_model_on_mode_unloads_previous_kind_on_switch(monkeypatch):
     _reset_model_holder(low_vram_mode=True, retrieval_model_id="lumi-preview", verification_model_id="laila")
-    monkeypatch.setattr(main, "load_retrieval_model", lambda model_id: "retrieval-instance")
+    monkeypatch.setattr(main, "load_retrieval_model", lambda model_id: _FakeTorchModel("retrieval-instance"))
     monkeypatch.setattr(main, "load_verification_model", lambda model_id: "verification-instance")
 
     main._ensure_active_model("retrieval")
