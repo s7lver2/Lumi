@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { getSettingsRepo } from "../../../../../lib/settings-repo";
+import { killProcessOnPort } from "../../../../../lib/kill-port";
 import { winPathToWsl } from "../../../../lib/wsl-path";
 
 // SECURITY BOUNDARY: this endpoint executes shell commands on the host. It is
@@ -232,7 +233,46 @@ async function runVerifyServices(send: (e: object) => void): Promise<number> {
   return workerAlive ? 0 : 1;
 }
 
+async function runRestartInference(send: (e: object) => void): Promise<number> {
+  send({ type: "log", line: "Deteniendo servicio de inferencia...\n" });
+  if (verifyServicesStarted.inference) {
+    verifyServicesStarted.inference.kill();
+  }
+  await killProcessOnPort(8000);
+  verifyServicesStarted.inference = undefined;
+
+  const runtime = (await getSettingsRepo().getSetting("INFERENCE_RUNTIME")) ?? (IS_WIN ? "windows" : "linux");
+  const argv = inferenceArgvFor(runtime);
+  if (!argv) {
+    send({ type: "log", line: `Entorno de inferencia (${runtime}) no instalado todavía.\n` });
+    return 1;
+  }
+
+  send({ type: "log", line: "Arrancando servicio de inferencia...\n" });
+  verifyServicesStarted.inference = spawn(argv.cmd, argv.args, { cwd: argv.cwd, shell: argv.shell, detached: true, stdio: "ignore" });
+  verifyServicesStarted.inference.unref();
+
+  const ready = await waitForInferenceReady(45000);
+  send({ type: "log", line: ready ? "Servicio de inferencia: listo.\n" : "Servicio de inferencia: no respondió a tiempo.\n" });
+  return ready ? 0 : 1;
+}
+
 export async function POST(request: Request, { params }: { params: { step: string } }) {
+  if (params.step === "restart-inference") {
+    const stream = new ReadableStream({
+      async start(controller) {
+        const enc = new TextEncoder();
+        const send = (e: object) => controller.enqueue(enc.encode(`data: ${JSON.stringify(e)}\n\n`));
+        const code = await runRestartInference(send);
+        send({ type: "done", code });
+        controller.close();
+      },
+    });
+    return new Response(stream, {
+      headers: { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" },
+    });
+  }
+
   if (params.step === "verify-services") {
     const stream = new ReadableStream({
       async start(controller) {
