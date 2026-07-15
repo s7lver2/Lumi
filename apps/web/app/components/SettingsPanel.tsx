@@ -7,6 +7,7 @@ import { Menu } from "./Menu";
 import { Tabs } from "./Tabs";
 import { SliderRow } from "./SliderRow";
 import { CalibrationGrid } from "./CalibrationGrid";
+import { LowVramModeRow } from "./LowVramModeRow";
 import { OverwriteKeyModal } from "./OverwriteKeyModal";
 import { AreasManagePanel } from "./AreasManagePanel";
 import { groupSettings } from "../settings/sections";
@@ -92,6 +93,8 @@ export function SettingsPanel() {
                         <span className="mb-1 block text-xs text-muted">{def.label}</span>
                         {def.isSecret ? (
                           <SecretRow display={values[def.key]} onEdit={() => setEditing(def)} />
+                        ) : def.key === "INFERENCE_LOW_VRAM_MODE" ? (
+                          <LowVramModeRow value={current(def)} onChange={(v) => set(def.key, v)} />
                         ) : def.type === "enum" ? (
                           <Menu value={current(def)} onChange={(v) => set(def.key, v)}
                             options={(def.options ?? []).map((o) => ({ value: o, label: o }))} />
