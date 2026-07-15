@@ -237,7 +237,11 @@ def test_ensure_active_model_raises_503_on_oom(monkeypatch):
 
 
 def test_model_status_reports_low_vram_mode_and_no_loading_when_idle():
-    _reset_model_holder(low_vram_mode=True)
+    _reset_model_holder(low_vram_mode=True, gpu_note="GPU detectada: RTX 3050 (6 GB)")
     res = _module_client.get("/model-status")
     assert res.status_code == 200
-    assert res.json() == {"loading": None, "lowVramMode": True}
+    assert res.json() == {
+        "loading": None,
+        "lowVramMode": True,
+        "gpuNote": "GPU detectada: RTX 3050 (6 GB)",
+    }

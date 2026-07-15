@@ -11,13 +11,17 @@ const OPTIONS = [
 
 export function LowVramModeRow({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [runningLowVram, setRunningLowVram] = useState<boolean | null>(null);
+  const [gpuNote, setGpuNote] = useState<string | null>(null);
   const [restarting, setRestarting] = useState(false);
   const [restartLog, setRestartLog] = useState<string[]>([]);
 
   useEffect(() => {
     fetch("/api/model-status")
       .then((r) => r.json())
-      .then((d: { lowVramMode: boolean }) => setRunningLowVram(d.lowVramMode))
+      .then((d: { lowVramMode: boolean; gpuNote: string }) => {
+        setRunningLowVram(d.lowVramMode);
+        setGpuNote(d.gpuNote);
+      })
       .catch(() => {});
   }, []);
 
@@ -61,6 +65,7 @@ export function LowVramModeRow({ value, onChange }: { value: string; onChange: (
 
   return (
     <div>
+      {gpuNote && <div className="mb-1 text-xs text-muted">{gpuNote}</div>}
       <Menu value={value} onChange={onChange} options={OPTIONS} />
       {restartPending && !restarting && (
         <div className="mt-2 rounded-md border border-[rgba(239,159,39,0.4)] bg-[rgba(239,159,39,0.08)] px-3 py-2 text-[11.5px] text-warning-fg">

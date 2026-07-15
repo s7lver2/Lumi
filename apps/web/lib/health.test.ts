@@ -43,12 +43,17 @@ describe("fetchModelStatus", () => {
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ loading: "retrieval", lowVramMode: true }),
+        json: async () => ({
+          loading: "retrieval",
+          lowVramMode: true,
+          gpuNote: "GPU detectada: RTX 3050 (6 GB)",
+        }),
       })
     );
     expect(await fetchModelStatus("http://localhost:8000")).toEqual({
       loading: "retrieval",
       lowVramMode: true,
+      gpuNote: "GPU detectada: RTX 3050 (6 GB)",
     });
   });
 
@@ -57,6 +62,7 @@ describe("fetchModelStatus", () => {
     expect(await fetchModelStatus("http://localhost:8000")).toEqual({
       loading: null,
       lowVramMode: false,
+      gpuNote: "Estado de la GPU desconocido — servicio de inferencia no disponible.",
     });
   });
 
@@ -65,6 +71,7 @@ describe("fetchModelStatus", () => {
     expect(await fetchModelStatus("http://localhost:8000")).toEqual({
       loading: null,
       lowVramMode: false,
+      gpuNote: "Estado de la GPU desconocido — servicio de inferencia no disponible.",
     });
   });
 });

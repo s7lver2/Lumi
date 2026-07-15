@@ -97,6 +97,7 @@ class VerifyRequest(BaseModel):
 class ModelStatusResponse(BaseModel):
     loading: str | None
     lowVramMode: bool
+    gpuNote: str
 
 
 class VerifyResult(BaseModel):
@@ -224,7 +225,9 @@ def load_model_once() -> None:
     _model_holder["low_vram_mode"] = low_vram_mode
     _model_holder["retrieval_model_id"] = retrieval_model_id
     _model_holder["verification_model_id"] = verification_model_id
-    print(f"[loader] modo bajo VRAM: {'activo' if low_vram_mode else 'inactivo'} ({describe_gpu(cuda_available, device_name, total_memory)})")
+    gpu_note = describe_gpu(cuda_available, device_name, total_memory)
+    _model_holder["gpu_note"] = gpu_note
+    print(f"[loader] modo bajo VRAM: {'activo' if low_vram_mode else 'inactivo'} ({gpu_note})")
 
     if low_vram_mode:
         # Extends today's "verification loads on demand" discipline to
@@ -361,4 +364,5 @@ def model_status() -> ModelStatusResponse:
     return ModelStatusResponse(
         loading=_loading_kind,
         lowVramMode=_model_holder.get("low_vram_mode", False),
+        gpuNote=_model_holder.get("gpu_note", "Estado de la GPU desconocido."),
     )
