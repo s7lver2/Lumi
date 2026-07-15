@@ -67,6 +67,7 @@ describe("submitSetup", () => {
       { key: "GOOGLE_FREE_MONTHLY_CREDIT_USD", value: "0", isSecret: false },
       { key: "GOOGLE_FREE_MONTHLY_IMAGES", value: "0", isSecret: false },
       { key: "INFERENCE_RUNTIME", value: "windows", isSecret: false },
+      { key: "INFERENCE_LOW_VRAM_MODE", value: "auto", isSecret: false },
     ]);
   });
     it("writes the runtime marker file with the submitted INFERENCE_RUNTIME value", async () => {
