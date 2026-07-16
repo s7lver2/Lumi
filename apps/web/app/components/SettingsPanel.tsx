@@ -8,6 +8,7 @@ import { Tabs } from "./Tabs";
 import { SliderRow } from "./SliderRow";
 import { CalibrationGrid } from "./CalibrationGrid";
 import { LowVramModeRow } from "./LowVramModeRow";
+import { ModelBundleRow } from "./ModelBundleRow";
 import { OverwriteKeyModal } from "./OverwriteKeyModal";
 import { AreasManagePanel } from "./AreasManagePanel";
 import { DatasetsCatalogPanel } from "./DatasetsCatalogPanel";
@@ -120,12 +121,23 @@ export function SettingsPanel() {
                 </h2>
                 <div className="space-y-4">
                   {activeGroup.defs
-                    .filter((def) => !SLIDER_KEYS.has(def.key) && !CALIBRATION_KEYS.includes(def.key))
+                    .filter((def) => !SLIDER_KEYS.has(def.key) && !CALIBRATION_KEYS.includes(def.key) && def.key !== "VERIFICATION_MODEL")
                     .map((def) => (
                       <div key={def.key}>
-                        <span className="mb-1 block text-xs text-muted">{def.label}</span>
+                        <span className="mb-1 block text-xs text-muted">
+                          {def.key === "RETRIEVAL_MODEL" ? "Modelo" : def.label}
+                        </span>
                         {def.isSecret ? (
                           <SecretRow display={values[def.key]} onEdit={() => setEditing(def)} />
+                        ) : def.key === "RETRIEVAL_MODEL" ? (
+                          <ModelBundleRow
+                            retrievalModelId={current(def)}
+                            verificationModelId={dirty["VERIFICATION_MODEL"] ?? values["VERIFICATION_MODEL"] ?? ""}
+                            onChange={(bundle) => {
+                              set("RETRIEVAL_MODEL", bundle.retrievalModelId);
+                              set("VERIFICATION_MODEL", bundle.verificationModelId);
+                            }}
+                          />
                         ) : def.key === "INFERENCE_LOW_VRAM_MODE" ? (
                           <LowVramModeRow value={current(def)} onChange={(v) => set(def.key, v)}
                             onSaveBeforeRestart={(v) => saveKey(def.key, v)} />
