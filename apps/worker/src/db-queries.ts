@@ -104,3 +104,45 @@ export async function insertIndexedImages(
     client.release();
   }
 }
+
+export interface PendingEmbedImage {
+  id: string;
+  imagePath: string;
+}
+
+/** Rows that already have an image on disk but no embedding yet — the
+ * state a dataset-catalog install leaves behind when the release's model
+ * doesn't match what's locally active (spec's "Completing embeddings
+ * after a mismatched install" section). Deliberately does NOT touch
+ * loadExistingPanoHeadings' dedup set — this has nothing to do with
+ * re-downloading. */
+export async function getPendingEmbedImages(pool: Pool, areaId: string): Promise<PendingEmbedImage[]> {
+  const { rows } = await pool.query<{ id: string; image_path: string }>(
+    `SELECT id, image_path FROM indexed_images
+     WHERE area_id = $1 AND embedding IS NULL AND image_path IS NOT NULL`,
+    [areaId]
+  );
+  return rows.map((r) => ({ id: r.id, imagePath: r.image_path }));
+}
+
+export async function updateImageEmbeddings(
+  pool: Pool,
+  updates: { id: string; embedding: number[] }[]
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const update of updates) {
+      await client.query(
+        `UPDATE indexed_images SET embedding = $2, embedded_at = now() WHERE id = $1`,
+        [update.id, `[${update.embedding.join(",")}]`]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
