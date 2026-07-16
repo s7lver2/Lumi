@@ -15,6 +15,7 @@ import { fetchJson } from "../lib/fetch-json";
 import { flyToRegion, flyToPoint } from "../lib/map-camera";
 import { MapArrivalPulse } from "./MapArrivalPulse";
 import { ModelLoadingNotice } from "./ModelLoadingNotice";
+import { RETRIEVAL_MODELS } from "@netryx/shared-types";
 
 // Debe coincidir con el contrato `Selected` de UploadPopup ({ file, url }).
 interface SelectedFile {
@@ -32,6 +33,7 @@ function formatEta(etaMs: number | null): string {
 }
 
 export function SearchDashboard() {
+  const activeModelId = RETRIEVAL_MODELS[0]?.id ?? "lumi-preview";
   const [map, setMap] = useState<any>(null);
   const [queryImageUrl, setQueryImageUrl] = useState<string | null>(null);
   const { 
@@ -61,7 +63,7 @@ export function SearchDashboard() {
     setSearching(file.name);
     const form = new FormData();
     form.append("image", file);
-    const { ok, data } = await fetchJson("/api/search", { method: "POST", body: form });
+    const { ok, data } = await fetchJson(`/api/models/${activeModelId}/estimate`, { method: "POST", body: form });
     if (!ok || !data) return setError(data?.error ?? "La búsqueda falló");
     setSearchResults(data, file.name);
   }
@@ -84,10 +86,10 @@ export function SearchDashboard() {
     selectRegion(regionId);
     setRefining();
 
-    const res = await fetch(`/api/search/${currentSearchId}/refine`, {
+    const res = await fetch(`/api/models/${activeModelId}/refine`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ regionId }),
+      body: JSON.stringify({ searchId: currentSearchId, regionId }),
     });
     if (!res.ok || !res.body) return setError(`El refinado falló (HTTP ${res.status})`);
 
