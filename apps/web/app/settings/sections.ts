@@ -32,6 +32,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       "VERIFICATION_MAGSAC_THRESHOLD_PX",
       "INFERENCE_RUNTIME",
       "INFERENCE_LOW_VRAM_MODE",
+      "GITHUB_TOKEN",
     ],
   },
 ];

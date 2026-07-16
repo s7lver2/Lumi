@@ -52,6 +52,7 @@ describe("submitSetup", () => {
     expect(repo.completeSetup).toHaveBeenCalledWith([
       { key: "GOOGLE_MAPS_API_KEY", value: "AIzaSyTest", isSecret: true },
       { key: "MAPBOX_TOKEN", value: "", isSecret: true },
+      { key: "GITHUB_TOKEN", value: "", isSecret: true },
       { key: "MAX_AREA_KM2", value: "5", isSecret: false },
       { key: "MAX_MONTHLY_BUDGET_USD", value: "50", isSecret: false },
       { key: "MAX_CONCURRENT_REQUESTS", value: "10", isSecret: false },

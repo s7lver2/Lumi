@@ -54,6 +54,13 @@ export const SETTINGS_SCHEMA: SettingDefinition[] = [
     required: false,
   },
   {
+    key: "GITHUB_TOKEN",
+    label: "GitHub Personal Access Token (para publicar/instalar datasets)",
+    type: "string",
+    isSecret: true,
+    required: false,
+  },
+  {
     key: "MAX_AREA_KM2",
     label: "Maximum area per indexing job (km²)",
     type: "number",

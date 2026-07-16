@@ -125,3 +125,13 @@ describe("INFERENCE_LOW_VRAM_MODE setting", () => {
     expect(def.defaultValue).toBe("auto");
   });
 });
+
+describe("GITHUB_TOKEN setting", () => {
+  it("is an optional secret string, for publishing/installing datasets", () => {
+    const def = SETTINGS_SCHEMA.find((s) => s.key === "GITHUB_TOKEN")!;
+    expect(def).toBeDefined();
+    expect(def.type).toBe("string");
+    expect(def.isSecret).toBe(true);
+    expect(def.required).toBe(false);
+  });
+});
