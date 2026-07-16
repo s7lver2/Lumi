@@ -32,30 +32,44 @@ export function loadOrCreateEncryptionKey(
   return key;
 }
 
-/**
- * Encrypts `plaintext` and returns `iv || authTag || ciphertext` as a single
- * Buffer, ready to store in `system_settings.encrypted_value` (bytea).
- */
-export function encrypt(plaintext: string, key: Buffer): Buffer {
+function encryptRaw(plaintext: Buffer, key: Buffer): Buffer {
   const iv = randomBytes(IV_LENGTH);
   const cipher = createCipheriv(ALGORITHM, key, iv);
-  const ciphertext = Buffer.concat([
-    cipher.update(plaintext, "utf8"),
-    cipher.final(),
-  ]);
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   const authTag = cipher.getAuthTag();
   return Buffer.concat([iv, authTag, ciphertext]);
 }
 
-export function decrypt(payload: Buffer, key: Buffer): string {
+function decryptRaw(payload: Buffer, key: Buffer): Buffer {
   const iv = payload.subarray(0, IV_LENGTH);
   const authTag = payload.subarray(IV_LENGTH, IV_LENGTH + 16);
   const ciphertext = payload.subarray(IV_LENGTH + 16);
 
   const decipher = createDecipheriv(ALGORITHM, key, iv);
   decipher.setAuthTag(authTag);
-  return Buffer.concat([
-    decipher.update(ciphertext),
-    decipher.final(),
-  ]).toString("utf8");
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+}
+
+/**
+ * Encrypts `plaintext` and returns `iv || authTag || ciphertext` as a single
+ * Buffer, ready to store in `system_settings.encrypted_value` (bytea).
+ */
+export function encrypt(plaintext: string, key: Buffer): Buffer {
+  return encryptRaw(Buffer.from(plaintext, "utf8"), key);
+}
+
+export function decrypt(payload: Buffer, key: Buffer): string {
+  return decryptRaw(payload, key).toString("utf8");
+}
+
+/** Same scheme as encrypt()/decrypt(), but for raw binary payloads (zip
+ * bundles, image bytes) that must never round-trip through a UTF-8 string —
+ * used by the dataset catalog (docs/superpowers/specs/2026-07-13-dataset-
+ * catalog-design.md). */
+export function encryptBuffer(plaintext: Buffer, key: Buffer): Buffer {
+  return encryptRaw(plaintext, key);
+}
+
+export function decryptBuffer(payload: Buffer, key: Buffer): Buffer {
+  return decryptRaw(payload, key);
 }

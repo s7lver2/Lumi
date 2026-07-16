@@ -3,7 +3,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadOrCreateEncryptionKey, encrypt, decrypt } from "./crypto";
+import { randomBytes } from "node:crypto";
+import { loadOrCreateEncryptionKey, encrypt, decrypt, encryptBuffer, decryptBuffer } from "./crypto";
 
 let dir: string;
 let keyPath: string;
@@ -54,5 +55,27 @@ describe("encrypt/decrypt", () => {
     const wrongKey = loadOrCreateEncryptionKey(wrongKeyPath);
     const ciphertext = encrypt("secret", key);
     expect(() => decrypt(ciphertext, wrongKey)).toThrow();
+  });
+});
+
+describe("encryptBuffer/decryptBuffer", () => {
+  it("round-trips arbitrary binary data without UTF-8 lossy conversion", () => {
+    const key = randomBytes(32);
+    // Bytes that are NOT valid UTF-8 on their own (a lone continuation byte) —
+    // proves this path never round-trips through a string.
+    const original = Buffer.from([0x00, 0x01, 0xff, 0x80, 0x81, 0xfe]);
+
+    const encrypted = encryptBuffer(original, key);
+    const decrypted = decryptBuffer(encrypted, key);
+
+    expect(decrypted.equals(original)).toBe(true);
+  });
+
+  it("fails to decrypt with the wrong key", () => {
+    const key = randomBytes(32);
+    const wrongKey = randomBytes(32);
+    const encrypted = encryptBuffer(Buffer.from("hello"), key);
+
+    expect(() => decryptBuffer(encrypted, wrongKey)).toThrow();
   });
 });
