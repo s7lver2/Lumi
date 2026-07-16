@@ -22,3 +22,16 @@ export interface StreetViewCapture {
   captureDate: string | null;
   imageBase64: string;
 }
+
+/** Fills in embeddings for indexed_images rows that already have an image
+ * on disk but embedding IS NULL — used after installing a dataset release
+ * built with a different model (spec's "Completing embeddings after a
+ * mismatched install" section). Deliberately NOT the same job as
+ * index-area: that job re-walks street geometry and re-attempts Street
+ * View downloads, using a global (pano_id, heading) dedup that would just
+ * SKIP these already-captured rows, embedding included. */
+export const EMBED_PENDING_IMAGES_JOB_NAME = "embed-pending-images";
+
+export interface EmbedPendingImagesJobPayload {
+  areaId: string;
+}
