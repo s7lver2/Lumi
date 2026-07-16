@@ -1,26 +1,28 @@
-// apps/web/app/api/search/[searchId]/refine/route.ts
-import { DEFAULT_CONFIRM_THRESHOLD, type RefineRequest } from "@netryx/shared-types";
+// apps/web/app/api/models/[modelId]/refine/route.ts
+import { RETRIEVAL_MODELS, DEFAULT_CONFIRM_THRESHOLD, type RefineRequest } from "@netryx/shared-types";
 import { getPool } from "../../../../../lib/db";
 import { getSettingsRepo } from "../../../../../lib/settings-repo";
+import { validateModelId } from "../../../../../lib/models/validate-model-id";
 import { verifyCandidates } from "../../../../../lib/verify-client";
 import { expandRegionCandidates } from "../../../../../lib/search/refine-retrieval";
 import { readImageBase64 } from "../../../../../lib/search/candidate-images";
 import { persistRefine } from "../../../../../lib/search/refine-persist";
 import { runRefine, type RunRefineDeps } from "../../../../../lib/search/run-refine";
 
-// Streamed as Server-Sent Events, not a single JSON response — RoMa/Laila
-// verification is ~10-25s PER CANDIDATE (see run-refine.ts's VERIFY_CHUNK_SIZE
-// comment), so a region with 8+ candidates used to mean one blocking request
-// running for minutes with zero feedback. Mirrors the setup wizard's
-// /api/setup/run/[step] SSE pattern (progress lines + a final "done" event).
-export async function POST(
-  request: Request,
-  { params }: { params: { searchId: string } }
-) {
+export async function POST(request: Request, { params }: { params: { modelId: string } }) {
   const body = (await request.json()) as RefineRequest;
-  if (!body.regionId) {
-    return new Response(JSON.stringify({ error: "regionId is required" }), {
+  if (!body.searchId || !body.regionId) {
+    return new Response(JSON.stringify({ error: "searchId and regionId are required" }), {
       status: 400,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  const activeModelId = (await getSettingsRepo().getSetting("RETRIEVAL_MODEL")) ?? "lumi-preview";
+  const check = validateModelId(params.modelId, RETRIEVAL_MODELS.map((m) => m.id), activeModelId);
+  if (!check.ok) {
+    return new Response(JSON.stringify({ error: check.error }), {
+      status: check.status,
       headers: { "content-type": "application/json" },
     });
   }
@@ -54,18 +56,13 @@ export async function POST(
         persist: (args) => persistRefine(pool, args),
         onProgress: (verified, total) => {
           const elapsedMs = Date.now() - startedAt;
-          // ETA from the observed average so far — RoMa's first candidate(s)
-          // after a cold start pay a one-time CUDA warmup cost (see
-          // services/inference/main.py's startup warmup), so this only gets
-          // accurate after a couple of candidates, not from candidate 1.
-          const etaMs =
-            verified > 0 ? Math.round((elapsedMs / verified) * (total - verified)) : null;
+          const etaMs = verified > 0 ? Math.round((elapsedMs / verified) * (total - verified)) : null;
           send({ type: "progress", verified, total, elapsedMs, etaMs });
         },
       };
 
       try {
-        const result = await runRefine(deps, { searchId: params.searchId, regionId: body.regionId });
+        const result = await runRefine(deps, { searchId: body.searchId, regionId: body.regionId });
         send({ type: "done", result });
       } catch (err) {
         send({ type: "error", message: err instanceof Error ? err.message : String(err) });
