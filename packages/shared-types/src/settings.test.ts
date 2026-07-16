@@ -135,3 +135,13 @@ describe("GITHUB_TOKEN setting", () => {
     expect(def.required).toBe(false);
   });
 });
+
+describe("MODEL_CATALOG_REPO setting", () => {
+  it("is an optional, non-secret string for the model catalog's GitHub repo", () => {
+    const def = SETTINGS_SCHEMA.find((s) => s.key === "MODEL_CATALOG_REPO")!;
+    expect(def).toBeDefined();
+    expect(def.type).toBe("string");
+    expect(def.isSecret).toBe(false);
+    expect(def.required).toBe(false);
+  });
+});

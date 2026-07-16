@@ -33,6 +33,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       "INFERENCE_RUNTIME",
       "INFERENCE_LOW_VRAM_MODE",
       "GITHUB_TOKEN",
+      "MODEL_CATALOG_REPO",
     ],
   },
 ];

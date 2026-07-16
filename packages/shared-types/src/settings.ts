@@ -61,6 +61,13 @@ export const SETTINGS_SCHEMA: SettingDefinition[] = [
     required: false,
   },
   {
+    key: "MODEL_CATALOG_REPO",
+    label: "Repositorio del catálogo de modelos (owner/repo)",
+    type: "string",
+    isSecret: false,
+    required: false,
+  },
+  {
     key: "MAX_AREA_KM2",
     label: "Maximum area per indexing job (km²)",
     type: "number",
