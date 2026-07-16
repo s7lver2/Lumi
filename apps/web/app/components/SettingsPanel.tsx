@@ -12,6 +12,7 @@ import { ModelBundleRow } from "./ModelBundleRow";
 import { OverwriteKeyModal } from "./OverwriteKeyModal";
 import { AreasManagePanel } from "./AreasManagePanel";
 import { DatasetsCatalogPanel } from "./DatasetsCatalogPanel";
+import { ModelCatalogPanel } from "./ModelCatalogPanel";
 import { groupSettings } from "../settings/sections";
 import { fetchJson } from "../lib/fetch-json";
 import { staggerContainer, staggerItem } from "../lib/motion";
@@ -27,6 +28,7 @@ const SECTION_ICON: Record<string, React.ReactNode> = {
   "models": svg(<><rect x="6" y="6" width="12" height="12" rx="1" /><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2" /></>, "#a89fff"),
   "areas": svg(<><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3Z" /><path d="M9 3v15M15 6v15" /></>, "#7edca4"),
   "datasets": svg(<><path d="M12 3c4.4 0 8 1.3 8 3v12c0 1.7-3.6 3-8 3s-8-1.3-8-3V6c0-1.7 3.6-3 8-3Z" /><path d="M4 6c0 1.7 3.6 3 8 3s8-1.3 8-3" /></>, "#7edca4"),
+  "model-catalog": svg(<><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 10h16M10 4v16" /></>, "#a89fff"),
 };
 
 const SLIDER_KEYS = new Set(["VERIFICATION_CONFIRM_THRESHOLD", "VERIFICATION_TILE_PASSES"]);
@@ -94,6 +96,7 @@ export function SettingsPanel() {
     ...groups.map(({ section }) => ({ id: section.id, label: section.title, icon: SECTION_ICON[section.id] })),
     { id: "areas", label: "Áreas", icon: SECTION_ICON.areas },
     { id: "datasets", label: "Datasets publicados", icon: SECTION_ICON.datasets },
+    { id: "model-catalog", label: "Catálogo de modelos", icon: SECTION_ICON["model-catalog"] },
   ];
   const activeGroup = groups.find((g) => g.section.id === activeTab);
 
@@ -112,6 +115,10 @@ export function SettingsPanel() {
           ) : activeTab === "datasets" ? (
             <motion.div variants={staggerItem}>
               <DatasetsCatalogPanel />
+            </motion.div>
+          ) : activeTab === "model-catalog" ? (
+            <motion.div variants={staggerItem}>
+              <ModelCatalogPanel />
             </motion.div>
           ) : activeGroup ? (
             <motion.div variants={staggerItem}>
