@@ -22,6 +22,11 @@ export function streetViewImageDir(): string {
   return resolve(repoRoot, "apps", "worker", "data", "street-view");
 }
 
+const SAFE_PANO_ID = /^[A-Za-z0-9_-]+$/;
+
 export function captureImagePath(panoId: string, heading: number): string {
+  if (!SAFE_PANO_ID.test(panoId)) {
+    throw new Error(`Invalid panoId (must match ${SAFE_PANO_ID}): ${JSON.stringify(panoId)}`);
+  }
   return resolve(streetViewImageDir(), `${panoId}_${heading}.jpg`);
 }
