@@ -1,5 +1,10 @@
 import PgBoss from "pg-boss";
-import { INDEX_AREA_JOB_NAME, type IndexAreaJobPayload } from "@netryx/shared-types";
+import {
+  INDEX_AREA_JOB_NAME,
+  EMBED_PENDING_IMAGES_JOB_NAME,
+  type IndexAreaJobPayload,
+  type EmbedPendingImagesJobPayload,
+} from "@netryx/shared-types";
 
 let boss: PgBoss | undefined;
 
@@ -34,6 +39,21 @@ export async function enqueueIndexAreaJob(payload: IndexAreaJobPayload): Promise
   if (!jobId) {
     throw new Error(`pg-boss declined to enqueue the ${INDEX_AREA_JOB_NAME} job`);
   }
-  
+
+  return jobId;
+}
+
+/** Enqueued after a dataset install whose release didn't match the locally
+ * active model (spec: "Completing embeddings after a mismatched install") —
+ * see apps/worker/src/jobs/embed-pending-images.ts for what the worker
+ * actually does with it. */
+export async function enqueueEmbedPendingImagesJob(payload: EmbedPendingImagesJobPayload): Promise<string> {
+  const client = await getBoss();
+  const jobId = await client.send(EMBED_PENDING_IMAGES_JOB_NAME, payload);
+
+  if (!jobId) {
+    throw new Error(`pg-boss declined to enqueue the ${EMBED_PENDING_IMAGES_JOB_NAME} job`);
+  }
+
   return jobId;
 }

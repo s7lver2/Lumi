@@ -1,9 +1,14 @@
 // apps/worker/src/queue.ts
 import PgBoss from "pg-boss";
-import { INDEX_AREA_JOB_NAME, type IndexAreaJobPayload } from "@netryx/shared-types";
+import {
+  INDEX_AREA_JOB_NAME,
+  EMBED_PENDING_IMAGES_JOB_NAME,
+  type IndexAreaJobPayload,
+  type EmbedPendingImagesJobPayload,
+} from "@netryx/shared-types";
 
-export { INDEX_AREA_JOB_NAME };
-export type { IndexAreaJobPayload };
+export { INDEX_AREA_JOB_NAME, EMBED_PENDING_IMAGES_JOB_NAME };
+export type { IndexAreaJobPayload, EmbedPendingImagesJobPayload };
 
 let boss: PgBoss | undefined;
 

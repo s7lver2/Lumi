@@ -12,19 +12,38 @@ import { getMonthlySpendUsd, recordStreetViewUsage } from "@netryx/api-usage";
 // FIX: Se cambia 'import.meta.dirname' por el estándar de CommonJS '__dirname'
 config({ path: resolve(__dirname, "../../../.env") });
 
-import type { IndexAreaJobPayload } from "@netryx/shared-types";
-import { getBoss, INDEX_AREA_JOB_NAME } from "./queue";
+import type { IndexAreaJobPayload, EmbedPendingImagesJobPayload } from "@netryx/shared-types";
+import { getBoss, INDEX_AREA_JOB_NAME, EMBED_PENDING_IMAGES_JOB_NAME } from "./queue";
 import { getPool } from "./db";
 import { startHeartbeatLoop } from "./heartbeat";
 import { getSettingsRepo } from "./settings";
 import { runIndexAreaJob } from "./jobs/index-area";
+import { runEmbedPendingImagesJob } from "./jobs/embed-pending-images";
 import { downloadCaptures } from "./street-view";
 import { embedImages } from "./inference-client";
 import { updateAreaProgress, loadExistingPanoHeadings } from "./progress";
 import { fetchStreetGeometry, samplePointsAlongStreets } from "@netryx/geo-sampling";
-import { getArea, getAreaPolygon, insertIndexedImages, insertIndexedPoints, isAreaCancelled } from "./db-queries";
+import {
+  getArea,
+  getAreaPolygon,
+  insertIndexedImages,
+  insertIndexedPoints,
+  isAreaCancelled,
+  getPendingEmbedImages,
+  updateImageEmbeddings,
+} from "./db-queries";
+import { readFile } from "node:fs/promises";
 
 function isIndexAreaJobPayload(data: unknown): data is IndexAreaJobPayload {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "areaId" in data &&
+    typeof (data as { areaId: unknown }).areaId === "string"
+  );
+}
+
+function isEmbedPendingImagesJobPayload(data: unknown): data is EmbedPendingImagesJobPayload {
   return (
     typeof data === "object" &&
     data !== null &&
@@ -61,6 +80,19 @@ async function main() {
       getMonthlySpendUsd: () => getMonthlySpendUsd(pool),
       recordStreetViewUsage: (requests, price) => recordStreetViewUsage(pool, requests, price),
       isCancelled: (areaId) => isAreaCancelled(pool, areaId),
+    });
+  });
+  await boss.work(EMBED_PENDING_IMAGES_JOB_NAME, async (job) => {
+    if (!isEmbedPendingImagesJobPayload(job.data)) {
+      throw new Error(`Malformed ${EMBED_PENDING_IMAGES_JOB_NAME} payload: ${JSON.stringify(job.data)}`);
+    }
+    await runEmbedPendingImagesJob(job.data, {
+      getPendingImages: (areaId) => getPendingEmbedImages(pool, areaId),
+      readImageBase64: async (imagePath) => (await readFile(imagePath)).toString("base64"),
+      embedImages,
+      updateImageEmbeddings: (updates) => updateImageEmbeddings(pool, updates),
+      updateAreaProgress: (areaId, update) => updateAreaProgress(pool, areaId, update),
+      inferenceBaseUrl,
     });
   });
   console.log(`netryx worker listening for "${INDEX_AREA_JOB_NAME}" jobs`);
