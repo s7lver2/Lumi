@@ -28,9 +28,11 @@ function parseVector(text: string): number[] {
 export async function retrieveCandidates(
   pool: Pool,
   queryEmbedding: number[],
-  k: number
+  k: number,
+  excludeIndexedImageId?: string
 ): Promise<RetrievedCandidate[]> {
   const q = toVectorLiteral(queryEmbedding);
+  const excludeId = excludeIndexedImageId ?? null;
 
   const perHeading = await pool.query(
     `SELECT id, pano_id, heading,
@@ -39,10 +41,10 @@ export async function retrieveCandidates(
             1 - (embedding <=> $1) AS similarity,
             embedding::text AS embedding_text
      FROM indexed_images
-     WHERE embedding IS NOT NULL
+     WHERE embedding IS NOT NULL AND ($3::uuid IS NULL OR id <> $3)
      ORDER BY embedding <=> $1
      LIMIT $2`,
-    [q, k]
+    [q, k, excludeId]
   );
 
   // Aggregate recall: nearest panos, expanded to all their per-heading images.
@@ -59,8 +61,8 @@ export async function retrieveCandidates(
        LIMIT $2
      ) AS near_panos
      JOIN indexed_images img ON img.pano_id = near_panos.pano_id
-     WHERE img.embedding IS NOT NULL`,
-    [q, k]
+     WHERE img.embedding IS NOT NULL AND ($3::uuid IS NULL OR img.id <> $3)`,
+    [q, k, excludeId]
   );
 
   // Dedup by panoId, not by indexedImageId: the aggregate query above

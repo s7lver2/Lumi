@@ -1,7 +1,39 @@
 // apps/web/lib/search/retrieval.test.ts
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { Pool } from "pg";
 import { retrieveCandidates } from "./retrieval";
+
+function makePool(perHeadingRows: any[], aggregateRows: any[] = []) {
+  return {
+    query: vi.fn(async (sql: string, params: any[]) => {
+      if (sql.includes("FROM indexed_images") && sql.includes("ORDER BY embedding")) {
+        return { rows: perHeadingRows.filter((r) => params[2] == null || r.id !== params[2]) };
+      }
+      if (sql.includes("FROM (")) return { rows: aggregateRows };
+      throw new Error(`unexpected query: ${sql}`);
+    }),
+  } as any;
+}
+
+describe("retrieveCandidates with excludeIndexedImageId", () => {
+  it("excludes the given id from the per-heading result set", async () => {
+    const pool = makePool([
+      { id: "img-1", pano_id: "p1", heading: 0, lat: "0", lng: "0", similarity: "0.9", embedding_text: "[0.1,0.2]" },
+      { id: "img-2", pano_id: "p2", heading: 0, lat: "0", lng: "0", similarity: "0.8", embedding_text: "[0.1,0.2]" },
+    ]);
+
+    const results = await retrieveCandidates(pool, [0.1, 0.2], 10, "img-1");
+    expect(results.map((r) => r.indexedImageId)).toEqual(["img-2"]);
+  });
+
+  it("includes everything when no id is excluded (unchanged default behavior)", async () => {
+    const pool = makePool([
+      { id: "img-1", pano_id: "p1", heading: 0, lat: "0", lng: "0", similarity: "0.9", embedding_text: "[0.1,0.2]" },
+    ]);
+    const results = await retrieveCandidates(pool, [0.1, 0.2], 10);
+    expect(results).toHaveLength(1);
+  });
+});
 
 const url = process.env.TEST_DATABASE_URL;
 const d = url ? describe : describe.skip; // skip cleanly when no test DB is configured
