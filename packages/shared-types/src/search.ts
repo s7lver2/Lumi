@@ -44,7 +44,10 @@ export interface SearchResponse {
 export const DEFAULT_CONFIRM_THRESHOLD = 0.5;
 
 /** Body of POST /api/search/:searchId/refine (Pass 2). */
+/** Body of POST /api/models/{modelId}/refine (Pass 2) — searchId moved into
+ * the body once the URL became per-model instead of per-search. */
 export interface RefineRequest {
+  searchId: string;
   regionId: string;
 }
 

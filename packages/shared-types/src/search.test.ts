@@ -5,6 +5,7 @@ import {
   DEFAULT_QUERY_EXPANSION_SIZE,
   DEFAULT_CONFIRM_THRESHOLD,
 } from "./search";
+import type { RefineRequest } from "./search";
 
 
 describe("search tuning constants", () => {
@@ -16,5 +17,13 @@ describe("search tuning constants", () => {
     expect(DEFAULT_REGION_RADIUS_M).toBeGreaterThan(0);
     expect(DEFAULT_QUERY_EXPANSION_SIZE).toBeGreaterThan(0);
     expect(DEFAULT_QUERY_EXPANSION_SIZE).toBeLessThan(DEFAULT_TOP_K);
+  });
+});
+
+describe("RefineRequest", () => {
+  it("carries both searchId and regionId in the body (no longer just regionId)", () => {
+    const body: RefineRequest = { searchId: "search-1", regionId: "region-1" };
+    expect(body.searchId).toBe("search-1");
+    expect(body.regionId).toBe("region-1");
   });
 });
