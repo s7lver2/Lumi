@@ -61,6 +61,32 @@ export function SettingsPanel() {
     setValues((prev) => ({ ...prev, ...body })); setDirty({}); setStatus({ tone: "ok", text: "Guardado" });
   }
 
+  // Scoped save for rows (e.g. LowVramModeRow) that need to guarantee a single
+  // key is durably persisted to system_settings before doing something
+  // irreversible (like restarting a service and navigating away) — using the
+  // full save() here would also flush unrelated in-progress edits the user
+  // hasn't asked to save yet.
+  async function saveKey(key: string, value: string): Promise<boolean> {
+    setSaving(true); setStatus(null);
+    const { ok, data } = await fetchJson("/api/settings", {
+      method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ [key]: value }),
+    });
+    setSaving(false);
+    if (!ok) {
+      setStatus({ tone: "error", text: (data as { error?: string })?.error ?? "No se pudo guardar" });
+      return false;
+    }
+    setValues((prev) => ({ ...prev, [key]: value }));
+    setDirty((d) => {
+      if (!(key in d)) return d;
+      const next = { ...d };
+      delete next[key];
+      return next;
+    });
+    setStatus({ tone: "ok", text: "Guardado" });
+    return true;
+  }
+
   const tabItems = [
     ...groups.map(({ section }) => ({ id: section.id, label: section.title, icon: SECTION_ICON[section.id] })),
     { id: "areas", label: "Áreas", icon: SECTION_ICON.areas },
@@ -94,7 +120,8 @@ export function SettingsPanel() {
                         {def.isSecret ? (
                           <SecretRow display={values[def.key]} onEdit={() => setEditing(def)} />
                         ) : def.key === "INFERENCE_LOW_VRAM_MODE" ? (
-                          <LowVramModeRow value={current(def)} onChange={(v) => set(def.key, v)} />
+                          <LowVramModeRow value={current(def)} onChange={(v) => set(def.key, v)}
+                            onSaveBeforeRestart={(v) => saveKey(def.key, v)} />
                         ) : def.type === "enum" ? (
                           <Menu value={current(def)} onChange={(v) => set(def.key, v)}
                             options={(def.options ?? []).map((o) => ({ value: o, label: o }))} />
