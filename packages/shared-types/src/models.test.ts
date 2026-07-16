@@ -13,6 +13,15 @@ describe("RETRIEVAL_MODELS", () => {
   });
 });
 
+describe("RETRIEVAL_MODELS version field", () => {
+  it("gives every retrieval model a non-empty version string", () => {
+    for (const model of RETRIEVAL_MODELS) {
+      expect(typeof model.version).toBe("string");
+      expect(model.version.length).toBeGreaterThan(0);
+    }
+  });
+});
+
 describe("VERIFICATION_MODELS", () => {
   it("includes laila as the default, backed by frozen RoMa", () => {
     const laila = VERIFICATION_MODELS.find((m) => m.id === "laila")!;

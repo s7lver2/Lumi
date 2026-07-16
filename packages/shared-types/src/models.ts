@@ -6,6 +6,7 @@ export interface RetrievalModelDefinition {
   baseModel: string;
   status: "preview" | "stable" | "deprecated";
   embeddingDim: number;
+  version: string;
 }
 
 export interface VerificationModelDefinition {
@@ -24,6 +25,7 @@ export const RETRIEVAL_MODELS: RetrievalModelDefinition[] = [
     baseModel: "MegaLoc (frozen)",
     status: "preview",
     embeddingDim: 8448,
+    version: "1.0",
   },
 ];
 
