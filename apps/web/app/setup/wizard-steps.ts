@@ -1,6 +1,8 @@
 // apps/web/app/setup/wizard-steps.ts
 export const WIZARD_STEPS = [
   { id: "install", title: "Instalación" },
+  { id: "usage", title: "Uso" },
+  { id: "models", title: "Modelos" },
   { id: "database", title: "Base de datos" },
   { id: "credentials", title: "Credenciales" },
   { id: "confirm", title: "Confirmación" },
