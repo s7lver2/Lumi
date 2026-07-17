@@ -10,26 +10,17 @@ const ITEMS_BY_RUNTIME = {
   windows: [
     { id: "inference-venv", label: "Entorno Python", engine: "venv" },
     { id: "inference-deps", label: "Dependencias PyTorch + CUDA", engine: "pip install" },
-    { id: "weights-retrieval", label: "Modelo de recuperación", engine: "Lumi Preview" },
-    { id: "weights-verification", label: "Modelo de verificación", engine: "Laila" },
-    { id: "verify-services", label: "Arrancar y verificar servicios", engine: "uvicorn + worker" },
   ],
   // Native Linux (e.g. Pop!_OS) — same steps/ids as "windows", the server
   // resolves venv/bin vs venv/Scripts per host (see run/[step]/route.ts).
   linux: [
     { id: "inference-venv", label: "Entorno Python", engine: "venv" },
     { id: "inference-deps", label: "Dependencias PyTorch + CUDA", engine: "pip install" },
-    { id: "weights-retrieval", label: "Modelo de recuperación", engine: "Lumi Preview" },
-    { id: "weights-verification", label: "Modelo de verificación", engine: "Laila" },
-    { id: "verify-services", label: "Arrancar y verificar servicios", engine: "uvicorn + worker" },
   ],
   wsl: [
     { id: "inference-wsl-prereqs", label: "Dependencias del sistema (WSL2)", engine: "apt install" },
     { id: "inference-venv-wsl", label: "Entorno Python (WSL2)", engine: "venv" },
     { id: "inference-deps-wsl", label: "Dependencias PyTorch + CUDA (WSL2)", engine: "pip install" },
-    { id: "weights-retrieval-wsl", label: "Modelo de recuperación (WSL2)", engine: "Lumi Preview" },
-    { id: "weights-verification-wsl", label: "Modelo de verificación (WSL2)", engine: "Laila" },
-    { id: "verify-services", label: "Arrancar y verificar servicios", engine: "uvicorn + worker" },
   ],
 } as const;
 
@@ -90,7 +81,7 @@ export function InstallStep({
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#e9ecf1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="m7 12 5 5 5-5" /><path d="M5 21h14" /></svg>
         </div>
         <div className="text-base font-medium text-fg">Instalar dependencias locales</div>
-        <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-muted">Verificaremos PostgreSQL y descargaremos el entorno de inferencia y los pesos de Lumi Preview y Laila. Ocupan ~2.5 GB y se guardan en tu equipo.</p>
+        <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-muted">Verificaremos PostgreSQL y prepararemos el entorno de inferencia (Python + PyTorch/CUDA).</p>
 
         {platform === "linux" ? (
           // Ya estás en Linux nativo — no hay nada que ofrecer entre
