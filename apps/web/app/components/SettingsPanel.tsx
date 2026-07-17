@@ -11,6 +11,7 @@ import { LowVramModeRow } from "./LowVramModeRow";
 import { ModelBundleRow } from "./ModelBundleRow";
 import { OverwriteKeyModal } from "./OverwriteKeyModal";
 import { AreasManagePanel } from "./AreasManagePanel";
+import { SystemPanel } from "./SystemPanel";
 import { groupSettings } from "../settings/sections";
 import { fetchJson } from "../lib/fetch-json";
 import { staggerContainer, staggerItem } from "../lib/motion";
@@ -25,6 +26,7 @@ const SECTION_ICON: Record<string, React.ReactNode> = {
   "limits-cost": svg(<><circle cx="12" cy="12" r="9" /><path d="M12 7v10M9.5 9.5a2.5 2.5 0 0 1 5 0M9.5 14.5a2.5 2.5 0 0 0 5 0" /></>, "#f0c477"),
   "models": svg(<><rect x="6" y="6" width="12" height="12" rx="1" /><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2" /></>, "#a89fff"),
   "areas": svg(<><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3Z" /><path d="M9 3v15M15 6v15" /></>, "#7edca4"),
+  "system": svg(<><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.1-3.1a5 5 0 0 1-6.6 6.6L6.7 20.3a2.1 2.1 0 0 1-3-3l7.5-7.5a5 5 0 0 1 6.6-6.6l-3 3.1Z" /></>, "#9aa1ac"),
 };
 
 const SLIDER_KEYS = new Set(["VERIFICATION_CONFIRM_THRESHOLD", "VERIFICATION_TILE_PASSES"]);
@@ -91,6 +93,7 @@ export function SettingsPanel() {
   const tabItems = [
     ...groups.map(({ section }) => ({ id: section.id, label: section.title, icon: SECTION_ICON[section.id] })),
     { id: "areas", label: "Áreas", icon: SECTION_ICON.areas },
+    { id: "system", label: "Sistema", icon: SECTION_ICON.system },
   ];
   const activeGroup = groups.find((g) => g.section.id === activeTab);
 
@@ -105,6 +108,10 @@ export function SettingsPanel() {
           {activeTab === "areas" ? (
             <motion.div variants={staggerItem}>
               <AreasManagePanel />
+            </motion.div>
+          ) : activeTab === "system" ? (
+            <motion.div variants={staggerItem}>
+              <SystemPanel />
             </motion.div>
           ) : activeGroup ? (
             <motion.div variants={staggerItem}>
@@ -167,7 +174,7 @@ export function SettingsPanel() {
             </motion.div>
           ) : null}
 
-          {activeTab !== "areas" && (
+          {activeTab !== "areas" && activeTab !== "system" && (
             <div className="flex items-center gap-3">
               <button onClick={save} disabled={saving || Object.keys(dirty).length === 0}
                 className="rounded-md bg-accent px-4 py-2 text-xs font-medium text-black disabled:opacity-50">{saving ? "Guardando…" : "Guardar cambios"}</button>
@@ -175,15 +182,6 @@ export function SettingsPanel() {
             </div>
           )}
 
-          <motion.div variants={staggerItem}>
-            <FloatingCard className="flex items-center justify-between p-5">
-              <div>
-                <div className="text-sm font-medium text-fg">Volver a ejecutar el setup</div>
-                <p className="mt-1 text-xs text-muted">Reinstala dependencias, migra la base de datos o cambia credenciales paso a paso.</p>
-              </div>
-              <a href="/setup" className="rounded-md border border-white/15 px-4 py-2 text-xs text-fg hover:bg-white/10">Abrir setup</a>
-            </FloatingCard>
-          </motion.div>
         </motion.div>
       </div>
 
