@@ -12,7 +12,7 @@ function labelsFor(useCases: UseCaseId[]): string {
   return labels.length > 0 ? `Recomendado para: ${labels.join(", ")}` : "Recomendado";
 }
 
-export function ModelsStep({ useCases, onComplete }: { useCases: UseCaseId[]; onComplete: () => void }) {
+export function ModelsStep({ useCases, runtime, onComplete }: { useCases: UseCaseId[]; runtime: "windows" | "linux" | "wsl"; onComplete: () => void }) {
   const recommended = recommendedBundles(useCases);
   const bundles = recommended.length > 0 ? recommended : MODEL_BUNDLES;
   const recommendationBlurb = labelsFor(useCases);
@@ -21,17 +21,22 @@ export function ModelsStep({ useCases, onComplete }: { useCases: UseCaseId[]; on
   // always this fixed set of steps. If a second bundle is ever added, its
   // own weight-download step ids would need to be threaded in here —
   // out of scope for now (see model-recommendations.ts comment).
+  // The weight-download step ids depend on which venv Instalación created
+  // (venv vs venv-wsl) — see run/[step]/route.ts. "verify-services" has no
+  // runtime variant, it's one fixed id regardless of runtime.
   const items = [
-    { id: "weights-retrieval", label: "Modelo de recuperación", engine: "Lumi Preview" },
-    { id: "weights-verification", label: "Modelo de verificación", engine: "Laila" },
+    runtime === "wsl"
+      ? { id: "weights-retrieval-wsl", label: "Modelo de recuperación", engine: "Lumi Preview" }
+      : { id: "weights-retrieval", label: "Modelo de recuperación", engine: "Lumi Preview" },
+    runtime === "wsl"
+      ? { id: "weights-verification-wsl", label: "Modelo de verificación", engine: "Laila" }
+      : { id: "weights-verification", label: "Modelo de verificación", engine: "Laila" },
     { id: "verify-services", label: "Arrancar y verificar servicios", engine: "uvicorn + worker" },
   ];
   const [activeIdx, setActiveIdx] = useState(0);
-  const [doneCount, setDoneCount] = useState(0);
 
   function onDone(ok: boolean) {
     if (!ok) return;
-    setDoneCount((d) => d + 1);
     setActiveIdx((x) => {
       const next = x + 1;
       if (next >= items.length) onComplete();
@@ -54,7 +59,7 @@ export function ModelsStep({ useCases, onComplete }: { useCases: UseCaseId[]; on
 
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs font-medium text-fg">Instalando…</span>
-        <span className="text-xs text-muted">{doneCount} / {items.length} completado</span>
+        <span className="text-xs text-muted">{Math.max(activeIdx, 0)} / {items.length} completado</span>
       </div>
       <div className="flex flex-col gap-2">
         {items.map((it, i) => (

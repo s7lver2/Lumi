@@ -14,9 +14,8 @@ export type SubmitSetupResult = { ok: true } | { ok: false; error: string };
  * If the field is present in the form (even as an empty string, e.g. an
  * optional field like MAPBOX_TOKEN left blank), that submitted value wins.
  * If the field is absent entirely — true for RETRIEVAL_MODEL/VERIFICATION_MODEL,
- * which the wizard doesn't render per spec §14.2's four steps — fall back to
- * the setting's defaultValue so setup can still complete (spec §15.3's
- * "lumi-preview"/"laila" defaults).
+ * which no wizard step renders — fall back to the setting's defaultValue so
+ * setup can still complete (spec §15.3's "lumi-preview"/"laila" defaults).
  */
 function resolveValue(formData: FormData, def: (typeof SETTINGS_SCHEMA)[number]): string {
   const raw = formData.get(def.key);

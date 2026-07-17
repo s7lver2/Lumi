@@ -39,16 +39,18 @@ export function SetupWizard() {
   const next = nextStep(current);
   const prev = prevStep(current);
 
+  const runtime = collected.INFERENCE_RUNTIME === "wsl" || collected.INFERENCE_RUNTIME === "linux" ? collected.INFERENCE_RUNTIME : "windows";
+
   const panel = {
     install: (
       <InstallStep
         onComplete={() => mark("install")}
-        runtime={collected.INFERENCE_RUNTIME === "wsl" || collected.INFERENCE_RUNTIME === "linux" ? collected.INFERENCE_RUNTIME : "windows"}
+        runtime={runtime}
         onRuntimeChange={(r) => setField("INFERENCE_RUNTIME", r)}
       />
     ),
     usage: <UsageStep selected={useCases} onSelectedChange={setUseCases} onComplete={() => mark("usage")} />,
-    models: <ModelsStep useCases={useCases} onComplete={() => mark("models")} />,
+    models: <ModelsStep useCases={useCases} runtime={runtime} onComplete={() => mark("models")} />,
     database: <DatabaseStep onComplete={() => mark("database")} />,
     credentials: <CredentialsStep values={collected} onChange={setField} onComplete={() => mark("credentials")} />,
     confirm: <ConfirmStep values={collected} />,
@@ -71,7 +73,7 @@ export function SetupWizard() {
           {WIZARD_STEPS.map((s, i) => {
             const state = done[s.id] ? "done" : i === idx ? "active" : "todo";
             return (
-              <div key={s.id} className="relative flex w-1/4 flex-col items-center gap-1.5">
+              <div key={s.id} className="relative flex flex-1 flex-col items-center gap-1.5">
                 <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs ${state === "done" ? "bg-accent text-black" : state === "active" ? "animate-pulse border-2 border-accent bg-bg text-fg" : "border border-white/15 bg-white/5 text-subtle"}`}>
                   {state === "done" ? "✓" : i + 1}
                 </div>
