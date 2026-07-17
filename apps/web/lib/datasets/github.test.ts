@@ -30,6 +30,7 @@ describe("ensureRepoWithTopic", () => {
 
     const createCall = calls.find((c) => c.url.endsWith("/user/repos"));
     expect(createCall).toBeDefined();
+    expect(JSON.parse(createCall!.body!).auto_init).toBe(true);
     const topicsPut = calls.find((c) => c.url.endsWith("/topics") && c.method === "PUT");
     expect(JSON.parse(topicsPut!.body!).names).toEqual(["existing-topic", "lumi-dataset"]);
   });

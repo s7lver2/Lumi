@@ -2,6 +2,15 @@
 
 const GITHUB_API = "https://api.github.com";
 
+// Next.js's extended fetch() caches GET responses by default in the App
+// Router. Every read here reflects GitHub state this same module just
+// mutated (or that changes via publish/install elsewhere) — caching any of
+// them risks permanently serving a stale response (e.g. an empty catalog
+// listing cached before a release existed, never refreshing without a
+// server restart). Applied to every fetch call in this file, reads and
+// writes alike, for consistency and to close the whole class of bug.
+const NO_STORE = { cache: "no-store" as const };
+
 export interface GithubReleaseAsset {
   name: string;
   url: string;
@@ -23,7 +32,7 @@ function authHeaders(token: string): Record<string, string> {
 }
 
 export async function ensureRepoWithTopic(owner: string, repo: string, token: string): Promise<void> {
-  const getRes = await fetch(`${GITHUB_API}/repos/${owner}/${repo}`, { headers: authHeaders(token) });
+  const getRes = await fetch(`${GITHUB_API}/repos/${owner}/${repo}`, { headers: authHeaders(token), ...NO_STORE });
   if (getRes.status === 404) {
     const createRes = await fetch(`${GITHUB_API}/user/repos`, {
       method: "POST",
@@ -42,7 +51,7 @@ export async function ensureRepoWithTopic(owner: string, repo: string, token: st
     // there's no default branch for upsertRelease's create-release call to
     // point at, and it fails with 422. GitHub returns 409 for /commits on an
     // empty repo; repair it with a first commit via the Contents API.
-    const commitsRes = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/commits`, { headers: authHeaders(token) });
+    const commitsRes = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/commits`, { headers: authHeaders(token), ...NO_STORE });
     if (commitsRes.status === 409) {
       const initRes = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/contents/README.md`, {
         method: "PUT",
@@ -56,7 +65,7 @@ export async function ensureRepoWithTopic(owner: string, repo: string, token: st
     }
   }
 
-  const topicsRes = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/topics`, { headers: authHeaders(token) });
+  const topicsRes = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/topics`, { headers: authHeaders(token), ...NO_STORE });
   const current: string[] = topicsRes.ok ? ((await topicsRes.json()) as { names: string[] }).names ?? [] : [];
   if (!current.includes("lumi-model-catalog")) {
     await fetch(`${GITHUB_API}/repos/${owner}/${repo}/topics`, {
@@ -77,6 +86,7 @@ export async function upsertRelease(
 ): Promise<void> {
   const existing = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/releases/tags/${tag}`, {
     headers: authHeaders(token),
+    ...NO_STORE,
   });
   if (existing.ok) {
     const { id } = (await existing.json()) as { id: number };
@@ -110,6 +120,7 @@ export async function upsertRelease(
 export async function listReleasesForRepo(owner: string, repo: string): Promise<GithubRelease[]> {
   const res = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/releases`, {
     headers: { accept: "application/vnd.github+json" },
+    ...NO_STORE,
   });
   if (!res.ok) throw new Error(`Failed to list releases for ${owner}/${repo}: ${res.status}`);
   const body = (await res.json()) as Array<{
@@ -129,6 +140,7 @@ export async function listReleasesForRepo(owner: string, repo: string): Promise<
 export async function searchRepositoriesByTopic(topic: string): Promise<{ owner: string; repo: string }[]> {
   const res = await fetch(`${GITHUB_API}/search/repositories?q=${encodeURIComponent(`topic:${topic}`)}`, {
     headers: { accept: "application/vnd.github+json" },
+    ...NO_STORE,
   });
   if (!res.ok) throw new Error(`GitHub search failed: ${res.status}`);
   const body = (await res.json()) as { items: Array<{ owner: { login: string }; name: string }> };
@@ -138,7 +150,7 @@ export async function searchRepositoriesByTopic(topic: string): Promise<{ owner:
 export async function downloadReleaseAsset(assetApiUrl: string, token?: string): Promise<Buffer> {
   const headers: Record<string, string> = { accept: "application/octet-stream" };
   if (token) headers.authorization = `Bearer ${token}`;
-  const res = await fetch(assetApiUrl, { headers });
+  const res = await fetch(assetApiUrl, { headers, ...NO_STORE });
   if (!res.ok) throw new Error(`Failed to download asset: ${res.status}`);
   return Buffer.from(await res.arrayBuffer());
 }
