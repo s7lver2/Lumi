@@ -45,7 +45,9 @@ export async function POST(request: Request) {
   const bundleId = activeRetrievalModel?.id ?? "lumi-preview";
   const version = activeRetrievalModel?.version ?? "1.0";
 
-  const inferenceDir = resolve(process.cwd(), "..", "services", "inference");
+  // process.cwd() is apps/web (the Next.js app root) — two levels up reaches
+  // the repo root, where services/inference actually lives.
+  const inferenceDir = resolve(process.cwd(), "..", "..", "services", "inference");
   const codeZip = await buildInferenceCodeZip(inferenceDir);
 
   const manifest: ModelCatalogManifest = {

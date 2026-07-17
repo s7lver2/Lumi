@@ -17,7 +17,9 @@ interface InstallBody {
   tag?: string;
 }
 
-const INFERENCE_DIR = resolve(process.cwd(), "..", "services", "inference");
+// process.cwd() is apps/web (the Next.js app root) — two levels up reaches
+// the repo root, where services/inference actually lives.
+const INFERENCE_DIR = resolve(process.cwd(), "..", "..", "services", "inference");
 const INFERENCE_SERVICE_URL = process.env.INFERENCE_SERVICE_URL ?? "http://localhost:8000";
 
 // Must match backupInferenceCode's own filter (apps/web/lib/model-catalog/

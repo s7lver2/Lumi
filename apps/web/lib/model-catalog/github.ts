@@ -28,11 +28,32 @@ export async function ensureRepoWithTopic(owner: string, repo: string, token: st
     const createRes = await fetch(`${GITHUB_API}/user/repos`, {
       method: "POST",
       headers: { ...authHeaders(token), "content-type": "application/json" },
-      body: JSON.stringify({ name: repo, private: false }),
+      // auto_init: a brand-new repo has zero commits and therefore no
+      // default branch — upsertRelease's create-release call has no ref to
+      // point at and fails with 422 unless a first commit exists.
+      body: JSON.stringify({ name: repo, private: false, auto_init: true }),
     });
     if (!createRes.ok) throw new Error(`Failed to create repo ${owner}/${repo}: ${createRes.status}`);
   } else if (!getRes.ok) {
     throw new Error(`Failed to check repo ${owner}/${repo}: ${getRes.status}`);
+  } else {
+    // Repo already existed (created by hand, or by a run of this function
+    // predating the auto_init fix above) — if it still has zero commits,
+    // there's no default branch for upsertRelease's create-release call to
+    // point at, and it fails with 422. GitHub returns 409 for /commits on an
+    // empty repo; repair it with a first commit via the Contents API.
+    const commitsRes = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/commits`, { headers: authHeaders(token) });
+    if (commitsRes.status === 409) {
+      const initRes = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/contents/README.md`, {
+        method: "PUT",
+        headers: { ...authHeaders(token), "content-type": "application/json" },
+        body: JSON.stringify({
+          message: "Initial commit",
+          content: Buffer.from(`# ${repo}\n`).toString("base64"),
+        }),
+      });
+      if (!initRes.ok) throw new Error(`Failed to initialize empty repo ${owner}/${repo}: ${initRes.status}`);
+    }
   }
 
   const topicsRes = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/topics`, { headers: authHeaders(token) });

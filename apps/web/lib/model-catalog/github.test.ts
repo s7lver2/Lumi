@@ -28,6 +28,43 @@ describe("ensureRepoWithTopic", () => {
 
     const topicsPut = calls.find((c) => c.url.endsWith("/topics") && c.method === "PUT");
     expect(JSON.parse(topicsPut!.body!).names).toEqual(["lumi-model-catalog"]);
+
+    const createCall = calls.find((c) => c.url.endsWith("/user/repos"));
+    expect(JSON.parse(createCall!.body!).auto_init).toBe(true);
+  });
+
+  it("repairs an existing repo that has zero commits by creating an initial commit", async () => {
+    const calls: Array<{ url: string; method?: string; body?: string }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, method: init?.method, body: init?.body as string });
+      if (url.endsWith("/repos/inigo/lumi-model-catalog")) return { status: 200, ok: true } as Response;
+      if (url.endsWith("/commits")) return { status: 409, ok: false } as Response;
+      if (url.endsWith("/contents/README.md")) return { ok: true, status: 201 } as Response;
+      if (url.endsWith("/topics") && !init?.method) return { ok: true, json: async () => ({ names: [] }) } as Response;
+      if (url.endsWith("/topics") && init?.method === "PUT") return { ok: true, status: 200 } as Response;
+      throw new Error(`unexpected fetch: ${url}`);
+    }));
+
+    await ensureRepoWithTopic("inigo", "lumi-model-catalog", "tok");
+
+    const initCall = calls.find((c) => c.url.endsWith("/contents/README.md"));
+    expect(initCall!.method).toBe("PUT");
+    expect(JSON.parse(initCall!.body!).message).toBe("Initial commit");
+  });
+
+  it("does not try to repair a repo that already has commits", async () => {
+    const calls: Array<{ url: string; method?: string }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, method: init?.method });
+      if (url.endsWith("/repos/inigo/lumi-model-catalog")) return { status: 200, ok: true } as Response;
+      if (url.endsWith("/commits")) return { status: 200, ok: true, json: async () => [] } as Response;
+      if (url.endsWith("/topics") && !init?.method) return { ok: true, json: async () => ({ names: ["lumi-model-catalog"] }) } as Response;
+      throw new Error(`unexpected fetch: ${url}`);
+    }));
+
+    await ensureRepoWithTopic("inigo", "lumi-model-catalog", "tok");
+
+    expect(calls.find((c) => c.url.endsWith("/contents/README.md"))).toBeUndefined();
   });
 });
 
