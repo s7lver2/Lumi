@@ -5,10 +5,13 @@ import { AnimatePresence, motion } from "framer-motion";
 import { PlanetBackground } from "../components/PlanetBackground";
 import { WIZARD_STEPS, nextStep, prevStep, type StepId } from "./wizard-steps";
 import { InstallStep } from "./steps/InstallStep";
+import { UsageStep } from "./steps/UsageStep";
+import { ModelsStep } from "./steps/ModelsStep";
 import { DatabaseStep } from "./steps/DatabaseStep";
 import { CredentialsStep } from "./steps/CredentialsStep";
 import { ConfirmStep } from "./steps/ConfirmStep";
 import { fadeRise } from "../lib/motion";
+import type { UseCaseId } from "./model-recommendations";
 
 const DEFAULT_COLLECTED: Record<string, string> = {
   MAX_AREA_KM2: "5", MAX_MONTHLY_BUDGET_USD: "50",
@@ -16,7 +19,9 @@ const DEFAULT_COLLECTED: Record<string, string> = {
   INFERENCE_RUNTIME: "windows",
 };
 const SUBTITLE: Record<StepId, string> = {
-  install: "descarga el entorno y los modelos.",
+  install: "prepara el entorno de inferencia.",
+  usage: "para qué vas a usar Lumi.",
+  models: "instalando lo recomendado.",
   database: "crea las tablas y extensiones.",
   credentials: "conecta tus llaves de Google y el mapa.",
   confirm: "revisa y termina.",
@@ -26,6 +31,7 @@ export function SetupWizard() {
   const [current, setCurrent] = useState<StepId>("install");
   const [done, setDone] = useState<Record<string, boolean>>({});
   const [collected, setCollected] = useState<Record<string, string>>(DEFAULT_COLLECTED);
+  const [useCases, setUseCases] = useState<UseCaseId[]>([]);
   const mark = (id: StepId) => setDone((d) => ({ ...d, [id]: true }));
   const setField = (k: string, v: string) => setCollected((c) => ({ ...c, [k]: v }));
 
@@ -41,6 +47,8 @@ export function SetupWizard() {
         onRuntimeChange={(r) => setField("INFERENCE_RUNTIME", r)}
       />
     ),
+    usage: <UsageStep selected={useCases} onSelectedChange={setUseCases} onComplete={() => mark("usage")} />,
+    models: <ModelsStep useCases={useCases} onComplete={() => mark("models")} />,
     database: <DatabaseStep onComplete={() => mark("database")} />,
     credentials: <CredentialsStep values={collected} onChange={setField} onComplete={() => mark("credentials")} />,
     confirm: <ConfirmStep values={collected} />,
