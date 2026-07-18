@@ -142,6 +142,25 @@ def test_verify_scores_each_candidate_in_order(monkeypatch):
     finally:
         main.app.dependency_overrides.clear()
 
+
+def test_verify_503s_when_verification_model_is_empty_string():
+    # Simulates a fresh install: the setting exists in _model_holder but is
+    # an empty string ("not installed yet"), not merely absent — both must
+    # 503 cleanly, never raise an unhandled UnknownModelError.
+    import main
+
+    main._model_holder["verification_model_id"] = ""
+    try:
+        c = TestClient(main.app)
+        resp = c.post(
+            "/verify",
+            json={"query_image_base64": "", "candidate_images_base64": ["x"]},
+        )
+        assert resp.status_code == 503
+        assert "not configured" in resp.json()["detail"].lower()
+    finally:
+        main._model_holder.pop("verification_model_id", None)
+
 def _reset_model_holder(**overrides):
     main._model_holder.clear()
     main._model_holder.update(overrides)
@@ -178,7 +197,7 @@ class _FakeTorchModel:
 def test_ensure_active_model_off_mode_never_unloads(monkeypatch):
     # Off mode: both kinds stay cached forever once loaded (today's exact
     # existing behavior) — switching kinds must NOT delete the other.
-    _reset_model_holder(low_vram_mode=False, retrieval_model_id="lumi-preview", verification_model_id="laila")
+    _reset_model_holder(low_vram_mode=False, retrieval_model_id="lumi-preview", verification_model_id="test-verify")
     monkeypatch.setattr(main, "load_retrieval_model", lambda model_id: _FakeTorchModel("retrieval-instance"))
     monkeypatch.setattr(main, "load_verification_model", lambda model_id: "verification-instance")
 
@@ -194,7 +213,7 @@ def test_ensure_active_model_off_mode_never_unloads(monkeypatch):
 
 
 def test_ensure_active_model_same_kind_never_reloads(monkeypatch):
-    _reset_model_holder(low_vram_mode=True, retrieval_model_id="lumi-preview", verification_model_id="laila")
+    _reset_model_holder(low_vram_mode=True, retrieval_model_id="lumi-preview", verification_model_id="test-verify")
     calls = []
     monkeypatch.setattr(
         main,
@@ -210,7 +229,7 @@ def test_ensure_active_model_same_kind_never_reloads(monkeypatch):
 
 
 def test_ensure_active_model_on_mode_unloads_previous_kind_on_switch(monkeypatch):
-    _reset_model_holder(low_vram_mode=True, retrieval_model_id="lumi-preview", verification_model_id="laila")
+    _reset_model_holder(low_vram_mode=True, retrieval_model_id="lumi-preview", verification_model_id="test-verify")
     monkeypatch.setattr(main, "load_retrieval_model", lambda model_id: _FakeTorchModel("retrieval-instance"))
     monkeypatch.setattr(main, "load_verification_model", lambda model_id: "verification-instance")
 
@@ -223,7 +242,7 @@ def test_ensure_active_model_on_mode_unloads_previous_kind_on_switch(monkeypatch
 
 
 def test_ensure_active_model_raises_503_on_oom(monkeypatch):
-    _reset_model_holder(low_vram_mode=True, retrieval_model_id="lumi-preview", verification_model_id="laila")
+    _reset_model_holder(low_vram_mode=True, retrieval_model_id="lumi-preview", verification_model_id="test-verify")
 
     def _raise_oom(model_id):
         raise torch.cuda.OutOfMemoryError("CUDA out of memory")

@@ -16,18 +16,26 @@ def _mock_conn(rows):
 
 def test_reads_retrieval_and_verification_model_from_system_settings():
     conn = _mock_conn(
-        [("RETRIEVAL_MODEL", "lumi-preview"), ("VERIFICATION_MODEL", "laila")]
+        [("RETRIEVAL_MODEL", "lumi-preview"), ("VERIFICATION_MODEL", "some-catalog-installed-id")]
     )
     retrieval, verification = get_active_model_ids(conn)
     assert retrieval == "lumi-preview"
-    assert verification == "laila"
+    assert verification == "some-catalog-installed-id"
 
 
 def test_falls_back_to_defaults_when_settings_row_is_missing():
+    # VERIFICATION_MODEL's default is "" (no verification model installed
+    # yet) — a fresh clone has retrieval only until a catalog release
+    # provides one.
     conn = _mock_conn([])
     retrieval, verification = get_active_model_ids(conn)
     assert retrieval == "lumi-preview"
-    assert verification == "laila"
+    assert verification == ""
+
+
+def test_default_verification_model_is_empty():
+    from settings import DEFAULT_VERIFICATION_MODEL
+    assert DEFAULT_VERIFICATION_MODEL == ""
 
 def test_reads_low_vram_mode_setting():
     # get_low_vram_mode_setting's query selects only `value` (single column),

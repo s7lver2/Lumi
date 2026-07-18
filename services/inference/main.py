@@ -189,7 +189,7 @@ def get_retrieval_model():
 
 
 def get_verification_model():
-    if "verification_model_id" not in _model_holder:
+    if not _model_holder.get("verification_model_id"):
         raise HTTPException(status_code=503, detail="Verification model not configured yet")
     return _ensure_active_model("verification")
 

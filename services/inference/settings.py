@@ -10,7 +10,9 @@ service free of any dependency on the Node-side AES-256-GCM key file.
 """
 
 DEFAULT_RETRIEVAL_MODEL = "lumi-preview"
-DEFAULT_VERIFICATION_MODEL = "laila"
+# Empty on purpose — no verification model until a catalog release
+# provides one (see models/registry.py).
+DEFAULT_VERIFICATION_MODEL = ""
 DEFAULT_VERIFICATION_TILE_PASSES = 5
 DEFAULT_LOW_VRAM_MODE = "auto"
 

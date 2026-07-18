@@ -22,11 +22,8 @@ RETRIEVAL_MODELS = [
 ]
 
 VERIFICATION_MODELS = [
-    {
-        "id": "laila",
-        "display_name": "Laila",
-        "base_model": "RoMa (frozen)",
-        "status": "stable",
-    },
-    # future verification models are added here
+    # Ships empty on purpose — a verification model is only present here
+    # once a catalog release providing one has been installed (the release
+    # replaces this whole file, registry entry included). See
+    # apps/web/app/api/model-catalog/install/route.ts.
 ]
