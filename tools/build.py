@@ -9,10 +9,10 @@ Two commands:
   producción pero sin nada pre-construido.
 
 - `python tools/build.py release [--nopublish] [--version X]
-  [--versionnotes "..."] [--keep-staging]` — genera una build completa,
-  lista para distribuir: apps/web (next build --standalone) y apps/worker
-  (esbuild) empaquetados, más un instalador nativo de la plataforma en la que
-  se ejecuta este script:
+  [--versionnotes "..."] [--keep-staging] [--testing]` — genera una build
+  completa, lista para distribuir: apps/web (next build --standalone) y
+  apps/worker (esbuild) empaquetados, más un instalador nativo de la
+  plataforma en la que se ejecuta este script:
   - Windows: dist/LumiSetup-<version>.exe, compilado con Inno Setup a partir
     de tools/templates/installer.iss (requiere Inno Setup 6 / ISCC.exe).
   - Linux: dist/LumiSetup-<version>.sh, un script bash autoextraíble
@@ -30,6 +30,18 @@ Two commands:
   `--nopublish`, release() SIEMPRE se queda en un build local en dist/.
   `--version` (si se pasa) solo cambia la etiqueta de ESTE build concreto
   (nombre del instalador) — no persiste en package.json todavía (sin decidir).
+
+  `--testing` compila apps/web y apps/worker exactamente igual que un release
+  real, pero se salta el empaquetado del instalador/binario de lumi (lo más
+  lento del proceso y, además, irrelevante para esto) y en su lugar arranca
+  el build recién compilado en el sitio: Postgres/migraciones/inferencia
+  salen de este mismo checkout (igual que el modo dev sin subcomando), pero
+  el worker y el servidor web son los artefactos COMPILADOS de verdad
+  (worker.js vía esbuild, server.js standalone de Next), no `tsx`/`next dev`.
+  Pensado para reproducir, sin pasar por un instalador completo, bugs que
+  solo aparecen en el build real (p. ej. el standalone tracer de Next
+  perdiendo una dependencia, o el bundle del worker comportándose distinto
+  a tsx en dev).
 
 Requiere (en ambas plataformas):
 - PyInstaller (build-time only, instalado en el Python que corre este script
@@ -53,6 +65,7 @@ stdlib `tarfile`, sin binario externo.
 Uso:
   tools/build.py
   tools/build.py release [--nopublish] [--version 1.2.0] [--versionnotes "..."] [--keep-staging]
+  tools/build.py release --testing
 """
 import argparse
 import json
@@ -236,6 +249,27 @@ BUNDLE_EXCLUDE_DIR_NAMES = {
     ".git",
     "dist",
 }
+
+
+def load_env_file(env_path: Path) -> dict[str, str]:
+    """Minimal KEY=VALUE .env parser (# comments and blank lines skipped,
+    surrounding quotes stripped) — mirrors tools/templates/lumi_launcher.py's
+    identical function exactly. Needed for run_staged_build(): unlike `next
+    dev`/tsx (which load .env themselves), the standalone server.js and the
+    esbuild-bundled worker.js do NOT — see lumi_launcher.py's own module
+    docstring for the confirmed-live reasoning. Skipping this injection would
+    make --testing's built artifacts fail in ways dev mode never does,
+    defeating the point of testing the real build."""
+    values: dict[str, str] = {}
+    if not env_path.exists():
+        return values
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        values[key.strip()] = value.strip().strip('"').strip("'")
+    return values
 
 
 def read_version(root: Path) -> str:
@@ -656,6 +690,80 @@ def dev(root: Path) -> int:
                 child.kill()
 
 
+def run_staged_build(root: Path, staging_dir: Path) -> int:
+    """`tools/build.py release --testing`: runs the JUST-BUILT standalone
+    web server + esbuild worker bundle (staging_dir/apps/{web,worker}) in
+    place — Postgres/migrations/inference come from THIS repo checkout
+    exactly like dev() (release doesn't touch or rebuild those), so this
+    reuses whatever venv/data/.env already exist here rather than the
+    staged copy (which never includes venv — see BUNDLE_EXCLUDE_DIR_NAMES).
+    Exists to reproduce, without a full installer round-trip, exactly the
+    kind of bug that only shows up in the REAL release artifacts and never
+    in `next dev`/tsx (e.g. the standalone tracer dropping a dependency,
+    or the worker bundle's env-loading being different from tsx's) — see
+    lumi_launcher.py's docstring on why server.js/worker.js need env
+    injected manually, unlike dev()'s next dev/tsx which load .env themselves."""
+    env_file = root / ".env"
+    env_example = root / ".env.example"
+    if not env_file.exists() and env_example.exists():
+        print("Creando .env desde .env.example...")
+        shutil.copy2(env_example, env_file)
+
+    node_env = {**os.environ, **load_env_file(env_file)}
+    node_env.setdefault("PORT", "3000")
+
+    print("Arrancando Postgres (docker compose up -d --build db)...")
+    try:
+        _run(["docker", "compose", "up", "-d", "--build", "db"], cwd=root, tag="docker")
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print("No se pudo arrancar Postgres — asegúrate de que Docker esté corriendo y reintenta.")
+        return 1
+
+    print("Aplicando migraciones pendientes...")
+    try:
+        _run(["pnpm", "--filter", "@netryx/db", "migrate:up"], cwd=root, tag="migrate")
+    except subprocess.CalledProcessError:
+        print("Aviso: las migraciones fallaron (o ya estaban al día) — revisa el log si es inesperado.")
+
+    children: list[subprocess.Popen] = []
+
+    infer_dir = root / "services" / "inference"
+    venv = infer_dir / "venv"
+    if venv.exists():
+        python_exe = venv / ("Scripts/python.exe" if IS_WIN else "bin/python")
+        print("Arrancando servicio de inferencia (uvicorn, sin --reload — igual que en producción)...")
+        children.append(_popen_tagged(
+            [str(python_exe), "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"],
+            infer_dir, "inference",
+        ))
+    else:
+        print(f"Servicio de inferencia: {venv} no existe todavía — completa /setup para instalarlo (se omite por ahora).")
+
+    worker_js = staging_dir / "apps" / "worker" / "worker.js"
+    print(f"Arrancando el worker COMPILADO ({worker_js})...")
+    children.append(_popen_tagged(["node", str(worker_js)], root, "worker", env=node_env))
+
+    print("\nAbriendo Lumi en http://localhost:3000 ...")
+    webbrowser.open("http://localhost:3000")
+
+    web_dir = staging_dir / "apps" / "web"
+    print(f"Arrancando el servidor web COMPILADO ({web_dir / 'server.js'})...")
+    web_proc = _popen_tagged(["node", "server.js"], web_dir, "web", env=node_env)
+    children.append(web_proc)
+
+    try:
+        return web_proc.wait()
+    finally:
+        print("\nDeteniendo procesos en segundo plano (inferencia, worker, web)...")
+        for child in children:
+            child.terminate()
+        for child in children:
+            try:
+                child.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                child.kill()
+
+
 def dev_tui(root: Path) -> int:
     """`python3 tools/build.py --tui`: same non-toggleable startup sequence
     as dev() (env/.env, Postgres, migrations), then hands off to the
@@ -734,6 +842,14 @@ def release(args: argparse.Namespace) -> int:
     overlay_built_worker(worker_js, staging_dir)
     shutil.rmtree(worker_work_dir, ignore_errors=True)
 
+    if args.testing:
+        # Skips the installer/lumi-binary packaging entirely — irrelevant to
+        # debugging the built web/worker artifacts and by far the slowest
+        # part of release(). Keeps staging_dir (run_staged_build runs
+        # straight out of it) regardless of --keep-staging.
+        print("\n--testing: omitiendo el empaquetado del instalador y levantando el build recién compilado...")
+        return run_staged_build(root, staging_dir)
+
     print("Compiling the lumi launcher (PyInstaller)...")
     binary_path = build_lumi_binary(root, staging_dir)
     print(f"  -> {binary_path}")
@@ -768,6 +884,13 @@ def main(argv: list[str] | None = None) -> int:
     release_parser.add_argument("--version", help="Override this build's version label (default: package.json's version). Not persisted to package.json.")
     release_parser.add_argument("--versionnotes", help="Reserved for the future GitHub Release body (not implemented yet).")
     release_parser.add_argument("--keep-staging", action="store_true", help="Don't delete the staging directory after building.")
+    release_parser.add_argument(
+        "--testing", action="store_true",
+        help="Build the web/worker artifacts exactly like a real release, but skip the installer/"
+             "lumi-binary packaging and immediately run the compiled build in place (Postgres/"
+             "migrations/inference reuse this checkout, same as no-subcommand dev mode) — for "
+             "debugging issues that only show up in the built artifacts, without a full install.",
+    )
 
     args = parser.parse_args(argv)
 
