@@ -40,6 +40,8 @@ export function MapDropTarget({ onImagesReady }: { onImagesReady: (images: Ready
   const [linkError, setLinkError] = useState<string | null>(null);
   const [recentImages, setRecentImages] = useState<LibraryImageSummary[]>([]);
   const [selectedRecent, setSelectedRecent] = useState<Set<string>>(new Set());
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (tab !== "recent") return;
@@ -49,17 +51,28 @@ export function MapDropTarget({ onImagesReady }: { onImagesReady: (images: Ready
   }, [tab]);
 
   async function uploadFiles(files: File[]) {
+    setUploading(true);
+    setUploadError(null);
     const ready: ReadyImage[] = [];
-    for (const file of files) {
-      const form = new FormData();
-      form.append("image", file);
-      const res = await fetch("/api/library", { method: "POST", body: form });
-      if (res.ok) {
-        const data = await res.json();
-        ready.push({ id: data.image.id, filename: data.image.filename });
+    let lastError: string | null = null;
+    try {
+      for (const file of files) {
+        const form = new FormData();
+        form.append("image", file);
+        const res = await fetch("/api/library", { method: "POST", body: form });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data) {
+          ready.push({ id: data.image.id, filename: data.image.filename });
+        } else {
+          lastError = data?.error ?? "No se pudo subir la imagen";
+        }
       }
+    } catch {
+      lastError = "No se pudo conectar con el servidor";
     }
+    setUploading(false);
     if (ready.length > 0) onImagesReady(ready);
+    if (lastError && ready.length === 0) setUploadError(lastError);
   }
 
   async function submitLink() {
@@ -89,7 +102,7 @@ export function MapDropTarget({ onImagesReady }: { onImagesReady: (images: Ready
   }
 
   return (
-    <div className="absolute left-1/2 top-6 z-20 w-[300px] -translate-x-1/2">
+    <div className="absolute left-1/2 top-1/2 z-20 w-[300px] -translate-x-1/2 -translate-y-1/2">
       <div
         className={`overflow-hidden rounded-card border bg-panel/80 backdrop-blur-md shadow-lg shadow-black/40 transition-colors ${
           dragging ? "border-white/40" : "border-white/10"
@@ -109,13 +122,16 @@ export function MapDropTarget({ onImagesReady }: { onImagesReady: (images: Ready
             </div>
             <div className="text-[13px] font-medium text-fg">Sube fotos para empezar tu búsqueda</div>
             <div className="mt-1 text-[11px] text-muted">Arrastra y suelta imágenes desde tu equipo</div>
-            <label className="mt-4 inline-block cursor-pointer rounded-lg bg-accent px-4 py-2 text-[11.5px] font-medium text-black transition-transform duration-150 hover:scale-[1.03] active:scale-[.92]">
-              Seleccionar archivos…
+            <label className={`mt-4 inline-block rounded-lg bg-accent px-4 py-2 text-[11.5px] font-medium text-black transition-transform duration-150 ${
+              uploading ? "cursor-wait opacity-60" : "cursor-pointer hover:scale-[1.03] active:scale-[.92]"
+            }`}>
+              {uploading ? "Subiendo…" : "Seleccionar archivos…"}
               <input
-                type="file" accept="image/*" multiple className="hidden"
+                type="file" accept="image/*" multiple className="hidden" disabled={uploading}
                 onChange={(e) => e.target.files && uploadFiles(Array.from(e.target.files))}
               />
             </label>
+            {uploadError && <div className="mt-3 text-[10.5px] text-danger-fg">{uploadError}</div>}
           </div>
         )}
 
