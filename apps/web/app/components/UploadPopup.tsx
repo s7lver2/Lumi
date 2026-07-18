@@ -4,19 +4,29 @@ import { useState } from "react";
 import { FloatingCard } from "./FloatingCard";
 import { Menu } from "./Menu";
 import { RETRIEVAL_MODELS } from "@netryx/shared-types";
+import { ModePicker } from "./ModePicker";
+import { CropDialog } from "./CropDialog";
 
 interface Selected { file: File; url: string }
 
 export function UploadPopup({
-  files, onAddMore, onRemove, onSearch, busy,
+  files,
+  onAddMore,
+  onRemove,
+  onSearch,
+  busy,
+  onCropSave,
 }: {
   files: Selected[];
   onAddMore: (files: File[]) => void;
   onRemove: (index: number) => void;
   onSearch: () => void;
   busy: boolean;
+  onCropSave: (index: number, croppedFile: File) => void;
 }) {
   const [model, setModel] = useState(RETRIEVAL_MODELS[0]?.id ?? "lumi-preview");
+  const [cropTarget, setCropTarget] = useState<{ index: number; url: string; name: string } | null>(null);
+
   return (
     <div className="absolute left-1/2 top-6 z-20 w-[460px] -translate-x-1/2">
       <FloatingCard className="p-4">
@@ -29,11 +39,7 @@ export function UploadPopup({
             </div>
           </div>
         </div>
-        <div className="mt-3 flex items-center justify-between rounded-md bg-white/5 px-3 py-2">
-          <span className="text-xs text-muted">Modelo</span>
-          <Menu value={model} onChange={setModel}
-            options={RETRIEVAL_MODELS.map((m) => ({ value: m.id, label: m.displayName, hint: m.status }))} />
-        </div>
+        <ModePicker value={model} onChange={setModel} />
         <div className="mt-3 text-sm text-fg">{files.length} imagen{files.length === 1 ? "" : "es"} seleccionada{files.length === 1 ? "" : "s"}</div>
         <div className="mt-2 space-y-2">
           {files.map((f, i) => (
@@ -41,7 +47,14 @@ export function UploadPopup({
               <img src={f.url} alt="" className="h-12 w-16 rounded object-cover" />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-xs text-fg">{f.file.name}</div>
-                <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted">
+                <button
+                  onClick={() => setCropTarget({ index: i, url: f.url, name: f.file.name })}
+                  className="mt-1.5 flex items-center gap-1 rounded-md border border-white/[.15] px-2 py-0.5 text-[9.5px] text-fg transition-transform hover:scale-[1.04] active:scale-[.93]"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 3v14a2 2 0 0 0 2 2h14M3 6h14a2 2 0 0 1 2 2v14" /></svg>
+                  Recortar
+                </button>
+                <div className="mt-1.5 flex items-center gap-2 text-[11px] text-muted">
                   <span>{Math.round(f.file.size / 1024)}kb {f.file.type.split("/")[1]}</span>
                   <span className="rounded bg-white/5 px-1.5 py-0.5">METADATA</span>
                 </div>
@@ -62,6 +75,18 @@ export function UploadPopup({
           </button>
         </div>
       </FloatingCard>
+
+      {cropTarget && (
+        <CropDialog
+          imageUrl={cropTarget.url}
+          filename={cropTarget.name}
+          onCancel={() => setCropTarget(null)}
+          onSave={(croppedFile) => {
+            onCropSave(cropTarget.index, croppedFile);
+            setCropTarget(null);
+          }}
+        />
+      )}
     </div>
   );
 }
