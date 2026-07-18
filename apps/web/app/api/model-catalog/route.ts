@@ -5,9 +5,15 @@ import { searchRepositoriesByTopic, listReleasesForRepo, downloadReleaseAsset } 
 import { MODEL_CATALOG_METADATA_ASSET_NAME, type ModelCatalogManifest } from "../../../lib/model-catalog/manifest";
 import { MODEL_CATALOG_SHARED_KEY } from "../../../lib/model-catalog/shared-key";
 import { decryptBuffer } from "@netryx/settings-repo";
+import { readUninstallMeta } from "../../../lib/model-catalog/uninstall-state";
 
 export async function GET() {
-  const activeVersion = RETRIEVAL_MODELS[0]?.version ?? null;
+  // Falling back to the static constant when nothing has ever been
+  // installed via the catalog keeps today's out-of-the-box behavior — a
+  // fresh clone still shows its built-in version as "Activa" until the
+  // first real catalog install.
+  const { currentVersion } = await readUninstallMeta();
+  const activeVersion = currentVersion ?? RETRIEVAL_MODELS[0]?.version ?? null;
   const repos = await searchRepositoriesByTopic("lumi-model-catalog");
 
   const bundles = await Promise.all(
