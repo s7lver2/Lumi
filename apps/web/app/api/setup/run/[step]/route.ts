@@ -37,22 +37,6 @@ function venvPip(venvDir: string): string {
   return resolve(venvBin(venvDir), IS_WIN ? "pip.exe" : "pip");
 }
 
-// Model weight caches (several GB) default to living INSIDE the repo clone
-// (<repo>/data/models-cache, already .gitignore'd) instead of the user's
-// ~/.cache — works out of the box on a fresh clone. MODELS_CACHE_DIR
-// (optional, root .env — same pattern as SETTINGS_KEY_PATH /
-// STREET_VIEW_IMAGE_DIR) overrides this with any other path. Only affects
-// the two weight-download steps; venv creation and pip installs don't need it.
-const MODELS_CACHE_DIR = process.env.MODELS_CACHE_DIR || resolve(REPO_ROOT, "data", "models-cache");
-
-function cacheEnvFor(): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    TORCH_HOME: resolve(MODELS_CACHE_DIR, "torch"),
-    HF_HOME: resolve(MODELS_CACHE_DIR, "huggingface"),
-  };
-}
-
 // Runs `<script>` inside the default WSL2 distro via `bash -lc`. MUST be
 // spawned with shell:false: with shell:true, Windows wraps the whole
 // invocation in cmd.exe, and cmd.exe treats the `&&` INSIDE this script
@@ -62,28 +46,6 @@ function cacheEnvFor(): NodeJS.ProcessEnv {
 // literally cmd.exe's own error, meaning the command never reached WSL.
 function wslStep(script: string): { cmd: string; args: string[]; cwd: string; shell: boolean } {
   return { cmd: "wsl.exe", args: ["--", "bash", "-lc", script], cwd: INFER, shell: false };
-}
-
-// Rather than pointing TORCH_HOME/HF_HOME straight at the raw /mnt/<drive>/...
-// path (works, but reads as an ugly Windows-mount path from inside WSL and
-// scatters that path through env vars), this symlinks a fixed, WSL-native
-// path (~/.lumi-models-cache) to the SAME on-disk folder used by the native
-// Windows runtime — one physical copy of the weights shared by both, not a
-// second download inside WSL's own filesystem. `ln -sfn` is idempotent
-// (safe to re-run every install). WSL doesn't inherit Windows process env
-// vars automatically, so this is inlined into the bash script itself.
-//
-// `mkdir -p` the real target dirs FIRST, on the /mnt/<drive> mount, before
-// symlinking to them — confirmed live: when the target didn't exist yet,
-// torch's own `os.makedirs(hub_dir, exist_ok=True)` failed reaching through
-// the symlink with `FileNotFoundError: .../​.lumi-models-cache/torch`
-// (DrvFs, the 9p-backed Windows-mount filesystem WSL uses for /mnt/<drive>,
-// doesn't reliably support creating directories by walking through a
-// symlink whose target doesn't already exist). Pre-creating the real
-// directories on the NTFS mount sidesteps that entirely.
-function wslCacheExport(): string {
-  const target = winPathToWsl(MODELS_CACHE_DIR);
-  return `mkdir -p '${target}/torch' '${target}/huggingface' && ln -sfn '${target}' "$HOME/.lumi-models-cache" && export TORCH_HOME="$HOME/.lumi-models-cache/torch" HF_HOME="$HOME/.lumi-models-cache/huggingface" && `;
 }
 
 // pip's own download/wheel-build cache (~/.cache/pip) lives in the WSL
@@ -110,18 +72,6 @@ const STEPS: Record<string, { cmd: string; args: string[]; cwd: string; shell?: 
     // project — for a ~2.5GB torch install that's real space on whatever
     // drive Windows itself lives on. Keep it beside the venv instead.
     env: { ...process.env, PIP_CACHE_DIR: resolve(INFER, ".pip-cache") },
-  },
-  "weights-retrieval": {
-    cmd: venvPython(resolve(INFER, "venv")),
-    args: ["download_weights.py", "retrieval"],
-    cwd: INFER,
-    env: cacheEnvFor(),
-  },
-  "weights-verification": {
-    cmd: venvPython(resolve(INFER, "venv")),
-    args: ["download_weights.py", "verification"],
-    cwd: INFER,
-    env: cacheEnvFor(),
   },
 };
 
@@ -159,8 +109,6 @@ if (IS_WIN) {
   );
   STEPS["inference-venv-wsl"] = wslStep(`cd '${INFER_WSL}' && python3 -m venv venv-wsl`);
   STEPS["inference-deps-wsl"] = wslStep(`${wslPipCacheExport()}cd '${INFER_WSL}' && venv-wsl/bin/pip install -r requirements.txt`);
-  STEPS["weights-retrieval-wsl"] = wslStep(`${wslCacheExport()}cd '${INFER_WSL}' && venv-wsl/bin/python download_weights.py retrieval`);
-  STEPS["weights-verification-wsl"] = wslStep(`${wslCacheExport()}cd '${INFER_WSL}' && venv-wsl/bin/python download_weights.py verification`);
 }
 
 // "verify-services" is not a fixed-argv one-shot command like everything in
