@@ -317,6 +317,21 @@ def _copytree_with_retry(src: Path, dst: Path, ignore_dirs: frozenset = frozense
         if entry.name in ignore_dirs:
             continue
         target = dst / entry.name
+        if entry.is_symlink() and not entry.exists():
+            # Dangling symlink — is_dir() below returns False for these (it
+            # can't stat a target that isn't there), so without this check
+            # they'd fall into the file-copy branch and crash with
+            # FileNotFoundError trying to open a target that doesn't exist.
+            # Confirmed live: `.next/standalone/node_modules/pg` pointing at
+            # a pnpm store hash that no longer existed after `pnpm install
+            # --force` re-linked the store mid-release. Harmless to skip —
+            # _ensure_complete_dependency_closure() (called right after this
+            # function returns, in overlay_built_web) re-copies the REAL
+            # content for every actual dependency of apps/web regardless of
+            # what this pass captured, so a stale/broken symlink here just
+            # means nothing to skip re-adding, not a missing dependency.
+            print(f"  (omitiendo symlink roto: {entry})")
+            continue
         if entry.is_dir():
             # is_dir() follows symlinks, so directory-symlinks (e.g. next's
             # own node_modules/next -> pnpm store) are dereferenced and their
