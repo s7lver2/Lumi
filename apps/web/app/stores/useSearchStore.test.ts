@@ -39,3 +39,22 @@ describe("useSearchStore", () => {
     expect(useSearchStore.getState().candidatesByRegion.r1[0].status).toBe("confirmed");
   });
 });
+
+describe("useSearchStore batchProgress", () => {
+  beforeEach(() => useSearchStore.getState().reset());
+
+  it("starts as null", () => {
+    expect(useSearchStore.getState().batchProgress).toBeNull();
+  });
+
+  it("setBatchProgress updates the field", () => {
+    useSearchStore.getState().setBatchProgress({ done: 2, total: 5, failed: 0 });
+    expect(useSearchStore.getState().batchProgress).toEqual({ done: 2, total: 5, failed: 0 });
+  });
+
+  it("reset() clears batchProgress back to null", () => {
+    useSearchStore.getState().setBatchProgress({ done: 1, total: 1, failed: 0 });
+    useSearchStore.getState().reset();
+    expect(useSearchStore.getState().batchProgress).toBeNull();
+  });
+});

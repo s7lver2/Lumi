@@ -20,12 +20,14 @@ interface SearchState {
   refineStatus: RefineStatus;
   refineProgress: RefineProgress | null;
   error: string | null;
+  batchProgress: { done: number; total: number; failed: number } | null;
   setSearching: (imageName: string) => void;
   setSearchResults: (res: SearchResponse, imageName: string) => void;
   selectRegion: (regionId: string) => void;
   setRefineResults: (regionId: string, candidates: SearchCandidate[]) => void;
   setRefining: () => void;
   setRefineProgress: (progress: RefineProgress) => void;
+  setBatchProgress: (progress: { done: number; total: number; failed: number } | null) => void;
   setError: (message: string) => void;
   reset: () => void;
 }
@@ -39,6 +41,7 @@ const INITIAL = {
   refineStatus: "idle" as RefineStatus,
   refineProgress: null as RefineProgress | null,
   error: null as string | null,
+  batchProgress: null as { done: number; total: number; failed: number } | null,
 };
 
 export const useSearchStore = create<SearchState>((set) => ({
@@ -60,6 +63,8 @@ export const useSearchStore = create<SearchState>((set) => ({
   selectRegion: (selectedRegionId) => set({ selectedRegionId }),
   setRefining: () => set({ refineStatus: "refining", refineProgress: null }),
   setRefineProgress: (refineProgress) => set({ refineProgress }),
+  setBatchProgress: (progress: { done: number; total: number; failed: number } | null) =>
+    set({ batchProgress: progress }),
   setRefineResults: (regionId, candidates) =>
     set((s) => ({
       candidatesByRegion: { ...s.candidatesByRegion, [regionId]: candidates },
