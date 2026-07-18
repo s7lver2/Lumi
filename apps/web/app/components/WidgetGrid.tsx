@@ -31,7 +31,10 @@ export function WidgetGrid({ widgets }: { widgets: Widget[] }) {
         {widgets.map((widget) => {
           const isExpanded = expanded.has(widget.id);
           return (
-            <div key={widget.id} style={isExpanded ? { gridColumn: `span ${widget.colSpan}` } : undefined}>
+            <div
+              key={widget.id}
+              style={anyExpanded ? { gridColumn: isExpanded ? `span ${widget.colSpan}` : "1 / -1" } : undefined}
+            >
               <button
                 onClick={() => toggle(widget.id)}
                 className="flex w-full items-center gap-2 border-b border-white/[.08] px-3.5 py-2.5 text-left"

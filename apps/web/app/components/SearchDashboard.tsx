@@ -282,13 +282,7 @@ export function SearchDashboard() {
         />
       )}
 
-      {searching && (
-        <div className="absolute left-1/2 top-1/2 z-40 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-card bg-panel/80 px-5 py-3 text-sm text-fg backdrop-blur-md">
-          <span className="inline-block h-3 w-3 flex-none animate-spin rounded-full border-2 border-white/25 border-t-fg" />
-          {batchProgress ? `Analizando ${batchProgress.done}/${batchProgress.total}…` : "Localizando…"}
-        </div>
-      )}
-      <ModelLoadNotification active={searching} thumbnailUrl={queryImageUrl} />
+      <ModelLoadNotification active={searching || refining} thumbnailUrl={queryImageUrl} />
 
       {regions.length > 0 && (
         <div className="absolute right-0 top-0 h-full w-[520px]">
