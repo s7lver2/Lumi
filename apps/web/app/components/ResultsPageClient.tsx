@@ -63,7 +63,7 @@ export function ResultsPageClient({ initialResult, searchId }: { initialResult: 
       <MapCanvas onReady={(m) => setMap(m)} />
       {map && <ConfidenceCircleLayer map={map} />}
       {regions.length > 0 && (
-        <div className="absolute right-0 top-0 h-full">
+        <div className="absolute right-0 top-0 h-full w-[520px]">
           <ResultsPanel
             queryImageUrl={`/api/images/query/${searchId}`}
             queryImageId={null}

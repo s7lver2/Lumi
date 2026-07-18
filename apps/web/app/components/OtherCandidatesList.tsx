@@ -52,7 +52,7 @@ export function OtherCandidatesList({
                 </span>
               </div>
               <Badge tone={c.status === "confirmed" ? "accent" : "muted"}>
-                {c.status === "confirmed" ? "confirmado" : "sin revisar"}
+                {c.status === "confirmed" ? "confirmado" : "sin verificar"}
               </Badge>
             </div>
           );

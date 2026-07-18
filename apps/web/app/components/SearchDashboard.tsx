@@ -291,7 +291,7 @@ export function SearchDashboard() {
       <ModelLoadNotification active={searching} thumbnailUrl={queryImageUrl} />
 
       {regions.length > 0 && (
-        <div className="absolute right-0 top-0 h-full">
+        <div className="absolute right-0 top-0 h-full w-[520px]">
           <ResultsPanel
             queryImageUrl={queryImageUrl}
             queryImageId={queryImageId}
