@@ -63,23 +63,43 @@ export function SearchDashboard() {
     setMode("search");
   }, [setMode]);
 
-  function pollBatchProgress(batchId: string) {
+  function pollBatchProgress(batchId: string, queryImageName: string) {
     const source = new EventSource(`/api/search/batch/${batchId}/progress`);
     source.onmessage = (event) => {
-      const data = JSON.parse(event.data) as { status: string; done: number; failed: number; total: number };
+      const data = JSON.parse(event.data) as {
+        status: string;
+        done: number;
+        failed: number;
+        total: number;
+        result?: import("@netryx/shared-types").SearchResponse | null;
+      };
       setBatchProgress({ done: data.done, total: data.total, failed: data.failed });
       if (data.status === "done" || data.status === "failed") {
         source.close();
         setBatchProgress(null);
+        if (data.status === "done" && data.result) {
+          setSearchResults(data.result, queryImageName);
+        } else {
+          setError("No se pudo completar la búsqueda para ninguna de las imágenes");
+        }
       }
+    };
+    source.onerror = () => {
+      source.close();
+      setBatchProgress(null);
+      setError("Se perdió la conexión con el progreso de la búsqueda");
     };
   }
 
   async function handleTriggerSearch() {
     if (selected.length === 0) return;
 
+    const queryImageName = selected[0].displayName;
+    const queryImageUrlSnapshot = selected[0].url;
+
     try {
-      setSearching(selected[0].file.name);
+      setSearching(queryImageName);
+      setQueryImageUrl(queryImageUrlSnapshot);
       const imageIds: string[] = [];
       
       for (const s of selected) {
@@ -103,9 +123,11 @@ export function SearchDashboard() {
       });
       if (!ok || !data) throw new Error("No se pudo iniciar la búsqueda por lotes");
 
-      pollBatchProgress(data.batchId);
-      
-      selected.forEach((s) => URL.revokeObjectURL(s.url));
+      pollBatchProgress(data.batchId, queryImageName);
+
+      // Keep selected[0].url alive — it's now shown as the query thumbnail
+      // (queryImageUrl) for the duration of this search.
+      selected.slice(1).forEach((s) => URL.revokeObjectURL(s.url));
       setSelected([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al iniciar la búsqueda por lotes");

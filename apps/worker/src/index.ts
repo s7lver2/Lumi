@@ -112,6 +112,7 @@ async function main() {
         form.append("image", new Blob([imageBytes as unknown as BlobPart]), "batch-image");
         const res = await fetch(`${webBaseUrl}/api/models/${modelId}/estimate`, { method: "POST", body: form });
         if (!res.ok) throw new Error(`estimate failed with status ${res.status}`);
+        return res.json();
       },
       updateProgress: (batchId, update) => updateSearchBatchProgress(pool, batchId, update),
     });

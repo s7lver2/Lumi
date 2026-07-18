@@ -7,6 +7,7 @@ interface SearchBatchProgressRow {
   total: number;
   done: number;
   failed: number;
+  result_json: unknown | null;
 }
 
 function isTerminal(status: string): boolean {
@@ -22,7 +23,7 @@ export async function GET(_request: Request, { params }: { params: { batchId: st
 
       while (true) {
         const { rows } = await pool.query<SearchBatchProgressRow>(
-          "SELECT status, total, done, failed FROM search_batches WHERE id = $1",
+          "SELECT status, total, done, failed, result_json FROM search_batches WHERE id = $1",
           [params.batchId]
         );
 
@@ -32,7 +33,9 @@ export async function GET(_request: Request, { params }: { params: { batchId: st
           return;
         }
 
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(rows[0])}\n\n`));
+        const { result_json, ...rest } = rows[0];
+        const payload = isTerminal(rows[0].status) ? { ...rest, result: result_json } : rest;
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
 
         if (isTerminal(rows[0].status)) {
           controller.close();
