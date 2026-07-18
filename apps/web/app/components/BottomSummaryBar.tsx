@@ -41,8 +41,9 @@ export function BottomSummaryBar() {
           )}
         </div>
         <div>
-          {/* radiusM is the fixed clustering-bucket radius, not a computed
-              confidence interval — see TopResultCard.tsx's comment. */}
+          {/* radiusM is the fixed clustering-bucket radius (DEFAULT_REGION_RADIUS_M),
+              the same value for every region regardless of how tightly its
+              candidates actually agree — NOT a computed confidence interval. */}
           <div className="text-[10px] uppercase tracking-wider text-subtle">Radio de búsqueda</div>
           <div className="mt-0.5 text-sm text-fg">~{(region.radiusM / 1000).toFixed(2)} km</div>
         </div>

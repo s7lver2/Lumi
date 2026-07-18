@@ -10,7 +10,7 @@ import { flyToRegion } from "../lib/map-camera";
 // RoMa-based verification has already geometrically pinned the location down — showing
 // the same fixed 150m clustering-bucket circle at that point would be the
 // same false-precision problem already fixed once for the "Radio" label
-// (see TopResultCard.tsx/BottomSummaryBar.tsx). Collapse to a small, fixed
+// (see BottomSummaryBar.tsx). Collapse to a small, fixed
 // radius "pin" instead, centered on the verified candidate's own lat/lng
 // (not the region's original, fuzzier centroid).
 const REFINED_RADIUS_KM = 0.003; // ~3m — reads as a precise point, not a search area
