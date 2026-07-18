@@ -7,7 +7,7 @@ import { useAreaProgress } from "../lib/useAreaProgress";
 import { ProgressMeter } from "./ProgressMeter";
 import { Badge } from "./Badge";
 import { fetchJson } from "../lib/fetch-json";
-import { ModelLoadingNotice } from "./ModelLoadingNotice";
+import { ModelLoadNotification } from "./ModelLoadNotification";
 
 const TONE = {
   failed: "danger",
@@ -89,7 +89,7 @@ export function JobProgressBar() {
           )}
         </div>
       </div>
-      <ModelLoadingNotice active={awaitingFirstProgress} />
+      <ModelLoadNotification active={awaitingFirstProgress} />
       <ProgressMeter
         label="Puntos de captura"
         value={p?.pointsCaptured ?? 0}

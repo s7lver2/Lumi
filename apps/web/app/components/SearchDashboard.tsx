@@ -14,7 +14,7 @@ import { useMapStore } from "../stores/useMapStore";
 import { fetchJson } from "../lib/fetch-json";
 import { flyToRegion, flyToPoint } from "../lib/map-camera";
 import { MapArrivalPulse } from "./MapArrivalPulse";
-import { ModelLoadingNotice } from "./ModelLoadingNotice";
+import { ModelLoadNotification } from "./ModelLoadNotification";
 import { RETRIEVAL_MODELS } from "@netryx/shared-types";
 
 interface SelectedFile {
@@ -259,7 +259,7 @@ export function SearchDashboard() {
       {searching && (
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-card bg-panel/80 px-5 py-3 text-sm text-fg backdrop-blur-md z-40">
           Localizando…
-          <ModelLoadingNotice active={searching} />
+          <ModelLoadNotification active={searching} thumbnailUrl={queryImageUrl} />
         </div>
       )}
 

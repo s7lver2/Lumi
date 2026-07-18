@@ -4,7 +4,7 @@
 import { useSearchStore } from "../stores/useSearchStore";
 import { RingGauge } from "./RingGauge";
 import { Badge } from "./Badge";
-import { ModelLoadingNotice } from "./ModelLoadingNotice";
+import { ModelLoadNotification } from "./ModelLoadNotification";
 import { formatCoords } from "../lib/coords";
 import { useReverseGeocode } from "../lib/useReverseGeocode";
 import { streetViewMapsUrl } from "../lib/street-view-maps-url";
@@ -16,11 +16,13 @@ function ResultRow({
   onRefine,
   onSelectRegion,
   refining,
+  queryImageUrl,
 }: {
   c: SearchCandidate;
   onRefine: (regionId: string) => void;
   onSelectRegion?: (regionId: string) => void;
   refining: boolean;
+  queryImageUrl: string | null;
 }) {
   const place = useReverseGeocode(c.lat, c.lng);
   const score = c.verificationScore ?? c.similarityScore;
@@ -86,7 +88,7 @@ function ResultRow({
           {refining && selected ? "Refinando…" : selected ? "Refinar aquí" : "Precisión de calle disponible"}
         </button>
       )}
-      <ModelLoadingNotice active={refining && Boolean(selected)} />
+      <ModelLoadNotification active={refining && Boolean(selected)} thumbnailUrl={queryImageUrl} />
     </div>
   );
 }
@@ -128,6 +130,7 @@ export function ResultsPanel({
             onRefine={onRefine}
             onSelectRegion={onSelectRegion}
             refining={refining}
+            queryImageUrl={queryImageUrl}
           />
         ))}
       </div>

@@ -3,7 +3,7 @@
 
 import { FloatingCard } from "./FloatingCard";
 import { RingGauge } from "./RingGauge";
-import { ModelLoadingNotice } from "./ModelLoadingNotice";
+import { ModelLoadNotification } from "./ModelLoadNotification";
 import { useSearchStore } from "../stores/useSearchStore";
 import { useReverseGeocode } from "../lib/useReverseGeocode";
 
@@ -55,7 +55,7 @@ export function TopResultCard({
             {refining ? "Refinando…" : `Refinar en ${place ?? "esta región"}`}
           </button>
         )}
-        <ModelLoadingNotice active={refining} />
+        <ModelLoadNotification active={refining} />
       </FloatingCard>
     </div>
   );
