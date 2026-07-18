@@ -1,20 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { recommendedBundles, USE_CASES } from "./model-recommendations";
+import { USE_CASES } from "./model-recommendations";
 
-describe("recommendedBundles", () => {
-  it("recommends lumi-preview for each individual use case", () => {
+describe("USE_CASES", () => {
+  it("has a non-empty label and id for every use case", () => {
     for (const useCase of USE_CASES) {
-      const bundles = recommendedBundles([useCase.id]);
-      expect(bundles.map((b) => b.id)).toEqual(["lumi-preview"]);
+      expect(useCase.id.length).toBeGreaterThan(0);
+      expect(useCase.label.length).toBeGreaterThan(0);
     }
-  });
-
-  it("dedupes when multiple use cases map to the same bundle", () => {
-    const bundles = recommendedBundles(["image-recognition", "geolocation"]);
-    expect(bundles.map((b) => b.id)).toEqual(["lumi-preview"]);
-  });
-
-  it("returns an empty array for an empty selection", () => {
-    expect(recommendedBundles([])).toEqual([]);
   });
 });

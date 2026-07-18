@@ -6,7 +6,7 @@ import { PlanetBackground } from "../components/PlanetBackground";
 import { WIZARD_STEPS, nextStep, prevStep, type StepId } from "./wizard-steps";
 import { InstallStep } from "./steps/InstallStep";
 import { UsageStep } from "./steps/UsageStep";
-import { ModelsStep } from "./steps/ModelsStep";
+import { CatalogModelsStep } from "./steps/CatalogModelsStep";
 import { DatabaseStep } from "./steps/DatabaseStep";
 import { CredentialsStep } from "./steps/CredentialsStep";
 import { ConfirmStep } from "./steps/ConfirmStep";
@@ -50,7 +50,7 @@ export function SetupWizard() {
       />
     ),
     usage: <UsageStep selected={useCases} onSelectedChange={setUseCases} onComplete={() => mark("usage")} />,
-    models: <ModelsStep useCases={useCases} runtime={runtime} onComplete={() => mark("models")} />,
+    models: <CatalogModelsStep onComplete={() => mark("models")} />,
     database: <DatabaseStep onComplete={() => mark("database")} />,
     credentials: <CredentialsStep values={collected} onChange={setField} onComplete={() => mark("credentials")} />,
     confirm: <ConfirmStep values={collected} />,
