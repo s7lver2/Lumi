@@ -56,7 +56,12 @@ describe("POST /api/model-catalog/publish", () => {
   it("publishes when the benchmark passes", async () => {
     const { getSettingsRepo } = await import("../../../../lib/settings-repo");
     (getSettingsRepo as any).mockReturnValue({
-      getSetting: vi.fn((key: string) => Promise.resolve(key === "GITHUB_TOKEN" ? "tok" : "inigo/lumi-model-catalog")),
+      getSetting: vi.fn((key: string) => {
+        if (key === "GITHUB_TOKEN") return Promise.resolve("tok");
+        if (key === "MODEL_CATALOG_REPO") return Promise.resolve("inigo/lumi-model-catalog");
+        if (key === "VERIFICATION_MODEL") return Promise.resolve("roma-verify");
+        return Promise.resolve(null);
+      }),
     });
     const { buildReferenceSet, runBenchmark, passesBenchmarkThreshold } = await import("../../../../lib/model-catalog/benchmark");
     (buildReferenceSet as any).mockResolvedValue([{ indexedImageId: "i1", imagePath: "/a.jpg", trueLat: 0, trueLng: 0 }]);
@@ -83,5 +88,36 @@ describe("POST /api/model-catalog/publish", () => {
       ]),
       "tok"
     );
+  });
+
+  it("includes the currently-configured verification model id in the published manifest", async () => {
+    const { getSettingsRepo } = await import("../../../../lib/settings-repo");
+    (getSettingsRepo as any).mockReturnValue({
+      getSetting: vi.fn((key: string) => {
+        if (key === "GITHUB_TOKEN") return Promise.resolve("tok");
+        if (key === "MODEL_CATALOG_REPO") return Promise.resolve("inigo/lumi-model-catalog");
+        if (key === "VERIFICATION_MODEL") return Promise.resolve("roma-verify");
+        return Promise.resolve(null);
+      }),
+    });
+    const { buildReferenceSet, runBenchmark, passesBenchmarkThreshold } = await import("../../../../lib/model-catalog/benchmark");
+    (buildReferenceSet as any).mockResolvedValue([{ indexedImageId: "i1", imagePath: "/a.jpg", trueLat: 0, trueLng: 0 }]);
+    (runBenchmark as any).mockResolvedValue({ accuracyWithin50m: 0.9, avgDistanceM: 5, sampleCount: 1, ranAt: "x" });
+    (passesBenchmarkThreshold as any).mockReturnValue(true);
+
+    const { buildInferenceCodeZip } = await import("../../../../lib/model-catalog/code-bundle");
+    (buildInferenceCodeZip as any).mockResolvedValue(new Uint8Array([1, 2, 3]));
+
+    const { upsertRelease } = await import("../../../../lib/model-catalog/github");
+    const { decryptBuffer } = await import("@netryx/settings-repo");
+    const { MODEL_CATALOG_SHARED_KEY } = await import("../../../../lib/model-catalog/shared-key");
+
+    const { POST } = await import("./route");
+    await POST(makeRequest({ description: "Better re-ranking" }));
+
+    const [, , , , assets] = (upsertRelease as any).mock.calls[0];
+    const metadataAsset = assets.find((a: any) => a.name === "metadata.json.enc");
+    const manifest = JSON.parse(decryptBuffer(metadataAsset.data, MODEL_CATALOG_SHARED_KEY).toString("utf8"));
+    expect(manifest.verificationModelId).toBe("roma-verify");
   });
 });

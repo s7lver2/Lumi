@@ -11,6 +11,7 @@ import { validateModelCatalogManifest, BUNDLE_CODE_ASSET_NAME, MODEL_CATALOG_MET
 import { MODEL_CATALOG_SHARED_KEY } from "../../../../lib/model-catalog/shared-key";
 import { backupInferenceCode, restoreInferenceCode, persistBackup } from "../../../../lib/model-catalog/backup";
 import { PREVIOUS_CODE_DIR, readUninstallMeta, writeUninstallMeta } from "../../../../lib/model-catalog/uninstall-state";
+import { getSettingsRepo } from "../../../../lib/settings-repo";
 
 interface InstallBody {
   owner?: string;
@@ -146,6 +147,12 @@ export async function POST(request: Request) {
     const priorMeta = await readUninstallMeta();
     await persistBackup(backupDir, PREVIOUS_CODE_DIR);
     await writeUninstallMeta({ currentVersion: manifest.version, previousVersion: priorMeta.currentVersion });
+
+    const settingsRepo = getSettingsRepo();
+    await settingsRepo.setSetting("RETRIEVAL_MODEL", manifest.bundleId, false);
+    if (manifest.verificationModelId) {
+      await settingsRepo.setSetting("VERIFICATION_MODEL", manifest.verificationModelId, false);
+    }
 
     return NextResponse.json({ ok: true, version: manifest.version });
   } catch (err) {

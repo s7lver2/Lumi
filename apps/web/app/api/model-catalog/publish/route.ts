@@ -44,6 +44,7 @@ export async function POST(request: Request) {
   const activeRetrievalModel = RETRIEVAL_MODELS[0];
   const bundleId = activeRetrievalModel?.id ?? "lumi-preview";
   const version = activeRetrievalModel?.version ?? "1.0";
+  const liveVerificationModel = await repo.getSetting("VERIFICATION_MODEL");
 
   // process.cwd() is apps/web (the Next.js app root) — two levels up reaches
   // the repo root, where services/inference actually lives.
@@ -59,6 +60,7 @@ export async function POST(request: Request) {
     ],
     benchmark,
     description: body.description ?? "",
+    verificationModelId: liveVerificationModel || undefined,
   };
 
   const [owner, repoName] = catalogRepo.split("/");

@@ -10,6 +10,12 @@ process.env.MODEL_CATALOG_READY_POLL_INTERVAL_MS = "5";
 
 vi.mock("../../../../lib/model-catalog/github", () => ({ listReleasesForRepo: vi.fn(), downloadReleaseAsset: vi.fn() }));
 vi.mock("../../../../lib/model-catalog/backup", () => ({ backupInferenceCode: vi.fn(), restoreInferenceCode: vi.fn(), persistBackup: vi.fn() }));
+vi.mock("../../../../lib/model-catalog/uninstall-state", () => ({
+  PREVIOUS_CODE_DIR: "/fake/previous",
+  readUninstallMeta: vi.fn().mockResolvedValue({ currentVersion: null, previousVersion: null }),
+  writeUninstallMeta: vi.fn(),
+}));
+vi.mock("../../../../lib/settings-repo", () => ({ getSettingsRepo: vi.fn(() => ({ setSetting: vi.fn() })) }));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
   return {
@@ -64,6 +70,7 @@ describe("POST /api/model-catalog/install", () => {
       bundleId: "lumi-preview", version: "1.1",
       backbones: [], description: "",
       benchmark: { accuracyWithin50m: 0.9, avgDistanceM: 5, sampleCount: 20, ranAt: "x" },
+      verificationModelId: "roma-verify",
     };
     const zip = new JSZip();
     zip.file("main.py", "print('v1.1')");
@@ -112,6 +119,34 @@ describe("POST /api/model-catalog/install", () => {
     // backup dir was a real bug this test guards against.
     expect(fsPromises.rm).toHaveBeenCalledWith("/tmp/staging", expect.anything());
     expect(fsPromises.rm).toHaveBeenCalledWith("/tmp/backup-1", expect.anything());
+  });
+
+  it("writes RETRIEVAL_MODEL and VERIFICATION_MODEL settings from the manifest on success", async () => {
+    await mockRelease();
+    const { backupInferenceCode } = await import("../../../../lib/model-catalog/backup");
+    (backupInferenceCode as any).mockResolvedValue("/tmp/backup-1");
+
+    const fsPromises = await import("node:fs/promises");
+    (fsPromises.readdir as any).mockResolvedValue([{ name: "main.py", isDirectory: () => false }]);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.includes("restart-inference")) return { ok: true } as Response;
+        if (url.includes("/docs")) return { ok: true } as Response;
+        throw new Error(`unexpected fetch: ${url}`);
+      })
+    );
+
+    const setSetting = vi.fn();
+    const { getSettingsRepo } = await import("../../../../lib/settings-repo");
+    (getSettingsRepo as any).mockReturnValue({ setSetting });
+
+    const { POST } = await import("./route");
+    await POST(makeRequest({ owner: "inigo", repo: "lumi-model-catalog", tag: "lumi-preview-v1.1" }));
+
+    expect(setSetting).toHaveBeenCalledWith("RETRIEVAL_MODEL", "lumi-preview", false);
+    expect(setSetting).toHaveBeenCalledWith("VERIFICATION_MODEL", "roma-verify", false);
   });
 
   it("restores the backup, restarts again, and reports the outcome when the new version never becomes ready", async () => {
