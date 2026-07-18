@@ -3,12 +3,14 @@ import PgBoss from "pg-boss";
 import {
   INDEX_AREA_JOB_NAME,
   EMBED_PENDING_IMAGES_JOB_NAME,
+  ANALYZE_IMAGE_BATCH_JOB_NAME,
   type IndexAreaJobPayload,
   type EmbedPendingImagesJobPayload,
+  type AnalyzeImageBatchJobPayload,
 } from "@netryx/shared-types";
 
-export { INDEX_AREA_JOB_NAME, EMBED_PENDING_IMAGES_JOB_NAME };
-export type { IndexAreaJobPayload, EmbedPendingImagesJobPayload };
+export { INDEX_AREA_JOB_NAME, EMBED_PENDING_IMAGES_JOB_NAME, ANALYZE_IMAGE_BATCH_JOB_NAME };
+export type { IndexAreaJobPayload, EmbedPendingImagesJobPayload, AnalyzeImageBatchJobPayload };
 
 let boss: PgBoss | undefined;
 

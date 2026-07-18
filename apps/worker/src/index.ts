@@ -3,6 +3,9 @@ import { config } from "dotenv";
 import { resolve } from "node:path";
 import { saveCaptureImage } from "./image-store";
 import { getMonthlySpendUsd, recordStreetViewUsage } from "@netryx/api-usage";
+import type { AnalyzeImageBatchJobPayload } from "@netryx/shared-types";
+import { runAnalyzeImageBatchJob } from "./jobs/analyze-image-batch";
+import { updateSearchBatchProgress } from "./search-batch-progress";
 
 // This worker has its own package cwd (apps/worker) and, unlike apps/web,
 // nothing auto-loads env files for a plain tsx/node process. apps/web and
@@ -13,7 +16,7 @@ import { getMonthlySpendUsd, recordStreetViewUsage } from "@netryx/api-usage";
 config({ path: resolve(__dirname, "../../../.env") });
 
 import type { IndexAreaJobPayload, EmbedPendingImagesJobPayload } from "@netryx/shared-types";
-import { getBoss, INDEX_AREA_JOB_NAME, EMBED_PENDING_IMAGES_JOB_NAME } from "./queue";
+import { getBoss, INDEX_AREA_JOB_NAME, EMBED_PENDING_IMAGES_JOB_NAME, ANALYZE_IMAGE_BATCH_JOB_NAME } from "./queue";
 import { getPool } from "./db";
 import { startHeartbeatLoop } from "./heartbeat";
 import { getSettingsRepo } from "./settings";
@@ -40,6 +43,17 @@ function isIndexAreaJobPayload(data: unknown): data is IndexAreaJobPayload {
     data !== null &&
     "areaId" in data &&
     typeof (data as { areaId: unknown }).areaId === "string"
+  );
+}
+
+function isAnalyzeImageBatchJobPayload(data: unknown): data is AnalyzeImageBatchJobPayload {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "batchId" in data &&
+    "imageIds" in data &&
+    "modelId" in data &&
+    Array.isArray((data as { imageIds: unknown }).imageIds)
   );
 }
 
@@ -80,6 +94,26 @@ async function main() {
       getMonthlySpendUsd: () => getMonthlySpendUsd(pool),
       recordStreetViewUsage: (requests, price) => recordStreetViewUsage(pool, requests, price),
       isCancelled: (areaId) => isAreaCancelled(pool, areaId),
+    });
+  });
+  await boss.work(ANALYZE_IMAGE_BATCH_JOB_NAME, async (job) => {
+    if (!isAnalyzeImageBatchJobPayload(job.data)) {
+      throw new Error(`Malformed ${ANALYZE_IMAGE_BATCH_JOB_NAME} payload: ${JSON.stringify(job.data)}`);
+    }
+    const webBaseUrl = process.env.WEB_APP_URL ?? "http://localhost:3000";
+    await runAnalyzeImageBatchJob(job.data, {
+      getImageBytes: async (imageId) => {
+        const res = await fetch(`${webBaseUrl}/api/library/${imageId}/bytes`);
+        if (!res.ok) return null;
+        return Buffer.from(await res.arrayBuffer());
+      },
+      analyzeOne: async (imageBytes, modelId) => {
+        const form = new FormData();
+        form.append("image", new Blob([imageBytes as unknown as BlobPart]), "batch-image");
+        const res = await fetch(`${webBaseUrl}/api/models/${modelId}/estimate`, { method: "POST", body: form });
+        if (!res.ok) throw new Error(`estimate failed with status ${res.status}`);
+      },
+      updateProgress: (batchId, update) => updateSearchBatchProgress(pool, batchId, update),
     });
   });
   await boss.work(EMBED_PENDING_IMAGES_JOB_NAME, async (job) => {
