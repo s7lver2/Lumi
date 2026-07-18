@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { open } from "node:fs/promises";
 import { resolve } from "node:path";
 
+// Uses request.url, which usually forces dynamic rendering on its own — but
+// see apps/web/app/api/health/route.ts's sibling route in this same family
+// getting incorrectly prerendered despite reading live DB state, so this is
+// made explicit rather than relying on Next's implicit detection.
+export const dynamic = "force-dynamic";
+
 const REPO_ROOT = resolve(process.cwd(), "..", "..");
 const ALLOWED_SERVICES = new Set(["worker", "inference"]);
 const MAX_LINES = 50;
