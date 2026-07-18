@@ -29,11 +29,8 @@ export const RETRIEVAL_MODELS: RetrievalModelDefinition[] = [
   },
 ];
 
-export const VERIFICATION_MODELS: VerificationModelDefinition[] = [
-  {
-    id: "laila",
-    displayName: "Laila",
-    baseModel: "RoMa (frozen)",
-    status: "stable",
-  },
-];
+// Ships empty on purpose — verification models are installed from the
+// model-catalog marketplace at runtime (apps/web/app/api/model-catalog),
+// never hardcoded here. A fresh clone has retrieval only, until an
+// operator installs a release that provides verification.
+export const VERIFICATION_MODELS: VerificationModelDefinition[] = [];

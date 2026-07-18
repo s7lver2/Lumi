@@ -13,7 +13,7 @@ export interface ModelBundleDefinition {
   id: string;
   displayName: string;
   retrievalModelId: string;
-  verificationModelId: string;
+  verificationModelId?: string;
   version: string;
   status: "preview" | "stable" | "deprecated";
 }
@@ -26,23 +26,15 @@ export const MODEL_BUNDLES: ModelBundleDefinition[] = [
     id: "lumi-preview",
     displayName: "Lumi Preview",
     retrievalModelId: "lumi-preview",
-    verificationModelId: "laila",
     version: "1.0",
     status: "preview",
   },
 ];
 
-/** Which bundle (if any) the current pair of active settings corresponds
- * to — used by the Settings UI to render the right selection, or a
- * warning if the two settings were changed independently (outside this
- * UI) into a combination no bundle describes. */
-export function resolveModelBundle(
-  retrievalModelId: string,
-  verificationModelId: string
-): ModelBundleDefinition | null {
-  return (
-    MODEL_BUNDLES.find(
-      (b) => b.retrievalModelId === retrievalModelId && b.verificationModelId === verificationModelId
-    ) ?? null
-  );
+/** Which bundle (if any) the current retrieval setting corresponds to —
+ * used by the Settings UI to render the right selection. Verification is
+ * no longer part of this pairing (it's independently catalog-installed),
+ * so this only matches on retrievalModelId now. */
+export function resolveModelBundle(retrievalModelId: string): ModelBundleDefinition | null {
+  return MODEL_BUNDLES.find((b) => b.retrievalModelId === retrievalModelId) ?? null;
 }

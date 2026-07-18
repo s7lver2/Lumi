@@ -34,18 +34,21 @@ describe("SETTINGS_SCHEMA", () => {
     expect(limit.type).toBe("number");
   });
 
-  it("exposes RETRIEVAL_MODEL/VERIFICATION_MODEL as enum settings with options derived from the registry (spec §15.3)", () => {
+  it("exposes RETRIEVAL_MODEL as an enum setting with options derived from the registry (spec §15.3)", () => {
     const retrieval = SETTINGS_SCHEMA.find((s) => s.key === "RETRIEVAL_MODEL")!;
-    const verification = SETTINGS_SCHEMA.find((s) => s.key === "VERIFICATION_MODEL")!;
 
     expect(retrieval.type).toBe("enum");
     expect(retrieval.isSecret).toBe(false);
     expect(retrieval.options).toEqual(RETRIEVAL_MODELS.map((m) => m.id));
     expect(retrieval.defaultValue).toBe("lumi-preview");
+  });
 
-    expect(verification.type).toBe("enum");
-    expect(verification.options).toEqual(VERIFICATION_MODELS.map((m) => m.id));
-    expect(verification.defaultValue).toBe("laila");
+  it("exposes VERIFICATION_MODEL as an optional free string — valid ids are catalog-installed at runtime, not a fixed enum", () => {
+    const verification = SETTINGS_SCHEMA.find((s) => s.key === "VERIFICATION_MODEL")!;
+
+    expect(verification.type).toBe("string");
+    expect(verification.required).toBe(false);
+    expect(verification.defaultValue).toBe("");
   });
 });
 
@@ -92,6 +95,14 @@ describe("validateSettingValue", () => {
     expect(() => validateSettingValue("RETRIEVAL_MODEL", "not-a-model")).toThrow(
       /one of/i
     );
+  });
+
+  it("accepts an empty VERIFICATION_MODEL (no verification model installed yet)", () => {
+    expect(() => validateSettingValue("VERIFICATION_MODEL", "")).not.toThrow();
+  });
+
+  it("accepts any non-empty VERIFICATION_MODEL id (catalog-defined, not a fixed enum)", () => {
+    expect(() => validateSettingValue("VERIFICATION_MODEL", "whatever-a-release-calls-it")).not.toThrow();
   });
   it("defines VERIFICATION_CONFIRM_THRESHOLD as a 0-1 slider setting with a sane default", () => {
     const def = getSettingDefinition("VERIFICATION_CONFIRM_THRESHOLD");

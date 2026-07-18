@@ -1,5 +1,5 @@
 // packages/shared-types/src/settings.ts
-import { RETRIEVAL_MODELS, VERIFICATION_MODELS } from "./models";
+import { RETRIEVAL_MODELS } from "./models";
 // DEFAULT_CONFIRM_THRESHOLD's canonical home is search.ts (the refine/verify
 // domain, spec §9.3) — imported here only to seed this setting's default so
 // the value isn't duplicated (previously declared independently in both
@@ -110,12 +110,11 @@ export const SETTINGS_SCHEMA: SettingDefinition[] = [
   },
   {
     key: "VERIFICATION_MODEL",
-    label: "Verification model",
-    type: "enum",
+    label: "Verification model (installed from the model marketplace — empty means none installed yet)",
+    type: "string",
     isSecret: false,
-    required: true,
-    defaultValue: "laila",
-    options: VERIFICATION_MODELS.map((m) => m.id),
+    required: false,
+    defaultValue: "",
   },
   {
     key: "VERIFICATION_CONFIRM_THRESHOLD",

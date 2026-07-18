@@ -9,20 +9,23 @@ describe("MODEL_BUNDLES", () => {
     expect(lumiPreview).toBeDefined();
     expect(lumiPreview.displayName).toBe("Lumi Preview");
     expect(lumiPreview.retrievalModelId).toBe("lumi-preview");
-    expect(lumiPreview.verificationModelId).toBe("laila");
     expect(lumiPreview.version).toBe("1.0");
     expect(lumiPreview.status).toBe("preview");
+  });
+
+  it("lumi-preview bundle has no fixed verification pairing", () => {
+    const bundle = MODEL_BUNDLES.find((b) => b.id === "lumi-preview")!;
+    expect(bundle.verificationModelId).toBeUndefined();
   });
 });
 
 describe("resolveModelBundle", () => {
-  it("returns the matching bundle for a known pair", () => {
-    const bundle = resolveModelBundle("lumi-preview", "laila");
+  it("returns the matching bundle for a known retrieval id", () => {
+    const bundle = resolveModelBundle("lumi-preview");
     expect(bundle?.id).toBe("lumi-preview");
   });
 
-  it("returns null for an unknown/mismatched pair", () => {
-    expect(resolveModelBundle("lumi-preview", "some-other-verification-model")).toBeNull();
-    expect(resolveModelBundle("nonexistent-model", "laila")).toBeNull();
+  it("returns null for an unknown retrieval id", () => {
+    expect(resolveModelBundle("nonexistent-model")).toBeNull();
   });
 });

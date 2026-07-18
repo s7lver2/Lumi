@@ -23,11 +23,7 @@ describe("RETRIEVAL_MODELS version field", () => {
 });
 
 describe("VERIFICATION_MODELS", () => {
-  it("includes laila as the default, backed by frozen RoMa", () => {
-    const laila = VERIFICATION_MODELS.find((m) => m.id === "laila")!;
-    expect(laila).toBeDefined();
-    expect(laila.displayName).toBe("Laila");
-    expect(laila.baseModel).toMatch(/RoMa/);
-    expect(laila.status).toBe("stable");
+  it("ships with no hardcoded verification models — those are catalog-installed", () => {
+    expect(VERIFICATION_MODELS).toEqual([]);
   });
 });
