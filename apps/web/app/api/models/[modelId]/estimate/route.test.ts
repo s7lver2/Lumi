@@ -34,7 +34,7 @@ describe("POST /api/models/[modelId]/estimate", () => {
 
     const form = new FormData();
     const jpegBytes = await makeJpegBytes();
-    form.append("image", new File([jpegBytes], "a.jpg", { type: "image/jpeg" }));
+    form.append("image", new File([jpegBytes as unknown as BlobPart], "a.jpg", { type: "image/jpeg" }));
     const res = await POST(makeRequest(form), { params: { modelId: "nonexistent-model" } });
 
     expect(res.status).toBe(404);
@@ -48,7 +48,7 @@ describe("POST /api/models/[modelId]/estimate", () => {
     const { POST } = await import("./route");
     const form = new FormData();
     const jpegBytes = await makeJpegBytes();
-    form.append("image", new File([jpegBytes], "a.jpg", { type: "image/jpeg" }));
+    form.append("image", new File([jpegBytes as unknown as BlobPart], "a.jpg", { type: "image/jpeg" }));
     const res = await POST(makeRequest(form), { params: { modelId: "lumi-preview" } });
 
     expect(res.status).toBe(409);
@@ -61,7 +61,7 @@ describe("POST /api/models/[modelId]/estimate", () => {
     const { POST } = await import("./route");
     const form = new FormData();
     const jpegBytes = await makeJpegBytes();
-    form.append("image", new File([jpegBytes], "a.jpg", { type: "image/jpeg" }));
+    form.append("image", new File([jpegBytes as unknown as BlobPart], "a.jpg", { type: "image/jpeg" }));
     const res = await POST(makeRequest(form), { params: { modelId: "lumi-preview" } });
     const json = await res.json();
 
