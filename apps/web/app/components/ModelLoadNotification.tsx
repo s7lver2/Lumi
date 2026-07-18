@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 const LABEL: Record<"retrieval" | "verification", string> = {
   retrieval: "Lumi Preview",
-  verification: "Laila",
+  verification: "Verificación geométrica",
 };
 
 /**

@@ -1,5 +1,5 @@
 """
-Multi-resolution overlapping tiling for Laila (spec §15.2). Pure NumPy: no model,
+Multi-resolution overlapping tiling for RoMa-based verification (spec §15.2). Pure NumPy: no model,
 no torch — so it is unit-testable. Each tile carries its (x0, y0) top-left offset
 so keypoint matches found in a tile can be mapped back to full-image coordinates.
 """

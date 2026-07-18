@@ -1,5 +1,5 @@
 """
-Laila geometric verification (spec §15.2): aggregate multi-resolution tile
+RoMa-based geometric verification (spec §15.2): aggregate multi-resolution tile
 matches, fit a homography with MAGSAC++, and turn (inliers, reprojection error)
 into a calibrated confidence score. The matcher (RoMa) is injected so this file
 is unit-testable without model weights.

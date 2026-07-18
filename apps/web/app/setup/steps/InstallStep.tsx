@@ -95,7 +95,7 @@ export function InstallStep({
           </div>
         ) : (
           /* Interruptor opcional: WSL2 evita el fallback lento de romatch en
-             Windows (verificación RoMa/Laila mucho más lenta fuera de Linux).
+             Windows (verificación geométrica RoMa mucho más lenta fuera de Linux).
              No instala WSL2 — solo cambia dónde se instalan las dependencias. */
           <div className="mt-4 w-full max-w-sm rounded-card border border-white/10 bg-white/[.03] p-3 text-left">
             <div className="mb-2 flex items-center justify-between">
@@ -123,7 +123,7 @@ export function InstallStep({
               </button>
             </div>
             {runtime === "wsl" && (
-              <p className="mt-2 text-[11px] text-subtle">La verificación (Laila/RoMa) corre notablemente más rápido en Linux — romatch desactiva su kernel optimizado en Windows.</p>
+              <p className="mt-2 text-[11px] text-subtle">La verificación geométrica (RoMa) corre notablemente más rápido en Linux — romatch desactiva su kernel optimizado en Windows.</p>
             )}
           </div>
         )}

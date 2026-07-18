@@ -23,7 +23,7 @@ export interface RunRefineDeps {
   onProgress?: (verified: number, total: number) => void;
 }
 
-// RoMa (Laila) verification is dense pairwise matching — MUCH more expensive
+// RoMa-based verification is dense pairwise matching — MUCH more expensive
 // per image than a Lumi Preview embedding. Sending all of a region's
 // candidates (seen live: 44) in one /verify call meant one blocking request
 // that could run for many minutes with zero feedback, reading as "colgado".

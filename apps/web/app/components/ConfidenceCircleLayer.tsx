@@ -7,7 +7,7 @@ import { useSearchStore } from "../stores/useSearchStore";
 import { flyToRegion } from "../lib/map-camera";
 
 // Once a region has been refined (its top candidate has a verificationScore),
-// RoMa/Laila has already geometrically pinned the location down — showing
+// RoMa-based verification has already geometrically pinned the location down — showing
 // the same fixed 150m clustering-bucket circle at that point would be the
 // same false-precision problem already fixed once for the "Radio" label
 // (see TopResultCard.tsx/BottomSummaryBar.tsx). Collapse to a small, fixed

@@ -11,7 +11,7 @@ const IS_WIN = process.platform === "win32";
 // Informational only — never blocks Install. Detects whether WSL2 is present
 // so the wizard can offer "install inference deps under WSL2" as an OPT-IN
 // speed knob (romatch disables its fast local-correlation kernel outside
-// Linux — confirmed live, RoMa/Laila verification is far slower on native
+// Linux — confirmed live, RoMa-based verification is far slower on native
 // Windows even with CUDA). This does NOT install WSL2 itself. Only
 // meaningful on a Windows host — on native Linux there's nothing to opt
 // into (you're already on Linux), and wsl.exe doesn't exist to spawn.

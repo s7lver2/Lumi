@@ -60,8 +60,8 @@ _VERIFY_CONFIG_DEFAULTS = {
 
 def get_verify_config(conn) -> dict:
     """Reads the 4 VERIFICATION_* calibration settings (Settings UI, spec: lets
-    users tune Laila's score calibration instead of only via Python source
-    edits) into a dict shaped exactly like verify.py's DEFAULT_VERIFY_CONFIG.
+    users tune verification's score calibration instead of only via Python
+    source edits) into a dict shaped exactly like verify.py's DEFAULT_VERIFY_CONFIG.
     Read once at startup, same convention as get_verification_tile_passes."""
     with conn.cursor() as cur:
         cur.execute(

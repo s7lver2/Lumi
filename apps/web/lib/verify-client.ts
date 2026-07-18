@@ -6,7 +6,7 @@ export interface VerifyResult {
   score: number;
 }
 
-/** Calls the inference /verify endpoint (Laila) for one query vs. many candidates. */
+/** Calls the inference /verify endpoint (RoMa-based geometric verification) for one query vs. many candidates. */
 export async function verifyCandidates(
   queryBase64: string,
   candidateBase64: string[],

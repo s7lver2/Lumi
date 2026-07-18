@@ -24,7 +24,7 @@ export interface SettingDefinition {
   step?: number;
 }
 
-/** VERIFICATION_TILE_PASSES's default — reproduces Laila's original fixed
+/** VERIFICATION_TILE_PASSES's default — reproduces the original fixed
  * tile schedule (full image + 2x2 grid) exactly, so the new slider setting
  * doesn't change anything for existing users until they move it. */
 export const DEFAULT_VERIFICATION_TILE_PASSES = 5;
@@ -130,12 +130,12 @@ export const SETTINGS_SCHEMA: SettingDefinition[] = [
   {
     // 1-10 slider (services/inference/tiles.py's multiscale_tiles schedule):
     // 1 = full image only (fastest, least precise), 10 = the full 10-tile
-    // schedule (slowest, most precise). 5 reproduces Laila's ORIGINAL fixed
+    // schedule (slowest, most precise). 5 reproduces the ORIGINAL fixed
     // behavior (full image + 2x2 grid) — kept as the default. Requires
     // restarting the inference service to apply, same as RETRIEVAL_MODEL/
     // VERIFICATION_MODEL (read once at startup, spec §15.4).
     key: "VERIFICATION_TILE_PASSES",
-    label: "Pasadas de verificación Laila (1 = rápido, 10 = lento y más preciso)",
+    label: "Pasadas de verificación geométrica (1 = rápido, 10 = lento y más preciso)",
     type: "slider",
     isSecret: false,
     required: true,
@@ -213,7 +213,7 @@ export const SETTINGS_SCHEMA: SettingDefinition[] = [
     // "wsl" routes the setup wizard's Install step through WSL2 instead of
     // native Windows for the inference venv/deps/weights — romatch disables
     // its optimized local-correlation kernel on non-Linux (confirmed live:
-    // RoMa/Laila verification went from ~11-13s/candidate on Windows+CUDA to
+    // RoMa-based verification went from ~11-13s/candidate on Windows+CUDA to
     // a fraction of that once run under Linux), so this is purely a speed
     // knob, not a functional requirement. Installing WSL2 itself, and its
     // NVIDIA CUDA passthrough driver, is out of scope — this only assumes
