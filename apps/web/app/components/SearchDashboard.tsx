@@ -242,7 +242,7 @@ export function SearchDashboard() {
       {map && <ConfidenceCircleLayer map={map} />}
       {map && <MapArrivalPulse map={map} point={pulsePoint} />}
 
-      {idle && (
+      {idle && selected.length === 0 && (
         <MapDropTarget
           onImagesReady={(images) => {
             Promise.all(
@@ -286,12 +286,7 @@ export function SearchDashboard() {
         />
       )}
 
-      {searching && (
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-card bg-panel/80 px-5 py-3 text-sm text-fg backdrop-blur-md z-40">
-          Localizando…
-          <ModelLoadNotification active={searching} thumbnailUrl={queryImageUrl} />
-        </div>
-      )}
+      <ModelLoadNotification active={searching} thumbnailUrl={queryImageUrl} />
 
       {regions.length > 0 && (
         <>

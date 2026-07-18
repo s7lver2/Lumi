@@ -35,7 +35,7 @@ export function UploadPopup({
   const [cropTarget, setCropTarget] = useState<{ index: number; url: string; name: string } | null>(null);
 
   return (
-    <div className="absolute left-1/2 top-6 z-20 w-[460px] -translate-x-1/2">
+    <div className="absolute left-1/2 top-1/2 z-20 w-[460px] -translate-x-1/2 -translate-y-1/2">
       <FloatingCard className="p-4">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2">
