@@ -10,7 +10,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     });
   }
 
-  return new Response(image.bytes, {
+  return new Response(image.bytes as unknown as BodyInit, {
     status: 200,
     headers: { "content-type": image.mimeType },
   });
