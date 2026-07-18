@@ -35,3 +35,15 @@ export const EMBED_PENDING_IMAGES_JOB_NAME = "embed-pending-images";
 export interface EmbedPendingImagesJobPayload {
   areaId: string;
 }
+
+/** One batch image-analysis run against the in-memory library (spec §2.4)
+ * — deliberately its own job, not a variant of embed-pending-images: it
+ * analyzes ad-hoc library images against a chosen model rather than
+ * embedding pending indexed_images rows. */
+export const ANALYZE_IMAGE_BATCH_JOB_NAME = "analyze-image-batch";
+
+export interface AnalyzeImageBatchJobPayload {
+  batchId: string;
+  imageIds: string[];
+  modelId: string;
+}

@@ -2,8 +2,10 @@ import PgBoss from "pg-boss";
 import {
   INDEX_AREA_JOB_NAME,
   EMBED_PENDING_IMAGES_JOB_NAME,
+  ANALYZE_IMAGE_BATCH_JOB_NAME,
   type IndexAreaJobPayload,
   type EmbedPendingImagesJobPayload,
+  type AnalyzeImageBatchJobPayload,
 } from "@netryx/shared-types";
 
 let boss: PgBoss | undefined;
@@ -53,6 +55,17 @@ export async function enqueueEmbedPendingImagesJob(payload: EmbedPendingImagesJo
 
   if (!jobId) {
     throw new Error(`pg-boss declined to enqueue the ${EMBED_PENDING_IMAGES_JOB_NAME} job`);
+  }
+
+  return jobId;
+}
+
+export async function enqueueAnalyzeImageBatchJob(payload: AnalyzeImageBatchJobPayload): Promise<string> {
+  const client = await getBoss();
+  const jobId = await client.send(ANALYZE_IMAGE_BATCH_JOB_NAME, payload);
+
+  if (!jobId) {
+    throw new Error(`pg-boss declined to enqueue the ${ANALYZE_IMAGE_BATCH_JOB_NAME} job`);
   }
 
   return jobId;

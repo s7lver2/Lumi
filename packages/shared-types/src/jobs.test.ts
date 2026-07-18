@@ -1,6 +1,6 @@
 // packages/shared-types/src/jobs.test.ts
 import { describe, it, expect } from "vitest";
-import { INDEX_AREA_JOB_NAME, STREET_VIEW_HEADINGS, EMBED_PENDING_IMAGES_JOB_NAME } from "./jobs";
+import { INDEX_AREA_JOB_NAME, STREET_VIEW_HEADINGS, EMBED_PENDING_IMAGES_JOB_NAME, ANALYZE_IMAGE_BATCH_JOB_NAME, type AnalyzeImageBatchJobPayload } from "./jobs";
 import type { EmbedPendingImagesJobPayload } from "./jobs";
 
 describe("job constants", () => {
@@ -21,5 +21,20 @@ describe("EMBED_PENDING_IMAGES_JOB_NAME", () => {
   it("payload only needs an areaId", () => {
     const payload: EmbedPendingImagesJobPayload = { areaId: "abc" };
     expect(payload.areaId).toBe("abc");
+  });
+});
+
+describe("ANALYZE_IMAGE_BATCH_JOB_NAME", () => {
+  it("is a stable, unique job name", () => {
+    expect(ANALYZE_IMAGE_BATCH_JOB_NAME).toBe("analyze-image-batch");
+  });
+
+  it("payload shape carries batchId, imageIds and modelId", () => {
+    const payload: AnalyzeImageBatchJobPayload = {
+      batchId: "b1",
+      imageIds: ["img1", "img2"],
+      modelId: "lumi-preview",
+    };
+    expect(payload.imageIds).toHaveLength(2);
   });
 });
