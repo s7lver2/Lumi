@@ -1,5 +1,6 @@
 // apps/web/app/api/models/[modelId]/estimate/route.test.ts
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import sharp from "sharp";
 
 vi.mock("../../../../../lib/db", () => ({ getPool: vi.fn(() => ({})) }));
 vi.mock("../../../../../lib/settings-repo", () => ({
@@ -20,13 +21,20 @@ function makeRequest(form: FormData) {
   return new Request("http://localhost/api/models/lumi-preview/estimate", { method: "POST", body: form });
 }
 
+async function makeJpegBytes(): Promise<Buffer> {
+  return sharp({
+    create: { width: 16, height: 16, channels: 3, background: { r: 128, g: 128, b: 128 } },
+  }).jpeg().toBuffer();
+}
+
 describe("POST /api/models/[modelId]/estimate", () => {
   it("404s on an unknown modelId, never calling runSearch", async () => {
     const { runSearch } = await import("../../../../../lib/search/run-search");
     const { POST } = await import("./route");
 
     const form = new FormData();
-    form.append("image", new File([new Uint8Array([1])], "a.jpg"));
+    const jpegBytes = await makeJpegBytes();
+    form.append("image", new File([jpegBytes], "a.jpg", { type: "image/jpeg" }));
     const res = await POST(makeRequest(form), { params: { modelId: "nonexistent-model" } });
 
     expect(res.status).toBe(404);
@@ -39,7 +47,8 @@ describe("POST /api/models/[modelId]/estimate", () => {
 
     const { POST } = await import("./route");
     const form = new FormData();
-    form.append("image", new File([new Uint8Array([1])], "a.jpg"));
+    const jpegBytes = await makeJpegBytes();
+    form.append("image", new File([jpegBytes], "a.jpg", { type: "image/jpeg" }));
     const res = await POST(makeRequest(form), { params: { modelId: "lumi-preview" } });
 
     expect(res.status).toBe(409);
@@ -51,7 +60,8 @@ describe("POST /api/models/[modelId]/estimate", () => {
 
     const { POST } = await import("./route");
     const form = new FormData();
-    form.append("image", new File([new Uint8Array([1])], "a.jpg"));
+    const jpegBytes = await makeJpegBytes();
+    form.append("image", new File([jpegBytes], "a.jpg", { type: "image/jpeg" }));
     const res = await POST(makeRequest(form), { params: { modelId: "lumi-preview" } });
     const json = await res.json();
 

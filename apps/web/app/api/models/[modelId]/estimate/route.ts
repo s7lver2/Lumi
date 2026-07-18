@@ -17,12 +17,7 @@ import { queryExpansionRerank } from "../../../../../lib/search/rerank";
 import { clusterCandidates } from "../../../../../lib/search/cluster";
 import { persistSearch } from "../../../../../lib/search/persist";
 import { runSearch, type RunSearchDeps } from "../../../../../lib/search/run-search";
-
-function extFromType(type: string): string {
-  if (type.includes("png")) return "png";
-  if (type.includes("webp")) return "webp";
-  return "jpg";
-}
+import { validateImageBytes } from "../../../../../lib/image-validation";
 
 export async function POST(request: Request, { params }: { params: { modelId: string } }) {
   const activeModelId = (await getSettingsRepo().getSetting("RETRIEVAL_MODEL")) ?? "lumi-preview";
@@ -47,8 +42,14 @@ export async function POST(request: Request, { params }: { params: { modelId: st
   }
 
   const bytes = Buffer.from(await file.arrayBuffer());
+
+  const validation = await validateImageBytes(bytes);
+  if (!validation.ok) {
+    return NextResponse.json({ error: validation.reason }, { status: 400 });
+  }
+
   const imageBase64 = bytes.toString("base64");
-  const imageExt = extFromType(file.type);
+  const imageExt = validation.format === "jpeg" ? "jpg" : validation.format;
 
   const pool = getPool();
   const inferenceBaseUrl = process.env.INFERENCE_SERVICE_URL ?? "http://localhost:8000";
