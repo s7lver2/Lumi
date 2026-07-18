@@ -59,7 +59,7 @@ describe("submitSetup", () => {
       { key: "MAX_CONCURRENT_REQUESTS", value: "10", isSecret: false },
       { key: "STREET_VIEW_PRICE_PER_IMAGE_USD", value: "0.007", isSecret: false },
       { key: "RETRIEVAL_MODEL", value: "lumi-preview", isSecret: false },
-      { key: "VERIFICATION_MODEL", value: "laila", isSecret: false },
+      { key: "VERIFICATION_MODEL", value: "", isSecret: false },
       { key: "VERIFICATION_CONFIRM_THRESHOLD", value: "0.5", isSecret: false },
       { key: "VERIFICATION_TILE_PASSES", value: "5", isSecret: false },
       { key: "VERIFICATION_MIN_INLIERS", value: "4", isSecret: false },

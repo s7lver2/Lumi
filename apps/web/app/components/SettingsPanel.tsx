@@ -132,11 +132,7 @@ export function SettingsPanel() {
                         ) : def.key === "RETRIEVAL_MODEL" ? (
                           <ModelBundleRow
                             retrievalModelId={current(def)}
-                            verificationModelId={dirty["VERIFICATION_MODEL"] ?? values["VERIFICATION_MODEL"] ?? ""}
-                            onChange={(bundle) => {
-                              set("RETRIEVAL_MODEL", bundle.retrievalModelId);
-                              set("VERIFICATION_MODEL", bundle.verificationModelId);
-                            }}
+                            onChange={(bundle) => set("RETRIEVAL_MODEL", bundle.retrievalModelId)}
                           />
                         ) : def.key === "INFERENCE_LOW_VRAM_MODE" ? (
                           <LowVramModeRow value={current(def)} onChange={(v) => set(def.key, v)}

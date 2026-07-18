@@ -14,8 +14,11 @@ export type SubmitSetupResult = { ok: true } | { ok: false; error: string };
  * If the field is present in the form (even as an empty string, e.g. an
  * optional field like MAPBOX_TOKEN left blank), that submitted value wins.
  * If the field is absent entirely — true for RETRIEVAL_MODEL/VERIFICATION_MODEL,
- * which no wizard step renders — fall back to the setting's defaultValue so
- * setup can still complete (spec §15.3's "lumi-preview"/"laila" defaults).
+ * which no wizard step renders directly as a form field — fall back to the
+ * setting's defaultValue so setup can still complete. VERIFICATION_MODEL's
+ * defaultValue is now "" (no verification model installed yet); it gets
+ * written for real once a catalog release providing one is installed
+ * (see model-catalog/install/route.ts).
  */
 function resolveValue(formData: FormData, def: (typeof SETTINGS_SCHEMA)[number]): string {
   const raw = formData.get(def.key);

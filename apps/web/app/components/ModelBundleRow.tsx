@@ -5,14 +5,12 @@ import { Menu } from "./Menu";
 
 export function ModelBundleRow({
   retrievalModelId,
-  verificationModelId,
   onChange,
 }: {
   retrievalModelId: string;
-  verificationModelId: string;
   onChange: (bundle: ModelBundleDefinition) => void;
 }) {
-  const current = resolveModelBundle(retrievalModelId, verificationModelId);
+  const current = resolveModelBundle(retrievalModelId);
 
   if (!current) {
     return (
