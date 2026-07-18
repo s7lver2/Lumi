@@ -17,6 +17,7 @@ export function CatalogDetailPanel({
   installLabel,
   installDisabled,
   onInstall,
+  secondaryAction,
 }: {
   title: string;
   subtitle: string;
@@ -25,6 +26,7 @@ export function CatalogDetailPanel({
   installLabel: string;
   installDisabled?: boolean;
   onInstall: () => void;
+  secondaryAction?: { label: string; onClick: () => void; disabled?: boolean };
 }) {
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto p-5">
@@ -39,13 +41,24 @@ export function CatalogDetailPanel({
         ))}
       </div>
       {extra}
-      <button
-        onClick={onInstall}
-        disabled={installDisabled}
-        className="mt-5 self-start rounded-md bg-accent px-4 py-2 text-xs font-medium text-black disabled:opacity-50"
-      >
-        {installLabel}
-      </button>
+      <div className="mt-5 flex items-center gap-2.5">
+        <button
+          onClick={onInstall}
+          disabled={installDisabled}
+          className="self-start rounded-md bg-accent px-4 py-2 text-xs font-medium text-black disabled:opacity-50"
+        >
+          {installLabel}
+        </button>
+        {secondaryAction && (
+          <button
+            onClick={secondaryAction.onClick}
+            disabled={secondaryAction.disabled}
+            className="self-start rounded-md border border-white/[.15] px-4 py-2 text-xs font-medium text-fg hover:bg-white/5 disabled:opacity-50"
+          >
+            {secondaryAction.label}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

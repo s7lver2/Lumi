@@ -9,7 +9,7 @@ process.env.MODEL_CATALOG_READY_TIMEOUT_MS = "20";
 process.env.MODEL_CATALOG_READY_POLL_INTERVAL_MS = "5";
 
 vi.mock("../../../../lib/model-catalog/github", () => ({ listReleasesForRepo: vi.fn(), downloadReleaseAsset: vi.fn() }));
-vi.mock("../../../../lib/model-catalog/backup", () => ({ backupInferenceCode: vi.fn(), restoreInferenceCode: vi.fn() }));
+vi.mock("../../../../lib/model-catalog/backup", () => ({ backupInferenceCode: vi.fn(), restoreInferenceCode: vi.fn(), persistBackup: vi.fn() }));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
   return {

@@ -9,7 +9,8 @@ import { decryptBuffer } from "@netryx/settings-repo";
 import { listReleasesForRepo, downloadReleaseAsset } from "../../../../lib/model-catalog/github";
 import { validateModelCatalogManifest, BUNDLE_CODE_ASSET_NAME, MODEL_CATALOG_METADATA_ASSET_NAME } from "../../../../lib/model-catalog/manifest";
 import { MODEL_CATALOG_SHARED_KEY } from "../../../../lib/model-catalog/shared-key";
-import { backupInferenceCode, restoreInferenceCode } from "../../../../lib/model-catalog/backup";
+import { backupInferenceCode, restoreInferenceCode, persistBackup } from "../../../../lib/model-catalog/backup";
+import { PREVIOUS_CODE_DIR, readUninstallMeta, writeUninstallMeta } from "../../../../lib/model-catalog/uninstall-state";
 
 interface InstallBody {
   owner?: string;
@@ -139,6 +140,12 @@ export async function POST(request: Request) {
         { status: 502 }
       );
     }
+
+    // Keep the pre-install snapshot around (outside stagingDir/backupDir,
+    // both deleted below) so a later "desinstalar" can restore it.
+    const priorMeta = await readUninstallMeta();
+    await persistBackup(backupDir, PREVIOUS_CODE_DIR);
+    await writeUninstallMeta({ currentVersion: manifest.version, previousVersion: priorMeta.currentVersion });
 
     return NextResponse.json({ ok: true, version: manifest.version });
   } catch (err) {

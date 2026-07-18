@@ -33,9 +33,21 @@ export function ModelosSection({ query }: { query: string }) {
   const [filter, setFilter] = useState<ModelFilterId>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [uninstallInfo, setUninstallInfo] = useState<{ available: boolean; previousVersion: string | null }>({
+    available: false,
+    previousVersion: null,
+  });
+  const [uninstalling, setUninstalling] = useState(false);
+
+  function refreshUninstallInfo() {
+    fetchJson<{ available: boolean; previousVersion: string | null }>("/api/model-catalog/uninstall").then((r) => {
+      if (r.data) setUninstallInfo(r.data);
+    });
+  }
 
   useEffect(() => {
     fetchJson<{ bundles: CatalogBundle[] }>("/api/model-catalog").then((r) => setItems(flattenModelBundles(r.data?.bundles ?? [])));
+    refreshUninstallInfo();
   }, []);
 
   const q = query.toLowerCase();
@@ -50,6 +62,24 @@ export function ModelosSection({ query }: { query: string }) {
       body: JSON.stringify({ owner: item.owner, repo: item.repo, tag: item.release.tag }),
     });
     setStatus(ok ? `Instalada v${item.release.version}` : (data as { error?: string } | null)?.error ?? "No se pudo instalar");
+    refreshUninstallInfo();
+  }
+
+  async function uninstall() {
+    setUninstalling(true);
+    setStatus(
+      uninstallInfo.previousVersion ? `Restaurando v${uninstallInfo.previousVersion}…` : "Restaurando estado original…"
+    );
+    const { ok, data } = await fetchJson<{ version: string | null }>("/api/model-catalog/uninstall", { method: "POST" });
+    setStatus(
+      ok
+        ? data?.version
+          ? `Restaurada v${data.version}`
+          : "Restaurado el estado original"
+        : (data as { error?: string } | null)?.error ?? "No se pudo desinstalar"
+    );
+    setUninstalling(false);
+    refreshUninstallInfo();
   }
 
   return (
@@ -88,6 +118,19 @@ export function ModelosSection({ query }: { query: string }) {
             installLabel={selected.release.isActive ? "Instalada" : "Instalar"}
             installDisabled={selected.release.isActive}
             onInstall={() => install(selected)}
+            secondaryAction={
+              selected.release.isActive
+                ? {
+                    label: uninstalling
+                      ? "Desinstalando…"
+                      : uninstallInfo.previousVersion
+                        ? `Desinstalar (volver a v${uninstallInfo.previousVersion})`
+                        : "Desinstalar",
+                    onClick: uninstall,
+                    disabled: uninstalling || !uninstallInfo.available,
+                  }
+                : undefined
+            }
           />
         ) : (
           <div className="flex h-full items-center justify-center text-xs text-subtle">
