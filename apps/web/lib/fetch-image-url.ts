@@ -6,16 +6,23 @@ const FETCH_TIMEOUT_MS = 8000;
 export type FetchImageUrlResult = { ok: true; bytes: Buffer } | { ok: false; reason: string };
 
 function isPrivateOrReservedIp(address: string): boolean {
+  // Unwrap IPv4-mapped IPv6 addresses (e.g. "::ffff:127.0.0.1") so the
+  // embedded IPv4 address is checked against the ranges below instead of
+  // silently passing through unmatched.
+  const v4Mapped = address.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+  const check = v4Mapped ? v4Mapped[1] : address;
+
   // IPv4 ranges
-  if (/^10\./.test(address)) return true;
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(address)) return true;
-  if (/^192\.168\./.test(address)) return true;
-  if (/^127\./.test(address)) return true;
-  if (/^169\.254\./.test(address)) return true;
+  if (/^10\./.test(check)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(check)) return true;
+  if (/^192\.168\./.test(check)) return true;
+  if (/^127\./.test(check)) return true;
+  if (/^169\.254\./.test(check)) return true;
+  if (/^0\./.test(check)) return true; // 0.0.0.0/8 - treated as localhost by the kernel on Linux
   // IPv6 ranges
-  if (address === "::1") return true;
-  if (/^f[cd][0-9a-f]{2}:/i.test(address)) return true; // fc00::/7
-  if (/^fe[89ab][0-9a-f]:/i.test(address)) return true; // fe80::/10
+  if (check === "::1") return true;
+  if (/^f[cd][0-9a-f]{2}:/i.test(check)) return true; // fc00::/7
+  if (/^fe[89ab][0-9a-f]:/i.test(check)) return true; // fe80::/10
   return false;
 }
 
@@ -41,6 +48,15 @@ export async function fetchImageUrl(url: string): Promise<FetchImageUrlResult> {
   }
 
   try {
+    // Known limitation (DNS-rebinding TOCTOU): we validate the IP here via
+    // dns.lookup(), but fetch() below resolves the hostname again on its own,
+    // so a DNS record with a very short TTL could theoretically resolve to a
+    // different (private) IP between the two lookups. A fully correct fix
+    // requires pinning the actual TCP connection to this already-validated
+    // IP (e.g. a custom undici Agent/dispatcher), which also complicates
+    // HTTPS SNI/certificate validation. Deliberately not doing that here —
+    // this is a self-hosted, single-operator tool, not multi-tenant SaaS,
+    // so the risk is accepted for now rather than building that follow-up.
     const { address } = await dns.lookup(parsed.hostname);
     if (isPrivateOrReservedIp(address)) {
       return { ok: false, reason: "El enlace apunta a una dirección no permitida" };
@@ -53,7 +69,7 @@ export async function fetchImageUrl(url: string): Promise<FetchImageUrlResult> {
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
-    const res = await fetch(parsed.toString(), { signal: controller.signal });
+    const res = await fetch(parsed.toString(), { signal: controller.signal, redirect: "error" });
     if (!res.ok || !res.body) {
       return { ok: false, reason: "No se pudo descargar el enlace" };
     }

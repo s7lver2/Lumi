@@ -65,4 +65,36 @@ describe("fetchImageUrl", () => {
 
     expect(result.ok).toBe(false);
   });
+
+  it("does not follow redirects (fetch throws with redirect: 'error')", async () => {
+    lookupMock.mockResolvedValue({ address: "93.184.216.34", family: 4 });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("fetch failed");
+      })
+    );
+
+    const result = await fetchImageUrl("http://example.com/redirects-to-internal");
+
+    expect(result).toEqual({ ok: false, reason: "No se pudo descargar el enlace a tiempo" });
+  });
+
+  it("rejects IPv4-mapped IPv6 addresses pointing at loopback or metadata", async () => {
+    lookupMock.mockResolvedValueOnce({ address: "::ffff:127.0.0.1", family: 6 });
+    const loopbackResult = await fetchImageUrl("http://internal.example/photo.jpg");
+    expect(loopbackResult).toEqual({ ok: false, reason: "El enlace apunta a una dirección no permitida" });
+
+    lookupMock.mockResolvedValueOnce({ address: "::ffff:169.254.169.254", family: 6 });
+    const metadataResult = await fetchImageUrl("http://metadata.example/photo.jpg");
+    expect(metadataResult).toEqual({ ok: false, reason: "El enlace apunta a una dirección no permitida" });
+  });
+
+  it("rejects 0.0.0.0", async () => {
+    lookupMock.mockResolvedValue({ address: "0.0.0.0", family: 4 });
+
+    const result = await fetchImageUrl("http://zero.example/photo.jpg");
+
+    expect(result).toEqual({ ok: false, reason: "El enlace apunta a una dirección no permitida" });
+  });
 });
