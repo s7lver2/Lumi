@@ -30,7 +30,9 @@ const RECENT_ICON = (
   </svg>
 );
 
-export function MapDropTarget({ onImagesReady }: { onImagesReady: (imageIds: string[]) => void }) {
+interface ReadyImage { id: string; filename: string }
+
+export function MapDropTarget({ onImagesReady }: { onImagesReady: (images: ReadyImage[]) => void }) {
   const [tab, setTab] = useState<Tab>("images");
   const [dragging, setDragging] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
@@ -47,17 +49,17 @@ export function MapDropTarget({ onImagesReady }: { onImagesReady: (imageIds: str
   }, [tab]);
 
   async function uploadFiles(files: File[]) {
-    const ids: string[] = [];
+    const ready: ReadyImage[] = [];
     for (const file of files) {
       const form = new FormData();
       form.append("image", file);
       const res = await fetch("/api/library", { method: "POST", body: form });
       if (res.ok) {
         const data = await res.json();
-        ids.push(data.image.id);
+        ready.push({ id: data.image.id, filename: data.image.filename });
       }
     }
-    if (ids.length > 0) onImagesReady(ids);
+    if (ready.length > 0) onImagesReady(ready);
   }
 
   async function submitLink() {
@@ -71,7 +73,7 @@ export function MapDropTarget({ onImagesReady }: { onImagesReady: (imageIds: str
     const data = await res.json();
     if (res.ok) {
       setLinkState("verified");
-      onImagesReady([data.image.id]);
+      onImagesReady([{ id: data.image.id, filename: data.image.filename }]);
     } else {
       setLinkState("rejected");
       setLinkError(data.error ?? "No se pudo verificar el enlace");
@@ -173,7 +175,13 @@ export function MapDropTarget({ onImagesReady }: { onImagesReady: (imageIds: str
               ))}
             </div>
             <button
-              onClick={() => onImagesReady([...selectedRecent])}
+              onClick={() =>
+                onImagesReady(
+                  recentImages
+                    .filter((img) => selectedRecent.has(img.id))
+                    .map((img) => ({ id: img.id, filename: img.filename }))
+                )
+              }
               disabled={selectedRecent.size === 0}
               className="mt-2.5 w-full rounded-lg bg-accent py-1.5 text-[11px] font-medium text-black disabled:opacity-40"
             >

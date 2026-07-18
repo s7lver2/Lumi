@@ -20,6 +20,7 @@ import { RETRIEVAL_MODELS } from "@netryx/shared-types";
 interface SelectedFile {
   file: File;
   url: string;
+  displayName: string;
 }
 
 function formatEta(etaMs: number | null): string {
@@ -187,11 +188,11 @@ export function SearchDashboard() {
         files.map(async (file) => {
           const form = new FormData();
           form.append("image", file);
-          const { ok, data } = await fetchJson<{ image: { id: string } }>("/api/library", { method: "POST", body: form });
+          const { ok, data } = await fetchJson<{ image: { id: string; filename: string } }>("/api/library", { method: "POST", body: form });
           if (!ok || !data) throw new Error("No se pudo añadir la imagen a la librería");
           // Guardamos el ID retornado en el name del archivo para mapeos subsecuentes (PATCH/Crop)
           const trackedFile = new File([file], data.image.id, { type: file.type });
-          return { file: trackedFile, url: URL.createObjectURL(file) };
+          return { file: trackedFile, url: URL.createObjectURL(file), displayName: data.image.filename };
         })
       );
       setSelected((prev) => [...prev, ...formatted]);
@@ -221,15 +222,22 @@ export function SearchDashboard() {
 
       {idle && (
         <MapDropTarget
-          onImagesReady={(imageIds) => {
+          onImagesReady={(images) => {
             Promise.all(
-              imageIds.map(async (id) => {
+              images.map(async ({ id, filename }) => {
                 const res = await fetch(`/api/library/${id}/bytes`);
+                if (!res.ok) return null;
                 const blob = await res.blob();
                 const file = new File([blob], id, { type: blob.type });
-                return { file, url: URL.createObjectURL(blob) };
+                return { file, url: URL.createObjectURL(blob), displayName: filename };
               })
-            ).then((newSelected) => setSelected((prev) => [...prev, ...newSelected]));
+            ).then((results) => {
+              const ready = results.filter((r): r is SelectedFile => r !== null);
+              if (ready.length < results.length) {
+                setError("Alguna imagen ya no está disponible en la librería y se omitió.");
+              }
+              setSelected((prev) => [...prev, ...ready]);
+            });
           }}
         />
       )}
@@ -249,7 +257,7 @@ export function SearchDashboard() {
             setSelected((prev) => {
               const next = [...prev];
               URL.revokeObjectURL(next[index].url);
-              next[index] = { file: croppedFile, url: URL.createObjectURL(croppedFile) };
+              next[index] = { file: croppedFile, url: URL.createObjectURL(croppedFile), displayName: next[index].displayName };
               return next;
             });
           }}

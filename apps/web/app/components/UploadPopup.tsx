@@ -7,7 +7,14 @@ import { RETRIEVAL_MODELS } from "@netryx/shared-types";
 import { ModePicker } from "./ModePicker";
 import { CropDialog } from "./CropDialog";
 
-interface Selected { file: File; url: string }
+interface Selected { file: File; url: string; displayName: string }
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${Math.round(kb)} KB`;
+  return `${(kb / 1024).toFixed(1)} MB`;
+}
 
 export function UploadPopup({
   files,
@@ -41,25 +48,24 @@ export function UploadPopup({
         </div>
         <ModePicker value={model} onChange={setModel} />
         <div className="mt-3 text-sm text-fg">{files.length} imagen{files.length === 1 ? "" : "es"} seleccionada{files.length === 1 ? "" : "s"}</div>
-        <div className="mt-2 space-y-2">
+        <div className="mt-2.5 space-y-2">
           {files.map((f, i) => (
-            <div key={f.url} className="flex items-center gap-3 rounded-md bg-white/5 p-2">
-              <img src={f.url} alt="" className="h-12 w-16 rounded object-cover" />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-xs text-fg">{f.file.name}</div>
+            <div key={f.url} className="flex items-center gap-3.5 rounded-lg bg-white/5 p-3">
+              <img src={f.url} alt="" className="h-14 w-14 shrink-0 rounded-md object-cover" />
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <div className="truncate text-[13px] leading-none text-fg">{f.displayName}</div>
+                <div className="text-[11px] leading-none text-muted">
+                  {formatSize(f.file.size)} · {(f.file.type.split("/")[1] ?? "img").toUpperCase()}
+                </div>
                 <button
                   onClick={() => setCropTarget({ index: i, url: f.url, name: f.file.name })}
-                  className="mt-1.5 flex items-center gap-1 rounded-md border border-white/[.15] px-2 py-0.5 text-[9.5px] text-fg transition-transform hover:scale-[1.04] active:scale-[.93]"
+                  className="flex items-center gap-1 rounded-md border border-white/[.15] px-2 py-0.5 text-[9.5px] text-fg transition-transform hover:scale-[1.04] active:scale-[.93]"
                 >
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 3v14a2 2 0 0 0 2 2h14M3 6h14a2 2 0 0 1 2 2v14" /></svg>
                   Recortar
                 </button>
-                <div className="mt-1.5 flex items-center gap-2 text-[11px] text-muted">
-                  <span>{Math.round(f.file.size / 1024)}kb {f.file.type.split("/")[1]}</span>
-                  <span className="rounded bg-white/5 px-1.5 py-0.5">METADATA</span>
-                </div>
               </div>
-              <button onClick={() => onRemove(i)} className="text-subtle hover:text-fg" aria-label="Quitar">✕</button>
+              <button onClick={() => onRemove(i)} className="shrink-0 text-subtle hover:text-fg" aria-label="Quitar">✕</button>
             </div>
           ))}
         </div>
