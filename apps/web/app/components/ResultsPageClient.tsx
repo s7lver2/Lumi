@@ -6,7 +6,6 @@ import { RETRIEVAL_MODELS } from "@netryx/shared-types";
 import { AppShell } from "./AppShell";
 import { MapCanvas } from "./MapCanvas";
 import { ConfidenceCircleLayer } from "./ConfidenceCircleLayer";
-import { TopResultCard } from "./TopResultCard";
 import { ResultsPanel } from "./ResultsPanel";
 import { useSearchStore } from "../stores/useSearchStore";
 
@@ -24,10 +23,6 @@ export function ResultsPageClient({ initialResult, searchId }: { initialResult: 
     // already copies candidatesByRegion verbatim, so refined data loaded
     // from the DB shows immediately without needing a live refine call.
   }, [initialResult, searchId, setSearchResults]);
-
-  function handleSelectRegion(regionId: string) {
-    selectRegion(regionId);
-  }
 
   async function handleRefine(regionId: string) {
     selectRegion(regionId);
@@ -68,17 +63,14 @@ export function ResultsPageClient({ initialResult, searchId }: { initialResult: 
       <MapCanvas onReady={(m) => setMap(m)} />
       {map && <ConfidenceCircleLayer map={map} />}
       {regions.length > 0 && (
-        <>
-          <TopResultCard onRefine={handleRefine} onSelectRegion={handleSelectRegion} refining={refining} />
-          <div className="absolute right-0 top-0 h-full">
-            <ResultsPanel
-              queryImageUrl={`/api/images/query/${searchId}`}
-              onRefine={handleRefine}
-              onSelectRegion={handleSelectRegion}
-              refining={refining}
-            />
-          </div>
-        </>
+        <div className="absolute right-0 top-0 h-full">
+          <ResultsPanel
+            queryImageUrl={`/api/images/query/${searchId}`}
+            queryImageId={null}
+            onRefine={handleRefine}
+            refining={refining}
+          />
+        </div>
       )}
     </AppShell>
   );

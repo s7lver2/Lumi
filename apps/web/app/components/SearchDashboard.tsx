@@ -7,7 +7,6 @@ import { MapDropTarget } from "./MapDropTarget";
 import { UploadPopup } from "./UploadPopup";
 import { ConfidenceCircleLayer } from "./ConfidenceCircleLayer";
 import { ResultsPanel } from "./ResultsPanel";
-import { TopResultCard } from "./TopResultCard";
 import { BottomSummaryBar } from "./BottomSummaryBar";
 import { useSearchStore } from "../stores/useSearchStore";
 import { useMapStore } from "../stores/useMapStore";
@@ -36,7 +35,8 @@ export function SearchDashboard() {
   const activeModelId = RETRIEVAL_MODELS[0]?.id ?? "lumi-preview";
   const [map, setMap] = useState<any>(null);
   const [queryImageUrl, setQueryImageUrl] = useState<string | null>(null);
-  
+  const [queryImageId, setQueryImageId] = useState<string | null>(null);
+
   const { 
     refineStatus, 
     refineProgress, 
@@ -124,6 +124,7 @@ export function SearchDashboard() {
       });
       if (!ok || !data) throw new Error("No se pudo iniciar la búsqueda por lotes");
 
+      setQueryImageId(imageIds[0] ?? null);
       pollBatchProgress(data.batchId, queryImageName);
 
       // Keep selected[0].url alive — it's now shown as the query thumbnail
@@ -133,12 +134,6 @@ export function SearchDashboard() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al iniciar la búsqueda por lotes");
     }
-  }
-
-  function handleSelectRegion(regionId: string) {
-    selectRegion(regionId);
-    const region = regions.find((r) => r.id === regionId);
-    if (region) flyToRegion(map, region);
   }
 
   async function handleRefine(regionId: string) {
@@ -296,12 +291,14 @@ export function SearchDashboard() {
       <ModelLoadNotification active={searching} thumbnailUrl={queryImageUrl} />
 
       {regions.length > 0 && (
-        <>
-          <TopResultCard onRefine={handleRefine} onSelectRegion={handleSelectRegion} refining={refining} />
-          <div className="absolute right-0 top-0 h-full">
-            <ResultsPanel queryImageUrl={queryImageUrl} onRefine={handleRefine} onSelectRegion={handleSelectRegion} refining={refining} />
-          </div>
-        </>
+        <div className="absolute right-0 top-0 h-full">
+          <ResultsPanel
+            queryImageUrl={queryImageUrl}
+            queryImageId={queryImageId}
+            onRefine={handleRefine}
+            refining={refining}
+          />
+        </div>
       )}
     </>
   );
