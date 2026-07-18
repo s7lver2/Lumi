@@ -458,7 +458,16 @@ def _ensure_complete_dependency_closure(root: Path, dest: Path) -> None:
     the COMPLETE real content (dirs_exist_ok=True — adds/overwrites, never
     deletes what nft did correctly include) for every direct dependency of
     apps/web, then recurse into each package's own declared `dependencies`
-    the same way. Trades some shipped-but-unused bytes (e.g. client-only
+    AND `optionalDependencies` the same way. The latter matters for native
+    modules like sharp, which lists its actual platform-specific binary
+    (e.g. @img/sharp-linux-x64) only under optionalDependencies — without
+    walking those too, the standalone build silently ships sharp's JS
+    wrapper with no native binary at all, which doesn't fail until runtime
+    ("Could not load the 'sharp' module using the linux-x64 runtime").
+    _resolve_package_dir() already returns None for anything not actually
+    installed on this platform, so walking optionalDependencies is a no-op
+    for the ~20 other platforms' entries in a typical optionalDependencies
+    list. Trades some shipped-but-unused bytes (e.g. client-only
     libs like mapbox-gl also landing in node_modules) for not playing
     whack-a-mole with nft's static analysis forever."""
     source_modules = root / "apps" / "web" / "node_modules"
@@ -480,7 +489,8 @@ def _ensure_complete_dependency_closure(root: Path, dest: Path) -> None:
         pkg_json = real_dir / "package.json"
         if not pkg_json.exists():
             return
-        deps = json.loads(pkg_json.read_text(encoding="utf-8")).get("dependencies", {})
+        pkg = json.loads(pkg_json.read_text(encoding="utf-8"))
+        deps = {**pkg.get("dependencies", {}), **pkg.get("optionalDependencies", {})}
         for dep_name in deps:
             visit(dep_name)
 
