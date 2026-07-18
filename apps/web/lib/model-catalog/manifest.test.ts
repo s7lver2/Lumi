@@ -44,4 +44,20 @@ describe("validateModelCatalogManifest", () => {
     delete manifest.bundleId;
     expect(() => validateModelCatalogManifest(manifest)).toThrow(/bundleId/);
   });
+
+  it("accepts a manifest with an optional verificationModelId", () => {
+    const result = validateModelCatalogManifest({ ...validManifest(), verificationModelId: "roma-verify" });
+    expect(result.verificationModelId).toBe("roma-verify");
+  });
+
+  it("leaves verificationModelId undefined when the manifest omits it", () => {
+    const result = validateModelCatalogManifest(validManifest());
+    expect(result.verificationModelId).toBeUndefined();
+  });
+
+  it("rejects a non-string verificationModelId", () => {
+    expect(() =>
+      validateModelCatalogManifest({ ...validManifest(), verificationModelId: 42 })
+    ).toThrow();
+  });
 });

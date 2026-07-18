@@ -21,6 +21,12 @@ export interface ModelCatalogManifest {
   backbones: BackboneReference[];
   benchmark: ModelCatalogBenchmark;
   description: string;
+  // The verification model id this release provides/activates, if any —
+  // undefined means this release doesn't touch verification (e.g. a
+  // retrieval-only update). Written by publish/route.ts from the
+  // currently-active VERIFICATION_MODEL setting; consumed by
+  // install/route.ts to activate it after a successful install.
+  verificationModelId?: string;
 }
 
 /**
@@ -66,6 +72,10 @@ export function validateModelCatalogManifest(data: unknown): ModelCatalogManifes
     throw new Error("manifest.benchmark has missing or wrongly-typed fields");
   }
 
+  if (raw.verificationModelId !== undefined && typeof raw.verificationModelId !== "string") {
+    throw new Error("manifest.verificationModelId must be a string when present");
+  }
+
   return {
     bundleId: raw.bundleId,
     version: raw.version,
@@ -77,5 +87,6 @@ export function validateModelCatalogManifest(data: unknown): ModelCatalogManifes
       ranAt: benchmarkRaw.ranAt,
     },
     description: typeof raw.description === "string" ? raw.description : "",
+    verificationModelId: typeof raw.verificationModelId === "string" ? raw.verificationModelId : undefined,
   };
 }
