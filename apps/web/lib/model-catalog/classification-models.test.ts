@@ -49,12 +49,12 @@ describe("installClassificationModel", () => {
 });
 
 describe("uninstallClassificationModel", () => {
-  it("deactivates the current row and reactivates the immediately-preceding one", async () => {
+  it("deactivates the current row and reactivates the most recent row with a genuinely different version", async () => {
     const calls: { sql: string; params: unknown[] }[] = [];
     const pool = makePool(async (sql, params) => {
       calls.push({ sql, params });
-      if (sql.includes("SELECT id FROM installed_classification_models")) {
-        return { rows: [{ id: "active-row-id" }] };
+      if (sql.includes("SELECT manifest FROM installed_classification_models") && sql.includes("active = true")) {
+        return { rows: [{ manifest: manifest("1.0") }] };
       }
       if (sql.includes("UPDATE installed_classification_models SET active = false")) return { rows: [] };
       if (sql.includes("SELECT id, manifest")) {
@@ -69,19 +69,19 @@ describe("uninstallClassificationModel", () => {
     expect(result).toEqual({ restoredVersion: "0.9" });
     expect(calls.some((c) => c.sql.includes("active = false"))).toBe(true);
     expect(calls.some((c) => c.sql.includes("active = true"))).toBe(true);
-    // the row about to be deactivated must be excluded from the "find a
-    // previous version" search, otherwise a model with no other history
-    // would match its own just-deactivated row and immediately reactivate it
+    // the version(s) just deactivated must be excluded from the "find a
+    // previous version" search, otherwise reactivating a row of the exact
+    // same version would look like a rollback when it's actually a no-op
     const findPreviousCall = calls.find((c) => c.sql.includes("SELECT id, manifest"));
-    expect(findPreviousCall?.params).toEqual(["wanda-v1", ["active-row-id"]]);
+    expect(findPreviousCall?.params).toEqual(["wanda-v1", ["1.0"]]);
   });
 
-  it("excludes every row that was active before this call from the previous-version search, not just one — a data-integrity edge case from before installClassificationModel deactivated priors, where two rows were left active for the same modelId (confirmed live: a single-id exclusion let the query match and immediately reactivate the OTHER row this same call had just deactivated)", async () => {
+  it("never reactivates a row of the same version that was just deactivated — repeated installs of the same version must fully uninstall, not silently reinstall themselves (confirmed live: wanda-v1 had 4 rows all at version 1.0 from repeated testing, and 'Desinstalar' kept reactivating another same-version row every time)", async () => {
     const calls: { sql: string; params: unknown[] }[] = [];
     const pool = makePool(async (sql, params) => {
       calls.push({ sql, params });
-      if (sql.includes("SELECT id FROM installed_classification_models")) {
-        return { rows: [{ id: "active-row-1" }, { id: "active-row-2" }] };
+      if (sql.includes("SELECT manifest FROM installed_classification_models") && sql.includes("active = true")) {
+        return { rows: [{ manifest: manifest("1.0") }] };
       }
       if (sql.includes("UPDATE installed_classification_models SET active = false")) return { rows: [] };
       if (sql.includes("SELECT id, manifest")) return { rows: [] };
@@ -92,12 +92,33 @@ describe("uninstallClassificationModel", () => {
 
     expect(result).toEqual({ restoredVersion: null });
     const findPreviousCall = calls.find((c) => c.sql.includes("SELECT id, manifest"));
-    expect(findPreviousCall?.params).toEqual(["wanda-v1", ["active-row-1", "active-row-2"]]);
+    expect(findPreviousCall?.params).toEqual(["wanda-v1", ["1.0"]]);
+  });
+
+  it("excludes every version that was active before this call, not just one — a data-integrity edge case from before installClassificationModel deactivated priors, where two rows were left active for the same modelId at different versions", async () => {
+    const calls: { sql: string; params: unknown[] }[] = [];
+    const pool = makePool(async (sql, params) => {
+      calls.push({ sql, params });
+      if (sql.includes("SELECT manifest FROM installed_classification_models") && sql.includes("active = true")) {
+        return { rows: [{ manifest: manifest("1.0") }, { manifest: manifest("1.1") }] };
+      }
+      if (sql.includes("UPDATE installed_classification_models SET active = false")) return { rows: [] };
+      if (sql.includes("SELECT id, manifest")) return { rows: [] };
+      throw new Error(`unexpected sql: ${sql}`);
+    });
+
+    const result = await uninstallClassificationModel(pool, "wanda-v1");
+
+    expect(result).toEqual({ restoredVersion: null });
+    const findPreviousCall = calls.find((c) => c.sql.includes("SELECT id, manifest"));
+    expect(findPreviousCall?.params).toEqual(["wanda-v1", ["1.0", "1.1"]]);
   });
 
   it("returns restoredVersion: null when there's no earlier row to restore", async () => {
     const pool = makePool(async (sql) => {
-      if (sql.includes("SELECT id FROM installed_classification_models")) return { rows: [{ id: "active-row-id" }] };
+      if (sql.includes("SELECT manifest FROM installed_classification_models") && sql.includes("active = true")) {
+        return { rows: [{ manifest: manifest("1.0") }] };
+      }
       if (sql.includes("UPDATE installed_classification_models SET active = false")) return { rows: [] };
       if (sql.includes("SELECT id, manifest")) return { rows: [] };
       throw new Error(`unexpected sql: ${sql}`);
@@ -111,12 +132,8 @@ describe("uninstallClassificationModel", () => {
 describe("getClassificationModelHistory", () => {
   it("reports available: true with the previous version when one is deactivated most-recently-first", async () => {
     const pool = makePool(async (sql) => {
-      if (sql.includes("SELECT 1 FROM installed_classification_models")) {
-        return { rows: [{ "?column?": 1 }] };
-      }
-      if (sql.includes("SELECT manifest FROM installed_classification_models")) {
-        return { rows: [{ manifest: manifest("0.9") }] };
-      }
+      if (sql.includes("active = true")) return { rows: [{ manifest: manifest("1.0") }] };
+      if (sql.includes("active = false")) return { rows: [{ manifest: manifest("0.9") }] };
       throw new Error(`unexpected sql: ${sql}`);
     });
 
@@ -126,11 +143,21 @@ describe("getClassificationModelHistory", () => {
 
   it("reports available: false when there's no active row for this model", async () => {
     const pool = makePool(async (sql) => {
-      if (sql.includes("SELECT 1 FROM installed_classification_models")) return { rows: [] };
+      if (sql.includes("active = true")) return { rows: [] };
       throw new Error(`unexpected sql: ${sql}`);
     });
     const result = await getClassificationModelHistory(pool, "wanda-v1");
     expect(result).toEqual({ available: false, previousVersion: null });
+  });
+
+  it("reports previousVersion: null when the only deactivated row is the same version that's currently active — a same-version rollback isn't a real previous version to offer", async () => {
+    const pool = makePool(async (sql) => {
+      if (sql.includes("active = true")) return { rows: [{ manifest: manifest("1.0") }] };
+      if (sql.includes("active = false")) return { rows: [] };
+      throw new Error(`unexpected sql: ${sql}`);
+    });
+    const result = await getClassificationModelHistory(pool, "wanda-v1");
+    expect(result).toEqual({ available: true, previousVersion: null });
   });
 });
 

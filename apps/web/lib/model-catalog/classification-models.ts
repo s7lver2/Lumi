@@ -27,27 +27,28 @@ export async function installClassificationModel(pool: Pool, manifest: GenericCl
 }
 
 /** Deactivates the current active row for modelId, then reactivates the
- * most recently deactivated row for that same modelId (if any) — this is
- * the "undo" step, one level back per call, same as clicking "uninstall"
- * again on the newly-reactivated row would step back one more level.
- * Captures the row being deactivated first and excludes it from the
- * "find a previous version" search — without that exclusion, a model with
- * no other history matches its own just-deactivated row and immediately
- * reactivates it, making uninstall a silent no-op (confirmed live: the UI
- * reported "Restaurada v1.0" — the version it had just turned off — and
- * the row stayed active in the DB the whole time). */
+ * most recently deactivated row for a genuinely DIFFERENT version of that
+ * same modelId (if any) — this is a version rollback, one level back per
+ * call, same as clicking "uninstall" again on the newly-reactivated row
+ * would step back one more level. It is never a no-op relabelled as
+ * "still installed": reactivating a row of the exact same version that
+ * was just turned off isn't a rollback, it's the same state under a new
+ * row id — the button said "Desinstalar" and the model must end up off
+ * (confirmed live: wanda-v1 had 4 rows all at version "1.0" from repeated
+ * installs during testing, so the old any-previous-row logic kept
+ * reactivating a same-version row every time, and "Desinstalar" looked
+ * like it did nothing).
+ *
+ * Captures every version currently active before deactivating (there can
+ * be more than one row if older data predates installClassificationModel's
+ * duplicate-prevention fix) and excludes ALL of those versions, not just
+ * the specific row ids, from the "find a previous version" search. */
 export async function uninstallClassificationModel(pool: Pool, modelId: string): Promise<{ restoredVersion: string | null }> {
   const { rows: activeRows } = await pool.query(
-    `SELECT id FROM installed_classification_models WHERE model_id = $1 AND active = true`,
+    `SELECT manifest FROM installed_classification_models WHERE model_id = $1 AND active = true`,
     [modelId]
   );
-  // Captures every row being deactivated, not just one — installs now
-  // guard against creating duplicate active rows (see installClassification
-  // Model), but existing data from before that fix may still have more
-  // than one, and a single-id exclusion let the "find previous" search
-  // match and immediately reactivate the OTHER row deactivated in this
-  // very call.
-  const deactivatedIds = (activeRows as { id: string }[]).map((r) => r.id);
+  const deactivatedVersions = (activeRows as { manifest: GenericClassifierManifest }[]).map((r) => r.manifest.version);
 
   await pool.query(
     `UPDATE installed_classification_models SET active = false WHERE model_id = $1 AND active = true`,
@@ -56,9 +57,9 @@ export async function uninstallClassificationModel(pool: Pool, modelId: string):
 
   const { rows } = await pool.query(
     `SELECT id, manifest FROM installed_classification_models
-     WHERE model_id = $1 AND active = false AND NOT (id = ANY($2::uuid[]))
+     WHERE model_id = $1 AND active = false AND NOT (manifest->>'version' = ANY($2::text[]))
      ORDER BY installed_at DESC LIMIT 1`,
-    [modelId, deactivatedIds]
+    [modelId, deactivatedVersions]
   );
   if (rows.length === 0) return { restoredVersion: null };
 
@@ -75,22 +76,26 @@ export async function uninstallClassificationModel(pool: Pool, modelId: string):
  * wrongly disabled uninstall entirely for a model with no version history
  * yet, even though it was genuinely active and removable. `previousVersion`
  * separately reports what a click would restore to afterward (or `null`,
- * meaning it fully uninstalls to "nothing installed" for this model). */
+ * meaning it fully uninstalls to "nothing installed" for this model) —
+ * must match uninstallClassificationModel's own same-version exclusion,
+ * or the button label ("Desinstalar (volver a vX)") promises a rollback
+ * that the click won't actually perform. */
 export async function getClassificationModelHistory(
   pool: Pool,
   modelId: string
 ): Promise<{ available: boolean; previousVersion: string | null }> {
   const { rows: activeRows } = await pool.query(
-    `SELECT 1 FROM installed_classification_models WHERE model_id = $1 AND active = true`,
+    `SELECT manifest FROM installed_classification_models WHERE model_id = $1 AND active = true`,
     [modelId]
   );
   if (activeRows.length === 0) return { available: false, previousVersion: null };
+  const activeVersions = (activeRows as { manifest: GenericClassifierManifest }[]).map((r) => r.manifest.version);
 
   const { rows: previousRows } = await pool.query(
     `SELECT manifest FROM installed_classification_models
-     WHERE model_id = $1 AND active = false
+     WHERE model_id = $1 AND active = false AND NOT (manifest->>'version' = ANY($2::text[]))
      ORDER BY installed_at DESC LIMIT 1`,
-    [modelId]
+    [modelId, activeVersions]
   );
   if (previousRows.length === 0) return { available: true, previousVersion: null };
   const row = previousRows[0] as { manifest: GenericClassifierManifest };
