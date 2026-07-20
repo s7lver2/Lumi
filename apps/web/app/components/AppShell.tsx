@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { CatalogBrowser } from "./CatalogBrowser";
+import { BackgroundJobsTray } from "./BackgroundJobsTray";
+
 
 const NAV = [
   { href: "/", label: "Uso", icon: "M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" },
@@ -41,6 +43,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </nav>
       <main className="relative flex-1 overflow-hidden bg-surface">{children}</main>
       {catalogOpen && <CatalogBrowser onClose={() => setCatalogOpen(false)} />}
+      <BackgroundJobsTray />
     </div>
   );
 }
