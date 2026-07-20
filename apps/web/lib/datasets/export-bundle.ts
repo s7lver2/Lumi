@@ -9,6 +9,58 @@ function parseVector(text: string | null): number[] | null {
   return text.slice(1, -1).split(",").map(Number);
 }
 
+interface ManifestArea {
+  images: unknown[];
+  points: unknown[];
+  [key: string]: unknown;
+}
+
+/**
+ * Serializes manifest.json without ever building the whole document as one
+ * JS string. indexed_images.embedding is a fixed vector(8448) column, so
+ * each image/point entry serializes to ~300KB of JSON; a single top-level
+ * JSON.stringify() over an area with a few thousand images blows past V8's
+ * ~512M-character string limit and crashes with "RangeError: Invalid string
+ * length" (confirmed live — reproduces at ~2000 entries). Stringifying one
+ * entry at a time keeps every individual JSON.stringify() call small, and
+ * concatenating as Buffers (not strings) means the full manifest is never
+ * materialized as a single string.
+ */
+function serializeManifest(payload: {
+  version: number;
+  exportedAt: string;
+  model: ModelTag;
+  areas: ManifestArea[];
+}): Buffer {
+  const chunks: Buffer[] = [];
+  const push = (s: string) => chunks.push(Buffer.from(s, "utf8"));
+  const pushArray = (items: unknown[]) => {
+    items.forEach((item, i) => {
+      if (i > 0) push(",");
+      push(JSON.stringify(item));
+    });
+  };
+
+  push(
+    `{"version":${JSON.stringify(payload.version)},` +
+      `"exportedAt":${JSON.stringify(payload.exportedAt)},` +
+      `"model":${JSON.stringify(payload.model)},"areas":[`
+  );
+  payload.areas.forEach((area, areaIdx) => {
+    if (areaIdx > 0) push(",");
+    const { images, points, ...rest } = area;
+    // Drop the closing "}" so images/points can be appended field-by-field.
+    push(`${JSON.stringify(rest).slice(0, -1)},"images":[`);
+    pushArray(images);
+    push(`],"points":[`);
+    pushArray(points);
+    push(`]}`);
+  });
+  push(`]}`);
+
+  return Buffer.concat(chunks);
+}
+
 /**
  * Builds the encrypted-later, zippable bundle for one or more areas —
  * extracted from apps/web/app/api/areas/export/route.ts (spec: "reused as-
@@ -95,7 +147,7 @@ export async function buildAreasZip(pool: Pool, areaIds: string[], model: ModelT
 
   zip.file(
     "manifest.json",
-    JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), model, areas: manifestAreas }, null, 2)
+    serializeManifest({ version: 1, exportedAt: new Date().toISOString(), model, areas: manifestAreas as ManifestArea[] })
   );
 
   return zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });

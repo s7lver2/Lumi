@@ -6,6 +6,7 @@ import {
   DEFAULT_TOP_K,
   DEFAULT_REGION_RADIUS_M,
   DEFAULT_QUERY_EXPANSION_SIZE,
+  DEFAULT_RELATIVE_SIMILARITY_FLOOR,
 } from "@netryx/shared-types";
 import { getPool } from "../../../../../lib/db";
 import { getSettingsRepo } from "../../../../../lib/settings-repo";
@@ -20,7 +21,15 @@ import { runSearch, type RunSearchDeps } from "../../../../../lib/search/run-sea
 import { validateImageBytes } from "../../../../../lib/image-validation";
 
 export async function POST(request: Request, { params }: { params: { modelId: string } }) {
-  const activeModelId = (await getSettingsRepo().getSetting("RETRIEVAL_MODEL")) ?? "lumi-preview";
+  let activeModelId: string;
+  try {
+    activeModelId = (await getSettingsRepo().getSetting("RETRIEVAL_MODEL")) ?? "lumi-preview";
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Could not read settings" },
+      { status: 502 }
+    );
+  }
   const check = validateModelId(params.modelId, RETRIEVAL_MODELS.map((m) => m.id), activeModelId);
   if (!check.ok) {
     return NextResponse.json({ error: check.error }, { status: check.status });
@@ -57,7 +66,8 @@ export async function POST(request: Request, { params }: { params: { modelId: st
   const deps: RunSearchDeps = {
     newSearchId: () => randomUUID(),
     embedQuery: (b64) => embedQueryImage(b64, inferenceBaseUrl),
-    retrieve: (embedding) => retrieveCandidates(pool, embedding, DEFAULT_TOP_K),
+    retrieve: (embedding) =>
+      retrieveCandidates(pool, embedding, DEFAULT_TOP_K, undefined, DEFAULT_RELATIVE_SIMILARITY_FLOOR),
     rerank: (embedding, candidates) =>
       queryExpansionRerank(embedding, candidates, DEFAULT_QUERY_EXPANSION_SIZE),
     cluster: (candidates) => clusterCandidates(candidates, DEFAULT_REGION_RADIUS_M),

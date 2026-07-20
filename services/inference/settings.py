@@ -94,3 +94,18 @@ def get_low_vram_mode_setting(conn) -> str:
     if row is None or row[0] is None:
         return DEFAULT_LOW_VRAM_MODE
     return row[0]
+
+
+def get_active_classification_models(conn) -> dict:
+    """Every currently-installed (active=true) generic-classifier model,
+    keyed by modelId (spec: docs/superpowers/specs/2026-07-20-unified-
+    model-catalog-design.md). Queried fresh on every /models/{model_id}/
+    classify call (not cached at startup like get_active_model_ids) —
+    installing/uninstalling a classifier must take effect without
+    restarting this process. psycopg2 decodes the `manifest` jsonb column
+    to a plain dict automatically (its default type adapter for jsonb),
+    no json.loads needed here."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT model_id, manifest FROM installed_classification_models WHERE active = true")
+        rows = cur.fetchall()
+    return {model_id: manifest for model_id, manifest in rows}

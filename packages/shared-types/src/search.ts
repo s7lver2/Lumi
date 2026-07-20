@@ -3,6 +3,16 @@
 /** Spec §9.2 — top-k candidates pulled by cosine before clustering. */
 export const DEFAULT_TOP_K = 50;
 
+/** Fraction (0..1) of the top-1 candidate's similarity below which a Pass-1
+ * candidate is dropped — without this, top-k retrieval returns k candidates
+ * regardless of how dissimilar they are (a sparse/small index can surface
+ * 2-8% "matches" alongside the real one). A fixed absolute cutoff doesn't
+ * work here: MegaLoc's cosine similarity isn't on a stable scale across
+ * searches (confirmed live — one search's best real match scored 8.9%,
+ * another search's best match scored 97%), so the floor is relative to each
+ * search's own top score instead. */
+export const DEFAULT_RELATIVE_SIMILARITY_FLOOR = 0.4;
+
 /** Radius (metres) within which candidates are grouped into one region (spec §9.2 clustering). */
 export const DEFAULT_REGION_RADIUS_M = 150;
 

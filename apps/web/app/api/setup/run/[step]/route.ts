@@ -12,7 +12,15 @@ import { winPathToWsl } from "../../../../lib/wsl-path";
 // never built from request input.
 // The setup wizard always passes ?rerun=1 (setup is re-runnable from Settings),
 // so the completed-guard only blocks stray external callers, not the wizard.
-const REPO_ROOT = resolve(process.cwd(), "..", "..");
+// In dev (`next dev`), cwd IS apps/web under the real checkout, so "../.."
+// lands on the repo root. In the compiled release build, server.js's cwd is
+// staging_dir/apps/web instead (a staged COPY, not the checkout) — "../.."
+// from there lands on staging_dir, not the real repo root, so a cwd-relative
+// guess silently looks for services/inference/venv in the wrong place and
+// reports a real, already-installed inference env as "not installed"
+// (confirmed live). tools/build.py sets LUMI_REPO_ROOT for exactly this case;
+// dev mode never sets it, so the cwd-relative fallback still covers it.
+const REPO_ROOT = process.env.LUMI_REPO_ROOT ?? resolve(process.cwd(), "..", "..");
 const INFER = resolve(REPO_ROOT, "services", "inference");
 // winPathToWsl() throws on anything that isn't a Windows drive-letter path
 // (see wsl-path.ts) — only ever call it when the host itself is Windows.

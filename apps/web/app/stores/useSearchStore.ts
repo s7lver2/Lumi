@@ -29,6 +29,7 @@ interface SearchState {
   setRefineProgress: (progress: RefineProgress) => void;
   setBatchProgress: (progress: { done: number; total: number; failed: number } | null) => void;
   setError: (message: string) => void;
+  dismissError: () => void;
   reset: () => void;
 }
 
@@ -72,5 +73,6 @@ export const useSearchStore = create<SearchState>((set) => ({
       refineProgress: null,
     })),
   setError: (error) => set({ error, refineStatus: "error", refineProgress: null }),
+  dismissError: () => set({ error: null }),
   reset: () => set({ ...INITIAL }),
 }));

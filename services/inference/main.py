@@ -59,11 +59,12 @@ from fastapi import Depends, FastAPI, HTTPException
 from PIL import Image
 from pydantic import BaseModel
 
-from loader import load_retrieval_model, load_verification_model
-from vram import resolve_low_vram_mode, describe_gpu
+from loader import load_retrieval_model, load_verification_model, load_generic_classifier
+from vram import resolve_low_vram_mode, describe_gpu, gpu_memory_bytes
 from settings import (
     DEFAULT_VERIFICATION_TILE_PASSES,
     get_active_model_ids,
+    get_active_classification_models,
     get_verification_tile_passes,
     get_verify_config,
     get_low_vram_mode_setting,
@@ -76,8 +77,18 @@ app = FastAPI(title="netryx-fork inference service")
 
 _model_holder: dict = {}
 
-_active_kind: str | None = None  # "retrieval" | "verification" | None — which kind _ensure_active_model most recently returned
+_active_kind: str | None = None  # "retrieval" | "verification" | <classification model_id> | None — which kind _ensure_active_model most recently returned
 _loading_kind: str | None = None  # set only WHILE a model is actively being loaded — read by GET /model-status
+
+
+def _connect_db():
+    return psycopg2.connect(
+        host=os.environ.get("POSTGRES_HOST", "localhost"),
+        port=os.environ.get("POSTGRES_PORT", "5432"),
+        user=os.environ.get("POSTGRES_USER", "netryx"),
+        password=os.environ.get("POSTGRES_PASSWORD", "changeme"),
+        dbname=os.environ.get("POSTGRES_DB", "netryx_dev"),
+    )
 
 
 class EmbedRequest(BaseModel):
@@ -98,6 +109,8 @@ class ModelStatusResponse(BaseModel):
     loading: str | None
     lowVramMode: bool
     gpuNote: str
+    gpuFreeBytes: int | None
+    gpuTotalBytes: int | None
 
 
 class VerifyResult(BaseModel):
@@ -110,10 +123,43 @@ class VerifyResponse(BaseModel):
     results: list[VerifyResult]
 
 
+class ClassifyRequest(BaseModel):
+    image_base64: str
+
+
+class ClassifyLabel(BaseModel):
+    name: str
+    score: float
+
+
+class ClassifyGroup(BaseModel):
+    facet: str
+    labels: list[ClassifyLabel]
+
+
+class ClassifyResponse(BaseModel):
+    groups: list[ClassifyGroup]
+
+
 _OOM_MESSAGE = (
     "No hay memoria de GPU suficiente para cargar el modelo. "
     "Cierra otras aplicaciones que usen la GPU e inténtalo de nuevo."
 )
+
+_OOM_INFERENCE_MESSAGE = (
+    "La GPU se quedó sin memoria durante el cálculo (no al cargar el modelo). "
+    "Cierra otras aplicaciones que usen la GPU e inténtalo de nuevo."
+)
+
+
+def _model_key(kind: str) -> str:
+    if kind == "retrieval":
+        return "model"
+    if kind == "verification":
+        return "verification_model"
+    # Any other kind is a classification model_id (spec: docs/superpowers/
+    # specs/2026-07-20-unified-model-catalog-design.md).
+    return f"classifier_{kind}"
 
 
 def _load_kind(kind: str):
@@ -123,11 +169,24 @@ def _load_kind(kind: str):
         model = model.to(device)
         model.eval()
         return model
-    return load_verification_model(_model_holder["verification_model_id"])
+    if kind == "verification":
+        return load_verification_model(_model_holder["verification_model_id"])
+
+    # A classification model_id — re-fetch its manifest from the DB-backed
+    # registry rather than threading it through _model_holder, since
+    # classify() isn't a hot path (unlike /embed's per-chunk calls).
+    conn = _connect_db()
+    try:
+        manifest = get_active_classification_models(conn).get(kind)
+    finally:
+        conn.close()
+    if manifest is None:
+        raise HTTPException(status_code=404, detail=f"Unknown or inactive classification model id: {kind}")
+    return load_generic_classifier(manifest)
 
 
 def _unload_kind(kind: str) -> None:
-    key = "model" if kind == "retrieval" else "verification_model"
+    key = _model_key(kind)
     if key in _model_holder:
         del _model_holder[key]
     if torch.cuda.is_available():
@@ -153,7 +212,7 @@ def _ensure_active_model(kind: str):
     """
     global _active_kind, _loading_kind
 
-    key = "model" if kind == "retrieval" else "verification_model"
+    key = _model_key(kind)
 
     with _swap_lock:
         if key in _model_holder and _active_kind == kind:
@@ -201,13 +260,7 @@ def load_model_once() -> None:
     startup using the credentials and identifiers retrieved from the database
     (spec §14.5, §15.4).
     """
-    conn = psycopg2.connect(
-        host=os.environ.get("POSTGRES_HOST", "localhost"),
-        port=os.environ.get("POSTGRES_PORT", "5432"),
-        user=os.environ.get("POSTGRES_USER", "netryx"),
-        password=os.environ.get("POSTGRES_PASSWORD", "changeme"),
-        dbname=os.environ.get("POSTGRES_DB", "netryx_dev"),
-    )
+    conn = _connect_db()
     try:
         # Extraemos ambos IDs usando la misma conexión según especificación
         retrieval_model_id, verification_model_id = get_active_model_ids(conn)
@@ -302,15 +355,21 @@ def embed(request: EmbedRequest, model=Depends(get_retrieval_model)) -> EmbedRes
 
     images = [_decode_image(img) for img in request.images_base64]
 
-    if request.augment:
-        embeddings = []
-        for img in images:
-            variants = augment_variants(img)
-            raw_vectors = _run_model(model, variants)
-            embeddings.append(mean_normalize(raw_vectors).tolist())
-        return EmbedResponse(embeddings=embeddings)
+    try:
+        if request.augment:
+            embeddings = []
+            for img in images:
+                variants = augment_variants(img)
+                raw_vectors = _run_model(model, variants)
+                embeddings.append(mean_normalize(raw_vectors).tolist())
+            return EmbedResponse(embeddings=embeddings)
 
-    raw_vectors = _run_model(model, images)
+        raw_vectors = _run_model(model, images)
+    except torch.cuda.OutOfMemoryError as exc:
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        raise HTTPException(status_code=503, detail=_OOM_INFERENCE_MESSAGE) from exc
+
     embeddings = []
     for vec in raw_vectors:
         vec = np.asarray(vec, dtype=np.float64)
@@ -345,7 +404,12 @@ def verify(request: VerifyRequest, model=Depends(get_verification_model)) -> Ver
         # comments), so _model_holder never gets these keys set in that case.
         passes = _model_holder.get("verification_tile_passes", DEFAULT_VERIFICATION_TILE_PASSES)
         verify_config = _model_holder.get("verify_config")  # None -> verify_pair uses its own DEFAULT_VERIFY_CONFIG
-        r = verify_pair(query, candidate, matcher, config=verify_config, passes=passes)
+        try:
+            r = verify_pair(query, candidate, matcher, config=verify_config, passes=passes)
+        except torch.cuda.OutOfMemoryError as exc:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            raise HTTPException(status_code=503, detail=_OOM_INFERENCE_MESSAGE) from exc
         elapsed = time.perf_counter() - candidate_start
         results.append(VerifyResult(**r))
         # Visible per-candidate, not just per-request: RoMa on CPU can take
@@ -359,10 +423,39 @@ def verify(request: VerifyRequest, model=Depends(get_verification_model)) -> Ver
     return VerifyResponse(results=results)
 
 
+@app.post("/models/{model_id}/classify", response_model=ClassifyResponse)
+def classify(model_id: str, request: ClassifyRequest) -> ClassifyResponse:
+    conn = _connect_db()
+    try:
+        active_models = get_active_classification_models(conn)
+    finally:
+        conn.close()
+    if model_id not in active_models:
+        raise HTTPException(status_code=404, detail=f"Unknown or inactive classification model id: {model_id}")
+
+    image = _decode_image(request.image_base64)
+    classifier = _ensure_active_model(model_id)  # OOM during load already raises 503 inside _ensure_active_model
+    try:
+        groups = classifier.classify(image)
+    except torch.cuda.OutOfMemoryError as exc:
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        raise HTTPException(status_code=503, detail=_OOM_INFERENCE_MESSAGE) from exc
+
+    return ClassifyResponse(groups=[ClassifyGroup(facet=g["facet"], labels=[ClassifyLabel(**l) for l in g["labels"]]) for g in groups])
+
+
 @app.get("/model-status", response_model=ModelStatusResponse)
 def model_status() -> ModelStatusResponse:
+    cuda_available = torch.cuda.is_available()
+    gpu_bytes = None
+    if cuda_available:
+        free_bytes, total_bytes = torch.cuda.mem_get_info()
+        gpu_bytes = gpu_memory_bytes(cuda_available, free_bytes, total_bytes)
     return ModelStatusResponse(
         loading=_loading_kind,
         lowVramMode=_model_holder.get("low_vram_mode", False),
         gpuNote=_model_holder.get("gpu_note", "Estado de la GPU desconocido."),
+        gpuFreeBytes=gpu_bytes[0] if gpu_bytes else None,
+        gpuTotalBytes=gpu_bytes[1] if gpu_bytes else None,
     )

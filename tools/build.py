@@ -736,6 +736,15 @@ def run_staged_build(root: Path, staging_dir: Path) -> int:
 
     node_env = {**os.environ, **load_env_file(env_file)}
     node_env.setdefault("PORT", "3000")
+    # server.js's cwd is staging_dir/apps/web, not the repo root (unlike
+    # `next dev`, whose cwd IS apps/web under the real checkout) — a
+    # cwd-relative "../.." from there lands inside staging_dir, not root.
+    # Confirmed live: apps/web/app/api/setup/run/[step]/route.ts derived
+    # REPO_ROOT that way, so its venv-existence check looked in
+    # staging_dir/services/inference/venv (never populated — Python venvs
+    # aren't staged, only .py source) and reported inference as "not
+    # installed" even though services/inference/venv exists right here.
+    node_env["LUMI_REPO_ROOT"] = str(root)
 
     print("Arrancando Postgres (docker compose up -d --build db)...")
     try:

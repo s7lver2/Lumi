@@ -10,15 +10,30 @@ import { persistRefine } from "../../../../../lib/search/refine-persist";
 import { runRefine, type RunRefineDeps } from "../../../../../lib/search/run-refine";
 
 export async function POST(request: Request, { params }: { params: { modelId: string } }) {
-  const body = (await request.json()) as RefineRequest;
-  if (!body.searchId || !body.regionId) {
-    return new Response(JSON.stringify({ error: "searchId and regionId are required" }), {
-      status: 400,
-      headers: { "content-type": "application/json" },
-    });
+  let body: RefineRequest;
+  let activeModelId: string;
+  let confirmThreshold: number;
+  try {
+    body = (await request.json()) as RefineRequest;
+    if (!body.searchId || !body.regionId) {
+      return new Response(JSON.stringify({ error: "searchId and regionId are required" }), {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    const repo = getSettingsRepo();
+    activeModelId = (await repo.getSetting("RETRIEVAL_MODEL")) ?? "lumi-preview";
+    confirmThreshold = Number(
+      (await repo.getSetting("VERIFICATION_CONFIRM_THRESHOLD")) ?? String(DEFAULT_CONFIRM_THRESHOLD)
+    );
+  } catch (err) {
+    return new Response(
+      JSON.stringify({ error: err instanceof Error ? err.message : "Could not read request or settings" }),
+      { status: 502, headers: { "content-type": "application/json" } }
+    );
   }
 
-  const activeModelId = (await getSettingsRepo().getSetting("RETRIEVAL_MODEL")) ?? "lumi-preview";
   const check = validateModelId(params.modelId, RETRIEVAL_MODELS.map((m) => m.id), activeModelId);
   if (!check.ok) {
     return new Response(JSON.stringify({ error: check.error }), {
@@ -28,11 +43,7 @@ export async function POST(request: Request, { params }: { params: { modelId: st
   }
 
   const pool = getPool();
-  const repo = getSettingsRepo();
   const inferenceBaseUrl = process.env.INFERENCE_SERVICE_URL ?? "http://localhost:8000";
-  const confirmThreshold = Number(
-    (await repo.getSetting("VERIFICATION_CONFIRM_THRESHOLD")) ?? String(DEFAULT_CONFIRM_THRESHOLD)
-  );
 
   const stream = new ReadableStream({
     async start(controller) {

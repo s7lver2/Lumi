@@ -29,7 +29,8 @@ export async function retrieveCandidates(
   pool: Pool,
   queryEmbedding: number[],
   k: number,
-  excludeIndexedImageId?: string
+  excludeIndexedImageId?: string,
+  relativeSimilarityFloor = 0
 ): Promise<RetrievedCandidate[]> {
   const q = toVectorLiteral(queryEmbedding);
   const excludeId = excludeIndexedImageId ?? null;
@@ -92,5 +93,10 @@ export async function retrieveCandidates(
     }
   }
 
-  return [...byPano.values()].sort((a, b) => b.similarity - a.similarity);
+  const sorted = [...byPano.values()].sort((a, b) => b.similarity - a.similarity);
+  const topSimilarity = sorted[0]?.similarity ?? 0;
+  if (relativeSimilarityFloor <= 0 || topSimilarity <= 0) return sorted;
+
+  const floor = topSimilarity * relativeSimilarityFloor;
+  return sorted.filter((c) => c.similarity >= floor);
 }

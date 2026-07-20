@@ -41,10 +41,11 @@ export function SearchDashboard() {
     refineStatus, 
     refineProgress, 
     regions, 
-    error, 
-    setSearching, 
-    setSearchResults, 
+    error,
+    setSearching,
+    setSearchResults,
     setError,
+    dismissError,
     candidatesByRegion,
     currentSearchId, 
     setRefining, 
@@ -79,7 +80,17 @@ export function SearchDashboard() {
         source.close();
         setBatchProgress(null);
         if (data.status === "done" && data.result) {
-          setSearchResults(data.result, queryImageName);
+          if (data.result.regions.length === 0) {
+            // A legitimately completed search can still surface zero regions
+            // (e.g. an empty index, or every candidate falling below
+            // DEFAULT_RELATIVE_SIMILARITY_FLOOR) — previously this rendered
+            // nothing at all (regions.length > 0 gates the whole
+            // ResultsPanel), so the notification vanished with no
+            // explanation of why the screen stayed empty.
+            setError("No se encontraron coincidencias para esta imagen. Prueba con otra foto o revisa que la zona esté indexada.");
+          } else {
+            setSearchResults(data.result, queryImageName);
+          }
         } else {
           setError("No se pudo completar la búsqueda para ninguna de las imágenes");
         }
@@ -231,6 +242,16 @@ export function SearchDashboard() {
   const idle = refineStatus === "idle";
   const searching = refineStatus === "searching";
   const refining = refineStatus === "refining";
+  // A batch-search failure (bad image, no candidates above the similarity
+  // floor, worker/inference down, etc.) leaves refineStatus "error" with no
+  // regions ever having arrived — previously the drop target stayed hidden
+  // (gated on idle only) and selected[] was already cleared before the
+  // failure, so the user was stuck looking at the error banner with no way
+  // to try again short of a full page reload. A refine (Pass 2) failure is
+  // different: regions are already populated from a prior successful search,
+  // so that case keeps the results panel up instead of reopening the drop
+  // target.
+  const canRetryDrop = idle || (refineStatus === "error" && regions.length === 0);
 
   return (
     <>
@@ -238,7 +259,7 @@ export function SearchDashboard() {
       {map && <ConfidenceCircleLayer map={map} />}
       {map && <MapArrivalPulse map={map} point={pulsePoint} />}
 
-      {idle && selected.length === 0 && (
+      {canRetryDrop && selected.length === 0 && (
         <MapDropTarget
           onImagesReady={(images) => {
             Promise.all(
@@ -282,7 +303,34 @@ export function SearchDashboard() {
         />
       )}
 
-      <ModelLoadNotification active={searching || refining} thumbnailUrl={queryImageUrl} />
+      <ModelLoadNotification
+        active={searching || refining}
+        thumbnailUrl={queryImageUrl}
+        fallbackLabel={
+          searching
+            ? batchProgress
+              ? `Escaneando ${batchProgress.done}/${batchProgress.total}…`
+              : "Buscando…"
+            : "Verificando…"
+        }
+      />
+
+      {error && (
+        <div className="fixed bottom-4 right-4 z-40 flex w-[280px] items-start gap-2.5 rounded-lg border border-danger/40 bg-panel/[.97] p-3 shadow-lg shadow-black/40">
+          <span className="mt-0.5 text-danger">⚠</span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] font-medium text-fg">No se pudo completar</div>
+            <div className="mt-0.5 text-[10.5px] leading-snug text-muted">{error}</div>
+          </div>
+          <button
+            onClick={dismissError}
+            className="text-subtle hover:text-fg"
+            aria-label="Cerrar"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {regions.length > 0 && (
         <div className="absolute right-0 top-0 h-full w-[520px]">

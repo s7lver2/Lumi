@@ -117,3 +117,95 @@ def load_verification_model(model_id: str):
     )
     roma_model = _LOAD_ROMA_OUTDOOR(device=device, amp_dtype=amp_dtype, use_custom_corr=use_custom_corr)
     return RomaMatcher(roma_model, device)
+
+
+class GenericClassifier:
+    """Wraps one or more per-facet sub-models behind the uniform
+    `.classify(image) -> list[dict]` interface main.py expects (same shape
+    RomaMatcher.match_points() plays for verification) — a manifest's
+    `facets` list (spec: docs/superpowers/specs/2026-07-20-unified-model-
+    catalog-design.md) drives which sub-model handles which facet, and
+    this class just runs each and merges the results."""
+
+    def __init__(self, facet_runners: list):
+        # facet_runners: list of (facet_name: str, runner: Callable[[np.ndarray], list[dict]])
+        self._facet_runners = facet_runners
+
+    def classify(self, image):
+        return [{"facet": facet, "labels": runner(image)} for facet, runner in self._facet_runners]
+
+
+# Indirection so tests can inject fakes instead of downloading real HF
+# weights — same pattern as _LOAD_ROMA_OUTDOOR above. Both stay None until
+# first real use; lazily resolved because `transformers` is a heavy import.
+_TRANSFORMERS_PIPELINE = None
+_CLIP_MODEL_CLS = None
+_CLIP_PROCESSOR_CLS = None
+
+
+def _load_hf_pipeline_classifier(hf_model_id: str):
+    global _TRANSFORMERS_PIPELINE
+    if _TRANSFORMERS_PIPELINE is None:
+        from transformers import pipeline as _pipeline
+
+        _TRANSFORMERS_PIPELINE = _pipeline
+    device = 0 if torch.cuda.is_available() else -1
+    return _TRANSFORMERS_PIPELINE("image-classification", model=hf_model_id, device=device)
+
+
+def _run_hf_pipeline(clf, image) -> list:
+    from PIL import Image
+
+    results = clf(Image.fromarray(image))
+    return [{"name": r["label"], "score": float(r["score"])} for r in results]
+
+
+def _load_clip_zero_shot_classifier(hf_model_id: str):
+    global _CLIP_MODEL_CLS, _CLIP_PROCESSOR_CLS
+    if _CLIP_MODEL_CLS is None or _CLIP_PROCESSOR_CLS is None:
+        from transformers import CLIPModel, CLIPProcessor
+
+        _CLIP_MODEL_CLS = CLIPModel
+        _CLIP_PROCESSOR_CLS = CLIPProcessor
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = _CLIP_MODEL_CLS.from_pretrained(hf_model_id).to(device)
+    processor = _CLIP_PROCESSOR_CLS.from_pretrained(hf_model_id)
+    return (model, processor, device)
+
+
+def _run_clip_zero_shot(model_and_processor, prompts: list, image) -> list:
+    from PIL import Image
+
+    model, processor, device = model_and_processor
+    inputs = processor(text=prompts, images=Image.fromarray(image), return_tensors="pt", padding=True)
+    inputs = {k: v.to(device) if hasattr(v, "to") else v for k, v in inputs.items()}
+    with torch.no_grad():
+        outputs = model(**inputs)
+    probs = outputs.logits_per_image.softmax(dim=1)[0].tolist()
+    ranked = sorted(zip(prompts, probs), key=lambda pair: pair[1], reverse=True)
+    return [{"name": name, "score": float(score)} for name, score in ranked]
+
+
+def load_generic_classifier(manifest: dict) -> GenericClassifier:
+    """manifest is one installed_classification_models row's decoded
+    `manifest` jsonb (spec: docs/superpowers/specs/2026-07-20-unified-
+    model-catalog-design.md) — loads one sub-model per facet. Two facets
+    naming the same hfModelId (Wanda's time_of_day/season both use the
+    same CLIP checkpoint) each get their own loaded instance — no
+    cross-facet caching; acceptable since that checkpoint is small enough
+    to load twice, and avoids adding cache-invalidation complexity for a
+    case that's rare today."""
+    facet_runners = []
+    for facet_cfg in manifest["facets"]:
+        facet = facet_cfg["facet"]
+        hf_model_id = facet_cfg["hfModelId"]
+        if facet_cfg["strategy"] == "pipeline":
+            clf = _load_hf_pipeline_classifier(hf_model_id)
+            facet_runners.append((facet, lambda image, clf=clf: _run_hf_pipeline(clf, image)))
+        else:
+            prompts = facet_cfg["prompts"]
+            model_and_processor = _load_clip_zero_shot_classifier(hf_model_id)
+            facet_runners.append(
+                (facet, lambda image, mp=model_and_processor, prompts=prompts: _run_clip_zero_shot(mp, prompts, image))
+            )
+    return GenericClassifier(facet_runners)

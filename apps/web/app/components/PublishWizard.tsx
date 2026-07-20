@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { fetchJson } from "../lib/fetch-json";
 import { canAdvanceFromAreaStep, canAdvanceFromDetailsStep, canPublish } from "../lib/publish-wizard-steps";
 import { getLastDatasetRepo, setLastDatasetRepo } from "../lib/last-dataset-repo";
+import { RepoPicker } from "./RepoPicker";
 
 interface Area {
   id: string;
@@ -141,13 +142,8 @@ export function PublishWizard({ onClose, onPublished }: { onClose: () => void; o
         {step === 3 && (
           <div>
             <div className="mb-3 text-xs text-muted">Paso 3 de 3 — Destino y publicar</div>
-            <label className="mb-1 block text-xs text-muted">Repositorio destino (owner/repo)</label>
-            <input
-              value={repo}
-              onChange={(e) => setRepo(e.target.value)}
-              placeholder="owner/repo"
-              className="mb-3 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-fg outline-none focus:border-white/25"
-            />
+            <label className="mb-1 block text-xs text-muted">Repositorio destino</label>
+            <RepoPicker value={repo} onChange={setRepo} />
             <div className="mb-3 rounded-md border border-dashed border-white/22 bg-white/[.03] px-3 py-2 text-xs text-muted">
               🔒 Se publicará etiquetado con tu modelo de retrieval activo ahora mismo (no editable).
             </div>

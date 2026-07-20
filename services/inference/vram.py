@@ -30,3 +30,17 @@ def describe_gpu(cuda_available: bool, device_name: str | None, total_memory_byt
         return "No se detectó GPU — modo bajo VRAM desactivado (no aplica sin GPU)."
     gb = total_memory_bytes / (1024 ** 3)
     return f"GPU detectada: {device_name or 'desconocida'} ({gb:.0f} GB)"
+
+
+def gpu_memory_bytes(cuda_available: bool, free_bytes: int, total_bytes: int) -> tuple[int, int] | None:
+    """Raw (free, total) VRAM bytes for the model-catalog VRAM bar (spec:
+    docs/superpowers/specs/2026-07-20-unified-model-catalog-design.md) —
+    describe_gpu() above only produces a human string. main.py queries
+    torch.cuda.mem_get_info() fresh on every /model-status call (VRAM
+    usage changes as models load/unload, unlike total_memory captured once
+    at startup) and passes the raw numbers in here; this function's only
+    job is the cuda_available guard, kept next to describe_gpu()'s
+    identical guard instead of duplicated in main.py."""
+    if not cuda_available:
+        return None
+    return (free_bytes, total_bytes)
