@@ -230,3 +230,53 @@ describe("POST /api/model-catalog/install", () => {
     expect(backupInferenceCode).not.toHaveBeenCalled();
   });
 });
+
+vi.mock("../../../../lib/model-catalog/classification-models", () => ({ installClassificationModel: vi.fn() }));
+vi.mock("../../../../lib/db", () => ({ getPool: vi.fn(() => ({})) }));
+
+describe("POST /api/model-catalog/install — generic-classifier strategy", () => {
+  it("installs without touching files or calling restart-inference", async () => {
+    const { listReleasesForRepo, downloadReleaseAsset } = await import("../../../../lib/model-catalog/github");
+    const { encryptBuffer } = await import("@netryx/settings-repo");
+    const { MODEL_CATALOG_SHARED_KEY } = await import("../../../../lib/model-catalog/shared-key");
+    const { installClassificationModel } = await import("../../../../lib/model-catalog/classification-models");
+
+    const manifest = {
+      kind: "generic-classifier", modelId: "wanda-v1", version: "1.0",
+      facets: [{ facet: "weather", hfModelId: "prithivMLmods/Weather-Image-Classification", strategy: "pipeline" }],
+      benchmark: { sampleCount: 0, ranAt: "x", vramEstimateBytes: null },
+      description: "",
+    };
+
+    (listReleasesForRepo as any).mockResolvedValue([
+      { tagName: "wanda-v1", name: "x", body: "", assets: [{ name: "metadata.json.enc", url: "meta-url" }] },
+    ]);
+    (downloadReleaseAsset as any).mockImplementation(async (url: string) => {
+      if (url === "meta-url") return encryptBuffer(Buffer.from(JSON.stringify(manifest)), MODEL_CATALOG_SHARED_KEY);
+      throw new Error(`unexpected asset url: ${url}`);
+    });
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest({ owner: "inigo", repo: "lumi-model-catalog", tag: "wanda-v1" }));
+    const json = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(json).toEqual({ ok: true, modelId: "wanda-v1", version: "1.0" });
+    expect(installClassificationModel).toHaveBeenCalledWith(expect.anything(), manifest);
+    expect(fetchMock).not.toHaveBeenCalled(); // no restart-inference call
+  });
+
+  it("400s when a generic-classifier release is missing its metadata asset", async () => {
+    const { listReleasesForRepo } = await import("../../../../lib/model-catalog/github");
+    (listReleasesForRepo as any).mockResolvedValue([
+      { tagName: "wanda-v1", name: "x", body: "", assets: [] },
+    ]);
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest({ owner: "inigo", repo: "lumi-model-catalog", tag: "wanda-v1" }));
+    expect(res.status).toBe(400);
+  });
+});

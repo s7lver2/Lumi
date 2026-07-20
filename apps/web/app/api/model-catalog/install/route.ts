@@ -12,6 +12,8 @@ import { MODEL_CATALOG_SHARED_KEY } from "../../../../lib/model-catalog/shared-k
 import { backupInferenceCode, restoreInferenceCode, persistBackup } from "../../../../lib/model-catalog/backup";
 import { PREVIOUS_CODE_DIR, readUninstallMeta, writeUninstallMeta } from "../../../../lib/model-catalog/uninstall-state";
 import { getSettingsRepo } from "../../../../lib/settings-repo";
+import { installClassificationModel } from "../../../../lib/model-catalog/classification-models";
+import { getPool } from "../../../../lib/db"; 
 
 interface InstallBody {
   owner?: string;
@@ -65,8 +67,7 @@ export async function POST(request: Request) {
   }
 
   const metadataAsset = release.assets.find((a) => a.name === MODEL_CATALOG_METADATA_ASSET_NAME);
-  const codeAsset = release.assets.find((a) => a.name === BUNDLE_CODE_ASSET_NAME);
-  if (!metadataAsset || !codeAsset) {
+  if (!metadataAsset) {
     return NextResponse.json({ error: "release is missing expected assets" }, { status: 400 });
   }
 
@@ -74,6 +75,16 @@ export async function POST(request: Request) {
   const manifest = validateModelCatalogManifest(
     JSON.parse(decryptBuffer(metadataBytes, MODEL_CATALOG_SHARED_KEY).toString("utf8"))
   );
+
+  if (manifest.kind === "generic-classifier") {
+    await installClassificationModel(getPool(), manifest);
+    return NextResponse.json({ ok: true, modelId: manifest.modelId, version: manifest.version }, { status: 201 });
+  }
+
+  const codeAsset = release.assets.find((a) => a.name === BUNDLE_CODE_ASSET_NAME);
+  if (!codeAsset) {
+    return NextResponse.json({ error: "release is missing expected assets" }, { status: 400 });
+  }
 
   const codeBytes = await downloadReleaseAsset(codeAsset.url);
   const decrypted = decryptBuffer(codeBytes, MODEL_CATALOG_SHARED_KEY);
