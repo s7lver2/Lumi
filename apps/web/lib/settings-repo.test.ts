@@ -95,4 +95,21 @@ describe("settings repo", () => {
     const repo = makeRepo();
     expect(await repo.getSetting("MAPBOX_TOKEN")).toBeNull();
   });
+
+  it("clearCache drops every cached value, including keys never written through the repo", async () => {
+    const repo = createSettingsRepo({
+      pool,
+      encryptionKeyPath: keyPath,
+      cacheTtlMs: 60_000,
+    });
+    await repo.completeSetup([{ key: "MAX_AREA_KM2", value: "5", isSecret: false }]);
+    expect(await repo.isSetupCompleted()).toBe(true);
+
+    // mutate the DB directly (mirroring a raw TRUNCATE), bypassing the repo
+    await pool.query("DELETE FROM system_settings");
+    expect(await repo.isSetupCompleted()).toBe(true); // still cached
+
+    repo.clearCache();
+    expect(await repo.isSetupCompleted()).toBe(false);
+  });
 });

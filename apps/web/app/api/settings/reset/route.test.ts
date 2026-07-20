@@ -71,7 +71,7 @@ describe("POST /api/settings/reset", () => {
 
     const setSetting = vi.fn();
     const { getSettingsRepo } = await import("../../../../lib/settings-repo");
-    (getSettingsRepo as any).mockReturnValue({ setSetting });
+    (getSettingsRepo as any).mockReturnValue({ setSetting, clearCache: vi.fn() });
 
     const { restoreInferenceCode } = await import("../../../../lib/model-catalog/backup");
     const { backupDatabaseToJson } = await import("../../../../lib/settings/db-backup");
@@ -89,6 +89,25 @@ describe("POST /api/settings/reset", () => {
     expect(setSetting).toHaveBeenCalledWith("VERIFICATION_MODEL", "", false);
   });
 
+  it("clears the settings repo's cache after truncating", async () => {
+    // Regression test: the TRUNCATE bypasses the settings repo entirely
+    // (raw pool.query), so its in-memory cache keeps serving pre-reset
+    // values — most visibly isSetupCompleted() staying true and the app
+    // never redirecting to /setup right after a real reset.
+    const { readUninstallMeta } = await import("../../../../lib/model-catalog/uninstall-state");
+    (readUninstallMeta as any).mockResolvedValue({ currentVersion: null, previousVersion: null });
+
+    const clearCache = vi.fn();
+    const { getSettingsRepo } = await import("../../../../lib/settings-repo");
+    (getSettingsRepo as any).mockReturnValue({ setSetting: vi.fn(), clearCache });
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest({ confirm: "RESET" }));
+
+    expect(res.status).toBe(200);
+    expect(clearCache).toHaveBeenCalled();
+  });
+
   it("reseeds worker_heartbeat's singleton row after truncating", async () => {
     // Regression test: worker_heartbeat's row 1 is seeded once by its
     // migration and never re-created afterward (the worker only ever
@@ -98,7 +117,7 @@ describe("POST /api/settings/reset", () => {
     (readUninstallMeta as any).mockResolvedValue({ currentVersion: null, previousVersion: null });
 
     const { getSettingsRepo } = await import("../../../../lib/settings-repo");
-    (getSettingsRepo as any).mockReturnValue({ setSetting: vi.fn() });
+    (getSettingsRepo as any).mockReturnValue({ setSetting: vi.fn(), clearCache: vi.fn() });
 
     const { POST } = await import("./route");
     const res = await POST(makeRequest({ confirm: "RESET" }));
@@ -121,7 +140,7 @@ describe("POST /api/settings/reset", () => {
     (readUninstallMeta as any).mockResolvedValue({ currentVersion: "1.0", previousVersion: null });
 
     const { getSettingsRepo } = await import("../../../../lib/settings-repo");
-    (getSettingsRepo as any).mockReturnValue({ setSetting: vi.fn() });
+    (getSettingsRepo as any).mockReturnValue({ setSetting: vi.fn(), clearCache: vi.fn() });
 
     const { restoreInferenceCode } = await import("../../../../lib/model-catalog/backup");
 
@@ -150,7 +169,7 @@ describe("POST /api/settings/reset", () => {
     (readUninstallMeta as any).mockResolvedValue({ currentVersion: "1.0", previousVersion: null });
 
     const { getSettingsRepo } = await import("../../../../lib/settings-repo");
-    (getSettingsRepo as any).mockReturnValue({ setSetting: vi.fn() });
+    (getSettingsRepo as any).mockReturnValue({ setSetting: vi.fn(), clearCache: vi.fn() });
 
     const fetchMock = vi.fn(async (url: string) => {
       if (String(url).includes("restart-inference")) return { ok: true } as Response;
@@ -174,7 +193,7 @@ describe("POST /api/settings/reset", () => {
     (readUninstallMeta as any).mockResolvedValue({ currentVersion: "1.0", previousVersion: null });
 
     const { getSettingsRepo } = await import("../../../../lib/settings-repo");
-    (getSettingsRepo as any).mockReturnValue({ setSetting: vi.fn() });
+    (getSettingsRepo as any).mockReturnValue({ setSetting: vi.fn(), clearCache: vi.fn() });
 
     const { restoreInferenceCode } = await import("../../../../lib/model-catalog/backup");
     (restoreInferenceCode as any).mockRejectedValue(new Error("backup dir missing"));
@@ -194,7 +213,7 @@ describe("POST /api/settings/reset", () => {
 
     const setSetting = vi.fn();
     const { getSettingsRepo } = await import("../../../../lib/settings-repo");
-    (getSettingsRepo as any).mockReturnValue({ setSetting });
+    (getSettingsRepo as any).mockReturnValue({ setSetting, clearCache: vi.fn() });
 
     const { restoreInferenceCode } = await import("../../../../lib/model-catalog/backup");
     (restoreInferenceCode as any).mockRejectedValue(new Error("backup dir missing"));
@@ -213,7 +232,7 @@ describe("POST /api/settings/reset", () => {
 
     const setSetting = vi.fn();
     const { getSettingsRepo } = await import("../../../../lib/settings-repo");
-    (getSettingsRepo as any).mockReturnValue({ setSetting });
+    (getSettingsRepo as any).mockReturnValue({ setSetting, clearCache: vi.fn() });
 
     const fetchMock = vi.fn(async (url: string) => {
       if (String(url).includes("restart-inference")) return { ok: true } as Response;

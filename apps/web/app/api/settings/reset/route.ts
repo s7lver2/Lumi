@@ -93,6 +93,11 @@ export async function POST(request: Request) {
   await pool.query(`INSERT INTO worker_heartbeat (id, updated_at) VALUES (1, now())`);
 
   const repo = getSettingsRepo();
+  // The TRUNCATE above bypassed the repo entirely, so its in-memory cache
+  // still holds every setting's pre-reset value (including
+  // isSetupCompleted() returning true) for up to its TTL — confirmed live:
+  // the app kept skipping the /setup redirect right after a real reset.
+  repo.clearCache();
   await repo.setSetting("RETRIEVAL_MODEL", "lumi-preview", false);
   await repo.setSetting("VERIFICATION_MODEL", "", false);
 

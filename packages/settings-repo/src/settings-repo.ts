@@ -132,7 +132,17 @@ export function createSettingsRepo(options: SettingsRepoOptions) {
     }
   }
 
-  return { getSetting, setSetting, isSetupCompleted, completeSetup };
+  /** Drops every cached value — needed after something bypasses this repo
+   * and mutates system_settings directly (e.g. a full-database reset that
+   * TRUNCATEs the table via a raw pool.query). Without this, reads for up
+   * to cacheTtlMs keep returning pre-truncate values, most visibly
+   * isSetupCompleted() staying "true" and failing to redirect to /setup
+   * right after a reset — confirmed live. */
+  function clearCache() {
+    cache.clear();
+  }
+
+  return { getSetting, setSetting, isSetupCompleted, completeSetup, clearCache };
 }
 
 export type SettingsRepo = ReturnType<typeof createSettingsRepo>;
