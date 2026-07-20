@@ -83,6 +83,15 @@ export async function POST(request: Request) {
 
   await pool.query(`TRUNCATE TABLE ${APPLICATION_TABLES.join(", ")} RESTART IDENTITY CASCADE`);
 
+  // worker_heartbeat's row 1 is seeded once by its migration (db/migrations/
+  // 1720700000000_worker_heartbeat.js) and never re-created afterward — the
+  // worker only ever UPDATEs it (apps/worker/src/heartbeat.ts), it has no
+  // upsert/bootstrap fallback. Truncating it without reseeding leaves
+  // /api/health's "SELECT ... WHERE id = 1" permanently empty, reporting the
+  // worker as stopped forever even though the (unrestarted) worker process
+  // is running fine — confirmed live after a real reset.
+  await pool.query(`INSERT INTO worker_heartbeat (id, updated_at) VALUES (1, now())`);
+
   const repo = getSettingsRepo();
   await repo.setSetting("RETRIEVAL_MODEL", "lumi-preview", false);
   await repo.setSetting("VERIFICATION_MODEL", "", false);

@@ -89,6 +89,31 @@ describe("POST /api/settings/reset", () => {
     expect(setSetting).toHaveBeenCalledWith("VERIFICATION_MODEL", "", false);
   });
 
+  it("reseeds worker_heartbeat's singleton row after truncating", async () => {
+    // Regression test: worker_heartbeat's row 1 is seeded once by its
+    // migration and never re-created afterward (the worker only ever
+    // UPDATEs it, no upsert fallback) — confirmed live that truncating it
+    // without reseeding leaves the worker permanently reported as stopped.
+    const { readUninstallMeta } = await import("../../../../lib/model-catalog/uninstall-state");
+    (readUninstallMeta as any).mockResolvedValue({ currentVersion: null, previousVersion: null });
+
+    const { getSettingsRepo } = await import("../../../../lib/settings-repo");
+    (getSettingsRepo as any).mockReturnValue({ setSetting: vi.fn() });
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest({ confirm: "RESET" }));
+
+    expect(res.status).toBe(200);
+    expect(poolQuery).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO worker_heartbeat (id, updated_at) VALUES (1, now())"));
+
+    // Must run after the truncate, not before (a before-truncate insert
+    // would just get wiped out).
+    const truncateIndex = poolQuery.mock.calls.findIndex((c) => String(c[0]).includes("TRUNCATE TABLE"));
+    const reseedIndex = poolQuery.mock.calls.findIndex((c) => String(c[0]).includes("INSERT INTO worker_heartbeat"));
+    expect(truncateIndex).toBeGreaterThanOrEqual(0);
+    expect(reseedIndex).toBeGreaterThan(truncateIndex);
+  });
+
   it("restores code and restarts inference when a backup exists", async () => {
     const { readUninstallMeta, writeUninstallMeta, clearPreviousBackup } = await import(
       "../../../../lib/model-catalog/uninstall-state"
