@@ -50,6 +50,8 @@ export function ModelosSection({ query }: { query: string }) {
   const [uninstalling, setUninstalling] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [gpu, setGpu] = useState<{ freeBytes: number | null; totalBytes: number | null }>({ freeBytes: null, totalBytes: null });
+  const [resetConfirmText, setResetConfirmText] = useState("");
+  const [resetting, setResetting] = useState(false);
 
   function refreshUninstallInfo(release: CatalogRelease | null) {
     const qs = release?.kind === "generic-classifier" ? `?modelId=${encodeURIComponent(release.modelId)}` : "";
@@ -111,8 +113,26 @@ export function ModelosSection({ query }: { query: string }) {
     refreshUninstallInfo(selected.release);
   }
 
+  async function resetCatalog() {
+    setResetting(true);
+    setStatus("Restableciendo catálogo de modelos…");
+    const { ok, data } = await fetchJson<{ error?: string }>("/api/model-catalog/reset", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ confirm: "RESET" }),
+    });
+    setStatus(ok ? "Catálogo restablecido" : (data as { error?: string } | null)?.error ?? "No se pudo restablecer el catálogo");
+    setResetting(false);
+    setResetConfirmText("");
+    if (ok) {
+      fetchJson<{ bundles: CatalogBundle[] }>("/api/model-catalog").then((r) => setItems(flattenModelBundles(r.data?.bundles ?? [])));
+      setSelectedId(null);
+    }
+  }
+
   return (
-    <div className="flex h-full">
+    <div className="flex h-full flex-col">
+      <div className="flex flex-1 overflow-hidden">
       <div className="w-[55%] border-r border-white/10">
         <CatalogList
           items={filtered}
@@ -271,9 +291,33 @@ export function ModelosSection({ query }: { query: string }) {
         )}
         {status && <div className="px-5 pb-3 text-xs text-muted">{status}</div>}
       </div>
+      </div>
+      <div className="w-full border-t border-white/10 bg-[rgba(163,51,51,0.04)] px-5 py-4">
+        <div className="mb-1 text-xs font-medium text-danger-fg">Restablecer catálogo de modelos</div>
+        <p className="mb-2 text-[11px] text-muted">
+          Borra todo lo instalado (clasificadores y, si aplica, restaura el código de retrieval/verificación a su
+          estado original) y reinicia el servicio de inferencia. Pensado para volver a un estado limpio antes de una
+          demo o prueba — no se puede deshacer.
+        </p>
+        <div className="flex items-center gap-2">
+          <input
+            value={resetConfirmText}
+            onChange={(e) => setResetConfirmText(e.target.value)}
+            placeholder='Escribe "RESET" para confirmar'
+            className="w-56 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-fg outline-none focus:border-white/25"
+          />
+          <button
+            onClick={resetCatalog}
+            disabled={resetConfirmText !== "RESET" || resetting}
+            className="rounded-md border border-[rgba(163,51,51,0.5)] bg-[rgba(163,51,51,0.15)] px-3 py-1.5 text-xs font-medium text-danger-fg hover:bg-[rgba(163,51,51,0.25)] disabled:opacity-40"
+          >
+            {resetting ? "Restableciendo…" : "Restablecer catálogo de modelos"}
+          </button>
+        </div>
+      </div>
       <ModelLoadNotification
-        active={installing || uninstalling}
-        fallbackLabel={installing ? "Instalando modelo…" : "Desinstalando modelo…"}
+        active={installing || uninstalling || resetting}
+        fallbackLabel={installing ? "Instalando modelo…" : uninstalling ? "Desinstalando modelo…" : "Restableciendo catálogo…"}
       />
     </div>
   );
