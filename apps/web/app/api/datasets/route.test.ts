@@ -7,6 +7,7 @@ vi.mock("../../../lib/datasets/github", () => ({
   downloadReleaseAsset: vi.fn(),
 }));
 vi.mock("../../../lib/datasets/active-model", () => ({ getActiveModelTag: vi.fn() }));
+vi.mock("../../../lib/settings-repo", () => ({ getSettingsRepo: vi.fn(() => ({ getSetting: vi.fn().mockResolvedValue(null) })) }));
 
 beforeEach(() => {
   vi.clearAllMocks();

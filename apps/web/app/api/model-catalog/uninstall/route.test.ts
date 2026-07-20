@@ -11,6 +11,11 @@ vi.mock("../../../../lib/model-catalog/uninstall-state", () => ({
   writeUninstallMeta: vi.fn(),
   clearPreviousBackup: vi.fn(),
 }));
+vi.mock("../../../../lib/model-catalog/classification-models", () => ({
+  uninstallClassificationModel: vi.fn(),
+  getClassificationModelHistory: vi.fn(),
+}));
+vi.mock("../../../../lib/db", () => ({ getPool: vi.fn(() => ({})) }));
 
 beforeEach(() => {
   vi.clearAllMocks();

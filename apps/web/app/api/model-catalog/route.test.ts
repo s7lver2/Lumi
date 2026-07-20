@@ -9,9 +9,18 @@ vi.mock("../../../lib/model-catalog/github", () => ({
 vi.mock("../../../lib/model-catalog/uninstall-state", () => ({
   readUninstallMeta: vi.fn(),
 }));
+vi.mock("../../../lib/model-catalog/classification-models", () => ({
+  listActiveClassificationModels: vi.fn(),
+}));
+vi.mock("../../../lib/db", () => ({ getPool: vi.fn(() => ({})) }));
+vi.mock("../../../lib/settings-repo", () => ({ getSettingsRepo: vi.fn() }));
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
+  const { listActiveClassificationModels } = await import("../../../lib/model-catalog/classification-models");
+  (listActiveClassificationModels as any).mockResolvedValue([]);
+  const { getSettingsRepo } = await import("../../../lib/settings-repo");
+  (getSettingsRepo as any).mockReturnValue({ getSetting: vi.fn().mockResolvedValue(null) });
 });
 
 describe("GET /api/model-catalog", () => {
@@ -25,8 +34,8 @@ describe("GET /api/model-catalog", () => {
 
     const { encryptBuffer } = await import("@netryx/settings-repo");
     const { MODEL_CATALOG_SHARED_KEY } = await import("../../../lib/model-catalog/shared-key");
-    const metaA = { bundleId: "lumi-preview", version: "1.0", backbones: [], benchmark: { accuracyWithin50m: 0.83, avgDistanceM: 12, sampleCount: 20, ranAt: "x" }, description: "" };
-    const metaB = { bundleId: "lumi-preview", version: "1.1", backbones: [], benchmark: { accuracyWithin50m: 0.89, avgDistanceM: 8, sampleCount: 20, ranAt: "x" }, description: "" };
+    const metaA = { kind: "code-bundle", bundleId: "lumi-preview", version: "1.0", backbones: [], benchmark: { accuracyWithin50m: 0.83, avgDistanceM: 12, sampleCount: 20, ranAt: "x" }, description: "" };
+    const metaB = { kind: "code-bundle", bundleId: "lumi-preview", version: "1.1", backbones: [], benchmark: { accuracyWithin50m: 0.89, avgDistanceM: 8, sampleCount: 20, ranAt: "x" }, description: "" };
     (github.downloadReleaseAsset as any)
       .mockResolvedValueOnce(encryptBuffer(Buffer.from(JSON.stringify(metaA)), MODEL_CATALOG_SHARED_KEY))
       .mockResolvedValueOnce(encryptBuffer(Buffer.from(JSON.stringify(metaB)), MODEL_CATALOG_SHARED_KEY));

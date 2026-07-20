@@ -6,6 +6,7 @@ vi.mock("../../../../lib/db", () => ({ getPool: vi.fn() }));
 vi.mock("../../../../lib/datasets/github", () => ({ listReleasesForRepo: vi.fn(), downloadReleaseAsset: vi.fn() }));
 vi.mock("../../../../lib/datasets/active-model", () => ({ getActiveModelTag: vi.fn() }));
 vi.mock("../../../../lib/queue", () => ({ enqueueEmbedPendingImagesJob: vi.fn() }));
+vi.mock("../../../../lib/settings-repo", () => ({ getSettingsRepo: vi.fn(() => ({ getSetting: vi.fn().mockResolvedValue(null) })) }));
 // The route stages downloaded images to a real temp dir and writes real
 // capture-image files to streetViewImageDir() — mock node:fs/promises so
 // this unit test never touches the real filesystem.

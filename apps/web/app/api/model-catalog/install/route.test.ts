@@ -67,7 +67,7 @@ describe("POST /api/model-catalog/install", () => {
     const { MODEL_CATALOG_SHARED_KEY } = await import("../../../../lib/model-catalog/shared-key");
 
     const manifest = {
-      bundleId: "lumi-preview", version: "1.1",
+      kind: "code-bundle", bundleId: "lumi-preview", version: "1.1",
       backbones: [], description: "",
       benchmark: { accuracyWithin50m: 0.9, avgDistanceM: 5, sampleCount: 20, ranAt: "x" },
       verificationModelId: "roma-verify",
@@ -203,7 +203,7 @@ describe("POST /api/model-catalog/install", () => {
     const { backupInferenceCode } = await import("../../../../lib/model-catalog/backup");
 
     const manifest = {
-      bundleId: "lumi-preview", version: "1.1", backbones: [], description: "",
+      kind: "code-bundle", bundleId: "lumi-preview", version: "1.1", backbones: [], description: "",
       benchmark: { accuracyWithin50m: 0.9, avgDistanceM: 5, sampleCount: 20, ranAt: "x" },
     };
     const zip = new JSZip();
