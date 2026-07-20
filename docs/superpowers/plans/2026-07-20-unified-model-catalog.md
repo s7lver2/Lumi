@@ -23,7 +23,7 @@
 ### Task 1: DB migration — `installed_classification_models`
 
 **Files:**
-- Create: `db/migrations/1721100000000_installed_classification_models.js`
+- Create: `db/migrations/1721200000000_installed_classification_models.js`
 
 **Interfaces:**
 - Produces: table `installed_classification_models(id uuid PK, model_id text, manifest jsonb, active boolean, installed_at timestamptz)`, indexed on `(model_id, active)`.
@@ -55,7 +55,7 @@ exports.down = (pgm) => {
 - [ ] **Step 2: Apply the migration against the running dev database**
 
 Run: `pnpm --filter @netryx/db migrate:up` (the repo's existing migration-runner script — same one `tools/build.py` runs on every dev boot).
-Expected: output confirms `1721100000000_installed_classification_models` ran, no errors.
+Expected: output confirms `1721200000000_installed_classification_models` ran, no errors.
 
 - [ ] **Step 3: Verify the table exists**
 
@@ -65,7 +65,7 @@ Expected: shows the 5 columns and the index.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add db/migrations/1721100000000_installed_classification_models.js
+git add db/migrations/1721200000000_installed_classification_models.js
 git commit -m "feat(db): add installed_classification_models table"
 ```
 
