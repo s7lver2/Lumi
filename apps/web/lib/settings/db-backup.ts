@@ -13,6 +13,7 @@ import type { Pool } from "pg";
 export const APPLICATION_TABLES = [
   "api_usage",
   "areas",
+  "background_jobs",
   "indexed_images",
   "indexed_points",
   "installed_classification_models",
