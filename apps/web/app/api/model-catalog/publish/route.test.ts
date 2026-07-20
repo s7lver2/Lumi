@@ -1,18 +1,33 @@
 // apps/web/app/api/model-catalog/publish/route.test.ts
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("../../../../lib/db", () => ({ getPool: vi.fn(() => ({})) }));
+vi.mock("../../../../lib/db", () => ({ getPool: vi.fn(() => ({ query: vi.fn().mockResolvedValue({ rows: [] }) })) }));
 vi.mock("../../../../lib/settings-repo", () => ({ getSettingsRepo: vi.fn() }));
 vi.mock("../../../../lib/model-catalog/benchmark", () => ({
   buildReferenceSet: vi.fn(),
   runBenchmark: vi.fn(),
   passesBenchmarkThreshold: vi.fn(),
+  measureVramDelta: vi.fn(),
 }));
 vi.mock("../../../../lib/model-catalog/code-bundle", () => ({ buildInferenceCodeZip: vi.fn() }));
 vi.mock("../../../../lib/model-catalog/github", () => ({ ensureRepoWithTopic: vi.fn(), upsertRelease: vi.fn() }));
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
+  // Default: actually run the passed warmup callback (route.ts assigns
+  // benchmarkResult inside it for the retrieval path) and report a
+  // plausible byte count — without this, measureVramDelta is an empty
+  // vi.fn() returning undefined, the callback never runs, and every test
+  // silently falls into the benchmarkPending catch branch instead of
+  // exercising the real success path (confirmed live: this exact gap let
+  // 3 of these 4 tests pass for the wrong reason after benchmarkPending
+  // was added, since the pending fallback happens to satisfy their
+  // assertions too).
+  const { measureVramDelta } = await import("../../../../lib/model-catalog/benchmark");
+  (measureVramDelta as any).mockImplementation(async (_snapshot: unknown, cb: () => Promise<void>) => {
+    await cb();
+    return 123456;
+  });
 });
 
 function makeRequest(body: unknown) {
@@ -119,5 +134,108 @@ describe("POST /api/model-catalog/publish", () => {
     const metadataAsset = assets.find((a: any) => a.name === "metadata.json.enc");
     const manifest = JSON.parse(decryptBuffer(metadataAsset.data, MODEL_CATALOG_SHARED_KEY).toString("utf8"));
     expect(manifest.verificationModelId).toBe("roma-verify");
+  });
+});
+
+describe("POST /api/model-catalog/publish — generic-classifier VRAM warmup is install-neutral", () => {
+  it("restores the publisher's own pre-existing active row after the temporary measurement, leaving no extra row behind", async () => {
+    const { getSettingsRepo } = await import("../../../../lib/settings-repo");
+    (getSettingsRepo as any).mockReturnValue({
+      getSetting: vi.fn((key: string) => Promise.resolve(key === "GITHUB_TOKEN" ? "tok" : "inigo/lumi-model-catalog")),
+    });
+
+    const { ensureRepoWithTopic, upsertRelease } = await import("../../../../lib/model-catalog/github");
+
+    const calls: { sql: string; params: unknown[] }[] = [];
+    const { getPool } = await import("../../../../lib/db");
+    (getPool as any).mockReturnValue({
+      query: vi.fn(async (sql: string, params: unknown[]) => {
+        calls.push({ sql, params });
+        // The publisher's own machine already has this modelId installed
+        // and active before this publish call starts.
+        if (sql.includes("SELECT id FROM installed_classification_models") && sql.includes("active = true")) {
+          return { rows: [{ id: "real-active-row-id" }] };
+        }
+        if (sql.includes("INSERT INTO installed_classification_models")) {
+          return { rows: [{ id: "temp-draft-row-id" }] };
+        }
+        return { rows: [] };
+      }),
+    });
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      makeRequest({
+        kind: "generic-classifier",
+        modelId: "wanda-v1",
+        version: "1.0",
+        facets: [{ facet: "weather", hfModelId: "prithivMLmods/Weather-Image-Classification", strategy: "pipeline" }],
+        sampleImageBase64: "ZmFrZQ==",
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(ensureRepoWithTopic).toHaveBeenCalled();
+    expect(upsertRelease).toHaveBeenCalled();
+
+    // Exactly the pre-existing active row was deactivated, then a temp
+    // row was inserted, then (in the finally block) the temp row was
+    // deleted by its OWN id and the original row reactivated by ITS OWN
+    // id — never a generic "reactivate whatever's most recent" step.
+    const deactivateReal = calls.find((c) => c.sql.includes("SET active = false") && c.params.includes("real-active-row-id"));
+    const deleteTemp = calls.find((c) => c.sql.includes("DELETE FROM installed_classification_models") && c.params.includes("temp-draft-row-id"));
+    const reactivateReal = calls.find((c) => c.sql.includes("SET active = true") && c.params.includes("real-active-row-id"));
+
+    expect(deactivateReal).toBeDefined();
+    expect(deleteTemp).toBeDefined();
+    expect(reactivateReal).toBeDefined();
+    // Never reactivate the temp row itself, and never delete the real row.
+    expect(calls.some((c) => c.sql.includes("SET active = true") && c.params.includes("temp-draft-row-id"))).toBe(false);
+    expect(calls.some((c) => c.sql.includes("DELETE FROM installed_classification_models") && c.params.includes("real-active-row-id"))).toBe(false);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("leaves nothing active when the modelId had no prior install (only the temp row is deleted, nothing reactivated)", async () => {
+    const { getSettingsRepo } = await import("../../../../lib/settings-repo");
+    (getSettingsRepo as any).mockReturnValue({
+      getSetting: vi.fn((key: string) => Promise.resolve(key === "GITHUB_TOKEN" ? "tok" : "inigo/lumi-model-catalog")),
+    });
+
+    const calls: { sql: string; params: unknown[] }[] = [];
+    const { getPool } = await import("../../../../lib/db");
+    (getPool as any).mockReturnValue({
+      query: vi.fn(async (sql: string, params: unknown[]) => {
+        calls.push({ sql, params });
+        if (sql.includes("SELECT id FROM installed_classification_models") && sql.includes("active = true")) {
+          return { rows: [] }; // nothing installed before this publish
+        }
+        if (sql.includes("INSERT INTO installed_classification_models")) {
+          return { rows: [{ id: "temp-draft-row-id" }] };
+        }
+        return { rows: [] };
+      }),
+    });
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      makeRequest({
+        kind: "generic-classifier",
+        modelId: "velle-v1",
+        version: "1.0",
+        facets: [{ facet: "vehicle", hfModelId: "Jordo23/vehicle-classifier", strategy: "pipeline" }],
+        sampleImageBase64: "ZmFrZQ==",
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(calls.some((c) => c.sql.includes("DELETE FROM installed_classification_models") && c.params.includes("temp-draft-row-id"))).toBe(true);
+    expect(calls.some((c) => c.sql.includes("SET active = true"))).toBe(false);
+
+    vi.unstubAllGlobals();
   });
 });

@@ -38,7 +38,6 @@ export async function POST(request: Request) {
   }
 
   const pool = getPool();
-  await deleteAllClassificationModels(pool);
 
   const meta = await readUninstallMeta();
   if (meta.currentVersion !== null || meta.previousVersion !== null) {
@@ -66,6 +65,8 @@ export async function POST(request: Request) {
     await writeUninstallMeta({ currentVersion: null, previousVersion: null });
     await clearPreviousBackup();
   }
+
+  await deleteAllClassificationModels(pool);
 
   const repo = getSettingsRepo();
   await repo.setSetting("RETRIEVAL_MODEL", "lumi-preview", false);

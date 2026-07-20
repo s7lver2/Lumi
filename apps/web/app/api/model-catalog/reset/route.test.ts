@@ -136,4 +136,56 @@ describe("POST /api/model-catalog/reset", () => {
     expect(json.error).toContain("No se pudieron restaurar los archivos originales");
     expect(json.error).toContain("backup dir missing");
   });
+
+  it("never deletes classifier rows or resets settings when the risky restore step fails", async () => {
+    // Regression guard for the reordering fix: the risky, revertible-if-
+    // it-fails part (code restore + restart + health check) must run and
+    // be confirmed BEFORE any persistent-state mutation — otherwise a
+    // failed reset can leave classifier history already wiped while
+    // reporting failure, a misleading half-applied result.
+    const { readUninstallMeta } = await import("../../../../lib/model-catalog/uninstall-state");
+    (readUninstallMeta as any).mockResolvedValue({ currentVersion: "1.0", previousVersion: null });
+
+    const setSetting = vi.fn();
+    const { getSettingsRepo } = await import("../../../../lib/settings-repo");
+    (getSettingsRepo as any).mockReturnValue({ setSetting });
+
+    const { deleteAllClassificationModels } = await import("../../../../lib/model-catalog/classification-models");
+    const { restoreInferenceCode } = await import("../../../../lib/model-catalog/backup");
+    (restoreInferenceCode as any).mockRejectedValue(new Error("backup dir missing"));
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest({ confirm: "RESET" }));
+
+    expect(res.status).toBe(502);
+    expect(deleteAllClassificationModels).not.toHaveBeenCalled();
+    expect(setSetting).not.toHaveBeenCalled();
+  });
+
+  it("never deletes classifier rows or resets settings when the restart never becomes healthy", async () => {
+    const { readUninstallMeta } = await import("../../../../lib/model-catalog/uninstall-state");
+    (readUninstallMeta as any).mockResolvedValue({ currentVersion: "1.0", previousVersion: null });
+
+    const setSetting = vi.fn();
+    const { getSettingsRepo } = await import("../../../../lib/settings-repo");
+    (getSettingsRepo as any).mockReturnValue({ setSetting });
+
+    const { deleteAllClassificationModels } = await import("../../../../lib/model-catalog/classification-models");
+
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("restart-inference")) return { ok: true } as Response;
+      if (String(url).includes("/docs")) return { ok: false } as Response; // never healthy
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest({ confirm: "RESET" }));
+
+    expect(res.status).toBe(502);
+    expect(deleteAllClassificationModels).not.toHaveBeenCalled();
+    expect(setSetting).not.toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
+  });
 });

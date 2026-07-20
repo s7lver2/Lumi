@@ -19,7 +19,6 @@ import {
 import { encryptBuffer } from "@netryx/settings-repo";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { installClassificationModel, uninstallClassificationModel } from "../../../../lib/model-catalog/classification-models";
 import { verifyCandidates } from "../../../../lib/verify-client";
 
 interface PublishBody {
@@ -60,10 +59,38 @@ async function publishGenericClassifier(body: PublishBody, token: string, catalo
   // specs/2026-07-20-unified-model-catalog-design.md), so a model being
   // published here has no active row yet and the warmup call below would
   // 404 (confirmed live) without this. Install a temporary row just for
-  // the measurement, then uninstall it again immediately after — publish
-  // alone must not leave the model installed on this machine.
+  // the measurement, then remove it again immediately after — publish
+  // alone must not leave the model installed, or change what's installed,
+  // on this machine.
+  //
+  // Deliberately NOT using installClassificationModel/
+  // uninstallClassificationModel (apps/web/lib/model-catalog/classification-
+  // models.ts) here: those assume "uninstall" means "step back to whatever
+  // was active before," which breaks when the publisher's own machine
+  // already has this exact modelId installed and active — the shared
+  // uninstall helper deactivates EVERY active row for that modelId (not
+  // just the temporary one this function just inserted) and reactivates
+  // an arbitrary older version, silently changing what's installed as a
+  // side effect of publishing. Instead: capture exactly which row (if any)
+  // was active before, insert a temp row for the measurement, and in the
+  // `finally` block delete the temp row by its own id and restore the
+  // captured row's exact prior state — publish must be install-neutral.
   const pool = getPool();
-  await installClassificationModel(pool, draftManifest);
+  const { rows: previouslyActiveRows } = await pool.query(
+    `SELECT id FROM installed_classification_models WHERE model_id = $1 AND active = true`,
+    [body.modelId]
+  );
+  const previouslyActiveId = (previouslyActiveRows[0] as { id: string } | undefined)?.id ?? null;
+  if (previouslyActiveId) {
+    await pool.query(`UPDATE installed_classification_models SET active = false WHERE id = $1`, [previouslyActiveId]);
+  }
+
+  const { rows: tempRows } = await pool.query(
+    `INSERT INTO installed_classification_models (model_id, manifest, active) VALUES ($1, $2, true) RETURNING id`,
+    [draftManifest.modelId, JSON.stringify(draftManifest)]
+  );
+  const tempRowId = (tempRows[0] as { id: string }).id;
+
   let vramEstimateBytes: number | null;
   try {
     vramEstimateBytes = await measureVramDelta(getModelStatusSnapshot, async () => {
@@ -75,7 +102,10 @@ async function publishGenericClassifier(body: PublishBody, token: string, catalo
       });
     });
   } finally {
-    await uninstallClassificationModel(pool, body.modelId);
+    await pool.query(`DELETE FROM installed_classification_models WHERE id = $1`, [tempRowId]);
+    if (previouslyActiveId) {
+      await pool.query(`UPDATE installed_classification_models SET active = true WHERE id = $1`, [previouslyActiveId]);
+    }
   }
 
   const manifest: GenericClassifierManifest = { ...draftManifest, benchmark: { ...draftManifest.benchmark, vramEstimateBytes } };
