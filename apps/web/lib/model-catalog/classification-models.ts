@@ -6,8 +6,20 @@ import type { GenericClassifierManifest } from "./manifest";
  * row, never an overwrite, so uninstall can always step back to whatever
  * was active before (spec: docs/superpowers/specs/2026-07-20-unified-
  * model-catalog-design.md, real multi-level history via DB rows instead
- * of a single filesystem snapshot). */
+ * of a single filesystem snapshot).
+ *
+ * Deactivates any existing active row for this modelId first — installing
+ * the same model twice (e.g. once from the setup wizard's recommended-
+ * classifier step, once later from Ajustes) must never leave two active
+ * rows at once, since uninstall assumes at most one (confirmed live: two
+ * active rows for "wanda-v1" made uninstall bulk-deactivate both, then
+ * immediately reactivate whichever the "find previous" query happened to
+ * pick — the click did something, just never what the button said). */
 export async function installClassificationModel(pool: Pool, manifest: GenericClassifierManifest): Promise<void> {
+  await pool.query(
+    `UPDATE installed_classification_models SET active = false WHERE model_id = $1 AND active = true`,
+    [manifest.modelId]
+  );
   await pool.query(
     `INSERT INTO installed_classification_models (model_id, manifest, active) VALUES ($1, $2, true)`,
     [manifest.modelId, JSON.stringify(manifest)]
@@ -29,7 +41,13 @@ export async function uninstallClassificationModel(pool: Pool, modelId: string):
     `SELECT id FROM installed_classification_models WHERE model_id = $1 AND active = true`,
     [modelId]
   );
-  const deactivatedId = (activeRows[0] as { id: string } | undefined)?.id ?? null;
+  // Captures every row being deactivated, not just one — installs now
+  // guard against creating duplicate active rows (see installClassification
+  // Model), but existing data from before that fix may still have more
+  // than one, and a single-id exclusion let the "find previous" search
+  // match and immediately reactivate the OTHER row deactivated in this
+  // very call.
+  const deactivatedIds = (activeRows as { id: string }[]).map((r) => r.id);
 
   await pool.query(
     `UPDATE installed_classification_models SET active = false WHERE model_id = $1 AND active = true`,
@@ -38,9 +56,9 @@ export async function uninstallClassificationModel(pool: Pool, modelId: string):
 
   const { rows } = await pool.query(
     `SELECT id, manifest FROM installed_classification_models
-     WHERE model_id = $1 AND active = false AND ($2::uuid IS NULL OR id <> $2)
+     WHERE model_id = $1 AND active = false AND NOT (id = ANY($2::uuid[]))
      ORDER BY installed_at DESC LIMIT 1`,
-    [modelId, deactivatedId]
+    [modelId, deactivatedIds]
   );
   if (rows.length === 0) return { restoredVersion: null };
 
