@@ -5,7 +5,13 @@
 export const BUNDLE_ASSET_NAME = "bundle.zip.enc";
 export const METADATA_ASSET_NAME = "metadata.json.enc";
 
-const SAFE_PANO_ID = /^[A-Za-z0-9_-]+$/;
+// Matches street-view-image-dir.ts's SAFE_PANO_ID exactly — a validated
+// panoId here ends up passed to captureImagePath, so both must accept the
+// same real-world Google pano_id shapes (confirmed live: a real published
+// dataset had panoIds ending in a literal ".", e.g.
+// "CAoSFkNJSE0wb2dLRUlDQWdJQ3N6SXI5QkE.") while still rejecting ".."
+// anywhere, which is what actually guards against path traversal.
+const SAFE_PANO_ID = /^(?!.*\.\.)[A-Za-z0-9_.-]+$/;
 
 export interface ModelTag {
   id: string;

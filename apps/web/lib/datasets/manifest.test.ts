@@ -67,6 +67,19 @@ describe("validateDatasetManifest", () => {
     expect(() => validateDatasetManifest(manifest, KNOWN_MODEL_IDS)).toThrow(/panoId/);
   });
 
+  it("accepts a real Google pano_id ending in a single dot (confirmed live against a real published dataset)", () => {
+    const manifest = validManifest();
+    manifest.areas[0].images[0].panoId = "CAoSFkNJSE0wb2dLRUlDQWdJQ3N6SXI5QkE.";
+    const result = validateDatasetManifest(manifest, KNOWN_MODEL_IDS);
+    expect(result.areas[0].images[0].panoId).toBe("CAoSFkNJSE0wb2dLRUlDQWdJQ3N6SXI5QkE.");
+  });
+
+  it("still rejects a panoId with two consecutive dots", () => {
+    const manifest = validManifest();
+    manifest.areas[0].images[0].panoId = "foo..bar";
+    expect(() => validateDatasetManifest(manifest, KNOWN_MODEL_IDS)).toThrow(/panoId/);
+  });
+
   it("rejects a non-object top level", () => {
     expect(() => validateDatasetManifest(null, KNOWN_MODEL_IDS)).toThrow();
     expect(() => validateDatasetManifest("nope", KNOWN_MODEL_IDS)).toThrow();

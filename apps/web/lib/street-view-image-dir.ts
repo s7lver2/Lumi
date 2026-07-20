@@ -22,7 +22,13 @@ export function streetViewImageDir(): string {
   return resolve(repoRoot, "apps", "worker", "data", "street-view");
 }
 
-const SAFE_PANO_ID = /^[A-Za-z0-9_-]+$/;
+// Google's newer pano_ids (the long "CAoS..." protobuf-derived ones) can
+// end in a literal "." (confirmed live against a real published dataset:
+// "CAoSFkNJSE0wb2dLRUlDQWdJQ3N6SXI5QkE."), so a single dot must be allowed
+// — but the negative lookahead still rejects ".." anywhere, which is what
+// actually matters for path traversal (this value gets interpolated
+// directly into a filesystem path below).
+const SAFE_PANO_ID = /^(?!.*\.\.)[A-Za-z0-9_.-]+$/;
 
 export function captureImagePath(panoId: string, heading: number): string {
   if (!SAFE_PANO_ID.test(panoId)) {

@@ -15,4 +15,13 @@ describe("captureImagePath", () => {
   it("rejects a panoId with a path separator", () => {
     expect(() => captureImagePath("foo/bar", 0)).toThrow();
   });
+
+  it("accepts a real Google pano_id ending in a single dot", () => {
+    const path = captureImagePath("CAoSFkNJSE0wb2dLRUlDQWdJQ3N6SXI5QkE.", 0);
+    expect(path.endsWith("CAoSFkNJSE0wb2dLRUlDQWdJQ3N6SXI5QkE._0.jpg")).toBe(true);
+  });
+
+  it("still rejects two consecutive dots even with the single-dot allowance", () => {
+    expect(() => captureImagePath("foo..bar", 0)).toThrow();
+  });
 });
