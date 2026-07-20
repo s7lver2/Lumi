@@ -3,17 +3,24 @@ import { NextResponse } from "next/server";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
+import type { Pool } from "pg";
 import JSZip from "jszip";
 import { readdir, copyFile } from "node:fs/promises";
 import { decryptBuffer } from "@netryx/settings-repo";
 import { listReleasesForRepo, downloadReleaseAsset } from "../../../../lib/model-catalog/github";
-import { validateModelCatalogManifest, BUNDLE_CODE_ASSET_NAME, MODEL_CATALOG_METADATA_ASSET_NAME } from "../../../../lib/model-catalog/manifest";
+import {
+  validateModelCatalogManifest,
+  BUNDLE_CODE_ASSET_NAME,
+  MODEL_CATALOG_METADATA_ASSET_NAME,
+  type ModelCatalogManifest,
+} from "../../../../lib/model-catalog/manifest";
 import { MODEL_CATALOG_SHARED_KEY } from "../../../../lib/model-catalog/shared-key";
 import { backupInferenceCode, restoreInferenceCode, persistBackup } from "../../../../lib/model-catalog/backup";
 import { PREVIOUS_CODE_DIR, readUninstallMeta, writeUninstallMeta } from "../../../../lib/model-catalog/uninstall-state";
 import { getSettingsRepo } from "../../../../lib/settings-repo";
 import { installClassificationModel } from "../../../../lib/model-catalog/classification-models";
-import { getPool } from "../../../../lib/db"; 
+import { getPool } from "../../../../lib/db";
+import { createJob, completeJob, failJob } from "../../../../lib/background-jobs";
 
 interface InstallBody {
   owner?: string;
@@ -21,22 +28,13 @@ interface InstallBody {
   tag?: string;
 }
 
-// process.cwd() is apps/web (the Next.js app root) — two levels up reaches
-// the repo root, where services/inference actually lives.
 const INFERENCE_DIR = resolve(process.cwd(), "..", "..", "services", "inference");
 const INFERENCE_SERVICE_URL = process.env.INFERENCE_SERVICE_URL ?? "http://localhost:8000";
 
-// Must match backupInferenceCode's own filter (apps/web/lib/model-catalog/
-// backup.ts) exactly — the backup only ever captures .py/requirements.txt,
-// so copying anything else from the release zip over INFERENCE_DIR would
-// leave a file restoreInferenceCode has no way to roll back on failure.
 function isManagedInferenceFile(name: string): boolean {
   return name.endsWith(".py") || name === "requirements.txt";
 }
 
-// Overridable via env (not a public setting) so tests can shrink a 60s real
-// wait down to milliseconds without fighting fake timers against the many
-// non-timer awaits (fetch, fs) elsewhere in this route.
 const READY_POLL_TIMEOUT_MS = Number(process.env.MODEL_CATALOG_READY_TIMEOUT_MS ?? 60_000);
 const READY_POLL_INTERVAL_MS = Number(process.env.MODEL_CATALOG_READY_POLL_INTERVAL_MS ?? 1_000);
 
@@ -52,6 +50,105 @@ async function waitForInferenceReady(timeoutMs: number = READY_POLL_TIMEOUT_MS):
     await new Promise((r) => setTimeout(r, READY_POLL_INTERVAL_MS));
   }
   return false;
+}
+
+/** The actual install work for both strategies — split out of POST so it
+ * can run detached from the request and be driven directly from
+ * route.test.ts. `origin` is threaded through instead of derived from
+ * `request.url`, since this runs after the request has already responded. */
+export async function runModelInstallJob(
+  pool: Pool,
+  jobId: string,
+  args: { manifest: ModelCatalogManifest; codeAssetUrl: string | undefined; origin: string }
+): Promise<void> {
+  const { manifest } = args;
+
+  if (manifest.kind === "generic-classifier") {
+    try {
+      await installClassificationModel(pool, manifest);
+      await completeJob(pool, jobId, { ok: true, modelId: manifest.modelId, version: manifest.version });
+    } catch (err) {
+      await failJob(pool, jobId, err instanceof Error ? err.message : String(err));
+    }
+    return;
+  }
+
+  if (!args.codeAssetUrl) {
+    await failJob(pool, jobId, "release is missing expected assets");
+    return;
+  }
+
+  const codeBytes = await downloadReleaseAsset(args.codeAssetUrl);
+  const decrypted = decryptBuffer(codeBytes, MODEL_CATALOG_SHARED_KEY);
+
+  const stagingDir = await mkdtemp(join(tmpdir(), "lumi-catalog-install-"));
+  let backupDir: string | null = null;
+
+  try {
+    const zip = await JSZip.loadAsync(decrypted);
+    for (const [relPath, entry] of Object.entries(zip.files)) {
+      if (entry.dir) continue;
+      const baseName = relPath.split("/").pop() ?? relPath;
+      if (!isManagedInferenceFile(baseName)) {
+        throw new Error(`Unexpected file in release bundle (only .py and requirements.txt are allowed): ${relPath}`);
+      }
+      const destPath = join(stagingDir, relPath);
+      await mkdir(dirname(destPath), { recursive: true });
+      await writeFile(destPath, await entry.async("nodebuffer"));
+    }
+
+    backupDir = await backupInferenceCode(INFERENCE_DIR);
+
+    async function copyStagedTree(fromDir: string): Promise<void> {
+      const entries = await readdir(fromDir, { withFileTypes: true });
+      for (const entry of entries) {
+        const srcPath = join(fromDir, entry.name);
+        if (entry.isDirectory()) {
+          await copyStagedTree(srcPath);
+          continue;
+        }
+        const relPath = srcPath.slice(stagingDir.length + 1);
+        const destPath = join(INFERENCE_DIR, relPath);
+        await mkdir(dirname(destPath), { recursive: true });
+        await copyFile(srcPath, destPath);
+      }
+    }
+    await copyStagedTree(stagingDir);
+
+    const restartRes = await fetch(`${args.origin}/api/setup/run/restart-inference`, { method: "POST" });
+    void restartRes;
+
+    const ready = await waitForInferenceReady();
+    if (!ready) {
+      await restoreInferenceCode(INFERENCE_DIR, backupDir);
+      await fetch(`${args.origin}/api/setup/run/restart-inference`, { method: "POST" });
+      const restoredReady = await waitForInferenceReady();
+      await failJob(
+        pool,
+        jobId,
+        `No se pudo aplicar la versión ${manifest.version} — se restauró la versión anterior${restoredReady ? "" : " (el servicio de inferencia tampoco volvió a responder tras restaurar)"}`
+      );
+      return;
+    }
+
+    const priorMeta = await readUninstallMeta();
+    await persistBackup(backupDir, PREVIOUS_CODE_DIR);
+    await writeUninstallMeta({ currentVersion: manifest.version, previousVersion: priorMeta.currentVersion });
+
+    const settingsRepo = getSettingsRepo();
+    await settingsRepo.setSetting("RETRIEVAL_MODEL", manifest.bundleId, false);
+    if (manifest.verificationModelId) {
+      await settingsRepo.setSetting("VERIFICATION_MODEL", manifest.verificationModelId, false);
+    }
+
+    await completeJob(pool, jobId, { ok: true, version: manifest.version });
+  } catch (err) {
+    if (backupDir) await restoreInferenceCode(INFERENCE_DIR, backupDir);
+    await failJob(pool, jobId, err instanceof Error ? err.message : String(err));
+  } finally {
+    await rm(stagingDir, { recursive: true, force: true });
+    if (backupDir) await rm(backupDir, { recursive: true, force: true });
+  }
 }
 
 export async function POST(request: Request) {
@@ -76,101 +173,24 @@ export async function POST(request: Request) {
     JSON.parse(decryptBuffer(metadataBytes, MODEL_CATALOG_SHARED_KEY).toString("utf8"))
   );
 
-  if (manifest.kind === "generic-classifier") {
-    await installClassificationModel(getPool(), manifest);
-    return NextResponse.json({ ok: true, modelId: manifest.modelId, version: manifest.version }, { status: 201 });
+  if (manifest.kind !== "generic-classifier") {
+    const codeAsset = release.assets.find((a) => a.name === BUNDLE_CODE_ASSET_NAME);
+    if (!codeAsset) {
+      return NextResponse.json({ error: "release is missing expected assets" }, { status: 400 });
+    }
   }
 
-  const codeAsset = release.assets.find((a) => a.name === BUNDLE_CODE_ASSET_NAME);
-  if (!codeAsset) {
-    return NextResponse.json({ error: "release is missing expected assets" }, { status: 400 });
-  }
+  const pool = getPool();
+  const label =
+    manifest.kind === "generic-classifier" ? `${manifest.modelId} v${manifest.version}` : `Lumi Preview v${manifest.version}`;
+  const jobId = await createJob(pool, "model-install", label);
 
-  const codeBytes = await downloadReleaseAsset(codeAsset.url);
-  const decrypted = decryptBuffer(codeBytes, MODEL_CATALOG_SHARED_KEY);
-
+  const codeAssetUrl =
+    manifest.kind === "generic-classifier"
+      ? undefined
+      : release.assets.find((a) => a.name === BUNDLE_CODE_ASSET_NAME)?.url;
   const origin = new URL(request.url).origin;
-  const stagingDir = await mkdtemp(join(tmpdir(), "lumi-catalog-install-"));
-  let backupDir: string | null = null;
+  void runModelInstallJob(pool, jobId, { manifest, codeAssetUrl, origin });
 
-  try {
-    const zip = await JSZip.loadAsync(decrypted);
-    for (const [relPath, entry] of Object.entries(zip.files)) {
-      if (entry.dir) continue;
-      // Reject anything the release zip shouldn't contain BEFORE touching
-      // the staging dir or INFERENCE_DIR — backupInferenceCode only ever
-      // backs up .py/requirements.txt, so a release smuggling any other
-      // file type would leave something restoreInferenceCode can't roll
-      // back on a failed install.
-      const baseName = relPath.split("/").pop() ?? relPath;
-      if (!isManagedInferenceFile(baseName)) {
-        throw new Error(`Unexpected file in release bundle (only .py and requirements.txt are allowed): ${relPath}`);
-      }
-      const destPath = join(stagingDir, relPath);
-      await mkdir(dirname(destPath), { recursive: true });
-      await writeFile(destPath, await entry.async("nodebuffer"));
-    }
-
-    backupDir = await backupInferenceCode(INFERENCE_DIR);
-
-    // Copy staged files over the real inference dir — same file-type scope
-    // as backupInferenceCode (enforced above), so restoreInferenceCode can
-    // always undo exactly what this loop wrote.
-    async function copyStagedTree(fromDir: string): Promise<void> {
-      const entries = await readdir(fromDir, { withFileTypes: true });
-      for (const entry of entries) {
-        const srcPath = join(fromDir, entry.name);
-        if (entry.isDirectory()) {
-          await copyStagedTree(srcPath);
-          continue;
-        }
-        const relPath = srcPath.slice(stagingDir.length + 1);
-        const destPath = join(INFERENCE_DIR, relPath);
-        await mkdir(dirname(destPath), { recursive: true });
-        await copyFile(srcPath, destPath);
-      }
-    }
-    await copyStagedTree(stagingDir);
-
-    // Restart the inference service — reuses the low-VRAM-mode epic's
-    // restart mechanism (POST /api/setup/run/restart-inference).
-    const restartRes = await fetch(`${origin}/api/setup/run/restart-inference`, { method: "POST" });
-    void restartRes; // SSE stream — this route just waits for real readiness below, not the stream's own "done" event.
-
-    const ready = await waitForInferenceReady();
-    if (!ready) {
-      await restoreInferenceCode(INFERENCE_DIR, backupDir);
-      await fetch(`${origin}/api/setup/run/restart-inference`, { method: "POST" });
-      const restoredReady = await waitForInferenceReady();
-      return NextResponse.json(
-        {
-          ok: false,
-          error: `No se pudo aplicar la versión ${manifest.version} — se restauró la versión anterior`,
-          restoredVersion: true,
-          restoredHealthy: restoredReady,
-        },
-        { status: 502 }
-      );
-    }
-
-    // Keep the pre-install snapshot around (outside stagingDir/backupDir,
-    // both deleted below) so a later "desinstalar" can restore it.
-    const priorMeta = await readUninstallMeta();
-    await persistBackup(backupDir, PREVIOUS_CODE_DIR);
-    await writeUninstallMeta({ currentVersion: manifest.version, previousVersion: priorMeta.currentVersion });
-
-    const settingsRepo = getSettingsRepo();
-    await settingsRepo.setSetting("RETRIEVAL_MODEL", manifest.bundleId, false);
-    if (manifest.verificationModelId) {
-      await settingsRepo.setSetting("VERIFICATION_MODEL", manifest.verificationModelId, false);
-    }
-
-    return NextResponse.json({ ok: true, version: manifest.version });
-  } catch (err) {
-    if (backupDir) await restoreInferenceCode(INFERENCE_DIR, backupDir);
-    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 400 });
-  } finally {
-    await rm(stagingDir, { recursive: true, force: true });
-    if (backupDir) await rm(backupDir, { recursive: true, force: true });
-  }
+  return NextResponse.json({ jobId }, { status: 202 });
 }

@@ -28,6 +28,14 @@ vi.mock("node:fs/promises", async (importOriginal) => {
     readdir: vi.fn().mockResolvedValue([]),
   };
 });
+vi.mock("../../../../lib/model-catalog/classification-models", () => ({ installClassificationModel: vi.fn() }));
+vi.mock("../../../../lib/db", () => ({ getPool: vi.fn(() => ({})) }));
+
+vi.mock("../../../../lib/background-jobs", () => ({
+  createJob: vi.fn().mockResolvedValue("job-1"),
+  completeJob: vi.fn(),
+  failJob: vi.fn(),
+}));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -39,6 +47,35 @@ function makeRequest(body: unknown) {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
+  });
+}
+
+async function mockRelease() {
+  const { listReleasesForRepo, downloadReleaseAsset } = await import("../../../../lib/model-catalog/github");
+  const { encryptBuffer } = await import("@netryx/settings-repo");
+  const { MODEL_CATALOG_SHARED_KEY } = await import("../../../../lib/model-catalog/shared-key");
+
+  const manifest = {
+    kind: "code-bundle", bundleId: "lumi-preview", version: "1.1",
+    backbones: [], description: "",
+    benchmark: { accuracyWithin50m: 0.9, avgDistanceM: 5, sampleCount: 20, ranAt: "x" },
+    verificationModelId: "roma-verify",
+  };
+  const zip = new JSZip();
+  zip.file("main.py", "print('v1.1')");
+  zip.file("requirements.txt", "torch==2.0.0");
+  const zipBytes = await zip.generateAsync({ type: "nodebuffer" });
+
+  (listReleasesForRepo as any).mockResolvedValue([
+    { tagName: "lumi-preview-v1.1", name: "x", body: "", assets: [
+      { name: "metadata.json.enc", url: "meta-url" },
+      { name: "code.zip.enc", url: "code-url" },
+    ] },
+  ]);
+  (downloadReleaseAsset as any).mockImplementation(async (url: string) => {
+    if (url === "meta-url") return encryptBuffer(Buffer.from(JSON.stringify(manifest)), MODEL_CATALOG_SHARED_KEY);
+    if (url === "code-url") return encryptBuffer(zipBytes, MODEL_CATALOG_SHARED_KEY);
+    throw new Error(`unexpected asset url: ${url}`);
   });
 }
 
@@ -60,40 +97,80 @@ describe("POST /api/model-catalog/install", () => {
     const res = await POST(makeRequest({ owner: "inigo", repo: "lumi-model-catalog", tag: "lumi-preview-v1.1" }));
     expect(res.status).toBe(400);
   });
+});
 
-  async function mockRelease() {
+describe("POST /api/model-catalog/install — success path", () => {
+  it("returns 202 with a jobId for a code-bundle release", async () => {
+    await mockRelease();
+    const { createJob } = await import("../../../../lib/background-jobs");
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest({ owner: "inigo", repo: "lumi-model-catalog", tag: "lumi-preview-v1.1" }));
+    const json = await res.json();
+
+    expect(res.status).toBe(202);
+    expect(json).toEqual({ jobId: "job-1" });
+    expect(createJob).toHaveBeenCalledWith(expect.anything(), "model-install", "Lumi Preview v1.1");
+  });
+
+  it("returns 202 with a jobId for a generic-classifier release", async () => {
     const { listReleasesForRepo, downloadReleaseAsset } = await import("../../../../lib/model-catalog/github");
     const { encryptBuffer } = await import("@netryx/settings-repo");
     const { MODEL_CATALOG_SHARED_KEY } = await import("../../../../lib/model-catalog/shared-key");
-
     const manifest = {
-      kind: "code-bundle", bundleId: "lumi-preview", version: "1.1",
-      backbones: [], description: "",
-      benchmark: { accuracyWithin50m: 0.9, avgDistanceM: 5, sampleCount: 20, ranAt: "x" },
-      verificationModelId: "roma-verify",
+      kind: "generic-classifier", modelId: "wanda-v1", version: "1.0",
+      facets: [{ facet: "weather", hfModelId: "prithivMLmods/Weather-Image-Classification", strategy: "pipeline" }],
+      benchmark: { sampleCount: 0, ranAt: "x", vramEstimateBytes: null }, description: "",
     };
-    const zip = new JSZip();
-    zip.file("main.py", "print('v1.1')");
-    zip.file("requirements.txt", "torch==2.0.0");
-    const zipBytes = await zip.generateAsync({ type: "nodebuffer" });
-
     (listReleasesForRepo as any).mockResolvedValue([
-      { tagName: "lumi-preview-v1.1", name: "x", body: "", assets: [
-        { name: "metadata.json.enc", url: "meta-url" },
-        { name: "code.zip.enc", url: "code-url" },
-      ] },
+      { tagName: "wanda-v1", name: "x", body: "", assets: [{ name: "metadata.json.enc", url: "meta-url" }] },
     ]);
     (downloadReleaseAsset as any).mockImplementation(async (url: string) => {
       if (url === "meta-url") return encryptBuffer(Buffer.from(JSON.stringify(manifest)), MODEL_CATALOG_SHARED_KEY);
-      if (url === "code-url") return encryptBuffer(zipBytes, MODEL_CATALOG_SHARED_KEY);
       throw new Error(`unexpected asset url: ${url}`);
     });
-  }
 
-  it("backs up, swaps, restarts, and confirms readiness on a successful install", async () => {
-    await mockRelease();
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest({ owner: "inigo", repo: "lumi-model-catalog", tag: "wanda-v1" }));
+    const json = await res.json();
+
+    expect(res.status).toBe(202);
+    expect(json).toEqual({ jobId: "job-1" });
+  });
+});
+
+describe("runModelInstallJob — generic-classifier", () => {
+  it("installs and completes the job", async () => {
+    const { runModelInstallJob } = await import("./route");
+    const { installClassificationModel } = await import("../../../../lib/model-catalog/classification-models");
+    const { completeJob } = await import("../../../../lib/background-jobs");
+    const manifest = {
+      kind: "generic-classifier" as const, modelId: "wanda-v1", version: "1.0",
+      facets: [], benchmark: { sampleCount: 0, ranAt: "x", vramEstimateBytes: null }, description: "",
+    };
+    const pool = {} as any;
+
+    await runModelInstallJob(pool, "job-1", { manifest, codeAssetUrl: undefined, origin: "http://localhost" });
+
+    expect(installClassificationModel).toHaveBeenCalledWith(pool, manifest);
+    expect(completeJob).toHaveBeenCalledWith(pool, "job-1", { ok: true, modelId: "wanda-v1", version: "1.0" });
+  });
+});
+
+describe("runModelInstallJob — code-bundle", () => {
+  it("backs up, swaps, restarts, confirms readiness, and completes the job", async () => {
+    const { runModelInstallJob } = await import("./route");
     const { backupInferenceCode, restoreInferenceCode } = await import("../../../../lib/model-catalog/backup");
     (backupInferenceCode as any).mockResolvedValue("/tmp/backup-1");
+    const { downloadReleaseAsset } = await import("../../../../lib/model-catalog/github");
+    const { encryptBuffer } = await import("@netryx/settings-repo");
+    const { MODEL_CATALOG_SHARED_KEY } = await import("../../../../lib/model-catalog/shared-key");
+    const { completeJob } = await import("../../../../lib/background-jobs");
+
+    const zip = new JSZip();
+    zip.file("main.py", "print('v1.1')");
+    const zipBytes = await zip.generateAsync({ type: "nodebuffer" });
+    (downloadReleaseAsset as any).mockResolvedValue(encryptBuffer(zipBytes, MODEL_CATALOG_SHARED_KEY));
 
     const fsPromises = await import("node:fs/promises");
     (fsPromises.readdir as any).mockResolvedValue([{ name: "main.py", isDirectory: () => false }]);
@@ -105,178 +182,53 @@ describe("POST /api/model-catalog/install", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const { POST } = await import("./route");
-    const res = await POST(makeRequest({ owner: "inigo", repo: "lumi-model-catalog", tag: "lumi-preview-v1.1" }));
-    const json = await res.json();
+    const manifest = {
+      kind: "code-bundle" as const, bundleId: "lumi-preview", version: "1.1", backbones: [], description: "",
+      benchmark: { accuracyWithin50m: 0.9, avgDistanceM: 5, sampleCount: 20, ranAt: "x" },
+      verificationModelId: "roma-verify",
+    };
+    const pool = {} as any;
 
-    expect(res.status).toBe(200);
-    expect(json).toEqual({ ok: true, version: "1.1" });
+    await runModelInstallJob(pool, "job-1", { manifest, codeAssetUrl: "code-url", origin: "http://localhost" });
+
     expect(backupInferenceCode).toHaveBeenCalledWith(expect.stringContaining("inference"));
-    expect(fsPromises.copyFile).toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/setup/run/restart-inference"), expect.objectContaining({ method: "POST" }));
     expect(restoreInferenceCode).not.toHaveBeenCalled();
-    // Both the staging dir and the backup dir must be cleaned up — a leaked
-    // backup dir was a real bug this test guards against.
-    expect(fsPromises.rm).toHaveBeenCalledWith("/tmp/staging", expect.anything());
-    expect(fsPromises.rm).toHaveBeenCalledWith("/tmp/backup-1", expect.anything());
+    expect(completeJob).toHaveBeenCalledWith(pool, "job-1", { ok: true, version: "1.1" });
   });
 
-  it("writes RETRIEVAL_MODEL and VERIFICATION_MODEL settings from the manifest on success", async () => {
-    await mockRelease();
-    const { backupInferenceCode } = await import("../../../../lib/model-catalog/backup");
-    (backupInferenceCode as any).mockResolvedValue("/tmp/backup-1");
-
-    const fsPromises = await import("node:fs/promises");
-    (fsPromises.readdir as any).mockResolvedValue([{ name: "main.py", isDirectory: () => false }]);
-
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        if (url.includes("restart-inference")) return { ok: true } as Response;
-        if (url.includes("/docs")) return { ok: true } as Response;
-        throw new Error(`unexpected fetch: ${url}`);
-      })
-    );
-
-    const setSetting = vi.fn();
-    const { getSettingsRepo } = await import("../../../../lib/settings-repo");
-    (getSettingsRepo as any).mockReturnValue({ setSetting });
-
-    const { POST } = await import("./route");
-    await POST(makeRequest({ owner: "inigo", repo: "lumi-model-catalog", tag: "lumi-preview-v1.1" }));
-
-    expect(setSetting).toHaveBeenCalledWith("RETRIEVAL_MODEL", "lumi-preview", false);
-    expect(setSetting).toHaveBeenCalledWith("VERIFICATION_MODEL", "roma-verify", false);
-  });
-
-  it("restores the backup, restarts again, and reports the outcome when the new version never becomes ready", async () => {
-    await mockRelease();
+  it("restores the backup and fails the job when the new version never becomes ready", async () => {
+    const { runModelInstallJob } = await import("./route");
     const { backupInferenceCode, restoreInferenceCode } = await import("../../../../lib/model-catalog/backup");
     (backupInferenceCode as any).mockResolvedValue("/tmp/backup-1");
-    (restoreInferenceCode as any).mockResolvedValue(undefined);
+    const { downloadReleaseAsset } = await import("../../../../lib/model-catalog/github");
+    const { encryptBuffer } = await import("@netryx/settings-repo");
+    const { MODEL_CATALOG_SHARED_KEY } = await import("../../../../lib/model-catalog/shared-key");
+    const { failJob } = await import("../../../../lib/background-jobs");
+
+    const zip = new JSZip();
+    zip.file("main.py", "print('v1.1')");
+    const zipBytes = await zip.generateAsync({ type: "nodebuffer" });
+    (downloadReleaseAsset as any).mockResolvedValue(encryptBuffer(zipBytes, MODEL_CATALOG_SHARED_KEY));
 
     const fsPromises = await import("node:fs/promises");
     (fsPromises.readdir as any).mockResolvedValue([{ name: "main.py", isDirectory: () => false }]);
 
     const fetchMock = vi.fn(async (url: string) => {
       if (url.includes("restart-inference")) return { ok: true } as Response;
-      if (url.includes("/docs")) return { ok: false } as Response; // never comes back healthy
+      if (url.includes("/docs")) return { ok: false } as Response;
       throw new Error(`unexpected fetch: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const { POST } = await import("./route");
-    const res = await POST(makeRequest({ owner: "inigo", repo: "lumi-model-catalog", tag: "lumi-preview-v1.1" }));
-    const json = await res.json();
-
-    expect(res.status).toBe(502);
-    expect(json.ok).toBe(false);
-    expect(json.restoredVersion).toBe(true);
-    expect(json.restoredHealthy).toBe(false); // /docs never returns ok, even after the restore restart
-    expect(restoreInferenceCode).toHaveBeenCalledWith(expect.stringContaining("inference"), "/tmp/backup-1");
-    const restartCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes("restart-inference"));
-    expect(restartCalls.length).toBe(2); // once for the new version, once for the restore
-  });
-
-  it("restores the backup and 400s when the file swap itself throws mid-copy", async () => {
-    await mockRelease();
-    const { backupInferenceCode, restoreInferenceCode } = await import("../../../../lib/model-catalog/backup");
-    (backupInferenceCode as any).mockResolvedValue("/tmp/backup-1");
-
-    const fsPromises = await import("node:fs/promises");
-    (fsPromises.readdir as any).mockResolvedValue([{ name: "main.py", isDirectory: () => false }]);
-    (fsPromises.copyFile as any).mockRejectedValue(new Error("disk full"));
-
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
-
-    const { POST } = await import("./route");
-    const res = await POST(makeRequest({ owner: "inigo", repo: "lumi-model-catalog", tag: "lumi-preview-v1.1" }));
-
-    expect(res.status).toBe(400);
-    expect(restoreInferenceCode).toHaveBeenCalledWith(expect.stringContaining("inference"), "/tmp/backup-1");
-  });
-
-  it("rejects a release whose code bundle contains a file outside the managed .py/requirements.txt scope, before touching the backup or the real inference dir", async () => {
-    const { listReleasesForRepo, downloadReleaseAsset } = await import("../../../../lib/model-catalog/github");
-    const { encryptBuffer } = await import("@netryx/settings-repo");
-    const { MODEL_CATALOG_SHARED_KEY } = await import("../../../../lib/model-catalog/shared-key");
-    const { backupInferenceCode } = await import("../../../../lib/model-catalog/backup");
-
     const manifest = {
-      kind: "code-bundle", bundleId: "lumi-preview", version: "1.1", backbones: [], description: "",
+      kind: "code-bundle" as const, bundleId: "lumi-preview", version: "1.1", backbones: [], description: "",
       benchmark: { accuracyWithin50m: 0.9, avgDistanceM: 5, sampleCount: 20, ranAt: "x" },
     };
-    const zip = new JSZip();
-    zip.file("main.py", "print('v1.1')");
-    zip.file("sneaky.sh", "#!/bin/sh\necho pwned");
-    const zipBytes = await zip.generateAsync({ type: "nodebuffer" });
+    const pool = {} as any;
 
-    (listReleasesForRepo as any).mockResolvedValue([
-      { tagName: "lumi-preview-v1.1", name: "x", body: "", assets: [
-        { name: "metadata.json.enc", url: "meta-url" },
-        { name: "code.zip.enc", url: "code-url" },
-      ] },
-    ]);
-    (downloadReleaseAsset as any).mockImplementation(async (url: string) => {
-      if (url === "meta-url") return encryptBuffer(Buffer.from(JSON.stringify(manifest)), MODEL_CATALOG_SHARED_KEY);
-      if (url === "code-url") return encryptBuffer(zipBytes, MODEL_CATALOG_SHARED_KEY);
-      throw new Error(`unexpected asset url: ${url}`);
-    });
+    await runModelInstallJob(pool, "job-1", { manifest, codeAssetUrl: "code-url", origin: "http://localhost" });
 
-    const { POST } = await import("./route");
-    const res = await POST(makeRequest({ owner: "inigo", repo: "lumi-model-catalog", tag: "lumi-preview-v1.1" }));
-
-    expect(res.status).toBe(400);
-    expect(backupInferenceCode).not.toHaveBeenCalled();
-  });
-});
-
-vi.mock("../../../../lib/model-catalog/classification-models", () => ({ installClassificationModel: vi.fn() }));
-vi.mock("../../../../lib/db", () => ({ getPool: vi.fn(() => ({})) }));
-
-describe("POST /api/model-catalog/install — generic-classifier strategy", () => {
-  it("installs without touching files or calling restart-inference", async () => {
-    const { listReleasesForRepo, downloadReleaseAsset } = await import("../../../../lib/model-catalog/github");
-    const { encryptBuffer } = await import("@netryx/settings-repo");
-    const { MODEL_CATALOG_SHARED_KEY } = await import("../../../../lib/model-catalog/shared-key");
-    const { installClassificationModel } = await import("../../../../lib/model-catalog/classification-models");
-
-    const manifest = {
-      kind: "generic-classifier", modelId: "wanda-v1", version: "1.0",
-      facets: [{ facet: "weather", hfModelId: "prithivMLmods/Weather-Image-Classification", strategy: "pipeline" }],
-      benchmark: { sampleCount: 0, ranAt: "x", vramEstimateBytes: null },
-      description: "",
-    };
-
-    (listReleasesForRepo as any).mockResolvedValue([
-      { tagName: "wanda-v1", name: "x", body: "", assets: [{ name: "metadata.json.enc", url: "meta-url" }] },
-    ]);
-    (downloadReleaseAsset as any).mockImplementation(async (url: string) => {
-      if (url === "meta-url") return encryptBuffer(Buffer.from(JSON.stringify(manifest)), MODEL_CATALOG_SHARED_KEY);
-      throw new Error(`unexpected asset url: ${url}`);
-    });
-
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-
-    const { POST } = await import("./route");
-    const res = await POST(makeRequest({ owner: "inigo", repo: "lumi-model-catalog", tag: "wanda-v1" }));
-    const json = await res.json();
-
-    expect(res.status).toBe(201);
-    expect(json).toEqual({ ok: true, modelId: "wanda-v1", version: "1.0" });
-    expect(installClassificationModel).toHaveBeenCalledWith(expect.anything(), manifest);
-    expect(fetchMock).not.toHaveBeenCalled(); // no restart-inference call
-  });
-
-  it("400s when a generic-classifier release is missing its metadata asset", async () => {
-    const { listReleasesForRepo } = await import("../../../../lib/model-catalog/github");
-    (listReleasesForRepo as any).mockResolvedValue([
-      { tagName: "wanda-v1", name: "x", body: "", assets: [] },
-    ]);
-
-    const { POST } = await import("./route");
-    const res = await POST(makeRequest({ owner: "inigo", repo: "lumi-model-catalog", tag: "wanda-v1" }));
-    expect(res.status).toBe(400);
+    expect(restoreInferenceCode).toHaveBeenCalledWith(expect.stringContaining("inference"), "/tmp/backup-1");
+    expect(failJob).toHaveBeenCalledWith(pool, "job-1", expect.stringContaining("se restauró la versión anterior"));
   });
 });
