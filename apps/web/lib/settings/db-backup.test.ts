@@ -1,4 +1,3 @@
-``ts
 // apps/web/lib/settings/db-backup.test.ts
 import { describe, it, expect, vi, beforeEach } from "vitest";
 

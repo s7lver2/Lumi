@@ -88,12 +88,3 @@ export async function listActiveClassificationModels(pool: Pool): Promise<Generi
   );
   return rows.map((r) => r.manifest as GenericClassifierManifest);
 }
-
-/** Wipes every installed-classifier row, active or not — used by the
- * catalog "reset" action (spec: returns to a clean slate for testing/
- * demos, not a normal uninstall). Deletes rather than deactivates: a
- * reset should leave zero history, not one more deactivated row per
- * model. */
-export async function deleteAllClassificationModels(pool: Pool): Promise<void> {
-  await pool.query("DELETE FROM installed_classification_models");
-}

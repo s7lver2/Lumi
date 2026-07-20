@@ -5,7 +5,6 @@ import {
   uninstallClassificationModel,
   getClassificationModelHistory,
   listActiveClassificationModels,
-  deleteAllClassificationModels,
 } from "./classification-models";
 import type { GenericClassifierManifest } from "./manifest";
 
@@ -107,13 +106,5 @@ describe("listActiveClassificationModels", () => {
     const pool = makePool(async () => ({ rows: [{ manifest: manifest("1.0") }] }));
     const result = await listActiveClassificationModels(pool);
     expect(result).toEqual([manifest("1.0")]);
-  });
-});
-
-describe("deleteAllClassificationModels", () => {
-  it("deletes every row, regardless of model_id or active state", async () => {
-    const pool = { query: vi.fn(async () => ({ rows: [] })) } as any;
-    await deleteAllClassificationModels(pool);
-    expect(pool.query).toHaveBeenCalledWith("DELETE FROM installed_classification_models");
   });
 });
