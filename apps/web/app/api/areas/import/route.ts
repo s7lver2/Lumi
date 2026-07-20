@@ -112,11 +112,16 @@ export async function POST(request: Request) {
         }
       }
       const embeddingLiteral = img.embedding ? `[${img.embedding.join(",")}]` : null;
+      // embeddedAt computed in JS and bound as its own parameter — see
+      // apps/web/app/api/datasets/install/run-job.ts's identical fix for
+      // why reusing $6 inside a bare `CASE WHEN $6 IS NOT NULL` throws
+      // "could not determine data type of parameter $6" when it's NULL.
+      const embeddedAt = embeddingLiteral !== null ? new Date() : null;
       await pool.query(
         `INSERT INTO indexed_images (area_id, pano_id, heading, location, street_view_date, embedding, image_path, embedded_at)
-         VALUES ($1, $2, $3, ST_GeogFromText($4), $5, $6, $7, CASE WHEN $6 IS NOT NULL THEN now() ELSE NULL END)
+         VALUES ($1, $2, $3, ST_GeogFromText($4), $5, $6, $7, $8)
          ON CONFLICT (pano_id, heading) DO NOTHING`,
-        [areaId, img.panoId, img.heading, `POINT(${img.lng} ${img.lat})`, img.streetViewDate ?? null, embeddingLiteral, imagePath]
+        [areaId, img.panoId, img.heading, `POINT(${img.lng} ${img.lat})`, img.streetViewDate ?? null, embeddingLiteral, imagePath, embeddedAt]
       );
     }
 

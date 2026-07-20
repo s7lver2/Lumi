@@ -143,11 +143,19 @@ export async function runDatasetInstallJob(
           await writeFile(imagePath, staged.bytes);
         }
         const embeddingLiteral = args.compatible && img.embedding ? `[${img.embedding.join(",")}]` : null;
+        // embeddedAt computed in JS and bound as its own parameter, rather
+        // than reusing $6 a second time inside a bare `CASE WHEN $6 IS NOT
+        // NULL` — Postgres can't always infer a type for a parameter whose
+        // only occurrence in a given expression carries no column/cast
+        // context, and throws "could not determine data type of parameter
+        // $6" (confirmed live installing a real dataset containing images
+        // with a null embedding, i.e. $6 actually being NULL).
+        const embeddedAt = embeddingLiteral !== null ? new Date() : null;
         await pool.query(
           `INSERT INTO indexed_images (area_id, pano_id, heading, location, street_view_date, embedding, image_path, embedded_at)
-           VALUES ($1, $2, $3, ST_GeogFromText($4), $5, $6, $7, CASE WHEN $6 IS NOT NULL THEN now() ELSE NULL END)
+           VALUES ($1, $2, $3, ST_GeogFromText($4), $5, $6, $7, $8)
            ON CONFLICT (pano_id, heading) DO NOTHING`,
-          [areaId, img.panoId, img.heading, `POINT(${img.lng} ${img.lat})`, img.streetViewDate, embeddingLiteral, imagePath]
+          [areaId, img.panoId, img.heading, `POINT(${img.lng} ${img.lat})`, img.streetViewDate, embeddingLiteral, imagePath, embeddedAt]
         );
       }
 
