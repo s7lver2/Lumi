@@ -17,12 +17,22 @@ vi.mock("../../../../lib/model-catalog/classification-models", () => ({
 }));
 vi.mock("../../../../lib/db", () => ({ getPool: vi.fn(() => ({})) }));
 
+vi.mock("../../../../lib/background-jobs", () => ({
+  createJob: vi.fn().mockResolvedValue("job-1"),
+  completeJob: vi.fn(),
+  failJob: vi.fn(),
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
-function makeRequest() {
-  return new Request("http://localhost/api/model-catalog/uninstall", { method: "POST" });
+function makeRequest(body?: unknown) {
+  return new Request("http://localhost/api/model-catalog/uninstall", { 
+    method: "POST",
+    headers: body ? { "content-type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined
+  });
 }
 
 function makeGetRequest() {
@@ -58,13 +68,49 @@ describe("POST /api/model-catalog/uninstall", () => {
     const res = await POST(makeRequest());
     expect(res.status).toBe(400);
   });
+});
 
-  it("restores the previous snapshot, restarts, and rotates state on success", async () => {
-    const { readUninstallMeta, writeUninstallMeta, clearPreviousBackup } = await import(
-      "../../../../lib/model-catalog/uninstall-state"
-    );
-    const { restoreInferenceCode } = await import("../../../../lib/model-catalog/backup");
+describe("POST /api/model-catalog/uninstall — success path", () => {
+  it("returns 202 with a jobId on an execution request", async () => {
+    const { readUninstallMeta } = await import("../../../../lib/model-catalog/uninstall-state");
     (readUninstallMeta as any).mockResolvedValue({ currentVersion: "1.1", previousVersion: "1.0" });
+    const { createJob } = await import("../../../../lib/background-jobs");
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest());
+    const json = await res.json();
+
+    expect(res.status).toBe(202);
+    expect(json).toEqual({ jobId: "job-1" });
+    expect(createJob).toHaveBeenCalledWith(expect.anything(), "model-uninstall", "Model Snapshot/Classifier Rollback");
+  });
+});
+
+describe("runModelUninstallJob — generic-classifier", () => {
+  it("deactivates/reactivates via modelId and completes the job without restarting inference", async () => {
+    const { runModelUninstallJob } = await import("./route");
+    const { uninstallClassificationModel } = await import("../../../../lib/model-catalog/classification-models");
+    const { completeJob } = await import("../../../../lib/background-jobs");
+    
+    (uninstallClassificationModel as any).mockResolvedValue({ restoredVersion: "0.9" });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const pool = {} as any;
+
+    await runModelUninstallJob(pool, "job-1", { modelId: "wanda-v1", meta: { currentVersion: "1.0", previousVersion: "0.9" }, origin: "http://localhost" });
+
+    expect(uninstallClassificationModel).toHaveBeenCalledWith(pool, "wanda-v1");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(completeJob).toHaveBeenCalledWith(pool, "job-1", { ok: true, version: "0.9" });
+  });
+});
+
+describe("runModelUninstallJob — code-bundle", () => {
+  it("restores the previous snapshot, restarts, rotates state, and completes the job", async () => {
+    const { runModelUninstallJob } = await import("./route");
+    const { writeUninstallMeta, clearPreviousBackup } = await import("../../../../lib/model-catalog/uninstall-state");
+    const { restoreInferenceCode } = await import("../../../../lib/model-catalog/backup");
+    const { completeJob } = await import("../../../../lib/background-jobs");
 
     const fetchMock = vi.fn(async (url: string) => {
       if (url.includes("restart-inference")) return { ok: true } as Response;
@@ -72,23 +118,20 @@ describe("POST /api/model-catalog/uninstall", () => {
       throw new Error(`unexpected fetch: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
+    const pool = {} as any;
 
-    const { POST } = await import("./route");
-    const res = await POST(makeRequest());
-    const json = await res.json();
+    await runModelUninstallJob(pool, "job-1", { modelId: undefined, meta: { currentVersion: "1.1", previousVersion: "1.0" }, origin: "http://localhost" });
 
-    expect(res.status).toBe(200);
-    expect(json).toEqual({ ok: true, version: "1.0" });
     expect(restoreInferenceCode).toHaveBeenCalledWith(expect.stringContaining("inference"), "/fake/previous");
     expect(writeUninstallMeta).toHaveBeenCalledWith({ currentVersion: "1.0", previousVersion: null });
     expect(clearPreviousBackup).toHaveBeenCalled();
+    expect(completeJob).toHaveBeenCalledWith(pool, "job-1", { ok: true, version: "1.0" });
   });
 
-  it("502s and leaves state untouched when the restored service never becomes ready", async () => {
-    const { readUninstallMeta, writeUninstallMeta, clearPreviousBackup } = await import(
-      "../../../../lib/model-catalog/uninstall-state"
-    );
-    (readUninstallMeta as any).mockResolvedValue({ currentVersion: "1.1", previousVersion: "1.0" });
+  it("fails the job and leaves state untouched when the restored service never becomes ready", async () => {
+    const { runModelUninstallJob } = await import("./route");
+    const { writeUninstallMeta, clearPreviousBackup } = await import("../../../../lib/model-catalog/uninstall-state");
+    const { failJob } = await import("../../../../lib/background-jobs");
 
     const fetchMock = vi.fn(async (url: string) => {
       if (url.includes("restart-inference")) return { ok: true } as Response;
@@ -96,13 +139,13 @@ describe("POST /api/model-catalog/uninstall", () => {
       throw new Error(`unexpected fetch: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
+    const pool = {} as any;
 
-    const { POST } = await import("./route");
-    const res = await POST(makeRequest());
+    await runModelUninstallJob(pool, "job-1", { modelId: undefined, meta: { currentVersion: "1.1", previousVersion: "1.0" }, origin: "http://localhost" });
 
-    expect(res.status).toBe(502);
     expect(writeUninstallMeta).not.toHaveBeenCalled();
     expect(clearPreviousBackup).not.toHaveBeenCalled();
+    expect(failJob).toHaveBeenCalledWith(pool, "job-1", expect.stringContaining("Inference engine readiness check failed"));
   });
 });
 
@@ -117,30 +160,5 @@ describe("GET /api/model-catalog/uninstall?modelId=...", () => {
 
     expect(json).toEqual({ available: true, previousVersion: "0.9" });
     expect(getClassificationModelHistory).toHaveBeenCalledWith(expect.anything(), "wanda-v1");
-  });
-});
-
-describe("POST /api/model-catalog/uninstall — generic-classifier strategy", () => {
-  it("deactivates/reactivates via modelId, without restarting inference", async () => {
-    const { uninstallClassificationModel } = await import("../../../../lib/model-catalog/classification-models");
-    (uninstallClassificationModel as any).mockResolvedValue({ restoredVersion: "0.9" });
-
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-
-    const { POST } = await import("./route");
-    const res = await POST(
-      new Request("http://localhost/api/model-catalog/uninstall", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ modelId: "wanda-v1" }),
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json).toEqual({ ok: true, version: "0.9" });
-    expect(uninstallClassificationModel).toHaveBeenCalledWith(expect.anything(), "wanda-v1");
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
