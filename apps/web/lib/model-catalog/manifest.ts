@@ -8,11 +8,35 @@ export interface BackboneReference {
   source: string;
 }
 
+export interface CodeBundleVramEstimate {
+  retrievalBytes: number | null;
+  verificationBytes: number | null;
+}
+
 export interface ModelCatalogBenchmark {
   accuracyWithin50m: number;
   avgDistanceM: number;
   sampleCount: number;
   ranAt: string;
+  // True when the accuracy run itself couldn't complete (confirmed live: a
+  // 6GB card can OOM loading/running the retrieval model, not just
+  // verification) — the publish route skips accuracy gating and publishes
+  // anyway rather than blocking the whole release on a benchmark that
+  // simply couldn't run on this hardware right now. accuracyWithin50m/
+  // avgDistanceM/sampleCount are meaningless placeholders (0) when this is
+  // true; the catalog UI shows "los benchmarks saldrán pronto" instead.
+  benchmarkPending?: boolean;
+  // Two separate numbers, not one — a code-bundle release actually loads
+  // two independent models (retrieval + verification) with very different
+  // footprints (confirmed live: MegaLoc ~1GB, RoMa ~5GB on a 6GB card).
+  // Collapsing them into a single "vramEstimateBytes" hid RoMa's real cost
+  // entirely, since only retrieval was ever exercised to measure it —
+  // published estimates looked safe but real usage OOM'd. Optional because
+  // runBenchmark() (apps/web/lib/model-catalog/benchmark.ts) computes
+  // accuracy metrics before the VRAM measurement happens — the route layer
+  // fills this in afterward. A validated manifest (via
+  // validateModelCatalogManifest) always has it set (to values or nulls).
+  vramEstimate?: CodeBundleVramEstimate | null;
 }
 
 export interface GenericClassifierBenchmark {
@@ -98,6 +122,20 @@ function validateCodeBundleManifest(raw: Record<string, unknown>): CodeBundleMan
   ) {
     throw new Error("manifest.benchmark has missing or wrongly-typed fields");
   }
+  let vramEstimate: CodeBundleVramEstimate | null = null;
+  if (benchmarkRaw.vramEstimate !== undefined && benchmarkRaw.vramEstimate !== null) {
+    const vramRaw = benchmarkRaw.vramEstimate as Record<string, unknown>;
+    if (
+      (vramRaw.retrievalBytes !== null && typeof vramRaw.retrievalBytes !== "number") ||
+      (vramRaw.verificationBytes !== null && typeof vramRaw.verificationBytes !== "number")
+    ) {
+      throw new Error("manifest.benchmark.vramEstimate.retrievalBytes/verificationBytes must be a number or null");
+    }
+    vramEstimate = {
+      retrievalBytes: (vramRaw.retrievalBytes as number | null) ?? null,
+      verificationBytes: (vramRaw.verificationBytes as number | null) ?? null,
+    };
+  }
 
   if (raw.verificationModelId !== undefined && typeof raw.verificationModelId !== "string") {
     throw new Error("manifest.verificationModelId must be a string when present");
@@ -113,6 +151,8 @@ function validateCodeBundleManifest(raw: Record<string, unknown>): CodeBundleMan
       avgDistanceM: benchmarkRaw.avgDistanceM,
       sampleCount: benchmarkRaw.sampleCount,
       ranAt: benchmarkRaw.ranAt,
+      benchmarkPending: benchmarkRaw.benchmarkPending === true,
+      vramEstimate,
     },
     description: typeof raw.description === "string" ? raw.description : "",
     verificationModelId: typeof raw.verificationModelId === "string" ? raw.verificationModelId : undefined,

@@ -109,9 +109,19 @@ export async function upsertRelease(
   }
 }
 
-export async function listReleasesForRepo(owner: string, repo: string): Promise<GithubRelease[]> {
+// Unauthenticated GitHub API reads are capped at 60 req/hour — trivially
+// exhausted by normal iteration (confirmed live: repeated catalog reads
+// during development burned through it, and 403'd every read call after —
+// same fix as apps/web/lib/model-catalog/github.ts). An authenticated
+// request (even for public data) gets 5000/hour, so every read here
+// accepts an optional token and uses it when the caller has one.
+function readHeaders(token?: string): Record<string, string> {
+  return token ? authHeaders(token) : { accept: "application/vnd.github+json" };
+}
+
+export async function listReleasesForRepo(owner: string, repo: string, token?: string): Promise<GithubRelease[]> {
   const res = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/releases`, {
-    headers: { accept: "application/vnd.github+json" },
+    headers: readHeaders(token),
     ...NO_STORE,
   });
   if (!res.ok) throw new Error(`Failed to list releases for ${owner}/${repo}: ${res.status}`);
@@ -129,9 +139,9 @@ export async function listReleasesForRepo(owner: string, repo: string): Promise<
   }));
 }
 
-export async function searchRepositoriesByTopic(topic: string): Promise<{ owner: string; repo: string }[]> {
+export async function searchRepositoriesByTopic(topic: string, token?: string): Promise<{ owner: string; repo: string }[]> {
   const res = await fetch(`${GITHUB_API}/search/repositories?q=${encodeURIComponent(`topic:${topic}`)}`, {
-    headers: { accept: "application/vnd.github+json" },
+    headers: readHeaders(token),
     ...NO_STORE,
   });
   if (!res.ok) throw new Error(`GitHub search failed: ${res.status}`);

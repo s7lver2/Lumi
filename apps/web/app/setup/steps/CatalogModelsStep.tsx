@@ -6,6 +6,7 @@ import { fadeRise } from "../../lib/motion";
 import { fetchJson } from "../../lib/fetch-json";
 
 interface CatalogRelease {
+  kind: "code-bundle" | "generic-classifier";
   tag: string;
   version: string;
   benchmark: { accuracyWithin50m: number };
@@ -28,6 +29,12 @@ export function pickDefaultRelease(
   let best: { owner: string; repo: string; release: CatalogRelease } | null = null;
   for (const bundle of bundles) {
     for (const release of bundle.releases) {
+      // Setup only ever auto-installs the mandatory retrieval/verification
+      // model — a generic-classifier release (Wanda/Velle) is always an
+      // optional, later Ajustes → Modelos install (spec: docs/superpowers/
+      // specs/2026-07-20-unified-model-catalog-design.md, "Setup wizard"),
+      // regardless of what number its own benchmark shape happens to carry.
+      if (release.kind !== "code-bundle") continue;
       if (!best || release.benchmark.accuracyWithin50m > best.release.benchmark.accuracyWithin50m) {
         best = { owner: bundle.owner, repo: bundle.repo, release };
       }

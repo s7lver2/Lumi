@@ -78,6 +78,7 @@ describe("validateModelCatalogManifest — generic-classifier", () => {
 describe("validateModelCatalogManifest", () => {
   it("accepts a well-formed manifest", () => {
     const result = validateModelCatalogManifest(validManifest());
+    if (result.kind !== "code-bundle") throw new Error("expected a code-bundle manifest");
     expect(result.bundleId).toBe("lumi-preview");
     expect(result.benchmark.accuracyWithin50m).toBe(0.89);
   });
@@ -107,11 +108,13 @@ describe("validateModelCatalogManifest", () => {
 
   it("accepts a manifest with an optional verificationModelId", () => {
     const result = validateModelCatalogManifest({ ...validManifest(), verificationModelId: "roma-verify" });
+    if (result.kind !== "code-bundle") throw new Error("expected a code-bundle manifest");
     expect(result.verificationModelId).toBe("roma-verify");
   });
 
   it("leaves verificationModelId undefined when the manifest omits it", () => {
     const result = validateModelCatalogManifest(validManifest());
+    if (result.kind !== "code-bundle") throw new Error("expected a code-bundle manifest");
     expect(result.verificationModelId).toBeUndefined();
   });
 

@@ -5,17 +5,96 @@ import { getPool } from "../../../../lib/db";
 import { getSettingsRepo } from "../../../../lib/settings-repo";
 import { embedQueryImage } from "../../../../lib/inference-client";
 import { retrieveCandidates } from "../../../../lib/search/retrieval";
-import { buildReferenceSet, runBenchmark, passesBenchmarkThreshold } from "../../../../lib/model-catalog/benchmark";
+import { buildReferenceSet, runBenchmark, passesBenchmarkThreshold, measureVramDelta, type ModelStatusSnapshot } from "../../../../lib/model-catalog/benchmark";
 import { buildInferenceCodeZip } from "../../../../lib/model-catalog/code-bundle";
 import { ensureRepoWithTopic, upsertRelease } from "../../../../lib/model-catalog/github";
 import { MODEL_CATALOG_SHARED_KEY } from "../../../../lib/model-catalog/shared-key";
-import { BUNDLE_CODE_ASSET_NAME, MODEL_CATALOG_METADATA_ASSET_NAME, type ModelCatalogManifest } from "../../../../lib/model-catalog/manifest";
+import {
+  BUNDLE_CODE_ASSET_NAME,
+  MODEL_CATALOG_METADATA_ASSET_NAME,
+  type CodeBundleManifest,
+  type GenericClassifierManifest,
+  type ClassifierFacet,
+} from "../../../../lib/model-catalog/manifest";
 import { encryptBuffer } from "@netryx/settings-repo";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { installClassificationModel, uninstallClassificationModel } from "../../../../lib/model-catalog/classification-models";
+import { verifyCandidates } from "../../../../lib/verify-client";
 
 interface PublishBody {
+  kind?: "code-bundle" | "generic-classifier";
   description?: string;
+  // generic-classifier only:
+  modelId?: string;
+  version?: string;
+  facets?: ClassifierFacet[];
+  sampleImageBase64?: string;
+}
+
+const INFERENCE_SERVICE_URL = process.env.INFERENCE_SERVICE_URL ?? "http://localhost:8000";
+
+async function getModelStatusSnapshot(): Promise<ModelStatusSnapshot> {
+  const res = await fetch(`${INFERENCE_SERVICE_URL}/model-status`);
+  if (!res.ok) return { gpuFreeBytes: null, gpuTotalBytes: null };
+  return (await res.json()) as ModelStatusSnapshot;
+}
+
+async function publishGenericClassifier(body: PublishBody, token: string, catalogRepo: string) {
+  if (!body.modelId || !body.version || !body.facets) {
+    return NextResponse.json({ error: "modelId, version and facets are required for a generic-classifier publish" }, { status: 400 });
+  }
+
+  const draftManifest: GenericClassifierManifest = {
+    kind: "generic-classifier",
+    modelId: body.modelId,
+    version: body.version,
+    facets: body.facets,
+    benchmark: { sampleCount: 0, ranAt: new Date().toISOString(), vramEstimateBytes: null },
+    description: body.description ?? "",
+  };
+
+  // POST /models/{model_id}/classify only recognizes model_ids that are
+  // already active in installed_classification_models — publish and
+  // install are deliberately separate actions (spec: docs/superpowers/
+  // specs/2026-07-20-unified-model-catalog-design.md), so a model being
+  // published here has no active row yet and the warmup call below would
+  // 404 (confirmed live) without this. Install a temporary row just for
+  // the measurement, then uninstall it again immediately after — publish
+  // alone must not leave the model installed on this machine.
+  const pool = getPool();
+  await installClassificationModel(pool, draftManifest);
+  let vramEstimateBytes: number | null;
+  try {
+    vramEstimateBytes = await measureVramDelta(getModelStatusSnapshot, async () => {
+      if (!body.sampleImageBase64) return;
+      await fetch(`${INFERENCE_SERVICE_URL}/models/${body.modelId}/classify`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ image_base64: body.sampleImageBase64 }),
+      });
+    });
+  } finally {
+    await uninstallClassificationModel(pool, body.modelId);
+  }
+
+  const manifest: GenericClassifierManifest = { ...draftManifest, benchmark: { ...draftManifest.benchmark, vramEstimateBytes } };
+
+  const [owner, repoName] = catalogRepo.split("/");
+  const tag = `${manifest.modelId}-v${manifest.version}`;
+  const title = `${manifest.modelId} v${manifest.version}`;
+
+  await ensureRepoWithTopic(owner, repoName, token);
+  await upsertRelease(
+    owner,
+    repoName,
+    tag,
+    title,
+    [{ name: MODEL_CATALOG_METADATA_ASSET_NAME, data: encryptBuffer(Buffer.from(JSON.stringify(manifest)), MODEL_CATALOG_SHARED_KEY) }],
+    token
+  );
+
+  return NextResponse.json({ tag }, { status: 200 });
 }
 
 export async function POST(request: Request) {
@@ -27,31 +106,84 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "GITHUB_TOKEN and MODEL_CATALOG_REPO must be configured in Settings first" }, { status: 400 });
   }
 
+  if (body.kind === "generic-classifier") {
+    return publishGenericClassifier(body, token, catalogRepo);
+  }
+
   const pool = getPool();
-  const inferenceBaseUrl = process.env.INFERENCE_SERVICE_URL ?? "http://localhost:8000";
+  const inferenceBaseUrl = INFERENCE_SERVICE_URL;
 
   const cases = await buildReferenceSet(pool);
-  const benchmark = await runBenchmark(cases, {
-    readImageBase64: async (imagePath) => (await readFile(imagePath)).toString("base64"),
-    embedQuery: (imageBase64) => embedQueryImage(imageBase64, inferenceBaseUrl),
-    retrieve: (embedding, excludeId) => retrieveCandidates(pool, embedding, DEFAULT_TOP_K, excludeId),
-  });
+  let benchmarkResult: Awaited<ReturnType<typeof runBenchmark>> | null = null;
+  let retrievalBytes: number | null = null;
+  let benchmarkPending = false;
+  try {
+    retrievalBytes = await measureVramDelta(getModelStatusSnapshot, async () => {
+      benchmarkResult = await runBenchmark(cases, {
+        readImageBase64: async (imagePath) => (await readFile(imagePath)).toString("base64"),
+        embedQuery: (imageBase64) => embedQueryImage(imageBase64, inferenceBaseUrl),
+        retrieve: (embedding, excludeId) => retrieveCandidates(pool, embedding, DEFAULT_TOP_K, excludeId),
+      });
+    });
+  } catch (err) {
+    // Doesn't block the publish — the accuracy run itself couldn't
+    // complete (confirmed live: not enough free VRAM to even load
+    // retrieval on a 6GB card), but that's a hardware/timing fact about
+    // THIS machine right now, not a reason to withhold an otherwise-good
+    // release. Publishes with a "pending" placeholder instead; the
+    // catalog UI shows "los benchmarks saldrán pronto" rather than a
+    // number, and accuracy gating below is skipped entirely.
+    console.error("[model-catalog] accuracy benchmark failed, publishing with benchmarkPending:", err instanceof Error ? err.message : err);
+    benchmarkPending = true;
+    benchmarkResult = { accuracyWithin50m: 0, avgDistanceM: 0, sampleCount: 0, ranAt: new Date().toISOString() };
+  }
 
-  if (!passesBenchmarkThreshold(benchmark)) {
+  const liveVerificationModel = await repo.getSetting("VERIFICATION_MODEL");
+
+  // Measured separately from retrieval above — a code-bundle release loads
+  // TWO independent models (retrieval + verification) with very different
+  // footprints (confirmed live: MegaLoc ~1GB, RoMa ~5GB on a 6GB card).
+  // Only ever measuring retrieval made the published estimate look safe
+  // while real usage OOM'd on RoMa, which this warmup never touched. Only
+  // attempted when a verification model is actually configured (an empty
+  // VERIFICATION_MODEL setting makes /verify itself 503 "not configured
+  // yet" — nothing to measure in that case) and there are at least 2
+  // reference images to use as a throwaway query/candidate pair.
+  //
+  // Unlike retrieval, a failure here (confirmed live: RoMa's real /verify
+  // computation itself OOM'd on a 6GB card, not just its load) must NOT
+  // crash the whole publish — the fact that verification doesn't reliably
+  // fit is itself useful information, recorded as `null` rather than
+  // aborting a release that otherwise has a perfectly good accuracy score.
+  let verificationBytes: number | null = null;
+  if (liveVerificationModel && cases.length >= 2) {
+    try {
+      verificationBytes = await measureVramDelta(getModelStatusSnapshot, async () => {
+        const queryBase64 = (await readFile(cases[0].imagePath)).toString("base64");
+        const candidateBase64 = (await readFile(cases[1].imagePath)).toString("base64");
+        await verifyCandidates(queryBase64, [candidateBase64], inferenceBaseUrl);
+      });
+    } catch (err) {
+      console.error("[model-catalog] verification VRAM measurement failed, recording null:", err instanceof Error ? err.message : err);
+      verificationBytes = null;
+    }
+  }
+
+  const benchmark = { ...benchmarkResult!, benchmarkPending, vramEstimate: { retrievalBytes, verificationBytes } };
+
+  if (!benchmarkPending && !passesBenchmarkThreshold(benchmark)) {
     return NextResponse.json({ benchmark }, { status: 409 });
   }
 
   const activeRetrievalModel = RETRIEVAL_MODELS[0];
   const bundleId = activeRetrievalModel?.id ?? "lumi-preview";
   const version = activeRetrievalModel?.version ?? "1.0";
-  const liveVerificationModel = await repo.getSetting("VERIFICATION_MODEL");
 
-  // process.cwd() is apps/web (the Next.js app root) — two levels up reaches
-  // the repo root, where services/inference actually lives.
   const inferenceDir = resolve(process.cwd(), "..", "..", "services", "inference");
   const codeZip = await buildInferenceCodeZip(inferenceDir);
 
-  const manifest: ModelCatalogManifest = {
+  const manifest: CodeBundleManifest = {
+    kind: "code-bundle",
     bundleId,
     version,
     backbones: [

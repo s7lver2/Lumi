@@ -95,3 +95,30 @@ export async function runBenchmark(cases: BenchmarkCase[], deps: BenchmarkDeps):
 export function passesBenchmarkThreshold(result: ModelCatalogBenchmark): boolean {
   return result.accuracyWithin50m >= BENCHMARK_ACCURACY_THRESHOLD;
 }
+
+export interface ModelStatusSnapshot {
+  gpuFreeBytes: number | null;
+  gpuTotalBytes: number | null;
+}
+
+/**
+ * Measures a model's real VRAM footprint via the HTTP boundary this file
+ * already uses for everything else (benchmark.ts has no direct access to
+ * torch — see docs/superpowers/specs/2026-07-20-unified-model-catalog-
+ * design.md's "VRAM bar" section). Takes a GET /model-status snapshot,
+ * runs `runWarmup` (whatever forces the model to load — the retrieval
+ * benchmark run, or one classify() call for a generic-classifier), then
+ * takes another snapshot; the drop in free VRAM approximates that model's
+ * footprint. Only accurate when nothing else is competing for the GPU
+ * during the measurement — a known approximation, not lab-grade.
+ */
+export async function measureVramDelta(
+  getModelStatus: () => Promise<ModelStatusSnapshot>,
+  runWarmup: () => Promise<void>
+): Promise<number | null> {
+  const before = await getModelStatus();
+  await runWarmup();
+  const after = await getModelStatus();
+  if (before.gpuFreeBytes === null || after.gpuFreeBytes === null) return null;
+  return Math.max(0, before.gpuFreeBytes - after.gpuFreeBytes);
+}

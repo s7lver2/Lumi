@@ -20,13 +20,17 @@ function makeRequest() {
   return new Request("http://localhost/api/model-catalog/uninstall", { method: "POST" });
 }
 
+function makeGetRequest() {
+  return new Request("http://localhost/api/model-catalog/uninstall", { method: "GET" });
+}
+
 describe("GET /api/model-catalog/uninstall", () => {
   it("reports unavailable when nothing has ever been installed", async () => {
     const { readUninstallMeta } = await import("../../../../lib/model-catalog/uninstall-state");
     (readUninstallMeta as any).mockResolvedValue({ currentVersion: null, previousVersion: null });
 
     const { GET } = await import("./route");
-    const json = await (await GET()).json();
+    const json = await (await GET(makeGetRequest())).json();
     expect(json).toEqual({ available: false, previousVersion: null });
   });
 
@@ -35,7 +39,7 @@ describe("GET /api/model-catalog/uninstall", () => {
     (readUninstallMeta as any).mockResolvedValue({ currentVersion: "1.1", previousVersion: "1.0" });
 
     const { GET } = await import("./route");
-    const json = await (await GET()).json();
+    const json = await (await GET(makeGetRequest())).json();
     expect(json).toEqual({ available: true, previousVersion: "1.0" });
   });
 });

@@ -36,10 +36,11 @@ describe("flattenModelBundles", () => {
         releases: [
           {
             tag: "lumi-preview-v1.0",
+            kind: "code-bundle",
             bundleId: "lumi-preview",
             version: "1.0",
             backbones: [],
-            benchmark: { accuracyWithin50m: 0.9, avgDistanceM: 5, sampleCount: 20, ranAt: "x" },
+            benchmark: { accuracyWithin50m: 0.9, avgDistanceM: 5, sampleCount: 20, ranAt: "x", vramEstimate: null },
             description: "",
             isActive: true,
           },

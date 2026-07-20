@@ -25,6 +25,7 @@ import {
   isLikelyJpeg,
 } from "../../../../lib/datasets/validate-bundle";
 import { enqueueEmbedPendingImagesJob } from "../../../../lib/queue";
+import { getSettingsRepo } from "../../../../lib/settings-repo";
 
 interface InstallBody {
   owner?: string;
@@ -41,7 +42,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "owner, repo and tag are required" }, { status: 400 });
   }
 
-  const releases = await listReleasesForRepo(body.owner, body.repo);
+  // Unauthenticated GitHub reads are capped at 60 req/hour — trivially
+  // exhausted (confirmed live, same issue fixed in GET /api/datasets).
+  const token = (await getSettingsRepo().getSetting("GITHUB_TOKEN")) ?? undefined;
+  const releases = await listReleasesForRepo(body.owner, body.repo, token);
   const release = releases.find((r) => r.tagName === body.tag);
   if (!release) {
     return NextResponse.json({ error: "release not found" }, { status: 404 });
@@ -58,7 +62,7 @@ export async function POST(request: Request) {
   let compatible: boolean;
   let decrypted: Buffer;
   try {
-    const metadataBytes = await downloadReleaseAsset(metadataAsset.url);
+    const metadataBytes = await downloadReleaseAsset(metadataAsset.url, token);
     metadata = JSON.parse(decryptBuffer(metadataBytes, DATASET_SHARED_KEY).toString("utf8")) as DatasetMetadata;
 
     activeModel = await getActiveModelTag();
@@ -77,7 +81,7 @@ export async function POST(request: Request) {
   let zip: JSZip;
   let manifest;
   try {
-    const bundleBytes = await downloadReleaseAsset(bundleAsset.url);
+    const bundleBytes = await downloadReleaseAsset(bundleAsset.url, token);
     decrypted = decryptBuffer(bundleBytes, DATASET_SHARED_KEY);
     assertCompressedSizeWithinLimit(decrypted.length);
 

@@ -45,6 +45,8 @@ export interface ModelStatus {
   loading: "retrieval" | "verification" | null;
   lowVramMode: boolean;
   gpuNote: string;
+  gpuFreeBytes: number | null;
+  gpuTotalBytes: number | null;
 }
 
 /** Proxies the inference service's /model-status endpoint, falling back to
@@ -57,6 +59,12 @@ export async function fetchModelStatus(baseUrl: string): Promise<ModelStatus> {
     if (!res.ok) throw new Error(`inference /model-status returned ${res.status}`);
     return (await res.json()) as ModelStatus;
   } catch {
-    return { loading: null, lowVramMode: false, gpuNote: "Estado de la GPU desconocido — servicio de inferencia no disponible." };
+    return {
+      loading: null,
+      lowVramMode: false,
+      gpuNote: "Estado de la GPU desconocido — servicio de inferencia no disponible.",
+      gpuFreeBytes: null,
+      gpuTotalBytes: null,
+    };
   }
 }

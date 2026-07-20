@@ -22,15 +22,36 @@ export interface DatasetCatalogItem {
 
 export interface Backbone { name: string; source: string }
 
+export interface CodeBundleVramEstimate {
+  retrievalBytes: number | null;
+  verificationBytes: number | null;
+}
+
 export interface CatalogBenchmark {
   accuracyWithin50m: number;
   avgDistanceM: number;
   sampleCount: number;
   ranAt: string;
+  benchmarkPending?: boolean;
+  vramEstimate: CodeBundleVramEstimate | null;
 }
 
-export interface CatalogRelease {
+export interface ClassifierFacetInfo {
+  facet: string;
+  hfModelId: string;
+  strategy: "pipeline" | "clip-zero-shot";
+  prompts?: string[];
+}
+
+export interface GenericClassifierBenchmark {
+  sampleCount: number;
+  ranAt: string;
+  vramEstimateBytes: number | null;
+}
+
+export interface CodeBundleCatalogRelease {
   tag: string;
+  kind: "code-bundle";
   bundleId: string;
   version: string;
   backbones: Backbone[];
@@ -38,6 +59,19 @@ export interface CatalogRelease {
   description: string;
   isActive: boolean;
 }
+
+export interface GenericClassifierCatalogRelease {
+  tag: string;
+  kind: "generic-classifier";
+  modelId: string;
+  version: string;
+  facets: ClassifierFacetInfo[];
+  benchmark: GenericClassifierBenchmark;
+  description: string;
+  isActive: boolean;
+}
+
+export type CatalogRelease = CodeBundleCatalogRelease | GenericClassifierCatalogRelease;
 
 export interface CatalogBundle { owner: string; repo: string; releases: CatalogRelease[] }
 
