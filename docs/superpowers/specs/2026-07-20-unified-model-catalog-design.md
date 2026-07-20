@@ -81,13 +81,23 @@ verification backbones genuinely need custom per-version code.
 **Manifest (`apps/web/lib/model-catalog/manifest.ts`):**
 `ModelCatalogManifest` gains a required `kind: "code-bundle" |
 "generic-classifier"` field. A `code-bundle` manifest keeps today's exact
-shape (`bundleId`, `backbones`, `verificationModelId?`, etc.) unchanged. A
+shape (`bundleId`, `backbones`, `verificationModelId?`, etc.) unchanged,
+including its geolocation-specific `benchmark` shape
+(`accuracyWithin50m`/`avgDistanceM`/`sampleCount`/`ranAt`). A
 `generic-classifier` manifest instead requires `modelId` (e.g.
 `"wanda-v1"`), `hfModelIds: string[]`, and `facets: { facet: string;
 strategy: "pipeline" | "clip-zero-shot"; prompts?: string[] }[]` (`prompts`
-required when `strategy` is `"clip-zero-shot"`, absent otherwise). Both
-kinds keep `version`, `benchmark`, `description`. `benchmark` gains
-`vramEstimateBytes: number | null`.
+required when `strategy` is `"clip-zero-shot"`, absent otherwise) — its
+`benchmark` is a *different*, smaller shape: `{ sampleCount: 0; ranAt:
+string; vramEstimateBytes: number | null }`. `accuracyWithin50m`-style
+accuracy gating is meaningless for a classifier and out of scope here (the
+Non-goals section already defers "the actual benchmark battery content"
+to the Consola spec) — publishing a `generic-classifier` release records
+*only* the VRAM measurement below, with no accuracy threshold check.
+`sampleCount` stays `0` until the later spec adds a real battery; this
+manifest shape is written once now and extended, not redesigned, when
+that lands. Both kinds' `benchmark` gains `vramEstimateBytes: number |
+null` (see "VRAM bar" below for how it's measured for each kind).
 
 **New table (`db/migrations/<ts>_installed_classification_models.js`):**
 ```sql
@@ -140,14 +150,25 @@ global snapshot. `services/inference` reads only `active = true` rows.
   immediately — no file writes, no `restart-inference` call. HF weights
   download lazily on first `/models/{model_id}/classify` call, same lazy
   pattern as MegaLoc/RoMa today.
-- `POST uninstall`: `code-bundle` → unchanged (single snapshot restore).
-  `generic-classifier` → deactivates the current row for that `model_id`
-  and reactivates the immediately-preceding row for the same `model_id`,
-  if one exists.
-- `POST publish`: branches on which kind is being published. A
-  `code-bundle` publish is unchanged (zips all of `services/inference`).
-  A `generic-classifier` publish uploads only the manifest as a release
-  asset — there's no code to zip.
+- `POST uninstall`: body gains an optional `modelId`. Without it, unchanged
+  (single snapshot restore for the `code-bundle` strategy). With it,
+  `generic-classifier` semantics: deactivates the current row for that
+  `model_id` and reactivates the immediately-preceding row for the same
+  `model_id`, if one exists. `GET uninstall` similarly accepts an optional
+  `?modelId=` query param, returning that model's own
+  `{available, previousVersion}` instead of the global code-bundle one.
+- `POST publish`: body gains an optional `kind` (defaults to
+  `"code-bundle"`, preserving today's exact behavior/request shape with
+  zero changes for existing callers). When `kind` is `"generic-classifier"`,
+  the body must also carry `modelId`, `hfModelIds`, `facets`, and
+  `description` directly — unlike a `code-bundle` publish, there's no
+  "currently active" classifier setting to derive these from (multiple
+  classifiers can be installed at once), so the caller supplies the full
+  manifest content. This path skips `buildReferenceSet`/`runBenchmark`/
+  `passesBenchmarkThreshold` entirely (no accuracy gating — see Manifest
+  section above) and skips zipping `services/inference` — it only runs the
+  VRAM before/after measurement (see "VRAM bar" below) and uploads the
+  manifest as the release's sole asset.
 - `GET /api/model-catalog`: unchanged shape, but every returned *release*
   now carries its manifest's `kind` (a single GitHub repo could in
   principle host releases of either kind over time, so `kind` lives on
