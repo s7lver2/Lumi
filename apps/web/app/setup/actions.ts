@@ -37,8 +37,18 @@ export async function submitSetup(
   }));
 
   for (const def of SETTINGS_SCHEMA) {
+    const value = resolveValue(formData, def);
+    // GOOGLE_MAPS_API_KEY is optional overall now (spec: docs/superpowers/
+    // specs/2026-07-20-setup-credentials-step-google-optional-design.md) —
+    // CredentialsStep's own client-side gate ("must pass test only if
+    // non-empty") already lets the wizard reach this final submit with an
+    // empty key. The schema still marks it required: true (that still
+    // drives Ajustes' "replace key" gate elsewhere), so this one key is
+    // exempted from the generic required-check here instead of flipping
+    // the shared schema flag, which would also loosen that unrelated flow.
+    if (def.key === "GOOGLE_MAPS_API_KEY" && value.trim() === "") continue;
     try {
-      validateSettingValue(def.key, resolveValue(formData, def));
+      validateSettingValue(def.key, value);
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }

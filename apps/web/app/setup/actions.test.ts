@@ -19,15 +19,38 @@ describe("submitSetup", () => {
       makeFormData({
         GOOGLE_MAPS_API_KEY: "",
         MAPBOX_TOKEN: "",
-        MAX_AREA_KM2: "5",
+        MAX_AREA_KM2: "not-a-number",
         MAX_MONTHLY_BUDGET_USD: "50",
         MAX_CONCURRENT_REQUESTS: "10",
         STREET_VIEW_PRICE_PER_IMAGE_USD: "0.007",
       })
     );
     expect(result.ok).toBe(false);
-    expect(result.ok || result.error).toMatch(/required/i);
+    expect(result.ok || result.error).toMatch(/number/i);
     expect(repo.completeSetup).not.toHaveBeenCalled();
+  });
+
+  it("completes successfully with an empty GOOGLE_MAPS_API_KEY — the key is optional (spec: docs/superpowers/specs/2026-07-20-setup-credentials-step-google-optional-design.md)", async () => {
+    const repo = { completeSetup: vi.fn() };
+    const result = await submitSetup(
+      repo as any,
+      makeFormData({
+        GOOGLE_MAPS_API_KEY: "",
+        MAPBOX_TOKEN: "",
+        MAX_AREA_KM2: "5",
+        MAX_MONTHLY_BUDGET_USD: "50",
+        MAX_CONCURRENT_REQUESTS: "10",
+        STREET_VIEW_PRICE_PER_IMAGE_USD: "0.007",
+      })
+    );
+    expect(result.ok).toBe(true);
+    expect(repo.completeSetup).toHaveBeenCalled();
+    const writes = repo.completeSetup.mock.calls[0][0];
+    expect(writes.find((w: any) => w.key === "GOOGLE_MAPS_API_KEY")).toEqual({
+      key: "GOOGLE_MAPS_API_KEY",
+      value: "",
+      isSecret: true,
+    });
   });
 
   it("calls completeSetup with all fields, marking API key/token as secret, and fills RETRIEVAL_MODEL/VERIFICATION_MODEL from their defaults since the wizard doesn't render those fields (spec §14.2 vs §15.3)", async () => {
