@@ -112,3 +112,59 @@ describe("downloadReleaseAsset", () => {
     expect(bytes.equals(Buffer.from([1, 2, 3]))).toBe(true);
   });
 });
+
+describe("listUserRepositories", () => {
+  it("maps a single page of results to UserRepository", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      headers: { get: () => null },
+      json: async () => ([
+        { owner: { login: "inigo" }, name: "lumi-madrid", private: false, description: "desc" },
+      ]),
+    } as unknown as Response)));
+
+    const { listUserRepositories } = await import("./github");
+    expect(await listUserRepositories("tok")).toEqual([
+      { owner: "inigo", repo: "lumi-madrid", private: false, description: "desc" },
+    ]);
+  });
+
+  it("follows the Link header to page through all results", async () => {
+    let call = 0;
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      call += 1;
+      if (call === 1) {
+        return {
+          ok: true,
+          headers: { get: () => '<https://api.github.com/user/repos?page=2>; rel="next"' },
+          json: async () => ([{ owner: { login: "inigo" }, name: "repo-one", private: false, description: null }]),
+        } as unknown as Response;
+      }
+      return {
+        ok: true,
+        headers: { get: () => null },
+        json: async () => ([{ owner: { login: "inigo" }, name: "repo-two", private: true, description: null }]),
+      } as unknown as Response;
+    }));
+
+    const { listUserRepositories } = await import("./github");
+    const result = await listUserRepositories("tok");
+    expect(result).toEqual([
+      { owner: "inigo", repo: "repo-one", private: false, description: null },
+      { owner: "inigo", repo: "repo-two", private: true, description: null },
+    ]);
+    expect(call).toBe(2);
+  });
+});
+
+describe("getAuthenticatedLogin", () => {
+  it("returns the token's own login", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ login: "inigo" }),
+    } as Response)));
+
+    const { getAuthenticatedLogin } = await import("./github");
+    expect(await getAuthenticatedLogin("tok")).toBe("inigo");
+  });
+});

@@ -151,3 +151,55 @@ export async function downloadReleaseAsset(assetApiUrl: string, token?: string):
   if (!res.ok) throw new Error(`Failed to download asset: ${res.status}`);
   return Buffer.from(await res.arrayBuffer());
 }
+
+export interface UserRepository {
+  owner: string;
+  repo: string;
+  private: boolean;
+  description: string | null;
+}
+
+/** Extracts the `rel="next"` URL from a GitHub `Link` response header, or
+ * null on the last page (GitHub's own pagination convention — no `next`
+ * relation once there's nothing left). */
+function parseNextLink(linkHeader: string | null): string | null {
+  if (!linkHeader) return null;
+  const nextPart = linkHeader.split(",").map((part) => part.trim()).find((part) => part.endsWith('rel="next"'));
+  if (!nextPart) return null;
+  const match = nextPart.match(/^<([^>]+)>/);
+  return match ? match[1] : null;
+}
+
+/** Every repo the token has write access to — own account plus any
+ * organization membership — paginated via the `Link` header since a
+ * single `per_page` request caps at 100. Used to back the dataset-publish
+ * repo picker (spec: docs/superpowers/specs/2026-07-20-dataset-publish-repo-picker-design.md). */
+export async function listUserRepositories(token: string): Promise<UserRepository[]> {
+  const results: UserRepository[] = [];
+  let url: string | null = `${GITHUB_API}/user/repos?affiliation=owner,collaborator,organization_member&per_page=100`;
+
+  while (url) {
+    const res: Response = await fetch(url, { headers: authHeaders(token), ...NO_STORE });
+    if (!res.ok) throw new Error(`Failed to list user repos: ${res.status}`);
+    const body = (await res.json()) as Array<{
+      owner: { login: string };
+      name: string;
+      private: boolean;
+      description: string | null;
+    }>;
+    results.push(...body.map((r) => ({ owner: r.owner.login, repo: r.name, private: r.private, description: r.description })));
+    url = parseNextLink(res.headers.get("link"));
+  }
+
+  return results;
+}
+
+/** The username the given token belongs to — a typed "create new repo"
+ * name in the picker always creates under this login (GitHub's
+ * `POST /user/repos` has no way to target an org). */
+export async function getAuthenticatedLogin(token: string): Promise<string> {
+  const res = await fetch(`${GITHUB_API}/user`, { headers: authHeaders(token), ...NO_STORE });
+  if (!res.ok) throw new Error(`Failed to fetch authenticated user: ${res.status}`);
+  const body = (await res.json()) as { login: string };
+  return body.login;
+}
