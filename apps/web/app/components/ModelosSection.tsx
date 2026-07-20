@@ -58,11 +58,18 @@ export function ModelosSection({ query }: { query: string }) {
     });
   }
 
+  function refreshCatalog() {
+    return fetchJson<{ bundles: CatalogBundle[] }>("/api/model-catalog").then((r) =>
+      setItems(flattenModelBundles(r.data?.bundles ?? []))
+    );
+  }
+
   useEffect(() => {
-    fetchJson<{ bundles: CatalogBundle[] }>("/api/model-catalog").then((r) => setItems(flattenModelBundles(r.data?.bundles ?? [])));
+    refreshCatalog();
     fetchJson<{ gpuFreeBytes: number | null; gpuTotalBytes: number | null }>("/api/model-status").then((r) => {
       if (r.data) setGpu({ freeBytes: r.data.gpuFreeBytes, totalBytes: r.data.gpuTotalBytes });
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const q = query.toLowerCase();
@@ -85,6 +92,13 @@ export function ModelosSection({ query }: { query: string }) {
     });
     setStatus(ok ? `Instalada ${label}` : (data as { error?: string } | null)?.error ?? "No se pudo instalar");
     setInstalling(false);
+    // The success notification means nothing if the card right below it
+    // still renders from the pre-install snapshot — items was only ever
+    // fetched once on mount, so selected.release.isActive stayed stale and
+    // the "Instalar" button reappeared as if the click had done nothing
+    // (confirmed live: DB showed the row active immediately after install,
+    // but the UI reverted anyway).
+    await refreshCatalog();
     refreshUninstallInfo(item.release);
   }
 
@@ -108,6 +122,7 @@ export function ModelosSection({ query }: { query: string }) {
         : (data as { error?: string } | null)?.error ?? "No se pudo desinstalar"
     );
     setUninstalling(false);
+    await refreshCatalog();
     refreshUninstallInfo(selected.release);
   }
   return (
