@@ -17,6 +17,12 @@ vi.mock("node:fs/promises", () => ({
   mkdir: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../../../../lib/background-jobs", () => ({
+  createJob: vi.fn().mockResolvedValue("job-1"),
+  completeJob: vi.fn(),
+  failJob: vi.fn(),
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -81,74 +87,75 @@ describe("POST /api/datasets/install", () => {
     const res = await POST(makeRequest({ owner: "inigo", repo: "lumi-madrid", tag: "lumi-preview-v1.0" }));
     expect(res.status).toBe(400);
   });
+});
 
-  it("stages a real JSZip bundle, writes rows via the pool, and returns 201 on a compatible install", async () => {
+describe("POST /api/datasets/install — success path", () => {
+  it("returns 202 with a jobId once compatibility passes", async () => {
     const { listReleasesForRepo, downloadReleaseAsset } = await import("../../../../lib/datasets/github");
-    const { encryptBuffer } = await import("@netryx/settings-repo");
-    const { DATASET_SHARED_KEY } = await import("../../../../lib/datasets/shared-key");
-    const model = { id: "lumi-preview", version: "1.0", embeddingDim: 3 };
-
-    const zip = new JSZip();
-    // Real JPEG magic bytes so isLikelyJpeg() passes.
-    zip.file("images/abc123_0.jpg", Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x01]));
-    zip.file(
-      "manifest.json",
-      JSON.stringify({
-        version: 1,
-        exportedAt: "2026-07-14T00:00:00.000Z",
-        model,
-        areas: [
-          {
-            name: "Test area",
-            geometryWkt: "POLYGON((0 0,0 1,1 1,1 0,0 0))",
-            areaKm2: 1,
-            status: "indexed",
-            pointsEstimated: 1,
-            pointsCaptured: 1,
-            pointsFailed: 0,
-            imagesEmbedded: 1,
-            estimatedCostUsd: null,
-            actualCostUsd: null,
-            images: [
-              { panoId: "abc123", heading: 0, lat: 0, lng: 0, streetViewDate: null, embedding: [0.1, 0.2, 0.3], hasFile: true },
-            ],
-            points: [{ panoId: "abc123", lat: 0, lng: 0, embedding: [0.1, 0.2, 0.3] }],
-          },
-        ],
-      })
-    );
-    const zipBytes = await zip.generateAsync({ type: "nodebuffer" });
-
     (listReleasesForRepo as any).mockResolvedValue([
-      {
-        tagName: "lumi-preview-v1.0", name: "x", body: "",
-        assets: [{ name: "metadata.json.enc", url: "meta-url" }, { name: "bundle.zip.enc", url: "bundle-url" }],
-      },
+      { tagName: "lumi-madrid-v1.0", name: "x", body: "", assets: [
+        { name: "metadata.json.enc", url: "meta-url" },
+        { name: "bundle.zip.enc", url: "bundle-url" },
+      ] },
     ]);
     (downloadReleaseAsset as any).mockImplementation(async (url: string) => {
-      if (url === "meta-url") return encryptedMetadata(model);
-      if (url === "bundle-url") return encryptBuffer(zipBytes, DATASET_SHARED_KEY);
-      throw new Error(`unexpected asset url: ${url}`);
+      if (url === "meta-url") return encryptedMetadata({ id: "lumi-preview", version: "1.0", embeddingDim: 8448 });
+      throw new Error(`unexpected asset url in this test: ${url}`);
     });
 
     const { getActiveModelTag } = await import("../../../../lib/datasets/active-model");
-    (getActiveModelTag as any).mockResolvedValue(model);
+    (getActiveModelTag as any).mockResolvedValue({ id: "lumi-preview", version: "1.0", embeddingDim: 8448 });
 
-    const { getPool } = await import("../../../../lib/db");
-    const query = vi.fn().mockResolvedValue({ rows: [{ id: "new-area-id" }] });
-    (getPool as any).mockReturnValue({ query });
-
-    const { enqueueEmbedPendingImagesJob } = await import("../../../../lib/queue");
+    const { createJob } = await import("../../../../lib/background-jobs");
 
     const { POST } = await import("./route");
-    const res = await POST(makeRequest({ owner: "inigo", repo: "lumi-madrid", tag: "lumi-preview-v1.0" }));
+    const res = await POST(makeRequest({ owner: "inigo", repo: "lumi-madrid", tag: "lumi-madrid-v1.0" }));
     const json = await res.json();
 
-    expect(res.status).toBe(201);
-    expect(json).toEqual({ areaId: "new-area-id", compatible: true });
-    // Compatible install must NOT enqueue the embed-pending-images job — that
-    // job only exists to backfill embeddings after a mismatched install.
-    expect(enqueueEmbedPendingImagesJob).not.toHaveBeenCalled();
-    expect(query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO areas"), expect.any(Array));
+    expect(res.status).toBe(202);
+    expect(json).toEqual({ jobId: "job-1" });
+    expect(createJob).toHaveBeenCalledWith(expect.anything(), "dataset-install", "inigo/lumi-madrid@lumi-madrid-v1.0");
+  });
+});
+
+describe("runDatasetInstallJob", () => {
+  it("stages images, writes areas/indexed_images/indexed_points, and completes the job", async () => {
+    const { runDatasetInstallJob } = await import("./route");
+    const { downloadReleaseAsset } = await import("../../../../lib/datasets/github");
+    const { encryptBuffer } = await import("@netryx/settings-repo");
+    const { DATASET_SHARED_KEY } = await import("../../../../lib/datasets/shared-key");
+    const { completeJob } = await import("../../../../lib/background-jobs");
+
+    const zip = new JSZip();
+    zip.file("manifest.json", JSON.stringify({
+      areas: [{
+        name: "Madrid", geometryWkt: "POLYGON((0 0,0 1,1 1,1 0,0 0))", areaKm2: 1, status: "indexed",
+        pointsEstimated: 1, pointsCaptured: 1, pointsFailed: 0, imagesEmbedded: 0,
+        estimatedCostUsd: 0, actualCostUsd: 0,
+        images: [], points: [],
+      }],
+    }));
+    const zipBytes = await zip.generateAsync({ type: "nodebuffer" });
+    (downloadReleaseAsset as any).mockResolvedValue(encryptBuffer(zipBytes, DATASET_SHARED_KEY));
+
+    const query = vi.fn().mockResolvedValue({ rows: [{ id: "area-1" }] });
+    const pool = { query } as any;
+
+    await runDatasetInstallJob(pool, "job-1", { bundleAssetUrl: "bundle-url", token: undefined, compatible: true });
+
+    expect(query.mock.calls[0][0]).toContain("INSERT INTO areas");
+    expect(completeJob).toHaveBeenCalledWith(pool, "job-1", { areaId: "area-1", compatible: true });
+  });
+
+  it("calls failJob instead of throwing when the bundle download fails", async () => {
+    const { runDatasetInstallJob } = await import("./route");
+    const { downloadReleaseAsset } = await import("../../../../lib/datasets/github");
+    (downloadReleaseAsset as any).mockRejectedValue(new Error("network error"));
+    const { failJob } = await import("../../../../lib/background-jobs");
+
+    const pool = { query: vi.fn() } as any;
+    await runDatasetInstallJob(pool, "job-1", { bundleAssetUrl: "bundle-url", token: undefined, compatible: true });
+
+    expect(failJob).toHaveBeenCalledWith(pool, "job-1", "network error");
   });
 });
