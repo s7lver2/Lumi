@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { resolve } from "node:path";
 import { restoreInferenceCode } from "../../../../lib/model-catalog/backup";
 import { PREVIOUS_CODE_DIR, readUninstallMeta, writeUninstallMeta, clearPreviousBackup } from "../../../../lib/model-catalog/uninstall-state";
+import { uninstallClassificationModel, getClassificationModelHistory } from "../../../../lib/model-catalog/classification-models";
+import { getPool } from "../../../../lib/db";
 
 // Same INFERENCE_DIR derivation as install/route.ts.
 const INFERENCE_DIR = resolve(process.cwd(), "..", "..", "services", "inference");
@@ -24,12 +26,29 @@ async function waitForInferenceReady(timeoutMs: number = READY_POLL_TIMEOUT_MS):
   return false;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const modelId = new URL(request.url).searchParams.get("modelId");
+  if (modelId) {
+    const history = await getClassificationModelHistory(getPool(), modelId);
+    return NextResponse.json(history);
+  }
+
   const meta = await readUninstallMeta();
   return NextResponse.json({ available: meta.previousVersion !== null || meta.currentVersion !== null, previousVersion: meta.previousVersion });
 }
 
+interface UninstallBody {
+  modelId?: string;
+}
+
 export async function POST(request: Request) {
+  const body = (await request.json().catch(() => ({}))) as UninstallBody;
+
+  if (body.modelId) {
+    const { restoredVersion } = await uninstallClassificationModel(getPool(), body.modelId);
+    return NextResponse.json({ ok: true, version: restoredVersion });
+  }
+
   const meta = await readUninstallMeta();
   if (meta.currentVersion === null) {
     return NextResponse.json({ error: "No hay ninguna versión instalada para desinstalar" }, { status: 400 });

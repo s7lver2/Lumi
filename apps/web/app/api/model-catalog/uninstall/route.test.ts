@@ -96,3 +96,42 @@ describe("POST /api/model-catalog/uninstall", () => {
     expect(clearPreviousBackup).not.toHaveBeenCalled();
   });
 });
+
+describe("GET /api/model-catalog/uninstall?modelId=...", () => {
+  it("returns that model's own history instead of the global code-bundle one", async () => {
+    const { getClassificationModelHistory } = await import("../../../../lib/model-catalog/classification-models");
+    (getClassificationModelHistory as any).mockResolvedValue({ available: true, previousVersion: "0.9" });
+
+    const { GET } = await import("./route");
+    const res = await GET(new Request("http://localhost/api/model-catalog/uninstall?modelId=wanda-v1"));
+    const json = await res.json();
+
+    expect(json).toEqual({ available: true, previousVersion: "0.9" });
+    expect(getClassificationModelHistory).toHaveBeenCalledWith(expect.anything(), "wanda-v1");
+  });
+});
+
+describe("POST /api/model-catalog/uninstall — generic-classifier strategy", () => {
+  it("deactivates/reactivates via modelId, without restarting inference", async () => {
+    const { uninstallClassificationModel } = await import("../../../../lib/model-catalog/classification-models");
+    (uninstallClassificationModel as any).mockResolvedValue({ restoredVersion: "0.9" });
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      new Request("http://localhost/api/model-catalog/uninstall", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ modelId: "wanda-v1" }),
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json).toEqual({ ok: true, version: "0.9" });
+    expect(uninstallClassificationModel).toHaveBeenCalledWith(expect.anything(), "wanda-v1");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
