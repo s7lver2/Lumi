@@ -117,4 +117,23 @@ describe("POST /api/model-catalog/reset", () => {
 
     vi.unstubAllGlobals();
   });
+
+  it("502s with a clear message when restoreInferenceCode throws", async () => {
+    const { readUninstallMeta } = await import("../../../../lib/model-catalog/uninstall-state");
+    (readUninstallMeta as any).mockResolvedValue({ currentVersion: "1.0", previousVersion: null });
+
+    const { getSettingsRepo } = await import("../../../../lib/settings-repo");
+    (getSettingsRepo as any).mockReturnValue({ setSetting: vi.fn() });
+
+    const { restoreInferenceCode } = await import("../../../../lib/model-catalog/backup");
+    (restoreInferenceCode as any).mockRejectedValue(new Error("backup dir missing"));
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest({ confirm: "RESET" }));
+
+    expect(res.status).toBe(502);
+    const json = await res.json();
+    expect(json.error).toContain("No se pudieron restaurar los archivos originales");
+    expect(json.error).toContain("backup dir missing");
+  });
 });

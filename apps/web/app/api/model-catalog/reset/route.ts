@@ -42,11 +42,18 @@ export async function POST(request: Request) {
 
   const meta = await readUninstallMeta();
   if (meta.currentVersion !== null || meta.previousVersion !== null) {
-    await restoreInferenceCode(INFERENCE_DIR, PREVIOUS_CODE_DIR);
+    try {
+      await restoreInferenceCode(INFERENCE_DIR, PREVIOUS_CODE_DIR);
 
-    const origin = new URL(request.url).origin;
-    const restartRes = await fetch(`${origin}/api/setup/run/restart-inference`, { method: "POST" });
-    void restartRes; // SSE stream — we just wait for real readiness below.
+      const origin = new URL(request.url).origin;
+      const restartRes = await fetch(`${origin}/api/setup/run/restart-inference`, { method: "POST" });
+      void restartRes; // SSE stream — we just wait for real readiness below.
+    } catch (err) {
+      return NextResponse.json(
+        { error: `No se pudieron restaurar los archivos originales: ${err instanceof Error ? err.message : String(err)}` },
+        { status: 502 }
+      );
+    }
 
     const ready = await waitForInferenceReady();
     if (!ready) {
