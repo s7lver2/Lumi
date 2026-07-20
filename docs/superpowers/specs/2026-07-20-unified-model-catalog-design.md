@@ -85,9 +85,13 @@ shape (`bundleId`, `backbones`, `verificationModelId?`, etc.) unchanged,
 including its geolocation-specific `benchmark` shape
 (`accuracyWithin50m`/`avgDistanceM`/`sampleCount`/`ranAt`). A
 `generic-classifier` manifest instead requires `modelId` (e.g.
-`"wanda-v1"`), `hfModelIds: string[]`, and `facets: { facet: string;
-strategy: "pipeline" | "clip-zero-shot"; prompts?: string[] }[]` (`prompts`
-required when `strategy` is `"clip-zero-shot"`, absent otherwise) — its
+`"wanda-v1"`) and `facets: { facet: string; hfModelId: string; strategy:
+"pipeline" | "clip-zero-shot"; prompts?: string[] }[]` (`prompts` required
+when `strategy` is `"clip-zero-shot"`, absent otherwise) — each facet
+carries its own `hfModelId` directly, rather than a separate top-level
+list the facets would have to map onto by position; two facets are free to
+name the same `hfModelId` (Wanda's `time_of_day` and `season` both use the
+same CLIP checkpoint, `weather` uses a different one). Its
 `benchmark` is a *different*, smaller shape: `{ sampleCount: 0; ranAt:
 string; vramEstimateBytes: number | null }`. `accuracyWithin50m`-style
 accuracy gating is meaningless for a classifier and out of scope here (the
@@ -160,7 +164,7 @@ global snapshot. `services/inference` reads only `active = true` rows.
 - `POST publish`: body gains an optional `kind` (defaults to
   `"code-bundle"`, preserving today's exact behavior/request shape with
   zero changes for existing callers). When `kind` is `"generic-classifier"`,
-  the body must also carry `modelId`, `hfModelIds`, `facets`, and
+  the body must also carry `modelId`, `facets`, and
   `description` directly — unlike a `code-bundle` publish, there's no
   "currently active" classifier setting to derive these from (multiple
   classifiers can be installed at once), so the caller supplies the full
@@ -219,7 +223,7 @@ Ajustes → Modelos action.
   with the `groups` shape, 503 via the existing OOM path); a test that the
   classifier registry is read from the DB, not a hardcoded list.
 - `apps/web`: `manifest.ts` validation tests for both `kind` shapes
-  (rejects a `generic-classifier` manifest missing `hfModelIds`/`facets`,
+  (rejects a `generic-classifier` manifest missing `facets`,
   rejects a `code-bundle` manifest carrying those fields); `install`/
   `uninstall`/`publish` route tests covering both strategies, explicitly
   asserting the `generic-classifier` path never calls the
