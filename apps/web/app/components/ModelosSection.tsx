@@ -6,7 +6,7 @@ import { flattenModelBundles, type CatalogBundle, type ModelCatalogItem, type Ca
 import { MODEL_FILTERS, filterModelItems, type ModelFilterId } from "../lib/catalog-filters";
 import { CatalogList } from "./CatalogList";
 import { CatalogDetailPanel } from "./CatalogDetailPanel";
-import { ModelLoadNotification } from "./ModelLoadNotification";
+import { useBackgroundJobsStore } from "../stores/useBackgroundJobsStore";
 
 function ModelRow({ item, selected }: { item: ModelCatalogItem; selected: boolean }) {
   const r = item.release;
@@ -47,9 +47,10 @@ export function ModelosSection({ query }: { query: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [uninstallInfo, setUninstallInfo] = useState<UninstallInfo>({ available: false, previousVersion: null });
-  const [uninstalling, setUninstalling] = useState(false);
-  const [installing, setInstalling] = useState(false);
   const [gpu, setGpu] = useState<{ freeBytes: number | null; totalBytes: number | null }>({ freeBytes: null, totalBytes: null });
+  const [watchedJobId, setWatchedJobId] = useState<string | null>(null);
+
+  const registerJob = useBackgroundJobsStore((s) => s.registerJob);
 
   function refreshUninstallInfo(release: CatalogRelease | null) {
     const qs = release?.kind === "generic-classifier" ? `?modelId=${encodeURIComponent(release.modelId)}` : "";
@@ -81,50 +82,54 @@ export function ModelosSection({ query }: { query: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
+  useEffect(() => {
+    if (!watchedJobId) return;
+    let cancelled = false;
+    const interval = setInterval(async () => {
+      const { data } = await fetchJson<{ status: "running" | "done" | "failed" }>(`/api/jobs/${watchedJobId}`);
+      if (cancelled || !data || data.status === "running") return;
+      clearInterval(interval);
+      setWatchedJobId(null);
+      await refreshCatalog();
+      refreshUninstallInfo(selected?.release ?? null);
+    }, 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedJobId]);
+
   async function install(item: ModelCatalogItem) {
-    const label = item.release.kind === "code-bundle" ? `v${item.release.version}` : `${item.release.modelId} v${item.release.version}`;
-    setInstalling(true);
-    setStatus(`Instalando ${label}…`);
-    const { ok, data } = await fetchJson("/api/model-catalog/install", {
+    const { ok, data } = await fetchJson<{ jobId: string }>("/api/model-catalog/install", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ owner: item.owner, repo: item.repo, tag: item.release.tag }),
     });
-    setStatus(ok ? `Instalada ${label}` : (data as { error?: string } | null)?.error ?? "No se pudo instalar");
-    setInstalling(false);
-    // The success notification means nothing if the card right below it
-    // still renders from the pre-install snapshot — items was only ever
-    // fetched once on mount, so selected.release.isActive stayed stale and
-    // the "Instalar" button reappeared as if the click had done nothing
-    // (confirmed live: DB showed the row active immediately after install,
-    // but the UI reverted anyway).
-    await refreshCatalog();
-    refreshUninstallInfo(item.release);
+    if (ok && data?.jobId) {
+      registerJob(data.jobId);
+      setWatchedJobId(data.jobId);
+    } else {
+      setStatus((data as { error?: string } | null)?.error ?? "No se pudo iniciar la instalación");
+    }
   }
 
   async function uninstall() {
     if (!selected) return;
     const isClassifier = selected.release.kind === "generic-classifier";
-    setUninstalling(true);
-    setStatus(
-      uninstallInfo.previousVersion ? `Restaurando v${uninstallInfo.previousVersion}…` : "Restaurando estado original…"
-    );
-    const { ok, data } = await fetchJson<{ version: string | null }>("/api/model-catalog/uninstall", {
+    const { ok, data } = await fetchJson<{ jobId: string }>("/api/model-catalog/uninstall", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(isClassifier ? { modelId: (selected.release as { modelId: string }).modelId } : {}),
     });
-    setStatus(
-      ok
-        ? data?.version
-          ? `Restaurada v${data.version}`
-          : "Restaurado el estado original"
-        : (data as { error?: string } | null)?.error ?? "No se pudo desinstalar"
-    );
-    setUninstalling(false);
-    await refreshCatalog();
-    refreshUninstallInfo(selected.release);
+    if (ok && data?.jobId) {
+      registerJob(data.jobId);
+      setWatchedJobId(data.jobId);
+    } else {
+      setStatus((data as { error?: string } | null)?.error ?? "No se pudo iniciar la desinstalación");
+    }
   }
+
   return (
     <div className="flex h-full overflow-hidden">
       <div className="w-[55%] border-r border-white/10">
@@ -213,13 +218,11 @@ export function ModelosSection({ query }: { query: string }) {
               secondaryAction={
                 selected.release.isActive
                   ? {
-                      label: uninstalling
-                        ? "Desinstalando…"
-                        : uninstallInfo.previousVersion
-                          ? `Desinstalar (volver a v${uninstallInfo.previousVersion})`
-                          : "Desinstalar",
+                      label: uninstallInfo.previousVersion
+                        ? `Desinstalar (volver a v${uninstallInfo.previousVersion})`
+                        : "Desinstalar",
                       onClick: uninstall,
-                      disabled: uninstalling || !uninstallInfo.available,
+                      disabled: !uninstallInfo.available,
                     }
                   : undefined
               }
@@ -250,13 +253,11 @@ export function ModelosSection({ query }: { query: string }) {
               secondaryAction={
                 selected.release.isActive
                   ? {
-                      label: uninstalling
-                        ? "Desinstalando…"
-                        : uninstallInfo.previousVersion
-                          ? `Desinstalar (volver a v${uninstallInfo.previousVersion})`
-                          : "Desinstalar",
+                      label: uninstallInfo.previousVersion
+                        ? `Desinstalar (volver a v${uninstallInfo.previousVersion})`
+                        : "Desinstalar",
                       onClick: uninstall,
-                      disabled: uninstalling || !uninstallInfo.available,
+                      disabled: !uninstallInfo.available,
                     }
                   : undefined
               }
@@ -269,10 +270,6 @@ export function ModelosSection({ query }: { query: string }) {
         )}
         {status && <div className="px-5 pb-3 text-xs text-muted">{status}</div>}
       </div>
-      <ModelLoadNotification
-        active={installing || uninstalling}
-        fallbackLabel={installing ? "Instalando modelo…" : "Desinstalando modelo…"}
-      />
     </div>
   );
 }
