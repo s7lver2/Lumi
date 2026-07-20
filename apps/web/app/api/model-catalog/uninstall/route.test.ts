@@ -88,7 +88,7 @@ describe("POST /api/model-catalog/uninstall — success path", () => {
 
 describe("runModelUninstallJob — generic-classifier", () => {
   it("deactivates/reactivates via modelId and completes the job without restarting inference", async () => {
-    const { runModelUninstallJob } = await import("./route");
+    const { runModelUninstallJob } = await import("./run-job");
     const { uninstallClassificationModel } = await import("../../../../lib/model-catalog/classification-models");
     const { completeJob } = await import("../../../../lib/background-jobs");
     
@@ -107,7 +107,7 @@ describe("runModelUninstallJob — generic-classifier", () => {
 
 describe("runModelUninstallJob — code-bundle", () => {
   it("restores the previous snapshot, restarts, rotates state, and completes the job", async () => {
-    const { runModelUninstallJob } = await import("./route");
+    const { runModelUninstallJob } = await import("./run-job");
     const { writeUninstallMeta, clearPreviousBackup } = await import("../../../../lib/model-catalog/uninstall-state");
     const { restoreInferenceCode } = await import("../../../../lib/model-catalog/backup");
     const { completeJob } = await import("../../../../lib/background-jobs");
@@ -129,7 +129,7 @@ describe("runModelUninstallJob — code-bundle", () => {
   });
 
   it("fails the job and leaves state untouched when the restored service never becomes ready", async () => {
-    const { runModelUninstallJob } = await import("./route");
+    const { runModelUninstallJob } = await import("./run-job");
     const { writeUninstallMeta, clearPreviousBackup } = await import("../../../../lib/model-catalog/uninstall-state");
     const { failJob } = await import("../../../../lib/background-jobs");
 

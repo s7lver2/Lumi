@@ -8,6 +8,7 @@ import { CatalogList } from "./CatalogList";
 import { CatalogDetailPanel } from "./CatalogDetailPanel";
 import { MismatchDialog } from "./MismatchDialog";
 import { PublishWizard } from "./PublishWizard";
+import { useBackgroundJobsStore } from "../stores/useBackgroundJobsStore";
 
 function DatasetRow({ item, selected }: { item: DatasetCatalogItem; selected: boolean }) {
   return (
@@ -37,6 +38,26 @@ export function DatasetsSection({ query }: { query: string }) {
   const [pendingInstall, setPendingInstall] = useState<DatasetCatalogItem | null>(null);
   const [publishOpen, setPublishOpen] = useState(false);
 
+  const registerJob = useBackgroundJobsStore((s) => s.registerJob);
+  const [watchedJobId, setWatchedJobId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!watchedJobId) return;
+    let cancelled = false;
+    const interval = setInterval(async () => {
+      const { data } = await fetchJson<{ status: "running" | "done" | "failed" }>(`/api/jobs/${watchedJobId}`);
+      if (cancelled || !data || data.status === "running") return;
+      clearInterval(interval);
+      setWatchedJobId(null);
+      reload();
+    }, 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedJobId]);
+
   function reload() {
     fetchJson<{ areas: DatasetArea[] }>("/api/datasets").then((r) => setItems(flattenDatasetAreas(r.data?.areas ?? [])));
   }
@@ -53,18 +74,21 @@ export function DatasetsSection({ query }: { query: string }) {
   const selected = items.find((i) => i.id === selectedId) ?? null;
 
   async function install(item: DatasetCatalogItem, forceInstall: boolean) {
-    setStatus("Instalando…");
-    const { ok, data } = await fetchJson("/api/datasets/install", {
+    const { ok, data } = await fetchJson<{ jobId: string }>("/api/datasets/install", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ owner: item.owner, repo: item.repo, tag: item.release.tag, forceInstall }),
     });
     if (!ok && (data as { compatible?: boolean } | null)?.compatible === false && !forceInstall) {
       setPendingInstall(item);
-      setStatus(null);
       return;
     }
-    setStatus(ok ? "Instalado" : (data as { error?: string } | null)?.error ?? "No se pudo instalar");
+    if (ok && data?.jobId) {
+      registerJob(data.jobId);
+      setWatchedJobId(data.jobId);
+    } else {
+      setStatus((data as { error?: string } | null)?.error ?? "No se pudo iniciar la instalación");
+    }
   }
 
   return (

@@ -141,7 +141,7 @@ describe("POST /api/model-catalog/install — success path", () => {
 
 describe("runModelInstallJob — generic-classifier", () => {
   it("installs and completes the job", async () => {
-    const { runModelInstallJob } = await import("./route");
+    const { runModelInstallJob } = await import("./run-job");
     const { installClassificationModel } = await import("../../../../lib/model-catalog/classification-models");
     const { completeJob } = await import("../../../../lib/background-jobs");
     const manifest = {
@@ -159,7 +159,7 @@ describe("runModelInstallJob — generic-classifier", () => {
 
 describe("runModelInstallJob — code-bundle", () => {
   it("backs up, swaps, restarts, confirms readiness, and completes the job", async () => {
-    const { runModelInstallJob } = await import("./route");
+    const { runModelInstallJob } = await import("./run-job");
     const { backupInferenceCode, restoreInferenceCode } = await import("../../../../lib/model-catalog/backup");
     (backupInferenceCode as any).mockResolvedValue("/tmp/backup-1");
     const { downloadReleaseAsset } = await import("../../../../lib/model-catalog/github");
@@ -197,7 +197,7 @@ describe("runModelInstallJob — code-bundle", () => {
   });
 
   it("restores the backup and fails the job when the new version never becomes ready", async () => {
-    const { runModelInstallJob } = await import("./route");
+    const { runModelInstallJob } = await import("./run-job");
     const { backupInferenceCode, restoreInferenceCode } = await import("../../../../lib/model-catalog/backup");
     (backupInferenceCode as any).mockResolvedValue("/tmp/backup-1");
     const { downloadReleaseAsset } = await import("../../../../lib/model-catalog/github");

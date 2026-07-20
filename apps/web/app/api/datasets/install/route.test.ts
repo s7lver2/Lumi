@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import JSZip from "jszip";
 
-vi.mock("../../../../lib/db", () => ({ getPool: vi.fn() }));
+vi.mock("../../../../lib/db", () => ({ getPool: vi.fn(() => ({})) }));
 vi.mock("../../../../lib/datasets/github", () => ({ listReleasesForRepo: vi.fn(), downloadReleaseAsset: vi.fn() }));
 vi.mock("../../../../lib/datasets/active-model", () => ({ getActiveModelTag: vi.fn() }));
 vi.mock("../../../../lib/queue", () => ({ enqueueEmbedPendingImagesJob: vi.fn() }));
@@ -120,7 +120,7 @@ describe("POST /api/datasets/install — success path", () => {
 
 describe("runDatasetInstallJob", () => {
   it("stages images, writes areas/indexed_images/indexed_points, and completes the job", async () => {
-    const { runDatasetInstallJob } = await import("./route");
+    const { runDatasetInstallJob } = await import("./run-job");
     const { downloadReleaseAsset } = await import("../../../../lib/datasets/github");
     const { encryptBuffer } = await import("@netryx/settings-repo");
     const { DATASET_SHARED_KEY } = await import("../../../../lib/datasets/shared-key");
@@ -128,6 +128,9 @@ describe("runDatasetInstallJob", () => {
 
     const zip = new JSZip();
     zip.file("manifest.json", JSON.stringify({
+      version: 1,
+      exportedAt: "2026-07-20T10:00:00.000Z",
+      model: { id: "lumi-preview", version: "1.0", embeddingDim: 8448 },
       areas: [{
         name: "Madrid", geometryWkt: "POLYGON((0 0,0 1,1 1,1 0,0 0))", areaKm2: 1, status: "indexed",
         pointsEstimated: 1, pointsCaptured: 1, pointsFailed: 0, imagesEmbedded: 0,
@@ -148,7 +151,7 @@ describe("runDatasetInstallJob", () => {
   });
 
   it("calls failJob instead of throwing when the bundle download fails", async () => {
-    const { runDatasetInstallJob } = await import("./route");
+    const { runDatasetInstallJob } = await import("./run-job");
     const { downloadReleaseAsset } = await import("../../../../lib/datasets/github");
     (downloadReleaseAsset as any).mockRejectedValue(new Error("network error"));
     const { failJob } = await import("../../../../lib/background-jobs");
