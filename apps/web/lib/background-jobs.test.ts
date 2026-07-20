@@ -1,6 +1,6 @@
 // apps/web/lib/background-jobs.test.ts
 import { describe, it, expect, vi } from "vitest";
-import { createJob, completeJob, failJob, getJob, listActiveJobs } from "./background-jobs";
+import { createJob, completeJob, failJob, getJob, listActiveJobs, updateJobProgress } from "./background-jobs";
 
 function makePool(queryImpl: (sql: string, params: unknown[]) => Promise<{ rows: any[] }>) {
   return { query: vi.fn(queryImpl) } as any;
@@ -45,6 +45,28 @@ describe("failJob", () => {
   });
 });
 
+describe("updateJobProgress", () => {
+  it("writes phase/current/total and bumps updated_at", async () => {
+    const pool = makePool(async (sql, params) => {
+      expect(sql).toContain("UPDATE background_jobs");
+      expect(sql).toContain("progress_phase = $2");
+      expect(params).toEqual(["job-1", "download", 4096, 65536]);
+      return { rows: [] };
+    });
+
+    await updateJobProgress(pool, "job-1", "download", 4096, 65536);
+  });
+
+  it("accepts a null total for a phase whose size isn't known yet", async () => {
+    const pool = makePool(async (sql, params) => {
+      expect(params).toEqual(["job-1", "download", 4096, null]);
+      return { rows: [] };
+    });
+
+    await updateJobProgress(pool, "job-1", "download", 4096, null);
+  });
+});
+
 describe("getJob", () => {
   it("returns null when the job doesn't exist", async () => {
     const pool = makePool(async () => ({ rows: [] }));
@@ -52,21 +74,34 @@ describe("getJob", () => {
     expect(job).toBeNull();
   });
 
-  it("maps a row to a BackgroundJob", async () => {
+  it("maps a row to a BackgroundJob with no progress reported yet", async () => {
     const pool = makePool(async () => ({
       rows: [{
         id: "job-1", kind: "model-install", label: "Wanda v1.0", status: "done",
-        error: null, result: { ok: true }, created_at: "2026-07-20T10:00:00.000Z",
-        updated_at: "2026-07-20T10:00:01.000Z",
+        error: null, result: { ok: true }, progress_phase: null, progress_current: null, progress_total: null,
+        created_at: "2026-07-20T10:00:00.000Z", updated_at: "2026-07-20T10:00:01.000Z",
       }],
     }));
 
     const job = await getJob(pool, "job-1");
     expect(job).toEqual({
       id: "job-1", kind: "model-install", label: "Wanda v1.0", status: "done",
-      error: null, result: { ok: true }, createdAt: "2026-07-20T10:00:00.000Z",
-      updatedAt: "2026-07-20T10:00:01.000Z",
+      error: null, result: { ok: true }, progress: null,
+      createdAt: "2026-07-20T10:00:00.000Z", updatedAt: "2026-07-20T10:00:01.000Z",
     });
+  });
+
+  it("maps a row's progress fields into a BackgroundJobProgress", async () => {
+    const pool = makePool(async () => ({
+      rows: [{
+        id: "job-1", kind: "dataset-install", label: "inigo/lumi-madrid@v1", status: "running",
+        error: null, result: null, progress_phase: "extract", progress_current: 40, progress_total: 120,
+        created_at: "2026-07-20T10:00:00.000Z", updated_at: "2026-07-20T10:00:01.000Z",
+      }],
+    }));
+
+    const job = await getJob(pool, "job-1");
+    expect(job?.progress).toEqual({ phase: "extract", current: 40, total: 120 });
   });
 });
 
@@ -78,8 +113,8 @@ describe("listActiveJobs", () => {
       return {
         rows: [{
           id: "job-1", kind: "dataset-install", label: "inigo/lumi-madrid@v1", status: "running",
-          error: null, result: null, created_at: "2026-07-20T10:00:00.000Z",
-          updated_at: "2026-07-20T10:00:00.000Z",
+          error: null, result: null, progress_phase: null, progress_current: null, progress_total: null,
+          created_at: "2026-07-20T10:00:00.000Z", updated_at: "2026-07-20T10:00:00.000Z",
         }],
       };
     });

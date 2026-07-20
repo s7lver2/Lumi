@@ -21,6 +21,7 @@ vi.mock("../../../../lib/background-jobs", () => ({
   createJob: vi.fn().mockResolvedValue("job-1"),
   completeJob: vi.fn(),
   failJob: vi.fn(),
+  updateJobProgress: vi.fn(),
 }));
 
 beforeEach(() => {

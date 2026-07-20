@@ -153,13 +153,41 @@ export async function searchRepositoriesByTopic(topic: string, token?: string): 
  * which requires `Accept: application/octet-stream` to return raw bytes
  * instead of asset metadata JSON. `token` is optional — public repos'
  * release assets are downloadable unauthenticated, but passing a token
- * avoids the stricter unauthenticated rate limit. */
-export async function downloadReleaseAsset(assetApiUrl: string, token?: string): Promise<Buffer> {
+ * avoids the stricter unauthenticated rate limit. `onProgress`, when
+ * given, is called after every chunk read from the response body with
+ * bytes downloaded so far and the total from `Content-Length` (null if
+ * the response didn't send one) — reads the stream manually instead of
+ * `res.arrayBuffer()` only when a caller actually wants progress, since
+ * `arrayBuffer()` gives no visibility into how much has arrived. */
+export async function downloadReleaseAsset(
+  assetApiUrl: string,
+  token?: string,
+  onProgress?: (loadedBytes: number, totalBytes: number | null) => void
+): Promise<Buffer> {
   const headers: Record<string, string> = { accept: "application/octet-stream" };
   if (token) headers.authorization = `Bearer ${token}`;
   const res = await fetch(assetApiUrl, { headers, ...NO_STORE });
   if (!res.ok) throw new Error(`Failed to download asset: ${res.status}`);
-  return Buffer.from(await res.arrayBuffer());
+
+  if (!onProgress || !res.body) {
+    return Buffer.from(await res.arrayBuffer());
+  }
+
+  const contentLength = res.headers.get("content-length");
+  const total = contentLength ? Number(contentLength) : null;
+  const reader = res.body.getReader();
+  const chunks: Buffer[] = [];
+  let loaded = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(Buffer.from(value));
+    loaded += value.byteLength;
+    onProgress(loaded, total);
+  }
+
+  return Buffer.concat(chunks);
 }
 
 export interface UserRepository {

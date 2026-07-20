@@ -9,6 +9,7 @@ import { decryptBuffer } from "@netryx/settings-repo";
 import { streetViewImageDir, captureImagePath } from "../../../../lib/street-view-image-dir";
 import { downloadReleaseAsset } from "../../../../lib/datasets/github";
 import { validateDatasetManifest } from "../../../../lib/datasets/manifest";
+import { parseManifestBuffer } from "../../../../lib/datasets/parse-manifest-buffer";
 import { DATASET_SHARED_KEY } from "../../../../lib/datasets/shared-key";
 import {
   assertCompressedSizeWithinLimit,
@@ -17,9 +18,30 @@ import {
   isLikelyJpeg,
 } from "../../../../lib/datasets/validate-bundle";
 import { enqueueEmbedPendingImagesJob } from "../../../../lib/queue";
-import { createJob, completeJob, failJob } from "../../../../lib/background-jobs";
+import { createJob, completeJob, failJob, updateJobProgress } from "../../../../lib/background-jobs";
 
 const KNOWN_MODEL_IDS = new Set(RETRIEVAL_MODELS.map((m) => m.id));
+
+/** Wraps a progress callback so it fires at most once per `intervalMs` —
+ * a raw download/extraction progress callback can fire on every network
+ * chunk or every single image, which would otherwise turn into one DB
+ * write per chunk/image. Always lets the final call through (when
+ * `current` reaches `total`) so the tray doesn't get stuck showing a
+ * stale in-between percentage. */
+function throttled<Args extends unknown[]>(
+  fn: (...args: Args) => void,
+  isFinal: (...args: Args) => boolean,
+  intervalMs = 250
+): (...args: Args) => void {
+  let last = 0;
+  return (...args: Args) => {
+    const now = Date.now();
+    if (now - last >= intervalMs || isFinal(...args)) {
+      last = now;
+      fn(...args);
+    }
+  };
+}
 
 /** The actual dataset install work (download bundle, stage images, write
  * areas/indexed_images/indexed_points, maybe enqueue an embed job) — split
@@ -44,7 +66,11 @@ export async function runDatasetInstallJob(
   let decompressedTotal = 0;
 
   try {
-    const bundleBytes = await downloadReleaseAsset(args.bundleAssetUrl, args.token);
+    const reportDownloadProgress = throttled<[number, number | null]>(
+      (loaded, total) => void updateJobProgress(pool, jobId, "download", loaded, total),
+      (loaded, total) => total !== null && loaded >= total
+    );
+    const bundleBytes = await downloadReleaseAsset(args.bundleAssetUrl, args.token, reportDownloadProgress);
     const decrypted = decryptBuffer(bundleBytes, DATASET_SHARED_KEY);
     assertCompressedSizeWithinLimit(decrypted.length);
 
@@ -52,16 +78,32 @@ export async function runDatasetInstallJob(
     assertFileCountWithinLimit(Object.keys(zip.files).length);
     const manifestFile = zip.file("manifest.json");
     if (!manifestFile) throw new Error("manifest.json missing from bundle");
-    const manifest = validateDatasetManifest(JSON.parse(await manifestFile.async("string")), KNOWN_MODEL_IDS);
+    const manifestBuf = await manifestFile.async("nodebuffer");
+    const manifest = validateDatasetManifest(parseManifestBuffer(manifestBuf), KNOWN_MODEL_IDS);
     if (manifest.areas.length !== 1) {
       throw new Error(`expected exactly 1 area in the bundle, got ${manifest.areas.length}`);
     }
 
+    const totalImages = manifest.areas.reduce((sum, area) => sum + area.images.length, 0);
+    const reportExtractProgress = throttled<[number, number]>(
+      (done, total) => void updateJobProgress(pool, jobId, "extract", done, total),
+      (done, total) => done >= total
+    );
+    let imagesExtracted = 0;
+
     for (const area of manifest.areas) {
       for (const img of area.images) {
-        if (!img.hasFile) continue;
+        if (!img.hasFile) {
+          imagesExtracted++;
+          reportExtractProgress(imagesExtracted, totalImages);
+          continue;
+        }
         const entry = zip.file(`images/${img.panoId}_${img.heading}.jpg`);
-        if (!entry) continue;
+        if (!entry) {
+          imagesExtracted++;
+          reportExtractProgress(imagesExtracted, totalImages);
+          continue;
+        }
         const bytes = Buffer.from(await entry.async("nodebuffer"));
         decompressedTotal += bytes.length;
         assertDecompressedSizeWithinLimit(decompressedTotal);
@@ -71,6 +113,8 @@ export async function runDatasetInstallJob(
         const stagedPath = join(stagingDir, `${img.panoId}_${img.heading}.jpg`);
         await writeFile(stagedPath, bytes);
         stagedImages.push({ panoId: img.panoId, heading: img.heading, bytes });
+        imagesExtracted++;
+        reportExtractProgress(imagesExtracted, totalImages);
       }
     }
 

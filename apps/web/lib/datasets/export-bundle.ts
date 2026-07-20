@@ -26,7 +26,7 @@ interface ManifestArea {
  * concatenating as Buffers (not strings) means the full manifest is never
  * materialized as a single string.
  */
-function serializeManifest(payload: {
+export function serializeManifest(payload: {
   version: number;
   exportedAt: string;
   model: ModelTag;

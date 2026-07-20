@@ -111,6 +111,40 @@ describe("downloadReleaseAsset", () => {
     const bytes = await downloadReleaseAsset("https://api.github.com/a/1", "tok");
     expect(bytes.equals(Buffer.from([1, 2, 3]))).toBe(true);
   });
+
+  it("reads the body in chunks and reports progress when onProgress is given", async () => {
+    const chunks = [new Uint8Array([1, 2]), new Uint8Array([3, 4, 5])];
+    let call = 0;
+    const reader = {
+      read: async () => {
+        if (call < chunks.length) return { done: false, value: chunks[call++] };
+        return { done: true, value: undefined };
+      },
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      headers: { get: (name: string) => (name === "content-length" ? "5" : null) },
+      body: { getReader: () => reader },
+    } as unknown as Response)));
+
+    const progressCalls: Array<[number, number | null]> = [];
+    const bytes = await downloadReleaseAsset("https://api.github.com/a/1", "tok", (loaded, total) =>
+      progressCalls.push([loaded, total])
+    );
+
+    expect(bytes.equals(Buffer.from([1, 2, 3, 4, 5]))).toBe(true);
+    expect(progressCalls).toEqual([[2, 5], [5, 5]]);
+  });
+
+  it("falls back to arrayBuffer() when onProgress is given but the response has no body stream", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => new Uint8Array([9, 9]).buffer,
+    } as Response)));
+
+    const bytes = await downloadReleaseAsset("https://api.github.com/a/1", "tok", () => {});
+    expect(bytes.equals(Buffer.from([9, 9]))).toBe(true);
+  });
 });
 
 describe("listUserRepositories", () => {

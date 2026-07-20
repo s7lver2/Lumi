@@ -4,6 +4,12 @@ import { useEffect, useState } from "react";
 import { fetchJson } from "../lib/fetch-json";
 import { useBackgroundJobsStore } from "../stores/useBackgroundJobsStore";
 
+interface BackgroundJobProgress {
+  phase: string;
+  current: number;
+  total: number | null;
+}
+
 interface BackgroundJob {
   id: string;
   kind: "dataset-install" | "model-install" | "model-uninstall";
@@ -11,6 +17,7 @@ interface BackgroundJob {
   status: "running" | "done" | "failed";
   error: string | null;
   result: unknown | null;
+  progress: BackgroundJobProgress | null;
 }
 
 interface SearchBatch {
@@ -27,10 +34,49 @@ const KIND_VERB: Record<BackgroundJob["kind"], string> = {
   "model-uninstall": "Desinstalando",
 };
 
+const PHASE_VERB: Record<string, string> = {
+  download: "Descargando",
+  extract: "Extrayendo",
+};
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Human-readable progress text for a running job's current phase, or
+ * null when no progress has been reported yet (falls back to the plain
+ * "Instalando X…" headline). "download" shows bytes (with a percentage
+ * once Content-Length is known); "extract" shows an item count. */
+function progressText(progress: BackgroundJobProgress): string {
+  const { phase, current, total } = progress;
+  if (phase === "download") {
+    if (total !== null && total > 0) {
+      const pct = Math.min(100, Math.round((current / total) * 100));
+      return `${PHASE_VERB.download} ${formatBytes(current)} / ${formatBytes(total)} (${pct}%)`;
+    }
+    return `${PHASE_VERB.download} ${formatBytes(current)}…`;
+  }
+  if (phase === "extract") {
+    return `${PHASE_VERB.extract} ${current}/${total ?? "?"}`;
+  }
+  return `${PHASE_VERB[phase] ?? phase} ${current}${total !== null ? `/${total}` : ""}`;
+}
+
 function jobHeadline(job: BackgroundJob): string {
-  if (job.status === "running") return `${KIND_VERB[job.kind]} ${job.label}…`;
+  if (job.status === "running") {
+    return job.progress ? `${job.label}: ${progressText(job.progress)}` : `${KIND_VERB[job.kind]} ${job.label}…`;
+  }
   if (job.status === "done") return `${job.label}: listo`;
   return `${job.label}: ${job.error ?? "error"}`;
+}
+
+/** Bar fill percent, or null when the total isn't known yet (renders the
+ * indeterminate shimmer instead of a real percentage). */
+function progressPercent(progress: BackgroundJobProgress | null): number | null {
+  if (!progress || progress.total === null || progress.total <= 0) return null;
+  return Math.min(100, Math.round((progress.current / progress.total) * 100));
 }
 
 /**
@@ -102,36 +148,43 @@ export function BackgroundJobsTray() {
 
   return (
     <div className="fixed bottom-4 right-4 z-40 flex flex-col gap-2">
-      {visibleJobs.map((job) => (
-        <div
-          key={job.id}
-          className="flex w-[260px] items-center gap-2.5 rounded-lg border border-white/[.12] bg-panel/[.97] p-2.5 shadow-lg shadow-black/40"
-        >
-          <div className="min-w-0 flex-1">
-            <div className="text-[10.5px] font-medium text-fg">{jobHeadline(job)}</div>
-            {job.status === "running" && (
-              <div className="mt-1.5 h-[3px] overflow-hidden rounded-full bg-white/[.08]">
-                <div
-                  className="h-full w-2/5 rounded-full bg-fg/60"
-                  style={{ animation: "lumi-shimmer 1.6s ease-in-out infinite" }}
-                />
-              </div>
+      {visibleJobs.map((job) => {
+        const pct = job.status === "running" ? progressPercent(job.progress) : null;
+        return (
+          <div
+            key={job.id}
+            className="flex w-[260px] items-center gap-2.5 rounded-lg border border-white/[.12] bg-panel/[.97] p-2.5 shadow-lg shadow-black/40"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="text-[10.5px] font-medium text-fg">{jobHeadline(job)}</div>
+              {job.status === "running" && (
+                <div className="mt-1.5 h-[3px] overflow-hidden rounded-full bg-white/[.08]">
+                  {pct !== null ? (
+                    <div className="h-full rounded-full bg-fg/60" style={{ width: `${pct}%` }} />
+                  ) : (
+                    <div
+                      className="h-full w-2/5 rounded-full bg-fg/60"
+                      style={{ animation: "lumi-shimmer 1.6s ease-in-out infinite" }}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+            {job.status !== "running" && (
+              <button
+                onClick={() => {
+                  untrackJob(job.id);
+                  setDismissedIds((prev) => new Set(prev).add(job.id));
+                }}
+                className="text-subtle hover:text-fg"
+                aria-label="Cerrar"
+              >
+                ✕
+              </button>
             )}
           </div>
-          {job.status !== "running" && (
-            <button
-              onClick={() => {
-                untrackJob(job.id);
-                setDismissedIds((prev) => new Set(prev).add(job.id));
-              }}
-              className="text-subtle hover:text-fg"
-              aria-label="Cerrar"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-      ))}
+        );
+      })}
       {batch && (
         <div className="flex w-[260px] items-center gap-2.5 rounded-lg border border-white/[.12] bg-panel/[.97] p-2.5 shadow-lg shadow-black/40">
           <div className="min-w-0 flex-1">
@@ -140,8 +193,8 @@ export function BackgroundJobsTray() {
             </div>
             <div className="mt-1.5 h-[3px] overflow-hidden rounded-full bg-white/[.08]">
               <div
-                className="h-full w-2/5 rounded-full bg-fg/60"
-                style={{ animation: "lumi-shimmer 1.6s ease-in-out infinite" }}
+                className="h-full rounded-full bg-fg/60"
+                style={{ width: `${batch.total > 0 ? Math.min(100, Math.round((batch.done / batch.total) * 100)) : 0}%` }}
               />
             </div>
           </div>
