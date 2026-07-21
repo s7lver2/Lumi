@@ -11,12 +11,12 @@ const PAGE_SIZE = 6;
 export function OtherCandidatesList({
   candidates,
   queryImageUrl,
-  onRefine,
+  onRefineCandidate,
   refining,
 }: {
   candidates: SearchCandidate[];
   queryImageUrl: string | null;
-  onRefine: (regionId: string) => void;
+  onRefineCandidate: (candidateId: string, regionId: string) => void;
   refining: boolean;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -24,8 +24,6 @@ export function OtherCandidatesList({
 
   const pageCount = Math.max(1, Math.ceil(candidates.length / PAGE_SIZE));
 
-  // Reset to page 1 whenever the underlying candidate set changes (e.g. a
-  // different region gets selected) so pagination never points past the end.
   useEffect(() => {
     setPage(0);
     setExpandedId(null);
@@ -58,7 +56,8 @@ export function OtherCandidatesList({
               <CandidateComparisonCard
                 candidate={c}
                 queryImageUrl={queryImageUrl}
-                onRefine={onRefine}
+                showZoneRefine={false}
+                onRefineCandidate={onRefineCandidate}
                 refining={refining}
               />
             </div>

@@ -195,6 +195,45 @@ export function SearchDashboard() {
     }
   }
 
+  async function handleRefineCandidate(candidateId: string, regionId: string) {
+    if (!currentSearchId) return;
+    selectRegion(regionId);
+    setRefining();
+
+    const res = await fetch(`/api/models/${activeModelId}/refine`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ searchId: currentSearchId, regionId, candidateId }),
+    });
+    if (!res.ok || !res.body) return setError(`El refinado falló (HTTP ${res.status})`);
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() ?? "";
+      for (const part of parts) {
+        const raw = part.replace(/^data: /, "");
+        if (!raw) continue;
+        const event = JSON.parse(raw) as
+          | { type: "progress"; verified: number; total: number; etaMs: number | null }
+          | { type: "done"; result: { candidates: import("@netryx/shared-types").SearchCandidate[] } }
+          | { type: "error"; message: string };
+        if (event.type === "progress") {
+          setRefineProgress({ verified: event.verified, total: event.total, etaMs: event.etaMs });
+        } else if (event.type === "done") {
+          setRefineResults(regionId, event.result.candidates);
+        } else if (event.type === "error") {
+          setError(event.message);
+        }
+      }
+    }
+  }
+
   useEffect(() => {
     if (!map || regions.length === 0) return;
     const lngs = regions.map((r) => r.centroid.lng);
@@ -338,7 +377,7 @@ export function SearchDashboard() {
             <ResultsPanel
               queryImageUrl={queryImageUrl}
               queryImageId={queryImageId}
-              onRefine={handleRefine}
+              onRefineCandidate={handleRefineCandidate}
               refining={refining}
             />
           </div>

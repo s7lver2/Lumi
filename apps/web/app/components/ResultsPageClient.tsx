@@ -59,6 +59,40 @@ export function ResultsPageClient({ initialResult, searchId }: { initialResult: 
     setRefiningLocal(false);
   }
 
+  async function handleRefineCandidate(candidateId: string, regionId: string) {
+    selectRegion(regionId);
+    setRefining();
+    setRefiningLocal(true);
+
+    const res = await fetch(`/api/models/${activeModelId}/refine`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ searchId, regionId, candidateId }),
+    });
+    if (!res.ok || !res.body) {
+      setRefiningLocal(false);
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() ?? "";
+      for (const part of parts) {
+        const raw = part.replace(/^data: /, "");
+        if (!raw) continue;
+        const event = JSON.parse(raw);
+        if (event.type === "done") setRefineResults(regionId, event.result.candidates);
+      }
+    }
+    setRefiningLocal(false);
+  }
+
   return (
     <AppShell>
       <MapCanvas onReady={(m) => setMap(m)} />
@@ -69,7 +103,7 @@ export function ResultsPageClient({ initialResult, searchId }: { initialResult: 
             <ResultsPanel
               queryImageUrl={`/api/images/query/${searchId}`}
               queryImageId={null}
-              onRefine={handleRefine}
+              onRefineCandidate={handleRefineCandidate}
               refining={refining}
             />
           </div>

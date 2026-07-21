@@ -27,12 +27,12 @@ function noop() {}
 export function ResultsPanel({
   queryImageUrl,
   queryImageId,
-  onRefine,
+  onRefineCandidate,
   refining = false,
 }: {
   queryImageUrl: string | null;
   queryImageId: string | null;
-  onRefine: (regionId: string) => void;
+  onRefineCandidate: (candidateId: string, regionId: string) => void;
   refining?: boolean;
 }) {
   const { queryImageName, candidatesByRegion, selectedRegionId } = useSearchStore();
@@ -60,14 +60,15 @@ export function ResultsPanel({
             <CandidateComparisonCard
               candidate={top}
               queryImageUrl={queryImageUrl}
-              onRefine={onRefine}
+              showZoneRefine={true}
+              onRefineCandidate={onRefineCandidate}
               refining={refining}
             />
           )}
           <OtherCandidatesList
             candidates={rest}
             queryImageUrl={queryImageUrl}
-            onRefine={onRefine}
+            onRefineCandidate={onRefineCandidate}
             refining={refining}
           />
         </>
