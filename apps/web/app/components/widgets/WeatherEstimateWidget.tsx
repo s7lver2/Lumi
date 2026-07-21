@@ -1,9 +1,7 @@
 // apps/web/app/components/widgets/WeatherEstimateWidget.tsx
 "use client";
 import { InfoTooltip } from "../InfoTooltip";
-
-// TODO: sin modelo real todavía; conectar cuando exista un modelo de
-// estimación de clima a partir de iluminación/sombras/elementos visibles.
+import { spanishWeatherLabel } from "../../../lib/weather-label";
 
 const WEATHER_ICON = (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -16,27 +14,41 @@ const LOCK_ICON = (
   </svg>
 );
 
-export function WeatherEstimateWidget({ onInstall }: { onInstall: () => void }) {
+export function WeatherEstimateWidget({
+  locked,
+  weather,
+  onInstall,
+}: {
+  locked: boolean;
+  weather: { label: string; score: number } | null;
+  onInstall: () => void;
+}) {
   return (
     <div className="relative overflow-hidden rounded-lg">
-      <div className="blur-[4px] opacity-50">
+      <div className={locked ? "blur-[4px] opacity-50" : undefined}>
         <div className="mb-2.5 flex items-center gap-1.5">
           {WEATHER_ICON}
           <span className="flex-1 text-[10.5px] font-medium text-fg">Clima estimado</span>
-          <InfoTooltip text="Estimado a partir de la iluminación, sombras y elementos visibles en la foto" />
+          <InfoTooltip text="Clasificado a partir de la imagen (Wanda)" />
         </div>
-        <div className="text-center text-[18px] font-semibold text-fg">18–22°C</div>
-        <div className="mt-0.5 text-center text-[9.5px] text-muted">Despejado, luz diurna</div>
+        <div className="text-center text-[18px] font-semibold text-fg">
+          {weather ? spanishWeatherLabel(weather.label) : "—"}
+        </div>
+        {weather && (
+          <div className="mt-0.5 text-center text-[9.5px] text-muted">{Math.round(weather.score * 100)}% confianza</div>
+        )}
       </div>
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0e0f11]/35">
-        <div className="flex h-[26px] w-[26px] items-center justify-center rounded-full border border-white/35">{LOCK_ICON}</div>
-        <button
-          onClick={onInstall}
-          className="rounded-lg bg-accent px-2.5 py-1.5 text-[9.5px] font-medium text-black transition-transform hover:scale-105 active:scale-90"
-        >
-          Instalar Clima estimado
-        </button>
-      </div>
+      {locked && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0e0f11]/35">
+          <div className="flex h-[26px] w-[26px] items-center justify-center rounded-full border border-white/35">{LOCK_ICON}</div>
+          <button
+            onClick={onInstall}
+            className="rounded-lg bg-accent px-2.5 py-1.5 text-[9.5px] font-medium text-black transition-transform hover:scale-105 active:scale-90"
+          >
+            Instalar Clima estimado
+          </button>
+        </div>
+      )}
     </div>
   );
 }

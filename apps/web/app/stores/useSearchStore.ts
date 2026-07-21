@@ -22,6 +22,7 @@ interface SearchState {
   error: string | null;
   batchProgress: { done: number; total: number; failed: number } | null;
   timeOfDay: { label: string; score: number } | null;
+  weather: { label: string; score: number } | null;
   setSearching: (imageName: string) => void;
   setSearchResults: (res: SearchResponse, imageName: string) => void;
   selectRegion: (regionId: string) => void;
@@ -46,6 +47,7 @@ const INITIAL = {
   error: null as string | null,
   batchProgress: null as { done: number; total: number; failed: number } | null,
   timeOfDay: null as { label: string; score: number } | null,
+  weather: null as { label: string; score: number } | null,
 };
 
 export const useSearchStore = create<SearchState>((set) => ({
@@ -63,6 +65,7 @@ export const useSearchStore = create<SearchState>((set) => ({
       refineProgress: null,
       error: null,
       timeOfDay: res.timeOfDay,
+      weather: res.weather,
     });
   },
   selectRegion: (selectedRegionId) => set({ selectedRegionId }),

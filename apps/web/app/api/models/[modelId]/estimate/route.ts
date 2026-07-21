@@ -67,6 +67,7 @@ export async function POST(request: Request, { params }: { params: { modelId: st
 
   const pool = getPool();
   const timeOfDayModel = await findActiveModelForFacet(pool, "time_of_day");
+  const weatherModel = await findActiveModelForFacet(pool, "weather");
   const inferenceBaseUrl = process.env.INFERENCE_SERVICE_URL ?? "http://localhost:8000";
 
   const deps: RunSearchDeps = {
@@ -91,6 +92,22 @@ export async function POST(request: Request, { params }: { params: { modelId: st
               // Time-of-day is decorative, not core — never fail the search
               // over a classify error (spec: docs/superpowers/specs/2026-
               // 07-21-results-layout-and-time-of-day-design.md).
+              return null;
+            }
+          },
+        }
+      : {}),
+    ...(weatherModel
+      ? {
+          classifyWeather: async (b64: string) => {
+            try {
+              const groups = await classifyQueryImage(b64, weatherModel.modelId, inferenceBaseUrl);
+              const group = groups.find((g) => g.facet === "weather");
+              const top = group?.labels[0];
+              return top ? { label: top.name, score: top.score } : null;
+            } catch {
+              // Weather is decorative, not core — never fail the search
+              // over a classify error (same rule as classifyTimeOfDay).
               return null;
             }
           },

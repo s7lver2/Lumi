@@ -13,6 +13,9 @@ export interface PersistSearchArgs {
    * SearchResponse (spec: docs/superpowers/specs/2026-07-21-results-
    * layout-and-time-of-day-design.md). */
   timeOfDay?: { label: string; score: number } | null;
+  /** Same non-persistence rule as timeOfDay (spec: docs/superpowers/specs/
+   * 2026-07-21-weather-classifier-and-batch-phase-design.md). */
+  weather?: { label: string; score: number } | null;
 }
 
 /**
@@ -85,7 +88,13 @@ export async function persistSearch(
     }
 
     await client.query("COMMIT");
-    return { searchId, regions: regionOut, candidatesByRegion, timeOfDay: args.timeOfDay ?? null };
+    return {
+      searchId,
+      regions: regionOut,
+      candidatesByRegion,
+      timeOfDay: args.timeOfDay ?? null,
+      weather: args.weather ?? null,
+    };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

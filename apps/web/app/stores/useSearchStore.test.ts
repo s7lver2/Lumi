@@ -17,6 +17,7 @@ const RESPONSE: SearchResponse = {
     ],
   },
   timeOfDay: null,
+  weather: null,
 };
 
 describe("useSearchStore", () => {

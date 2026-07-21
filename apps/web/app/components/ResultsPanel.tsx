@@ -40,6 +40,7 @@ export function ResultsPanel({
   const [top, ...rest] = candidates;
   const timeOfDay = useSearchStore((s) => s.timeOfDay);
   const estimatedHour = timeOfDay ? hourForLabel(timeOfDay.label) : null;
+  const weather = useSearchStore((s) => s.weather);
 
   const widgets: Widget[] = [
     {
@@ -95,9 +96,9 @@ export function ResultsPanel({
       title: "Clima estimado",
       icon: SEARCH_ICON,
       colSpan: 2,
-      locked: true,
-      defaultExpanded: false,
-      render: () => <WeatherEstimateWidget onInstall={noop} />,
+      locked: weather === null,
+      defaultExpanded: weather !== null,
+      render: () => <WeatherEstimateWidget locked={weather === null} weather={weather} onInstall={noop} />,
     },
     {
       id: "detected-objects",

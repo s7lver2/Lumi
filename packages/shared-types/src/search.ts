@@ -54,6 +54,12 @@ export interface SearchResponse {
    * the DB (spec: docs/superpowers/specs/2026-07-21-results-layout-and-
    * time-of-day-design.md). */
   timeOfDay: { label: string; score: number } | null;
+  /** Same shape and same non-persistence rule as timeOfDay, for Wanda's
+   * weather facet (spec: docs/superpowers/specs/2026-07-21-weather-
+   * classifier-and-batch-phase-design.md). `label` is the raw HF label
+   * (e.g. "rain/storm") — translation to Spanish happens at display time,
+   * not stored translated. */
+  weather: { label: string; score: number } | null;
 }
 
 /** Verification score at/above which the top candidate auto-confirms (spec §9.3). */
