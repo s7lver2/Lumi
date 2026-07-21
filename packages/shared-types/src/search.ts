@@ -71,6 +71,11 @@ export const DEFAULT_CONFIRM_THRESHOLD = 0.5;
 export interface RefineRequest {
   searchId: string;
   regionId: string;
+  /** When present, refine verifies ONLY this one candidate instead of the
+   * whole region (spec: docs/superpowers/specs/2026-07-21-results-widgets-
+   * popup-and-per-candidate-refine-design.md). Absent = whole-region
+   * refine, unchanged from before this field existed. */
+  candidateId?: string;
 }
 
 /** Response of the refine endpoint — candidates re-ranked by verification score. */
