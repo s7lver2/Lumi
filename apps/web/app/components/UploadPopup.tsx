@@ -45,10 +45,8 @@ export function UploadPopup({
   const shownFiles = files.length > 0 ? files : lastFiles.current;
 
   return (
-    <div
-      className="absolute left-1/2 top-1/2 z-20 w-[460px] -translate-x-1/2 -translate-y-1/2"
-      style={{ animation: `${closing ? "jg-popup-scale-out" : "jg-popup-scale-in"} 180ms cubic-bezier(.2,.85,.35,1) both` }}
-    >
+    <div className="absolute left-1/2 top-1/2 z-20 w-[460px] -translate-x-1/2 -translate-y-1/2">
+      <div style={{ animation: `${closing ? "jg-popup-scale-out" : "jg-popup-scale-in"} 180ms cubic-bezier(.2,.85,.35,1) both` }}>
       <FloatingCard className="p-4">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2">
@@ -94,6 +92,7 @@ export function UploadPopup({
           </button>
         </div>
       </FloatingCard>
+      </div>
 
       {cropTarget && (
         <CropDialog
