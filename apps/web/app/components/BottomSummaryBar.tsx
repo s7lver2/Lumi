@@ -45,8 +45,8 @@ export function BottomSummaryBar({
   const pct = Math.round((top?.verificationScore ?? region.aggregateScore) * 100);
   return (
     <div
-      className={`absolute bottom-0 left-0 right-[520px] flex items-center justify-between border-t border-border bg-panel/80 px-4 py-2 backdrop-blur-md transition-all duration-300 ease-out ${
-        hidden ? "pointer-events-none translate-y-2 opacity-0" : "translate-y-0 opacity-100"
+      className={`absolute bottom-0 left-0 right-0 flex items-center justify-between border-t border-border bg-panel/80 px-4 py-2 backdrop-blur-md transition-transform duration-300 ease-out ${
+        hidden ? "pointer-events-none translate-y-full" : "translate-y-0"
       }`}
     >
       <div className="flex items-center gap-6">
