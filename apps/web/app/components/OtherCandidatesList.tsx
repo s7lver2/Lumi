@@ -49,12 +49,12 @@ export function OtherCandidatesList({
         )}
       </div>
 
-      <div className="mt-2 grid grid-cols-2 gap-1.5">
+      <div className="mt-2 flex flex-col gap-1.5">
         {pageItems.map((c) => {
           const isExpanded = expandedId === c.id;
           const score = c.verificationScore ?? c.similarityScore;
           return isExpanded ? (
-            <div key={c.id} onClick={() => setExpandedId(null)} className="col-span-2 cursor-pointer">
+            <div key={c.id} onClick={() => setExpandedId(null)} className="cursor-pointer">
               <CandidateComparisonCard
                 candidate={c}
                 queryImageUrl={queryImageUrl}
@@ -66,17 +66,24 @@ export function OtherCandidatesList({
             <div
               key={c.id}
               onClick={() => setExpandedId(c.id)}
-              className="flex cursor-pointer flex-col gap-1.5 rounded-card border border-border p-2.5 transition-colors hover:border-white/20 hover:bg-white/[.03]"
+              className="flex cursor-pointer items-center gap-2.5 rounded-card border border-border p-2.5 transition-colors hover:border-white/20 hover:bg-white/[.03]"
             >
-              <div className="flex items-center justify-between">
-                <RingGauge value={score} size={16} tone={c.status === "confirmed" ? "accent" : "muted"} />
-                <Badge tone={c.status === "confirmed" ? "accent" : "muted"}>
-                  {c.status === "confirmed" ? "confirmado" : "sin verificar"}
-                </Badge>
+              <img
+                src={`/api/images/indexed/${c.indexedImageId}`}
+                alt=""
+                className="h-11 w-11 shrink-0 rounded-md object-cover"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between">
+                  <RingGauge value={score} size={16} tone={c.status === "confirmed" ? "accent" : "muted"} />
+                  <Badge tone={c.status === "confirmed" ? "accent" : "muted"}>
+                    {c.status === "confirmed" ? "confirmado" : "sin verificar"}
+                  </Badge>
+                </div>
+                <span className="truncate text-[12.5px] text-fg">
+                  {Math.round(score * 100)}% {c.verificationScore != null ? "verificación" : "similitud"}
+                </span>
               </div>
-              <span className="truncate text-[12.5px] text-fg">
-                {Math.round(score * 100)}% {c.verificationScore != null ? "verificación" : "similitud"}
-              </span>
             </div>
           );
         })}
