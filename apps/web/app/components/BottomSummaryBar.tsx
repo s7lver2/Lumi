@@ -6,7 +6,13 @@ import { useReverseGeocode } from "../lib/useReverseGeocode";
 import { formatCoords } from "../lib/coords";
 import { streetViewMapsUrl } from "../lib/street-view-maps-url";
 
-export function BottomSummaryBar() {
+export function BottomSummaryBar({
+  onRefine,
+  refining,
+}: {
+  onRefine: (regionId: string) => void;
+  refining: boolean;
+}) {
   const { regions, selectedRegionId, candidatesByRegion } = useSearchStore();
   const region = regions.find((r) => r.id === selectedRegionId) ?? regions[0];
   const top = region ? candidatesByRegion[region.id]?.[0] : undefined;
@@ -46,6 +52,15 @@ export function BottomSummaryBar() {
               candidates actually agree — NOT a computed confidence interval. */}
           <div className="text-[10px] uppercase tracking-wider text-subtle">Radio de búsqueda</div>
           <div className="mt-0.5 text-sm text-fg">~{(region.radiusM / 1000).toFixed(2)} km</div>
+        </div>
+        <div className="flex flex-col justify-center">
+          <button
+            onClick={() => onRefine(region.id)}
+            disabled={refining}
+            className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-black disabled:opacity-50"
+          >
+            {refining ? "Refinando…" : "Refinar toda esta zona"}
+          </button>
         </div>
       </div>
       <div className="text-right">

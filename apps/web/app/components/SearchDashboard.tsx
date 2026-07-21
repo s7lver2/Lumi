@@ -333,14 +333,17 @@ export function SearchDashboard() {
       )}
 
       {regions.length > 0 && (
-        <div className="absolute right-0 top-0 h-full w-[520px]">
-          <ResultsPanel
-            queryImageUrl={queryImageUrl}
-            queryImageId={queryImageId}
-            onRefine={handleRefine}
-            refining={refining}
-          />
-        </div>
+        <>
+          <div className="absolute right-0 top-0 h-full w-[520px]">
+            <ResultsPanel
+              queryImageUrl={queryImageUrl}
+              queryImageId={queryImageId}
+              onRefine={handleRefine}
+              refining={refining}
+            />
+          </div>
+          <BottomSummaryBar onRefine={handleRefine} refining={refining} />
+        </>
       )}
     </>
   );

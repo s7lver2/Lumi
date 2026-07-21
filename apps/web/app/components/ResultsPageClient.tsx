@@ -7,6 +7,7 @@ import { AppShell } from "./AppShell";
 import { MapCanvas } from "./MapCanvas";
 import { ConfidenceCircleLayer } from "./ConfidenceCircleLayer";
 import { ResultsPanel } from "./ResultsPanel";
+import { BottomSummaryBar } from "./BottomSummaryBar";
 import { useSearchStore } from "../stores/useSearchStore";
 
 const activeModelId = RETRIEVAL_MODELS[0]?.id ?? "lumi-preview";
@@ -63,14 +64,17 @@ export function ResultsPageClient({ initialResult, searchId }: { initialResult: 
       <MapCanvas onReady={(m) => setMap(m)} />
       {map && <ConfidenceCircleLayer map={map} />}
       {regions.length > 0 && (
-        <div className="absolute right-0 top-0 h-full w-[520px]">
-          <ResultsPanel
-            queryImageUrl={`/api/images/query/${searchId}`}
-            queryImageId={null}
-            onRefine={handleRefine}
-            refining={refining}
-          />
-        </div>
+        <>
+          <div className="absolute right-0 top-0 h-full w-[520px]">
+            <ResultsPanel
+              queryImageUrl={`/api/images/query/${searchId}`}
+              queryImageId={null}
+              onRefine={handleRefine}
+              refining={refining}
+            />
+          </div>
+          <BottomSummaryBar onRefine={handleRefine} refining={refining} />
+        </>
       )}
     </AppShell>
   );
