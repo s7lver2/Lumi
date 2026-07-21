@@ -4,7 +4,7 @@ import { getPool } from "../../../../../lib/db";
 import { getSettingsRepo } from "../../../../../lib/settings-repo";
 import { validateModelId } from "../../../../../lib/models/validate-model-id";
 import { verifyCandidates } from "../../../../../lib/verify-client";
-import { expandRegionCandidates } from "../../../../../lib/search/refine-retrieval";
+import { expandRegionCandidates, expandOneCandidate } from "../../../../../lib/search/refine-retrieval";
 import { readImageBase64 } from "../../../../../lib/search/candidate-images";
 import { persistRefine } from "../../../../../lib/search/refine-persist";
 import { runRefine, type RunRefineDeps } from "../../../../../lib/search/run-refine";
@@ -62,6 +62,7 @@ export async function POST(request: Request, { params }: { params: { modelId: st
           return rows[0].query_image_path as string;
         },
         expandRegion: (regionId) => expandRegionCandidates(pool, regionId),
+        expandOneCandidate: (candidateId) => expandOneCandidate(pool, candidateId),
         readImage: (path) => readImageBase64(path),
         verify: (q, cands) => verifyCandidates(q, cands, inferenceBaseUrl),
         persist: (args) => persistRefine(pool, args),
@@ -73,7 +74,11 @@ export async function POST(request: Request, { params }: { params: { modelId: st
       };
 
       try {
-        const result = await runRefine(deps, { searchId: body.searchId, regionId: body.regionId });
+        const result = await runRefine(deps, {
+          searchId: body.searchId,
+          regionId: body.regionId,
+          candidateId: body.candidateId,
+        });
         send({ type: "done", result });
       } catch (err) {
         send({ type: "error", message: err instanceof Error ? err.message : String(err) });

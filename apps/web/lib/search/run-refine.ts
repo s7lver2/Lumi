@@ -47,15 +47,17 @@ export async function runRefine(deps: RunRefineDeps, input: RunRefineInput): Pro
     throw new Error(`Query image missing for search ${input.searchId} at ${queryPath}`);
   }
 
-  const region: RegionCandidate[] = input.candidateId
-    ? await (async () => {
-        if (!deps.expandOneCandidate) {
-          throw new Error("expandOneCandidate dep is required when input.candidateId is set");
-        }
-        const one = await deps.expandOneCandidate(input.candidateId);
-        return one ? [one] : [];
-      })()
-    : await deps.expandRegion(input.regionId);
+  const region: RegionCandidate[] = await (async () => {
+    const candidateId = input.candidateId;
+    if (!candidateId) {
+      return deps.expandRegion(input.regionId);
+    }
+    if (!deps.expandOneCandidate) {
+      throw new Error("expandOneCandidate dep is required when input.candidateId is set");
+    }
+    const one = await deps.expandOneCandidate(candidateId);
+    return one ? [one] : [];
+  })();
 
   // Pair each candidate with its image; keep only those whose image is present.
   const present: { candidate: RegionCandidate; base64: string }[] = [];
