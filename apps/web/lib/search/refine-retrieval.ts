@@ -45,3 +45,35 @@ export async function expandRegionCandidates(
     imagePath: r.image_path,
   }));
 }
+
+/** Same shape as expandRegionCandidates, but for exactly one candidate,
+ * looked up by search_candidates.id (NOT indexed_images.id — RegionCandidate's
+ * own `indexedImageId` field refers to the latter) — used for per-candidate
+ * refine (spec: docs/superpowers/specs/2026-07-21-results-widgets-popup-and-
+ * per-candidate-refine-design.md). Returns null if the candidate doesn't
+ * exist. */
+export async function expandOneCandidate(
+  pool: Pool,
+  candidateId: string
+): Promise<RegionCandidate | null> {
+  const { rows } = await pool.query(
+    `SELECT img.id, img.pano_id, img.heading,
+            ST_Y(img.location::geometry) AS lat,
+            ST_X(img.location::geometry) AS lng,
+            img.image_path
+     FROM search_candidates sc
+     JOIN indexed_images img ON img.id = sc.indexed_image_id
+     WHERE sc.id = $1`,
+    [candidateId]
+  );
+  if (rows.length === 0) return null;
+  const r = rows[0];
+  return {
+    indexedImageId: r.id,
+    panoId: r.pano_id,
+    heading: r.heading,
+    lat: Number(r.lat),
+    lng: Number(r.lng),
+    imagePath: r.image_path,
+  };
+}
