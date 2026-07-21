@@ -73,9 +73,11 @@ const KIND_BY_LABEL: Record<string, WeatherKind> = {
   "foggy/hazy": "fog",
 };
 
-const CLOUD_BODY = `      .--.
-   .-(    ).
-  (___.__)__)`;
+// Each line is the same width (10 chars) and individually centered within
+// it, so the shape itself is symmetric — not just its bounding box.
+const CLOUD_BODY = `   .--.   
+  (    )  
+ (______) `;
 
 function AsciiWeatherArt({ kind }: { kind: WeatherKind }) {
   switch (kind) {
