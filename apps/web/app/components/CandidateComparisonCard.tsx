@@ -10,12 +10,18 @@ import type { SearchCandidate } from "@netryx/shared-types";
 export function CandidateComparisonCard({
   candidate,
   queryImageUrl,
-  onRefine,
+  showZoneRefine,
+  onRefineCandidate,
   refining,
 }: {
   candidate: SearchCandidate;
   queryImageUrl: string | null;
-  onRefine: (regionId: string) => void;
+  /** True only for the top candidate's card — the zone-wide "Refinar toda
+   * esta zona" trigger lives in BottomSummaryBar instead, so this card
+   * renders no refine button of its own in that case. False for every
+   * other candidate, which gets its own "Refinar este candidato" button. */
+  showZoneRefine: boolean;
+  onRefineCandidate: (candidateId: string, regionId: string) => void;
   refining: boolean;
 }) {
   const place = useReverseGeocode(candidate.lat, candidate.lng);
@@ -70,16 +76,16 @@ export function CandidateComparisonCard({
         </button>
       </div>
 
-      {candidate.regionId && !verified && (
+      {!showZoneRefine && candidate.regionId && !verified && (
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onRefine(candidate.regionId!);
+            onRefineCandidate(candidate.id, candidate.regionId!);
           }}
           disabled={refining}
           className="mt-2 w-full rounded-md bg-accent py-2 text-xs font-medium text-black disabled:opacity-50"
         >
-          {refining ? "Refinando…" : "Refinar aquí"}
+          {refining ? "Refinando…" : "Refinar este candidato"}
         </button>
       )}
     </div>
