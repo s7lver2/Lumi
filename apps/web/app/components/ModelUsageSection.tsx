@@ -1,6 +1,7 @@
 // apps/web/app/components/ModelUsageSection.tsx
 "use client";
 import { useEffect, useState } from "react";
+import { FloatingCard } from "./FloatingCard";
 
 interface ModelUsageRow {
   kind: string;
@@ -46,8 +47,8 @@ export function ModelUsageSection() {
   if (rows === null) return null;
 
   return (
-    <section className="mt-10">
-      <h2 className="mb-3 text-sm font-medium text-fg">Consumo de cómputo por modelo</h2>
+    <FloatingCard className="p-5">
+      <h2 className="mb-4 text-sm font-medium text-fg">Consumo de cómputo por modelo</h2>
       {rows.length === 0 ? (
         <div className="text-xs text-muted">Todavía no se ha registrado ninguna llamada a un modelo.</div>
       ) : (
@@ -86,6 +87,6 @@ export function ModelUsageSection() {
           </tbody>
         </table>
       )}
-    </section>
+    </FloatingCard>
   );
 }

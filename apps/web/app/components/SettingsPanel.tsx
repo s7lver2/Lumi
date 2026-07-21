@@ -12,6 +12,7 @@ import { ModelBundleRow } from "./ModelBundleRow";
 import { OverwriteKeyModal } from "./OverwriteKeyModal";
 import { AreasManagePanel } from "./AreasManagePanel";
 import { SystemPanel } from "./SystemPanel";
+import { ModelUsageSection } from "./ModelUsageSection";
 import { groupSettings } from "../settings/sections";
 import { fetchJson } from "../lib/fetch-json";
 import { staggerContainer, staggerItem } from "../lib/motion";
@@ -27,6 +28,7 @@ const SECTION_ICON: Record<string, React.ReactNode> = {
   "models": svg(<><rect x="6" y="6" width="12" height="12" rx="1" /><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2" /></>, "#a89fff"),
   "areas": svg(<><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3Z" /><path d="M9 3v15M15 6v15" /></>, "#7edca4"),
   "system": svg(<><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.1-3.1a5 5 0 0 1-6.6 6.6L6.7 20.3a2.1 2.1 0 0 1-3-3l7.5-7.5a5 5 0 0 1 6.6-6.6l-3 3.1Z" /></>, "#9aa1ac"),
+  "usage": svg(<path d="M3 21V10M9 21V6M15 21v-8M21 21V3" />, "#7edca4"),
 };
 
 const SLIDER_KEYS = new Set(["VERIFICATION_CONFIRM_THRESHOLD", "VERIFICATION_TILE_PASSES"]);
@@ -94,6 +96,7 @@ export function SettingsPanel() {
     ...groups.map(({ section }) => ({ id: section.id, label: section.title, icon: SECTION_ICON[section.id] })),
     { id: "areas", label: "Áreas", icon: SECTION_ICON.areas },
     { id: "system", label: "Sistema", icon: SECTION_ICON.system },
+    { id: "usage", label: "Consumo", icon: SECTION_ICON.usage },
   ];
   const activeGroup = groups.find((g) => g.section.id === activeTab);
 
@@ -112,6 +115,10 @@ export function SettingsPanel() {
           ) : activeTab === "system" ? (
             <motion.div variants={staggerItem}>
               <SystemPanel />
+            </motion.div>
+          ) : activeTab === "usage" ? (
+            <motion.div variants={staggerItem}>
+              <ModelUsageSection />
             </motion.div>
           ) : activeGroup ? (
             <motion.div variants={staggerItem}>
@@ -170,7 +177,7 @@ export function SettingsPanel() {
             </motion.div>
           ) : null}
 
-          {activeTab !== "areas" && activeTab !== "system" && (
+          {activeTab !== "areas" && activeTab !== "system" && activeTab !== "usage" && (
             <div className="flex items-center gap-3">
               <button onClick={save} disabled={saving || Object.keys(dirty).length === 0}
                 className="rounded-md bg-accent px-4 py-2 text-xs font-medium text-black disabled:opacity-50">{saving ? "Guardando…" : "Guardar cambios"}</button>
