@@ -84,7 +84,7 @@ async function main() {
       samplePointsAlongStreets: (lines, spacing, polygon) => samplePointsAlongStreets(lines, spacing, polygon),
       loadExistingPanoHeadings: () => loadExistingPanoHeadings(pool),
       downloadCaptures,
-      embedImages,
+      embedImages: (base64s, url) => embedImages(base64s, url, pool),
       insertIndexedImages: (areaId, images) => insertIndexedImages(pool, areaId, images),
       updateAreaProgress: (areaId, update) => updateAreaProgress(pool, areaId, update),
       getSetting: (key) => settingsRepo.getSetting(key),
@@ -125,7 +125,7 @@ async function main() {
     await runEmbedPendingImagesJob(job.data, {
       getPendingImages: (areaId) => getPendingEmbedImages(pool, areaId),
       readImageBase64: async (imagePath) => (await readFile(imagePath)).toString("base64"),
-      embedImages,
+      embedImages: (base64s, url) => embedImages(base64s, url, pool),
       updateImageEmbeddings: (updates) => updateImageEmbeddings(pool, updates),
       updateAreaProgress: (areaId, update) => updateAreaProgress(pool, areaId, update),
       inferenceBaseUrl,

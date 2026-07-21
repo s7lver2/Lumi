@@ -12,7 +12,7 @@ describe("embedImages", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await embedImages(["aaaa", "bbbb"], "http://localhost:8000");
+    const result = await embedImages(["aaaa", "bbbb"], "http://localhost:8000", {} as any);
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:8000/embed",
@@ -30,7 +30,7 @@ describe("embedImages", () => {
       vi.fn().mockResolvedValue({ ok: false, status: 503, text: async () => "model not loaded" })
     );
 
-    await expect(embedImages(["aaaa"], "http://localhost:8000")).rejects.toThrow(
+    await expect(embedImages(["aaaa"], "http://localhost:8000", {} as any)).rejects.toThrow(
       /Inference service \/embed failed \(503\): model not loaded/
     );
   });

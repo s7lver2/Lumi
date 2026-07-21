@@ -64,7 +64,7 @@ export async function POST(request: Request, { params }: { params: { modelId: st
         expandRegion: (regionId) => expandRegionCandidates(pool, regionId),
         expandOneCandidate: (candidateId) => expandOneCandidate(pool, candidateId),
         readImage: (path) => readImageBase64(path),
-        verify: (q, cands) => verifyCandidates(q, cands, inferenceBaseUrl),
+        verify: (q, cands) => verifyCandidates(q, cands, inferenceBaseUrl, pool),
         persist: (args) => persistRefine(pool, args),
         onProgress: (verified, total) => {
           const elapsedMs = Date.now() - startedAt;

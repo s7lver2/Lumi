@@ -14,7 +14,7 @@ describe("verifyCandidates", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const out = await verifyCandidates("Q", ["C1"], "http://localhost:8000");
+    const out = await verifyCandidates("Q", ["C1"], "http://localhost:8000", {} as any);
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:8000/verify",
@@ -31,7 +31,7 @@ describe("verifyCandidates", () => {
       "fetch",
       vi.fn().mockResolvedValue({ ok: false, status: 503, text: async () => "not loaded" })
     );
-    await expect(verifyCandidates("Q", ["C1"], "http://localhost:8000")).rejects.toThrow(
+    await expect(verifyCandidates("Q", ["C1"], "http://localhost:8000", {} as any)).rejects.toThrow(
       /Inference service \/verify failed \(503\): not loaded/
     );
   });

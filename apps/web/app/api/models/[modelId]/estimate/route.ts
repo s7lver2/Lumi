@@ -72,7 +72,7 @@ export async function POST(request: Request, { params }: { params: { modelId: st
 
   const deps: RunSearchDeps = {
     newSearchId: () => randomUUID(),
-    embedQuery: (b64) => embedQueryImage(b64, inferenceBaseUrl),
+    embedQuery: (b64) => embedQueryImage(b64, inferenceBaseUrl, pool),
     retrieve: (embedding) =>
       retrieveCandidates(pool, embedding, DEFAULT_TOP_K, undefined, DEFAULT_RELATIVE_SIMILARITY_FLOOR),
     rerank: (embedding, candidates) =>
@@ -84,7 +84,7 @@ export async function POST(request: Request, { params }: { params: { modelId: st
       ? {
           classifyTimeOfDay: async (b64: string) => {
             try {
-              const groups = await classifyQueryImage(b64, timeOfDayModel.modelId, inferenceBaseUrl);
+              const groups = await classifyQueryImage(b64, timeOfDayModel.modelId, inferenceBaseUrl, pool);
               const group = groups.find((g) => g.facet === "time_of_day");
               const top = group?.labels[0];
               return top ? { label: top.name, score: top.score } : null;
@@ -101,7 +101,7 @@ export async function POST(request: Request, { params }: { params: { modelId: st
       ? {
           classifyWeather: async (b64: string) => {
             try {
-              const groups = await classifyQueryImage(b64, weatherModel.modelId, inferenceBaseUrl);
+              const groups = await classifyQueryImage(b64, weatherModel.modelId, inferenceBaseUrl, pool);
               const group = groups.find((g) => g.facet === "weather");
               const top = group?.labels[0];
               return top ? { label: top.name, score: top.score } : null;

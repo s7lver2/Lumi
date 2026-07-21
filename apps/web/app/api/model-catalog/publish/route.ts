@@ -152,7 +152,7 @@ export async function POST(request: Request) {
     retrievalBytes = await measureVramDelta(getModelStatusSnapshot, async () => {
       benchmarkResult = await runBenchmark(cases, {
         readImageBase64: async (imagePath) => (await readFile(imagePath)).toString("base64"),
-        embedQuery: (imageBase64) => embedQueryImage(imageBase64, inferenceBaseUrl),
+        embedQuery: (imageBase64) => embedQueryImage(imageBase64, inferenceBaseUrl, pool),
         retrieve: (embedding, excludeId) => retrieveCandidates(pool, embedding, DEFAULT_TOP_K, excludeId),
       });
     });
@@ -192,7 +192,7 @@ export async function POST(request: Request) {
       verificationBytes = await measureVramDelta(getModelStatusSnapshot, async () => {
         const queryBase64 = (await readFile(cases[0].imagePath)).toString("base64");
         const candidateBase64 = (await readFile(cases[1].imagePath)).toString("base64");
-        await verifyCandidates(queryBase64, [candidateBase64], inferenceBaseUrl);
+        await verifyCandidates(queryBase64, [candidateBase64], inferenceBaseUrl, pool);
       });
     } catch (err) {
       console.error("[model-catalog] verification VRAM measurement failed, recording null:", err instanceof Error ? err.message : err);

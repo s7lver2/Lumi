@@ -12,7 +12,7 @@ describe("embedQueryImage", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const vec = await embedQueryImage("aaaa", "http://localhost:8000");
+    const vec = await embedQueryImage("aaaa", "http://localhost:8000", {} as any);
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:8000/embed",
@@ -29,7 +29,7 @@ describe("embedQueryImage", () => {
       "fetch",
       vi.fn().mockResolvedValue({ ok: false, status: 503, text: async () => "model not loaded" })
     );
-    await expect(embedQueryImage("aaaa", "http://localhost:8000")).rejects.toThrow(
+    await expect(embedQueryImage("aaaa", "http://localhost:8000", {} as any)).rejects.toThrow(
       /Inference service \/embed failed \(503\): model not loaded/
     );
   });
@@ -47,7 +47,7 @@ describe("classifyQueryImage", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const groups = await classifyQueryImage("aaaa", "wanda-v1", "http://localhost:8000");
+    const groups = await classifyQueryImage("aaaa", "wanda-v1", "http://localhost:8000", {} as any);
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:8000/models/wanda-v1/classify",
@@ -66,7 +66,7 @@ describe("classifyQueryImage", () => {
       "fetch",
       vi.fn().mockResolvedValue({ ok: false, status: 404, text: async () => "Unknown or inactive classification model id: wanda-v1" })
     );
-    await expect(classifyQueryImage("aaaa", "wanda-v1", "http://localhost:8000")).rejects.toThrow(
+    await expect(classifyQueryImage("aaaa", "wanda-v1", "http://localhost:8000", {} as any)).rejects.toThrow(
       /Inference service \/models\/wanda-v1\/classify failed \(404\): Unknown or inactive classification model id: wanda-v1/
     );
   });
