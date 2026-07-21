@@ -20,6 +20,7 @@ import { persistSearch } from "../../../../../lib/search/persist";
 import { runSearch, type RunSearchDeps } from "../../../../../lib/search/run-search";
 import { validateImageBytes } from "../../../../../lib/image-validation";
 import { findActiveModelForFacet } from "../../../../../lib/model-catalog/classification-models";
+import { reportBatchPhase } from "../../../../../lib/search/batch-phase";
 
 export async function POST(request: Request, { params }: { params: { modelId: string } }) {
   let activeModelId: string;
@@ -50,6 +51,9 @@ export async function POST(request: Request, { params }: { params: { modelId: st
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "image file is required" }, { status: 400 });
   }
+
+  const batchIdField = form.get("batchId");
+  const batchId = typeof batchIdField === "string" && batchIdField.length > 0 ? batchIdField : undefined;
 
   const bytes = Buffer.from(await file.arrayBuffer());
 
@@ -89,6 +93,13 @@ export async function POST(request: Request, { params }: { params: { modelId: st
               // 07-21-results-layout-and-time-of-day-design.md).
               return null;
             }
+          },
+        }
+      : {}),
+    ...(batchId
+      ? {
+          reportPhase: (phase: "embedding" | "searching" | "saving") => {
+            void reportBatchPhase(pool, batchId, phase).catch(() => {});
           },
         }
       : {}),

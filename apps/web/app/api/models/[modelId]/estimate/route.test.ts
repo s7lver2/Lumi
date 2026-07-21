@@ -12,6 +12,7 @@ vi.mock("../../../../../lib/inference-client", () => ({
   embedQueryImage: vi.fn(),
   classifyQueryImage: vi.fn(),
 }));
+vi.mock("../../../../../lib/search/batch-phase", () => ({ reportBatchPhase: vi.fn() }));
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -136,5 +137,37 @@ describe("POST /api/models/[modelId]/estimate", () => {
 
     (classifyQueryImage as any).mockRejectedValue(new Error("inference service down"));
     await expect(depsPassed.classifyTimeOfDay("aaaa")).resolves.toBeNull();
+  });
+  it("builds a reportPhase dep when batchId is present in the form", async () => {
+    const { runSearch } = await import("../../../../../lib/search/run-search");
+    (runSearch as any).mockResolvedValue({ searchId: "s1", regions: [], candidatesByRegion: {}, timeOfDay: null, weather: null });
+
+    const { POST } = await import("./route");
+    const form = new FormData();
+    const jpegBytes = await makeJpegBytes();
+    form.append("image", new File([jpegBytes as unknown as BlobPart], "a.jpg", { type: "image/jpeg" }));
+    form.append("batchId", "batch-1");
+    await POST(makeRequest(form), { params: { modelId: "lumi-preview" } });
+
+    const depsPassed = (runSearch as any).mock.calls[0][0];
+    expect(depsPassed.reportPhase).toBeInstanceOf(Function);
+
+    const { reportBatchPhase } = await import("../../../../../lib/search/batch-phase");
+    depsPassed.reportPhase("searching");
+    expect(reportBatchPhase).toHaveBeenCalledWith(expect.anything(), "batch-1", "searching");
+  });
+
+  it("omits reportPhase entirely when no batchId is present", async () => {
+    const { runSearch } = await import("../../../../../lib/search/run-search");
+    (runSearch as any).mockResolvedValue({ searchId: "s1", regions: [], candidatesByRegion: {}, timeOfDay: null, weather: null });
+
+    const { POST } = await import("./route");
+    const form = new FormData();
+    const jpegBytes = await makeJpegBytes();
+    form.append("image", new File([jpegBytes as unknown as BlobPart], "a.jpg", { type: "image/jpeg" }));
+    await POST(makeRequest(form), { params: { modelId: "lumi-preview" } });
+
+    const depsPassed = (runSearch as any).mock.calls[0][0];
+    expect(depsPassed.reportPhase).toBeUndefined();
   });
 });
