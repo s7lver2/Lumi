@@ -26,6 +26,7 @@ interface SearchBatch {
   total: number;
   done: number;
   failed: number;
+  currentPhase: string | null;
 }
 
 const KIND_VERB: Record<BackgroundJob["kind"], string> = {
@@ -37,6 +38,12 @@ const KIND_VERB: Record<BackgroundJob["kind"], string> = {
 const PHASE_VERB: Record<string, string> = {
   download: "Descargando",
   extract: "Extrayendo",
+};
+
+const BATCH_PHASE_LABEL: Record<string, string> = {
+  embedding: "Analizando…",
+  searching: "Buscando coincidencias…",
+  saving: "Guardando…",
 };
 
 function formatBytes(n: number): string {
@@ -191,6 +198,9 @@ export function BackgroundJobsTray() {
             <div className="text-[10.5px] font-medium text-fg">
               Escaneando {batch.done}/{batch.total}…
             </div>
+            {batch.currentPhase && BATCH_PHASE_LABEL[batch.currentPhase] && (
+              <div className="mt-0.5 text-[9.5px] text-muted">{BATCH_PHASE_LABEL[batch.currentPhase]}</div>
+            )}
             <div className="mt-1.5 h-[3px] overflow-hidden rounded-full bg-white/[.08]">
               <div
                 className="h-full rounded-full bg-fg/60"
