@@ -168,7 +168,15 @@ def _load_clip_zero_shot_classifier(hf_model_id: str):
         _CLIP_MODEL_CLS = CLIPModel
         _CLIP_PROCESSOR_CLS = CLIPProcessor
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = _CLIP_MODEL_CLS.from_pretrained(hf_model_id).to(device)
+    # use_safetensors=True: newer transformers refuses to torch.load() a
+    # plain pytorch_model.bin checkpoint unless torch>=2.6 (CVE-2025-32434
+    # mitigation) — confirmed live, this raised a 500 on every classify call
+    # for a CLIP zero-shot facet. torch is deliberately pinned to 2.5.1+cu121
+    # here for romatch/CUDA compatibility (see requirements.txt), so this
+    # avoids the torch.load path entirely instead of bumping that pin —
+    # openai/clip-vit-base-patch32 (and any other real HF checkpoint at this
+    # point) publishes safetensors weights, confirmed live this loads clean.
+    model = _CLIP_MODEL_CLS.from_pretrained(hf_model_id, use_safetensors=True).to(device)
     processor = _CLIP_PROCESSOR_CLS.from_pretrained(hf_model_id)
     return (model, processor, device)
 
