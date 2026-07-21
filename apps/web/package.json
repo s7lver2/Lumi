@@ -12,6 +12,7 @@
   "dependencies": {
     "@mapbox/mapbox-gl-draw": "^1.4.3",
     "@netryx/api-usage": "workspace:*",
+    "@netryx/model-usage": "workspace:*",
     "@netryx/geo-sampling": "workspace:*",
     "@netryx/settings-repo": "workspace:*",
     "@netryx/shared-types": "workspace:*",

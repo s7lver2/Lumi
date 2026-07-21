@@ -12,6 +12,7 @@
     "@netryx/settings-repo": "workspace:*",
     "@netryx/shared-types": "workspace:*",
     "@netryx/api-usage": "workspace:*",
+    "@netryx/model-usage": "workspace:*",
     "dotenv": "^17.4.2",
     "p-limit": "^6.1.0",
     "pg": "^8.12.0",
