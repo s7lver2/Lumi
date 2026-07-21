@@ -1,14 +1,16 @@
 // apps/web/app/components/ResultsPanel.tsx
 "use client";
 
+import { useState } from "react";
 import { useSearchStore } from "../stores/useSearchStore";
 import { CandidateComparisonCard } from "./CandidateComparisonCard";
 import { OtherCandidatesList } from "./OtherCandidatesList";
 import { WidgetGrid } from "./WidgetGrid";
+import { ResultsWidgetsPopup } from "./ResultsWidgetsPopup";
 import { ExifMetadataWidget } from "./widgets/ExifMetadataWidget";
-import { EstimatedTimeWidget } from "./widgets/EstimatedTimeWidget";
-import { WeatherEstimateWidget } from "./widgets/WeatherEstimateWidget";
-import { DetectedObjectsWidget } from "./widgets/DetectedObjectsWidget";
+import { EstimatedTimeWidget, SUN_ICON } from "./widgets/EstimatedTimeWidget";
+import { WeatherEstimateWidget, WEATHER_ICON } from "./widgets/WeatherEstimateWidget";
+import { DetectedObjectsWidget, OBJECTS_ICON } from "./widgets/DetectedObjectsWidget";
 import type { Widget } from "./widgets/types";
 import { hourForLabel } from "../../lib/time-of-day";
 
@@ -41,6 +43,7 @@ export function ResultsPanel({
   const timeOfDay = useSearchStore((s) => s.timeOfDay);
   const estimatedHour = timeOfDay ? hourForLabel(timeOfDay.label) : null;
   const weather = useSearchStore((s) => s.weather);
+  const [popupOpen, setPopupOpen] = useState(false);
 
   const widgets: Widget[] = [
     {
@@ -86,7 +89,8 @@ export function ResultsPanel({
     {
       id: "estimated-time",
       title: "Hora estimada",
-      icon: SEARCH_ICON,
+      icon: SUN_ICON,
+      tooltip: "Estimado a partir del largo y dirección de las sombras visibles en la foto",
       colSpan: 2,
       locked: estimatedHour === null,
       defaultExpanded: estimatedHour !== null,
@@ -95,7 +99,8 @@ export function ResultsPanel({
     {
       id: "weather",
       title: "Clima estimado",
-      icon: SEARCH_ICON,
+      icon: WEATHER_ICON,
+      tooltip: "Clasificado a partir de la imagen (Wanda)",
       colSpan: 2,
       locked: weather === null,
       defaultExpanded: weather !== null,
@@ -104,7 +109,8 @@ export function ResultsPanel({
     {
       id: "detected-objects",
       title: "Objetos detectados",
-      icon: SEARCH_ICON,
+      icon: OBJECTS_ICON,
+      tooltip: "Detectado por un modelo de reconocimiento de objetos entrenado sobre escenas urbanas",
       colSpan: 2,
       locked: true,
       defaultExpanded: false,
@@ -112,5 +118,20 @@ export function ResultsPanel({
     },
   ];
 
-  return <WidgetGrid widgets={widgets} />;
+  return (
+    <div className="relative flex h-full flex-col">
+      <button
+        onClick={() => setPopupOpen(true)}
+        className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-md border border-white/15 bg-panel/80 text-subtle hover:text-fg"
+        title="Expandir"
+        aria-label="Expandir panel de resultados"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3" />
+        </svg>
+      </button>
+      <WidgetGrid columns={1} widgets={widgets} />
+      {popupOpen && <ResultsWidgetsPopup widgets={widgets} onClose={() => setPopupOpen(false)} />}
+    </div>
+  );
 }
