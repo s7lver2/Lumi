@@ -58,7 +58,10 @@ export default function MapCanvasClient({
                     center: [viewport.lng, viewport.lat],
                     zoom: viewport.zoom,
                     pitch: initialPitch,
-                    attributionControl: true,
+                    // Drops the "© Mapbox © OpenStreetMap Improve this map"
+                    // attribution text — the Mapbox wordmark logo in the
+                    // corner is a separate control and stays regardless.
+                    attributionControl: false,
                 });
             } else {
                 const maplibregl = (await import("maplibre-gl")).default;
@@ -67,6 +70,7 @@ export default function MapCanvasClient({
                     style: cfg.styleUrl,
                     center: [viewport.lng, viewport.lat],
                     zoom: viewport.zoom,
+                    attributionControl: false,
                     pitch: initialPitch,
                 });
             }
