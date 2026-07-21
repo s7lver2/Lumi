@@ -58,4 +58,14 @@ describe("useSearchStore batchProgress", () => {
     useSearchStore.getState().reset();
     expect(useSearchStore.getState().batchProgress).toBeNull();
   });
+  it("stores timeOfDay from the search response, and resets it on the next search", () => {
+    useSearchStore.getState().setSearchResults(
+      { ...RESPONSE, timeOfDay: { label: "foto tomada al mediodía", score: 0.72 } },
+      "IMG_1.jpg"
+    );
+    expect(useSearchStore.getState().timeOfDay).toEqual({ label: "foto tomada al mediodía", score: 0.72 });
+
+    useSearchStore.getState().setSearching("IMG_2.jpg");
+    expect(useSearchStore.getState().timeOfDay).toBeNull();
+  });
 });

@@ -21,6 +21,7 @@ interface SearchState {
   refineProgress: RefineProgress | null;
   error: string | null;
   batchProgress: { done: number; total: number; failed: number } | null;
+  timeOfDay: { label: string; score: number } | null;
   setSearching: (imageName: string) => void;
   setSearchResults: (res: SearchResponse, imageName: string) => void;
   selectRegion: (regionId: string) => void;
@@ -31,6 +32,7 @@ interface SearchState {
   setError: (message: string) => void;
   dismissError: () => void;
   reset: () => void;
+  
 }
 
 const INITIAL = {
@@ -43,6 +45,7 @@ const INITIAL = {
   refineProgress: null as RefineProgress | null,
   error: null as string | null,
   batchProgress: null as { done: number; total: number; failed: number } | null,
+  timeOfDay: null as { label: string; score: number } | null,
 };
 
 export const useSearchStore = create<SearchState>((set) => ({
@@ -59,6 +62,7 @@ export const useSearchStore = create<SearchState>((set) => ({
       refineStatus: "done",
       refineProgress: null,
       error: null,
+      timeOfDay: res.timeOfDay,
     });
   },
   selectRegion: (selectedRegionId) => set({ selectedRegionId }),
