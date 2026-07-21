@@ -180,10 +180,16 @@ export function MapDropTarget({ onImagesReady }: { onImagesReady: (images: Ready
                 <button
                   key={img.id}
                   onClick={() => toggleRecent(img.id)}
-                  className={`relative aspect-square rounded-md border-2 bg-white/5 transition-transform hover:scale-[1.06] active:scale-95 ${
+                  className={`relative aspect-square overflow-hidden rounded-md border-2 bg-white/5 transition-transform hover:scale-[1.06] active:scale-95 ${
                     selectedRecent.has(img.id) ? "border-fg" : "border-white/15"
                   }`}
                 >
+                  <img
+                    src={`/api/library/${img.id}/bytes`}
+                    alt={img.filename}
+                    loading="lazy"
+                    className="h-full w-full object-cover"
+                  />
                   {selectedRecent.has(img.id) && (
                     <span className="absolute left-0.5 top-0.5 flex h-3 w-3 items-center justify-center rounded-sm bg-accent text-[8px] text-black">✓</span>
                   )}
