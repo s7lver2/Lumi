@@ -16,6 +16,7 @@ const RESPONSE: SearchResponse = {
       { id: "c1", regionId: "r1", indexedImageId: "i1", panoId: "p1", heading: 0, lat: 37.3, lng: -121.9, similarityScore: 0.83, verificationScore: null, rank: 1, status: "unreviewed" },
     ],
   },
+  timeOfDay: null,
 };
 
 describe("useSearchStore", () => {

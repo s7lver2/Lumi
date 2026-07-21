@@ -48,6 +48,12 @@ export interface SearchResponse {
   searchId: string;
   regions: SearchRegion[];
   candidatesByRegion: Record<string, SearchCandidate[]>;
+  /** Highest-scoring time_of_day facet label from Wanda (or any active
+   * classifier serving that facet), or null if none is installed/active or
+   * classification failed. Computed fresh per search — never persisted to
+   * the DB (spec: docs/superpowers/specs/2026-07-21-results-layout-and-
+   * time-of-day-design.md). */
+  timeOfDay: { label: string; score: number } | null;
 }
 
 /** Verification score at/above which the top candidate auto-confirms (spec §9.3). */
