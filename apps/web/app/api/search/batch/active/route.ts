@@ -9,9 +9,13 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const { rows } = await getPool().query(
-    `SELECT id, status, total, done, failed FROM search_batches
+    `SELECT id, status, total, done, failed, current_phase FROM search_batches
      WHERE status IN ('pending', 'running')
      ORDER BY id DESC LIMIT 1`
   );
-  return NextResponse.json({ batch: rows[0] ?? null });
+  const row = rows[0];
+  const batch = row
+    ? { id: row.id, status: row.status, total: row.total, done: row.done, failed: row.failed, currentPhase: row.current_phase }
+    : null;
+  return NextResponse.json({ batch });
 }
