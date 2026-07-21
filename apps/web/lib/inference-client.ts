@@ -1,9 +1,12 @@
 // apps/web/lib/inference-client.ts
+import type { Pool } from "pg";
+import { recordModelUsage } from "@netryx/model-usage";
 
 /** Embeds a single query image with Lumi Preview TTA on (spec §15.1). */
 export async function embedQueryImage(
   imageBase64: string,
-  inferenceBaseUrl: string
+  inferenceBaseUrl: string,
+  pool: Pool
 ): Promise<number[]> {
   const res = await fetch(`${inferenceBaseUrl}/embed`, {
     method: "POST",
@@ -16,7 +19,8 @@ export async function embedQueryImage(
     throw new Error(`Inference service /embed failed (${res.status}): ${detail}`);
   }
 
-  const body = (await res.json()) as { embeddings: number[][] };
+  const body = (await res.json()) as { embeddings: number[][]; duration_ms: number };
+  recordModelUsage(pool, "retrieval", body.duration_ms).catch(() => {});
   return body.embeddings[0];
 }
 
@@ -37,7 +41,8 @@ export interface ClassifyGroup {
 export async function classifyQueryImage(
   imageBase64: string,
   modelId: string,
-  inferenceBaseUrl: string
+  inferenceBaseUrl: string,
+  pool: Pool
 ): Promise<ClassifyGroup[]> {
   const res = await fetch(`${inferenceBaseUrl}/models/${modelId}/classify`, {
     method: "POST",
@@ -50,6 +55,7 @@ export async function classifyQueryImage(
     throw new Error(`Inference service /models/${modelId}/classify failed (${res.status}): ${detail}`);
   }
 
-  const body = (await res.json()) as { groups: ClassifyGroup[] };
+  const body = (await res.json()) as { groups: ClassifyGroup[]; duration_ms: number };
+  recordModelUsage(pool, modelId, body.duration_ms).catch(() => {});
   return body.groups;
 }

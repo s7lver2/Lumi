@@ -1,4 +1,6 @@
 // apps/web/lib/verify-client.ts
+import type { Pool } from "pg";
+import { recordModelUsage } from "@netryx/model-usage";
 
 export interface VerifyResult {
   inliers: number;
@@ -10,7 +12,8 @@ export interface VerifyResult {
 export async function verifyCandidates(
   queryBase64: string,
   candidateBase64: string[],
-  inferenceBaseUrl: string
+  inferenceBaseUrl: string,
+  pool: Pool
 ): Promise<VerifyResult[]> {
   const res = await fetch(`${inferenceBaseUrl}/verify`, {
     method: "POST",
@@ -35,7 +38,9 @@ export async function verifyCandidates(
 
   const body = (await res.json()) as {
     results: { inliers: number; reproj_error: number; score: number }[];
+    duration_ms: number;
   };
+  recordModelUsage(pool, "verification", body.duration_ms).catch(() => {});
   return body.results.map((r) => ({
     inliers: r.inliers,
     reprojError: r.reproj_error,
