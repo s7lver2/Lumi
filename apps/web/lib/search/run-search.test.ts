@@ -46,4 +46,55 @@ describe("runSearch", () => {
     );
     expect(res.searchId).toBe("search-x");
   });
+  it("calls classifyTimeOfDay concurrently with embedQuery when the dep is provided, and passes its result to persist", async () => {
+    const embedding = [1, 0];
+    const retrieved: RetrievedCandidate[] = [
+      { indexedImageId: "img-1", panoId: "p", heading: 0, lat: 1, lng: 2, similarity: 0.5, embedding },
+    ];
+    const regions: ClusteredRegion[] = [
+      { centroid: { lat: 1, lng: 2 }, radiusM: 150, aggregateScore: 0.9, memberIds: ["img-1"] },
+    ];
+
+    const deps = {
+      newSearchId: () => "search-x",
+      embedQuery: vi.fn().mockResolvedValue(embedding),
+      retrieve: vi.fn().mockResolvedValue(retrieved),
+      rerank: vi.fn().mockReturnValue(retrieved),
+      cluster: vi.fn().mockReturnValue(regions),
+      saveImage: vi.fn().mockResolvedValue("/tmp/search-x.jpg"),
+      persist: vi.fn().mockResolvedValue({ searchId: "search-x", regions: [], candidatesByRegion: {}, timeOfDay: null }),
+      classifyTimeOfDay: vi.fn().mockResolvedValue({ label: "foto tomada al mediodía", score: 0.72 }),
+    };
+
+    await runSearch(deps, { imageBase64: "aaaa", imageBytes: Buffer.from([1]), imageExt: "jpg" });
+
+    expect(deps.classifyTimeOfDay).toHaveBeenCalledWith("aaaa");
+    expect(deps.persist).toHaveBeenCalledWith(
+      expect.objectContaining({ timeOfDay: { label: "foto tomada al mediodía", score: 0.72 } })
+    );
+  });
+
+  it("passes timeOfDay: null to persist when the classifyTimeOfDay dep is omitted", async () => {
+    const embedding = [1, 0];
+    const retrieved: RetrievedCandidate[] = [
+      { indexedImageId: "img-1", panoId: "p", heading: 0, lat: 1, lng: 2, similarity: 0.5, embedding },
+    ];
+    const regions: ClusteredRegion[] = [
+      { centroid: { lat: 1, lng: 2 }, radiusM: 150, aggregateScore: 0.9, memberIds: ["img-1"] },
+    ];
+
+    const deps = {
+      newSearchId: () => "search-x",
+      embedQuery: vi.fn().mockResolvedValue(embedding),
+      retrieve: vi.fn().mockResolvedValue(retrieved),
+      rerank: vi.fn().mockReturnValue(retrieved),
+      cluster: vi.fn().mockReturnValue(regions),
+      saveImage: vi.fn().mockResolvedValue("/tmp/search-x.jpg"),
+      persist: vi.fn().mockResolvedValue({ searchId: "search-x", regions: [], candidatesByRegion: {}, timeOfDay: null }),
+    };
+
+    await runSearch(deps, { imageBase64: "aaaa", imageBytes: Buffer.from([1]), imageExt: "jpg" });
+
+    expect(deps.persist).toHaveBeenCalledWith(expect.objectContaining({ timeOfDay: null }));
+  });
 });
