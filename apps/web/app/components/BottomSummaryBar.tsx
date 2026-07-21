@@ -1,7 +1,7 @@
 // apps/web/app/components/BottomSummaryBar.tsx
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchStore } from "../stores/useSearchStore";
 import { useReverseGeocode } from "../lib/useReverseGeocode";
 import { formatCoords } from "../lib/coords";
@@ -23,20 +23,16 @@ export function BottomSummaryBar({
   // scroll container) don't bubble, but a capture-phase listener on window
   // still sees them on the way down — lets this bar react to scrolling
   // anywhere on the page without the scrollable element needing to know
-  // about it.
+  // about it. Tied to actual scroll position (not a timer): hidden while
+  // the scrolled element isn't at its top, shown again only once it is.
   const [hidden, setHidden] = useState(false);
-  const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    function handleScroll() {
-      setHidden(true);
-      if (hideTimeout.current) clearTimeout(hideTimeout.current);
-      hideTimeout.current = setTimeout(() => setHidden(false), 500);
+    function handleScroll(e: Event) {
+      const target = e.target as HTMLElement | null;
+      setHidden((target?.scrollTop ?? 0) > 0);
     }
     window.addEventListener("scroll", handleScroll, true);
-    return () => {
-      window.removeEventListener("scroll", handleScroll, true);
-      if (hideTimeout.current) clearTimeout(hideTimeout.current);
-    };
+    return () => window.removeEventListener("scroll", handleScroll, true);
   }, []);
 
   if (!region) return null;

@@ -4,32 +4,50 @@ import { useEffect, useState } from "react";
 import { spanishWeatherLabel } from "../../../lib/weather-label";
 import { LockedWidgetOverlay } from "./LockedWidgetOverlay";
 
-/** Ring around the icon fills from 0 to `value` on mount (CSS transition on
- * strokeDashoffset, kicked off a frame after mount so the browser paints
- * the empty ring first instead of jumping straight to the final fill). */
+// Speedometer-style gauge: a 270° arc with a 90° gap at the bottom,
+// instead of a full 360° ring.
+const GAUGE_SWEEP_DEG = 270;
+const GAUGE_START_DEG = 135; // leaves a 90° gap centered at the bottom
+
+/** Gauge arc around the icon fills from 0 to `value` on mount (CSS
+ * transition on stroke-dasharray, kicked off a frame after mount so the
+ * browser paints the empty arc first instead of jumping straight to the
+ * final fill). */
 function ConfidenceRing({ value, size }: { value: number; size: number }) {
   const [filled, setFilled] = useState(0);
   useEffect(() => {
     const frame = requestAnimationFrame(() => setFilled(value));
     return () => cancelAnimationFrame(frame);
   }, [value]);
-  const r = size / 2 - 3;
+  const strokeWidth = 6;
+  const r = size / 2 - strokeWidth / 2 - 1;
   const c = 2 * Math.PI * r;
+  const arcLen = c * (GAUGE_SWEEP_DEG / 360);
+  const filledLen = arcLen * filled;
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="absolute inset-0">
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#2c2d30" strokeWidth="3" />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke="#2c2d30"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeDasharray={`${arcLen} ${c}`}
+        transform={`rotate(${GAUGE_START_DEG} ${size / 2} ${size / 2})`}
+      />
       <circle
         cx={size / 2}
         cy={size / 2}
         r={r}
         fill="none"
         stroke="#5dcaa5"
-        strokeWidth="3"
+        strokeWidth={strokeWidth}
         strokeLinecap="round"
-        strokeDasharray={c}
-        strokeDashoffset={c * (1 - filled)}
-        transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        style={{ transition: "stroke-dashoffset 1.1s cubic-bezier(.2,.85,.35,1)" }}
+        strokeDasharray={`${filledLen} ${c}`}
+        transform={`rotate(${GAUGE_START_DEG} ${size / 2} ${size / 2})`}
+        style={{ transition: "stroke-dasharray 1.1s cubic-bezier(.2,.85,.35,1)" }}
       />
     </svg>
   );
@@ -63,7 +81,7 @@ function AsciiWeatherArt({ kind }: { kind: WeatherKind }) {
   switch (kind) {
     case "sun":
       return (
-        <pre className="ascii-weather" style={{ color: "#f2c94c", fontSize: 14, animation: "jg-sun-pulse 2.4s ease-in-out infinite" }}>
+        <pre className="ascii-weather" style={{ color: "#f2c94c", fontSize: 11, animation: "jg-sun-pulse 2.4s ease-in-out infinite" }}>
 {`    \\   |   /
   *  \\  |  /  *
      \\ \\|/ /
@@ -76,8 +94,8 @@ function AsciiWeatherArt({ kind }: { kind: WeatherKind }) {
     case "rain":
       return (
         <div className="flex flex-col items-center">
-          <pre className="ascii-weather" style={{ color: "#c9cdd3", fontSize: 14 }}>{CLOUD_BODY}</pre>
-          <pre className="ascii-weather" style={{ color: "#6fa8dc", fontSize: 14, animation: "jg-rain-fall 0.9s ease-in-out infinite" }}>
+          <pre className="ascii-weather" style={{ color: "#c9cdd3", fontSize: 11 }}>{CLOUD_BODY}</pre>
+          <pre className="ascii-weather" style={{ color: "#6fa8dc", fontSize: 11, animation: "jg-rain-fall 0.9s ease-in-out infinite" }}>
 {`   / / / / /
   / / / / /`}
           </pre>
@@ -86,8 +104,8 @@ function AsciiWeatherArt({ kind }: { kind: WeatherKind }) {
     case "snow":
       return (
         <div className="flex flex-col items-center">
-          <pre className="ascii-weather" style={{ color: "#c9cdd3", fontSize: 14 }}>{CLOUD_BODY}</pre>
-          <pre className="ascii-weather" style={{ color: "#e8e8e6", fontSize: 14, animation: "jg-snow-drift 2.6s ease-in-out infinite" }}>
+          <pre className="ascii-weather" style={{ color: "#c9cdd3", fontSize: 11 }}>{CLOUD_BODY}</pre>
+          <pre className="ascii-weather" style={{ color: "#e8e8e6", fontSize: 11, animation: "jg-snow-drift 2.6s ease-in-out infinite" }}>
 {`   *  *  *  *
     *  *  *`}
           </pre>
@@ -96,15 +114,15 @@ function AsciiWeatherArt({ kind }: { kind: WeatherKind }) {
     case "fog":
       return (
         <div className="flex flex-col items-center gap-0.5">
-          <pre className="ascii-weather" style={{ color: "#8a9099", fontSize: 14, animation: "jg-fog-drift 3.6s ease-in-out infinite" }}>{"- - - - - - -"}</pre>
-          <pre className="ascii-weather" style={{ color: "#8a9099", fontSize: 14, animation: "jg-fog-drift 3.6s ease-in-out infinite reverse" }}>{" - - - - - - -"}</pre>
-          <pre className="ascii-weather" style={{ color: "#8a9099", fontSize: 14, animation: "jg-fog-drift 3.6s ease-in-out infinite" }}>{"- - - - - - - -"}</pre>
+          <pre className="ascii-weather" style={{ color: "#8a9099", fontSize: 11, animation: "jg-fog-drift 3.6s ease-in-out infinite" }}>{"- - - - - - -"}</pre>
+          <pre className="ascii-weather" style={{ color: "#8a9099", fontSize: 11, animation: "jg-fog-drift 3.6s ease-in-out infinite reverse" }}>{" - - - - - - -"}</pre>
+          <pre className="ascii-weather" style={{ color: "#8a9099", fontSize: 11, animation: "jg-fog-drift 3.6s ease-in-out infinite" }}>{"- - - - - - - -"}</pre>
         </div>
       );
     case "cloud":
     default:
       return (
-        <pre className="ascii-weather" style={{ color: "#c9cdd3", fontSize: 14, animation: "jg-cloud-float 3.2s ease-in-out infinite" }}>{CLOUD_BODY}</pre>
+        <pre className="ascii-weather" style={{ color: "#c9cdd3", fontSize: 11, animation: "jg-cloud-float 3.2s ease-in-out infinite" }}>{CLOUD_BODY}</pre>
       );
   }
 }
@@ -124,8 +142,8 @@ export function WeatherEstimateWidget({
     <div className="relative rounded-lg">
       <div className={locked ? "blur-[4px] opacity-50" : undefined}>
         <div className="flex flex-col items-center py-1">
-          <div className="relative flex items-center justify-center" style={{ width: 96, height: 96 }}>
-            {weather && <ConfidenceRing value={weather.score} size={96} />}
+          <div className="relative flex items-center justify-center" style={{ width: 108, height: 108 }}>
+            {weather && <ConfidenceRing value={weather.score} size={108} />}
             <AsciiWeatherArt kind={kind} />
           </div>
           <div className="mt-2 text-center text-[18px] font-semibold text-fg">
