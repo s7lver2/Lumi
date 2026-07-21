@@ -44,6 +44,10 @@ export default function MapCanvasClient({
             if (cancelled || !container.current) return;
             const cfg: MapConfig = ok && data ? data : FALLBACK_CONFIG;
 
+            // A pitched (tilted) camera at whole-planet zoom shows mostly empty
+            // sky above the horizon instead of a centered globe — only tilt
+            // once we're actually zoomed into a place with 3D buildings to see.
+            const initialPitch = viewport.zoom < 3 ? 0 : 45;
             let map: any;
             if (cfg.provider === "mapbox") {
                 const mapboxgl = (await import("mapbox-gl")).default;
@@ -53,7 +57,7 @@ export default function MapCanvasClient({
                     style: cfg.styleUrl,
                     center: [viewport.lng, viewport.lat],
                     zoom: viewport.zoom,
-                    pitch: 45, // tilt so 3D buildings are visible
+                    pitch: initialPitch,
                     attributionControl: true,
                 });
             } else {
@@ -63,7 +67,7 @@ export default function MapCanvasClient({
                     style: cfg.styleUrl,
                     center: [viewport.lng, viewport.lat],
                     zoom: viewport.zoom,
-                    pitch: 45,
+                    pitch: initialPitch,
                 });
             }
             mapRef.current = map;
