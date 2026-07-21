@@ -12,13 +12,14 @@ import { getPool } from "../../../../../lib/db";
 import { getSettingsRepo } from "../../../../../lib/settings-repo";
 import { validateModelId } from "../../../../../lib/models/validate-model-id";
 import { saveQueryImage } from "../../../../../lib/query-image-store";
-import { embedQueryImage } from "../../../../../lib/inference-client";
+import { embedQueryImage, classifyQueryImage } from "../../../../../lib/inference-client";
 import { retrieveCandidates } from "../../../../../lib/search/retrieval";
 import { queryExpansionRerank } from "../../../../../lib/search/rerank";
 import { clusterCandidates } from "../../../../../lib/search/cluster";
 import { persistSearch } from "../../../../../lib/search/persist";
 import { runSearch, type RunSearchDeps } from "../../../../../lib/search/run-search";
 import { validateImageBytes } from "../../../../../lib/image-validation";
+import { findActiveModelForFacet } from "../../../../../lib/model-catalog/classification-models";
 
 export async function POST(request: Request, { params }: { params: { modelId: string } }) {
   let activeModelId: string;
@@ -61,6 +62,7 @@ export async function POST(request: Request, { params }: { params: { modelId: st
   const imageExt = validation.format === "jpeg" ? "jpg" : validation.format;
 
   const pool = getPool();
+  const timeOfDayModel = await findActiveModelForFacet(pool, "time_of_day");
   const inferenceBaseUrl = process.env.INFERENCE_SERVICE_URL ?? "http://localhost:8000";
 
   const deps: RunSearchDeps = {
@@ -73,6 +75,23 @@ export async function POST(request: Request, { params }: { params: { modelId: st
     cluster: (candidates) => clusterCandidates(candidates, DEFAULT_REGION_RADIUS_M),
     saveImage: (searchId, b, ext) => saveQueryImage(searchId, b, ext),
     persist: (args) => persistSearch(pool, args),
+    ...(timeOfDayModel
+      ? {
+          classifyTimeOfDay: async (b64: string) => {
+            try {
+              const groups = await classifyQueryImage(b64, timeOfDayModel.modelId, inferenceBaseUrl);
+              const group = groups.find((g) => g.facet === "time_of_day");
+              const top = group?.labels[0];
+              return top ? { label: top.name, score: top.score } : null;
+            } catch {
+              // Time-of-day is decorative, not core — never fail the search
+              // over a classify error (spec: docs/superpowers/specs/2026-
+              // 07-21-results-layout-and-time-of-day-design.md).
+              return null;
+            }
+          },
+        }
+      : {}),
   };
 
   try {
