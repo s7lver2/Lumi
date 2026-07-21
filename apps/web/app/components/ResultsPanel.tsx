@@ -133,7 +133,7 @@ export function ResultsPanel({
         </svg>
       </button>
       <WidgetGrid widgets={sidebarWidgets} />
-      {popupOpen && <ResultsWidgetsPopup widgets={widgets} onClose={() => setPopupOpen(false)} />}
+      <ResultsWidgetsPopup open={popupOpen} widgets={widgets} onClose={() => setPopupOpen(false)} />
     </div>
   );
 }

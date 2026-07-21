@@ -40,9 +40,7 @@ export function PhotoComparison({
           <div className="mt-1 text-[10px] text-accent-fg">Street View</div>
         </div>
       </div>
-      {lightbox && (
-        <ImageLightbox src={lightbox.src} label={lightbox.label} onClose={() => setLightbox(null)} />
-      )}
+      <ImageLightbox content={lightbox} onClose={() => setLightbox(null)} />
     </>
   );
 }

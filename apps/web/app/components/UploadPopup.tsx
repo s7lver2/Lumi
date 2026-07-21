@@ -1,11 +1,12 @@
 // apps/web/app/components/UploadPopup.tsx
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { FloatingCard } from "./FloatingCard";
 import { Menu } from "./Menu";
 import { RETRIEVAL_MODELS } from "@netryx/shared-types";
 import { ModePicker } from "./ModePicker";
 import { CropDialog } from "./CropDialog";
+import { useDismissable } from "../../lib/useDismissable";
 
 interface Selected { file: File; url: string; displayName: string }
 
@@ -33,9 +34,21 @@ export function UploadPopup({
 }) {
   const [model, setModel] = useState(RETRIEVAL_MODELS[0]?.id ?? "lumi-preview");
   const [cropTarget, setCropTarget] = useState<{ index: number; url: string; name: string } | null>(null);
+  const { rendered, closing } = useDismissable(files.length > 0, 180);
+  // Keeps the last non-empty file list visible while the closing animation
+  // plays — the caller's `files` prop goes to [] the instant the search
+  // starts, before the exit animation would otherwise get a chance to show.
+  const lastFiles = useRef(files);
+  if (files.length > 0) lastFiles.current = files;
+
+  if (!rendered) return null;
+  const shownFiles = files.length > 0 ? files : lastFiles.current;
 
   return (
-    <div className="absolute left-1/2 top-1/2 z-20 w-[460px] -translate-x-1/2 -translate-y-1/2">
+    <div
+      className="absolute left-1/2 top-1/2 z-20 w-[460px] -translate-x-1/2 -translate-y-1/2"
+      style={{ animation: `${closing ? "jg-popup-scale-out" : "jg-popup-scale-in"} 180ms cubic-bezier(.2,.85,.35,1) both` }}
+    >
       <FloatingCard className="p-4">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2">
@@ -47,9 +60,9 @@ export function UploadPopup({
           </div>
         </div>
         <ModePicker value={model} onChange={setModel} />
-        <div className="mt-3 text-sm text-fg">{files.length} imagen{files.length === 1 ? "" : "es"} seleccionada{files.length === 1 ? "" : "s"}</div>
+        <div className="mt-3 text-sm text-fg">{shownFiles.length} imagen{shownFiles.length === 1 ? "" : "es"} seleccionada{shownFiles.length === 1 ? "" : "s"}</div>
         <div className="mt-2.5 space-y-2">
-          {files.map((f, i) => (
+          {shownFiles.map((f, i) => (
             <div key={f.url} className="flex items-center gap-3.5 rounded-lg bg-white/5 p-3">
               <img src={f.url} alt="" className="h-14 w-14 shrink-0 rounded-md object-cover" />
               <div className="min-w-0 flex-1 space-y-1.5">

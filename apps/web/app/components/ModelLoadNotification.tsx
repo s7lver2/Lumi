@@ -1,6 +1,7 @@
 // apps/web/app/components/ModelLoadNotification.tsx
 "use client";
 import { useEffect, useState } from "react";
+import { useDismissable } from "../../lib/useDismissable";
 
 const LABEL: Record<"retrieval" | "verification", string> = {
   retrieval: "Lumi Preview",
@@ -59,13 +60,14 @@ export function ModelLoadNotification({
     };
   }, [active]);
 
-  if (!active) return null;
+  const { rendered, closing } = useDismissable(active, 250);
+  if (!rendered) return null;
   const label = loading ? LABEL[loading] : fallbackLabel;
 
   return (
     <div
       className="fixed bottom-4 right-4 z-40 flex w-[210px] items-center gap-2.5 rounded-lg border border-white/[.12] bg-panel/[.97] p-2 shadow-lg shadow-black/40"
-      style={{ animation: "jg-toast-in .35s cubic-bezier(.2,.85,.35,1) both" }}
+      style={{ animation: `${closing ? "jg-toast-out .25s ease-in both" : "jg-toast-in .35s cubic-bezier(.2,.85,.35,1) both"}` }}
     >
       <div
         className="h-9 w-9 shrink-0 rounded-md bg-cover bg-center"

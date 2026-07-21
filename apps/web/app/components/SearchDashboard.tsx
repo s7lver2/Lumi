@@ -320,27 +320,25 @@ export function SearchDashboard() {
         />
       )}
 
-      {selected.length > 0 && (
-        <UploadPopup
-          files={selected}
-          onAddMore={handleFilesDropped}
-          onRemove={handleRemove}
-          onSearch={handleTriggerSearch}
-          busy={searching}
-          onCropSave={async (index, croppedFile) => {
-            const imageId = selected[index].file.name;
-            const form = new FormData();
-            form.append("image", croppedFile);
-            await fetch(`/api/library/${imageId}`, { method: "PATCH", body: form });
-            setSelected((prev) => {
-              const next = [...prev];
-              URL.revokeObjectURL(next[index].url);
-              next[index] = { file: croppedFile, url: URL.createObjectURL(croppedFile), displayName: next[index].displayName };
-              return next;
-            });
-          }}
-        />
-      )}
+      <UploadPopup
+        files={selected}
+        onAddMore={handleFilesDropped}
+        onRemove={handleRemove}
+        onSearch={handleTriggerSearch}
+        busy={searching}
+        onCropSave={async (index, croppedFile) => {
+          const imageId = selected[index].file.name;
+          const form = new FormData();
+          form.append("image", croppedFile);
+          await fetch(`/api/library/${imageId}`, { method: "PATCH", body: form });
+          setSelected((prev) => {
+            const next = [...prev];
+            URL.revokeObjectURL(next[index].url);
+            next[index] = { file: croppedFile, url: URL.createObjectURL(croppedFile), displayName: next[index].displayName };
+            return next;
+          });
+        }}
+      />
 
       <ModelLoadNotification
         active={searching || refining}

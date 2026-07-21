@@ -1,7 +1,39 @@
 // apps/web/app/components/widgets/WeatherEstimateWidget.tsx
 "use client";
+import { useEffect, useState } from "react";
 import { spanishWeatherLabel } from "../../../lib/weather-label";
 import { LockedWidgetOverlay } from "./LockedWidgetOverlay";
+
+/** Ring around the icon fills from 0 to `value` on mount (CSS transition on
+ * strokeDashoffset, kicked off a frame after mount so the browser paints
+ * the empty ring first instead of jumping straight to the final fill). */
+function ConfidenceRing({ value, size }: { value: number; size: number }) {
+  const [filled, setFilled] = useState(0);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setFilled(value));
+    return () => cancelAnimationFrame(frame);
+  }, [value]);
+  const r = size / 2 - 3;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="absolute inset-0">
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#2c2d30" strokeWidth="3" />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke="#5dcaa5"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeDasharray={c}
+        strokeDashoffset={c * (1 - filled)}
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        style={{ transition: "stroke-dashoffset 1.1s cubic-bezier(.2,.85,.35,1)" }}
+      />
+    </svg>
+  );
+}
 
 export const WEATHER_ICON = (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -92,7 +124,10 @@ export function WeatherEstimateWidget({
     <div className="relative rounded-lg">
       <div className={locked ? "blur-[4px] opacity-50" : undefined}>
         <div className="flex flex-col items-center py-1">
-          <AsciiWeatherArt kind={kind} />
+          <div className="relative flex items-center justify-center" style={{ width: 96, height: 96 }}>
+            {weather && <ConfidenceRing value={weather.score} size={96} />}
+            <AsciiWeatherArt kind={kind} />
+          </div>
           <div className="mt-2 text-center text-[18px] font-semibold text-fg">
             {weather ? spanishWeatherLabel(weather.label) : "—"}
           </div>

@@ -19,7 +19,7 @@ export function flyToRegion(map: any, region: { centroid: LatLng }): void {
     center: [region.centroid.lng, region.centroid.lat],
     zoom: 15,
     pitch: 50,
-    duration: 1100,
+    duration: 1700,
     curve: 1.2,
   });
 }
@@ -30,7 +30,7 @@ export function flyToPoint(map: any, point: LatLng): void {
     center: [point.lng, point.lat],
     zoom: 17,
     pitch: 60,
-    duration: 1400,
+    duration: 2100,
     curve: 1.5,
   });
 }

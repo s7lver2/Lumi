@@ -2,6 +2,7 @@
 "use client";
 import { FloatingCard } from "./FloatingCard";
 import { InfoTooltip } from "./InfoTooltip";
+import { useDismissable } from "../../lib/useDismissable";
 import type { Widget } from "./widgets/types";
 
 function WidgetCard({ widget }: { widget: Widget }) {
@@ -17,20 +18,23 @@ function WidgetCard({ widget }: { widget: Widget }) {
   );
 }
 
-export function ResultsWidgetsPopup({ widgets, onClose }: { widgets: Widget[]; onClose: () => void }) {
+export function ResultsWidgetsPopup({ open, widgets, onClose }: { open: boolean; widgets: Widget[]; onClose: () => void }) {
+  const { rendered, closing } = useDismissable(open, 180);
   const hero = widgets.find((w) => w.id === "search-results");
   const secondary = widgets.filter((w) => w.id !== "search-results");
+
+  if (!rendered) return null;
 
   return (
     <div
       className="fixed inset-0 z-30 flex items-center justify-center bg-black/60"
-      style={{ animation: "jg-backdrop-in 150ms ease-out both" }}
+      style={{ animation: `${closing ? "jg-backdrop-out" : "jg-backdrop-in"} 180ms ease-out both` }}
       onClick={onClose}
     >
       <FloatingCard
         className="flex w-[900px] max-h-[85vh] flex-col p-5"
         onClick={(e) => e.stopPropagation()}
-        style={{ animation: "jg-popup-scale-in 180ms cubic-bezier(.2,.85,.35,1) both" }}
+        style={{ animation: `${closing ? "jg-popup-scale-out" : "jg-popup-scale-in"} 180ms cubic-bezier(.2,.85,.35,1) both` }}
       >
         <div className="mb-3 flex items-center justify-between">
           <span className="text-[13.5px] font-medium text-fg">Resultado</span>
