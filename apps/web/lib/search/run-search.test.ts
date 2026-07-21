@@ -97,4 +97,55 @@ describe("runSearch", () => {
 
     expect(deps.persist).toHaveBeenCalledWith(expect.objectContaining({ timeOfDay: null }));
   });
+  it("calls reportPhase at each stage transition, in order, when the dep is provided", async () => {
+    const embedding = [1, 0];
+    const retrieved: RetrievedCandidate[] = [
+      { indexedImageId: "img-1", panoId: "p", heading: 0, lat: 1, lng: 2, similarity: 0.5, embedding },
+    ];
+    const regions: ClusteredRegion[] = [
+      { centroid: { lat: 1, lng: 2 }, radiusM: 150, aggregateScore: 0.9, memberIds: ["img-1"] },
+    ];
+    const phasesReported: string[] = [];
+
+    const deps = {
+      newSearchId: () => "search-x",
+      embedQuery: vi.fn().mockResolvedValue(embedding),
+      retrieve: vi.fn().mockResolvedValue(retrieved),
+      rerank: vi.fn().mockReturnValue(retrieved),
+      cluster: vi.fn().mockReturnValue(regions),
+      saveImage: vi.fn().mockResolvedValue("/tmp/search-x.jpg"),
+      persist: vi.fn().mockResolvedValue({ searchId: "search-x", regions: [], candidatesByRegion: {}, timeOfDay: null }),
+      reportPhase: vi.fn((phase: string) => phasesReported.push(phase)),
+    };
+
+    await runSearch(deps, { imageBase64: "aaaa", imageBytes: Buffer.from([1]), imageExt: "jpg" });
+
+    expect(phasesReported).toEqual(["embedding", "searching", "saving"]);
+  });
+
+  it("never calls reportPhase when the dep is omitted", async () => {
+    const embedding = [1, 0];
+    const retrieved: RetrievedCandidate[] = [
+      { indexedImageId: "img-1", panoId: "p", heading: 0, lat: 1, lng: 2, similarity: 0.5, embedding },
+    ];
+    const regions: ClusteredRegion[] = [
+      { centroid: { lat: 1, lng: 2 }, radiusM: 150, aggregateScore: 0.9, memberIds: ["img-1"] },
+    ];
+
+    const deps = {
+      newSearchId: () => "search-x",
+      embedQuery: vi.fn().mockResolvedValue(embedding),
+      retrieve: vi.fn().mockResolvedValue(retrieved),
+      rerank: vi.fn().mockReturnValue(retrieved),
+      cluster: vi.fn().mockReturnValue(regions),
+      saveImage: vi.fn().mockResolvedValue("/tmp/search-x.jpg"),
+      persist: vi.fn().mockResolvedValue({ searchId: "search-x", regions: [], candidatesByRegion: {}, timeOfDay: null }),
+    };
+
+    // No reportPhase in deps at all — runSearch must not throw calling an
+    // undefined function.
+    await expect(
+      runSearch(deps, { imageBase64: "aaaa", imageBytes: Buffer.from([1]), imageExt: "jpg" })
+    ).resolves.toBeDefined();
+  });
 });
