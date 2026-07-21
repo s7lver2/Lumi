@@ -5,7 +5,7 @@ import { InfoTooltip } from "./InfoTooltip";
 
 export function WidgetGrid({ widgets }: { widgets: Widget[] }) {
   return (
-    <div className="flex h-full w-full flex-col overflow-y-auto border-l border-border bg-panel/80 backdrop-blur-md">
+    <div className="flex h-full w-full flex-col overflow-y-auto overflow-x-hidden border-l border-border bg-panel/80 backdrop-blur-md">
       {widgets.map((widget) => (
         <div key={widget.id} className="border-b border-white/[.08]">
           <div className="flex items-center gap-2 px-3.5 py-2.5">
