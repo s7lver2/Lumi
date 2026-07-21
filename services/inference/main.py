@@ -98,6 +98,7 @@ class EmbedRequest(BaseModel):
 
 class EmbedResponse(BaseModel):
     embeddings: list[list[float]]
+    duration_ms: float
 
 
 class VerifyRequest(BaseModel):
@@ -121,6 +122,7 @@ class VerifyResult(BaseModel):
 
 class VerifyResponse(BaseModel):
     results: list[VerifyResult]
+    duration_ms: float
 
 
 class ClassifyRequest(BaseModel):
@@ -139,6 +141,7 @@ class ClassifyGroup(BaseModel):
 
 class ClassifyResponse(BaseModel):
     groups: list[ClassifyGroup]
+    duration_ms: float
 
 
 _OOM_MESSAGE = (
@@ -354,6 +357,7 @@ def embed(request: EmbedRequest, model=Depends(get_retrieval_model)) -> EmbedRes
         raise HTTPException(status_code=400, detail="images_base64 must not be empty")
 
     images = [_decode_image(img) for img in request.images_base64]
+    start = time.perf_counter()
 
     try:
         if request.augment:
@@ -362,7 +366,7 @@ def embed(request: EmbedRequest, model=Depends(get_retrieval_model)) -> EmbedRes
                 variants = augment_variants(img)
                 raw_vectors = _run_model(model, variants)
                 embeddings.append(mean_normalize(raw_vectors).tolist())
-            return EmbedResponse(embeddings=embeddings)
+            return EmbedResponse(embeddings=embeddings, duration_ms=(time.perf_counter() - start) * 1000)
 
         raw_vectors = _run_model(model, images)
     except torch.cuda.OutOfMemoryError as exc:
@@ -376,7 +380,7 @@ def embed(request: EmbedRequest, model=Depends(get_retrieval_model)) -> EmbedRes
         norm = np.linalg.norm(vec)
         normalized = vec / norm if norm > 0 else vec
         embeddings.append(normalized.tolist())
-    return EmbedResponse(embeddings=embeddings)
+    return EmbedResponse(embeddings=embeddings, duration_ms=(time.perf_counter() - start) * 1000)
 
 
 def _roma_matcher_adapter(model):
@@ -419,8 +423,9 @@ def verify(request: VerifyRequest, model=Depends(get_verification_model)) -> Ver
         # here specifically to tell apart "slow but working on GPU" from
         # "still bottlenecked somewhere even with CUDA".
         print(f"[verify] {i + 1}/{total} candidatos verificados ({elapsed:.2f}s)")
-    print(f"[verify] request completa: {total} candidatos en {time.perf_counter() - request_start:.2f}s")
-    return VerifyResponse(results=results)
+    total_elapsed_ms = (time.perf_counter() - request_start) * 1000
+    print(f"[verify] request completa: {total} candidatos en {total_elapsed_ms / 1000:.2f}s")
+    return VerifyResponse(results=results, duration_ms=total_elapsed_ms)
 
 
 @app.post("/models/{model_id}/classify", response_model=ClassifyResponse)
@@ -435,14 +440,19 @@ def classify(model_id: str, request: ClassifyRequest) -> ClassifyResponse:
 
     image = _decode_image(request.image_base64)
     classifier = _ensure_active_model(model_id)  # OOM during load already raises 503 inside _ensure_active_model
+    start = time.perf_counter()
     try:
         groups = classifier.classify(image)
     except torch.cuda.OutOfMemoryError as exc:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         raise HTTPException(status_code=503, detail=_OOM_INFERENCE_MESSAGE) from exc
+    duration_ms = (time.perf_counter() - start) * 1000
 
-    return ClassifyResponse(groups=[ClassifyGroup(facet=g["facet"], labels=[ClassifyLabel(**l) for l in g["labels"]]) for g in groups])
+    return ClassifyResponse(
+        groups=[ClassifyGroup(facet=g["facet"], labels=[ClassifyLabel(**l) for l in g["labels"]]) for g in groups],
+        duration_ms=duration_ms,
+    )
 
 
 @app.get("/model-status", response_model=ModelStatusResponse)
