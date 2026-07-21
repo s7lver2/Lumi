@@ -5,6 +5,7 @@ import {
   uninstallClassificationModel,
   getClassificationModelHistory,
   listActiveClassificationModels,
+  findActiveModelForFacet
 } from "./classification-models";
 import type { GenericClassifierManifest } from "./manifest";
 
@@ -166,5 +167,48 @@ describe("listActiveClassificationModels", () => {
     const pool = makePool(async () => ({ rows: [{ manifest: manifest("1.0") }] }));
     const result = await listActiveClassificationModels(pool);
     expect(result).toEqual([manifest("1.0")]);
+  });
+});
+
+describe("findActiveModelForFacet", () => {
+  it("returns the modelId of the active model whose facets include the given facet", async () => {
+    const pool = makePool(async () => ({
+      rows: [{ manifest: manifest("1.0") }], // manifest()'s only facet is "weather"
+    }));
+
+    const result = await findActiveModelForFacet(pool, "weather");
+    expect(result).toEqual({ modelId: "wanda-v1" });
+  });
+
+  it("returns null when no active model has the given facet", async () => {
+    const pool = makePool(async () => ({ rows: [{ manifest: manifest("1.0") }] }));
+
+    const result = await findActiveModelForFacet(pool, "time_of_day");
+    expect(result).toBeNull();
+  });
+
+  it("returns null when there are no active models at all", async () => {
+    const pool = makePool(async () => ({ rows: [] }));
+
+    const result = await findActiveModelForFacet(pool, "time_of_day");
+    expect(result).toBeNull();
+  });
+
+  it("finds the right model among several active ones", async () => {
+    const weatherOnly = manifest("1.0");
+    const withTimeOfDay: typeof weatherOnly = {
+      ...manifest("1.0"),
+      modelId: "wanda-v2",
+      facets: [
+        { facet: "weather", hfModelId: "prithivMLmods/Weather-Image-Classification", strategy: "pipeline" },
+        { facet: "time_of_day", hfModelId: "openai/clip-vit-base-patch32", strategy: "clip-zero-shot", prompts: ["a", "b"] },
+      ],
+    };
+    const pool = makePool(async () => ({
+      rows: [{ manifest: weatherOnly }, { manifest: withTimeOfDay }],
+    }));
+
+    const result = await findActiveModelForFacet(pool, "time_of_day");
+    expect(result).toEqual({ modelId: "wanda-v2" });
   });
 });

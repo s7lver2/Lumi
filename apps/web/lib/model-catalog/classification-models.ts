@@ -111,3 +111,13 @@ export async function listActiveClassificationModels(pool: Pool): Promise<Generi
   );
   return rows.map((r) => r.manifest as GenericClassifierManifest);
 }
+
+/** Finds the active classification model, if any, whose manifest declares
+ * the given facet — e.g. `findActiveModelForFacet(pool, "time_of_day")`
+ * to discover which installed model (Wanda today, whatever tomorrow) can
+ * serve a time-of-day classification, without hardcoding a modelId. */
+export async function findActiveModelForFacet(pool: Pool, facet: string): Promise<{ modelId: string } | null> {
+  const manifests = await listActiveClassificationModels(pool);
+  const match = manifests.find((m) => m.facets.some((f) => f.facet === facet));
+  return match ? { modelId: match.modelId } : null;
+}
