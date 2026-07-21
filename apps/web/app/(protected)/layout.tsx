@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "../components/AppShell";
 import { BootGate } from "../components/LoadingScreen";
-import { PageFadeTransition } from "../components/PageFadeTransition";
 import { getSettingsRepo } from "../../lib/settings-repo";
 import { resolveGateDecision } from "./gate";
 
@@ -31,7 +30,7 @@ export default async function ProtectedLayout({
   return (
     <AppShell>
       <BootGate>
-        <PageFadeTransition>{children}</PageFadeTransition>
+        {children}
       </BootGate>
     </AppShell>
   );
