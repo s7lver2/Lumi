@@ -9,6 +9,10 @@ export interface PersistSearchArgs {
   queryEmbedding: number[];
   candidates: RetrievedCandidate[]; // already re-ranked, best-first
   regions: ClusteredRegion[];
+  /** Not persisted to the DB — passed straight through into the returned
+   * SearchResponse (spec: docs/superpowers/specs/2026-07-21-results-
+   * layout-and-time-of-day-design.md). */
+  timeOfDay?: { label: string; score: number } | null;
 }
 
 /**
@@ -81,7 +85,7 @@ export async function persistSearch(
     }
 
     await client.query("COMMIT");
-    return { searchId, regions: regionOut, candidatesByRegion };
+    return { searchId, regions: regionOut, candidatesByRegion, timeOfDay: args.timeOfDay ?? null };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

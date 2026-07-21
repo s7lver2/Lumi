@@ -56,4 +56,33 @@ d("persistSearch", () => {
     expect(res.candidatesByRegion[regionId][0].status).toBe("unreviewed");
     expect(res.candidatesByRegion[regionId][0].rank).toBe(1);
   });
+  it("passes timeOfDay through into the response without writing it anywhere", async () => {
+    const candidates: RetrievedCandidate[] = [
+      { indexedImageId: imageId, panoId: "pano-p", heading: 0, lat: 0.5, lng: 0.5, similarity: 0.88, embedding: [] },
+    ];
+    const regions: ClusteredRegion[] = [
+      { centroid: { lat: 0.5, lng: 0.5 }, radiusM: 150, aggregateScore: 0.88, memberIds: [imageId] },
+    ];
+
+    const res = await persistSearch(pool, {
+      queryImagePath: "/tmp/q.jpg",
+      queryEmbedding: new Array(8448).fill(0),
+      candidates,
+      regions,
+      timeOfDay: { label: "foto tomada al mediodía", score: 0.72 },
+    });
+
+    expect(res.timeOfDay).toEqual({ label: "foto tomada al mediodía", score: 0.72 });
+  });
+
+  it("defaults timeOfDay to null when not provided", async () => {
+    const res = await persistSearch(pool, {
+      queryImagePath: "/tmp/q.jpg",
+      queryEmbedding: new Array(8448).fill(0),
+      candidates: [],
+      regions: [],
+    });
+
+    expect(res.timeOfDay).toBeNull();
+  });
 });
