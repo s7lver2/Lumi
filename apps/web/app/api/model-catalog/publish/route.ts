@@ -20,6 +20,7 @@ import { encryptBuffer } from "@netryx/settings-repo";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { verifyCandidates } from "../../../../lib/verify-client";
+import { getRepoRoot } from "../../../../lib/repo-root";
 
 interface PublishBody {
   kind?: "code-bundle" | "generic-classifier";
@@ -209,7 +210,9 @@ export async function POST(request: Request) {
   const bundleId = activeRetrievalModel?.id ?? "lumi-preview";
   const version = activeRetrievalModel?.version ?? "1.0";
 
-  const inferenceDir = resolve(process.cwd(), "..", "..", "services", "inference");
+  // Must be the real repo checkout, not process.cwd()'s "../.." — see
+  // repo-root.ts for why a packaged --testing run's cwd doesn't give that.
+  const inferenceDir = resolve(getRepoRoot(), "services", "inference");
   const codeZip = await buildInferenceCodeZip(inferenceDir);
 
   const manifest: CodeBundleManifest = {

@@ -1,13 +1,16 @@
 // apps/web/lib/model-catalog/uninstall-state.ts
 import { readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
+import { getRepoRoot } from "../repo-root";
 
-// process.cwd() is apps/web — two levels up reaches the repo root, where
-// services/inference lives (see install/route.ts's INFERENCE_DIR). This
-// backups dir sits next to it, outside any single request's tmpdir, so the
-// "previous version" snapshot survives across requests/restarts until the
-// next install or a successful uninstall consumes it.
-const BACKUPS_ROOT = resolve(process.cwd(), "..", "..", ".model-catalog-backups");
+// This backups dir sits next to services/inference at the repo root, outside
+// any single request's tmpdir, so the "previous version" snapshot survives
+// across requests/restarts until the next install or a successful uninstall
+// consumes it — but only if it's actually anchored to the real repo root
+// (see repo-root.ts: a packaged --testing run's process.cwd() is NOT that,
+// and this exact bug was confirmed live as the reason "Reinstalar Lumi
+// Preview para crear un respaldo" never stuck between rebuilds).
+const BACKUPS_ROOT = resolve(getRepoRoot(), ".model-catalog-backups");
 export const PREVIOUS_CODE_DIR = resolve(BACKUPS_ROOT, "previous");
 const META_PATH = resolve(BACKUPS_ROOT, "meta.json");
 

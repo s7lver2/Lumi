@@ -13,8 +13,11 @@ import { PREVIOUS_CODE_DIR, readUninstallMeta, writeUninstallMeta } from "../../
 import { getSettingsRepo } from "../../../../lib/settings-repo";
 import { installClassificationModel } from "../../../../lib/model-catalog/classification-models";
 import { completeJob, failJob } from "../../../../lib/background-jobs";
+import { getRepoRoot } from "../../../../lib/repo-root";
 
-const INFERENCE_DIR = resolve(process.cwd(), "..", "..", "services", "inference");
+// Must be the real repo checkout, not process.cwd()'s "../.." — see
+// repo-root.ts for why a packaged --testing run's cwd doesn't give that.
+const INFERENCE_DIR = resolve(getRepoRoot(), "services", "inference");
 const INFERENCE_SERVICE_URL = process.env.INFERENCE_SERVICE_URL ?? "http://localhost:8000";
 
 function isManagedInferenceFile(name: string): boolean {

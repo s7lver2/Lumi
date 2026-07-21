@@ -1,5 +1,6 @@
 // apps/web/lib/street-view-image-dir.ts
 import { resolve } from "node:path";
+import { getRepoRoot } from "./repo-root";
 
 /**
  * Mirrors apps/worker/src/image-store.ts's imageDir() default EXACTLY, so
@@ -15,11 +16,15 @@ import { resolve } from "node:path";
  * Replicating that exact path (not apps/web's cwd) here is required for
  * imported images to actually land where the worker (and its own dedup
  * checks) will look for them on a fresh clone with no override.
+ *
+ * `<repo_root>` here must be the REAL repo checkout, not process.cwd()'s
+ * "../.." — see repo-root.ts: confirmed live that every downloaded
+ * dataset's captured images were landing inside a packaged --testing
+ * run's staging directory and vanishing on the next rebuild.
  */
 export function streetViewImageDir(): string {
   if (process.env.STREET_VIEW_IMAGE_DIR) return process.env.STREET_VIEW_IMAGE_DIR;
-  const repoRoot = resolve(process.cwd(), "..", "..");
-  return resolve(repoRoot, "apps", "worker", "data", "street-view");
+  return resolve(getRepoRoot(), "apps", "worker", "data", "street-view");
 }
 
 // Google's newer pano_ids (the long "CAoS..." protobuf-derived ones) can

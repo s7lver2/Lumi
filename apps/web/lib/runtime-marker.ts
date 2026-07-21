@@ -1,6 +1,7 @@
 // apps/web/lib/runtime-marker.ts
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { getRepoRoot } from "./repo-root";
 
 // tools/installer_source.py has no access to the settings repo (no Postgres
 // connection, no encryption key) — it needs SOME way to know whether to
@@ -11,7 +12,9 @@ import { resolve } from "node:path";
 // how to launch things. Mirrored by tools/service_launcher.py's
 // read_runtime_marker() — the "inferenceRuntime" key name must match on both sides.
 export async function writeRuntimeMarker(runtime: string, repoRoot?: string): Promise<void> {
-  const root = repoRoot ?? resolve(process.cwd(), "..", "..");
+  // Must be the real repo checkout, not process.cwd()'s "../.." — see
+  // repo-root.ts for why a packaged --testing run's cwd doesn't give that.
+  const root = repoRoot ?? getRepoRoot();
   const dir = resolve(root, "data");
   await mkdir(dir, { recursive: true });
   await writeFile(

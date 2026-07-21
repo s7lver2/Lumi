@@ -10,8 +10,11 @@ import {
 } from "../../../../lib/model-catalog/uninstall-state";
 import { uninstallClassificationModel } from "../../../../lib/model-catalog/classification-models";
 import { completeJob, failJob } from "../../../../lib/background-jobs";
+import { getRepoRoot } from "../../../../lib/repo-root";
 
-const INFERENCE_DIR = resolve(process.cwd(), "..", "..", "services", "inference");
+// Must be the real repo checkout, not process.cwd()'s "../.." — see
+// repo-root.ts for why a packaged --testing run's cwd doesn't give that.
+const INFERENCE_DIR = resolve(getRepoRoot(), "services", "inference");
 const INFERENCE_SERVICE_URL = process.env.INFERENCE_SERVICE_URL ?? "http://localhost:8000";
 const READY_POLL_TIMEOUT_MS = Number(process.env.MODEL_CATALOG_READY_TIMEOUT_MS ?? 60_000);
 const READY_POLL_INTERVAL_MS = Number(process.env.MODEL_CATALOG_READY_POLL_INTERVAL_MS ?? 1_000);

@@ -3,6 +3,7 @@ import { createWriteStream } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Pool } from "pg";
+import { getRepoRoot } from "../repo-root";
 
 /** Fixed, hardcoded — deliberately not discovered via information_schema at
  * request time, which would silently start touching PostGIS's tiger/
@@ -45,7 +46,11 @@ async function writeChunk(stream: NodeJS.WritableStream, chunk: string): Promise
  * JSON file shaped as [{ table, rows }, ...] — only how it's built
  * changed. Returns the absolute path written. */
 export async function backupDatabaseToJson(pool: Pool): Promise<string> {
-  const dir = resolve(process.cwd(), "data", "db-backups");
+  // Anchored to the real repo checkout, not process.cwd() — see
+  // repo-root.ts for why a packaged --testing run's cwd doesn't give a
+  // stable location (this reset-time safety backup would otherwise vanish
+  // on the very next rebuild).
+  const dir = resolve(getRepoRoot(), "apps", "web", "data", "db-backups");
   await mkdir(dir, { recursive: true });
   const path = resolve(dir, `${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
 

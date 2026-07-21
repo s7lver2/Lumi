@@ -11,10 +11,12 @@ import {
   writeUninstallMeta,
   clearPreviousBackup,
 } from "../../../../lib/model-catalog/uninstall-state";
+import { getRepoRoot } from "../../../../lib/repo-root";
 
 // Same INFERENCE_DIR/URL/poll derivation as the feature this replaces
-// (apps/web/app/api/model-catalog/uninstall/route.ts).
-const INFERENCE_DIR = resolve(process.cwd(), "..", "..", "services", "inference");
+// (apps/web/app/api/model-catalog/uninstall/route.ts). Must be the real
+// repo checkout, not process.cwd()'s "../.." — see repo-root.ts.
+const INFERENCE_DIR = resolve(getRepoRoot(), "services", "inference");
 const INFERENCE_SERVICE_URL = process.env.INFERENCE_SERVICE_URL ?? "http://localhost:8000";
 const READY_POLL_TIMEOUT_MS = Number(process.env.MODEL_CATALOG_READY_TIMEOUT_MS ?? 60_000);
 const READY_POLL_INTERVAL_MS = Number(process.env.MODEL_CATALOG_READY_POLL_INTERVAL_MS ?? 1_000);

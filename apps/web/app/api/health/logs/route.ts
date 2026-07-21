@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { open } from "node:fs/promises";
 import { resolve } from "node:path";
+import { getRepoRoot } from "../../../../lib/repo-root";
 
 // Uses request.url, which usually forces dynamic rendering on its own — but
 // see apps/web/app/api/health/route.ts's sibling route in this same family
@@ -8,7 +9,11 @@ import { resolve } from "node:path";
 // made explicit rather than relying on Next's implicit detection.
 export const dynamic = "force-dynamic";
 
-const REPO_ROOT = resolve(process.cwd(), "..", "..");
+// Must be the real repo checkout, not process.cwd()'s "../.." — see
+// repo-root.ts for why a packaged --testing run's cwd doesn't give that
+// (this route's log files are written by tools/build.py against the real
+// checkout, not wherever the packaged server's cwd happens to be).
+const REPO_ROOT = getRepoRoot();
 const ALLOWED_SERVICES = new Set(["worker", "inference"]);
 const MAX_LINES = 50;
 // Bounds memory/IO regardless of how large data/logs/{tag}.log has grown —
