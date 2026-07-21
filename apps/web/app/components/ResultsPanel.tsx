@@ -10,6 +10,7 @@ import { EstimatedTimeWidget } from "./widgets/EstimatedTimeWidget";
 import { WeatherEstimateWidget } from "./widgets/WeatherEstimateWidget";
 import { DetectedObjectsWidget } from "./widgets/DetectedObjectsWidget";
 import type { Widget } from "./widgets/types";
+import { hourForLabel } from "../../lib/time-of-day";
 
 const SEARCH_ICON = (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -37,6 +38,8 @@ export function ResultsPanel({
   const { queryImageName, candidatesByRegion, selectedRegionId } = useSearchStore();
   const candidates = selectedRegionId ? candidatesByRegion[selectedRegionId] ?? [] : [];
   const [top, ...rest] = candidates;
+  const timeOfDay = useSearchStore((s) => s.timeOfDay);
+  const estimatedHour = timeOfDay ? hourForLabel(timeOfDay.label) : null;
 
   const widgets: Widget[] = [
     {
@@ -83,9 +86,9 @@ export function ResultsPanel({
       title: "Hora estimada",
       icon: SEARCH_ICON,
       colSpan: 2,
-      locked: true,
-      defaultExpanded: false,
-      render: () => <EstimatedTimeWidget locked={true} estimatedHour={null} onInstall={noop} />,
+      locked: estimatedHour === null,
+      defaultExpanded: estimatedHour !== null,
+      render: () => <EstimatedTimeWidget locked={estimatedHour === null} estimatedHour={estimatedHour} onInstall={noop} />,
     },
     {
       id: "weather",
