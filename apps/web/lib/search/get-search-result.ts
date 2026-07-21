@@ -60,5 +60,5 @@ export async function getSearchResult(pool: Pool, searchId: string): Promise<Sea
     (candidatesByRegion[r.region_id] ??= []).push(candidate);
   }
 
-  return { searchId, regions, candidatesByRegion };
+  return { searchId, regions, candidatesByRegion, timeOfDay: null };
 }

@@ -13,4 +13,5 @@ data/
 *.exe
 *.zip
 .superpowers/
+.model-catalog-backups/
 
