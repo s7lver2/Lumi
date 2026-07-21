@@ -7,12 +7,15 @@ import type { ScoredCandidate, PersistRefineArgs } from "./refine-persist";
 export interface RunRefineInput {
   searchId: string;
   regionId: string;
+  candidateId?: string;
 }
 
 export interface RunRefineDeps {
   confirmThreshold: number;
   getQueryImagePath: (searchId: string) => Promise<string>;
   expandRegion: (regionId: string) => Promise<RegionCandidate[]>;
+  /** Only needed when input.candidateId is present. */
+  expandOneCandidate?: (candidateId: string) => Promise<RegionCandidate | null>;
   readImage: (path: string) => Promise<string | null>;
   verify: (queryBase64: string, candidateBase64: string[]) => Promise<VerifyResult[]>;
   persist: (args: PersistRefineArgs) => Promise<SearchCandidate[]>;
@@ -44,7 +47,15 @@ export async function runRefine(deps: RunRefineDeps, input: RunRefineInput): Pro
     throw new Error(`Query image missing for search ${input.searchId} at ${queryPath}`);
   }
 
-  const region = await deps.expandRegion(input.regionId);
+  const region: RegionCandidate[] = input.candidateId
+    ? await (async () => {
+        if (!deps.expandOneCandidate) {
+          throw new Error("expandOneCandidate dep is required when input.candidateId is set");
+        }
+        const one = await deps.expandOneCandidate(input.candidateId);
+        return one ? [one] : [];
+      })()
+    : await deps.expandRegion(input.regionId);
 
   // Pair each candidate with its image; keep only those whose image is present.
   const present: { candidate: RegionCandidate; base64: string }[] = [];
