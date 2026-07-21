@@ -107,9 +107,10 @@ async function main() {
         if (!res.ok) return null;
         return Buffer.from(await res.arrayBuffer());
       },
-      analyzeOne: async (imageBytes, modelId) => {
+      analyzeOne: async (imageBytes, modelId, batchId) => {
         const form = new FormData();
         form.append("image", new Blob([imageBytes as unknown as BlobPart]), "batch-image");
+        form.append("batchId", batchId);
         const res = await fetch(`${webBaseUrl}/api/models/${modelId}/estimate`, { method: "POST", body: form });
         if (!res.ok) throw new Error(`estimate failed with status ${res.status}`);
         return res.json();

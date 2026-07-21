@@ -3,7 +3,7 @@ import type { AnalyzeImageBatchJobPayload, SearchResponse } from "@netryx/shared
 
 export interface AnalyzeImageBatchJobDeps {
   getImageBytes: (imageId: string) => Promise<Buffer | null>;
-  analyzeOne: (imageBytes: Buffer, modelId: string) => Promise<SearchResponse>;
+  analyzeOne: (imageBytes: Buffer, modelId: string, batchId: string) => Promise<SearchResponse>;
   updateProgress: (
     batchId: string,
     update: {
@@ -43,7 +43,7 @@ export async function runAnalyzeImageBatchJob(
         continue;
       }
       try {
-        const one = await deps.analyzeOne(bytes, modelId);
+        const one = await deps.analyzeOne(bytes, modelId, batchId);
         if (!result) result = one;
         done++;
         await deps.updateProgress(batchId, { done });

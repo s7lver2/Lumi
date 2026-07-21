@@ -17,6 +17,8 @@ describe("runAnalyzeImageBatchJob", () => {
 
     expect(updateProgress).toHaveBeenCalledWith("b1", { status: "running" });
     expect(analyzeOne).toHaveBeenCalledTimes(2);
+    expect(analyzeOne).toHaveBeenNthCalledWith(1, expect.any(Buffer), "lumi-preview", "b1");
+    expect(analyzeOne).toHaveBeenNthCalledWith(2, expect.any(Buffer), "lumi-preview", "b1");
     expect(updateProgress).toHaveBeenCalledWith("b1", { done: 1 });
     expect(updateProgress).toHaveBeenCalledWith("b1", { done: 2 });
     // Only the first successful image's result is reported — see the
