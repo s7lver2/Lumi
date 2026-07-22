@@ -12,8 +12,8 @@
 </p>
 
 <p align="center">
-  Subís una foto tomada en la calle y el sistema busca, dentro de un índice
-  que vos mismo generás para una zona concreta, el punto capturado que más
+  Subes una foto tomada en la calle y el sistema busca, dentro de un índice
+  que tú mismo generas para una zona concreta, el punto capturado que más
   se parece — con coordenadas, radio de confianza y verificación geométrica
   opcional.
 </p>
@@ -46,14 +46,14 @@
 
 <h2 id="capturas"><img src="docs/assets/title-capturas.svg" alt="Qué hace, en capturas reales" /></h2>
 
-**1. Indexar un área.** Dibujás un polígono sobre el mapa, el sistema
+**1. Indexar un área.** Dibujas un polígono sobre el mapa, el sistema
 samplea puntos siguiendo la red de calles real (vía Overpass/OpenStreetMap,
 no un grid ciego) y lanza un job de indexado en segundo plano.
 
 ![Indexando un área en León](docs/screenshots/indexing-area.png)
 
 **2. Subir una imagen y elegir modelo.** El pase de retrieval usa el modelo
-expuesto como **Lumi Preview**; podés tener más de un modelo disponible en
+expuesto como **Lumi Preview**; puedes tener más de un modelo disponible en
 `/settings`.
 
 ![Selección de imagen y modelo de búsqueda](docs/screenshots/search-region.png)
@@ -61,7 +61,7 @@ expuesto como **Lumi Preview**; podés tener más de un modelo disponible en
 **3. Resultados agrupados por zona, con nivel de confianza.** Los candidatos
 del top-k se agrupan espacialmente en regiones (círculos translúcidos =
 radio de confianza), cada uno con su % de similitud y estado
-(`unreviewed`/`confirmed`). Desde ahí podés pedir un refinamiento más caro
+(`unreviewed`/`confirmed`). Desde ahí puedes pedir un refinamiento más caro
 (verificación geométrica) sobre una región concreta.
 
 ![Resultados agrupados por región de confianza](docs/screenshots/results-clustering.png)
@@ -116,7 +116,7 @@ despliegue principal).
 
 > **[Ver la guía completa, paso a paso, comando a comando →](./INSTALL.md)**
 > Cubre Windows y Linux, y cómo usar una base de datos remota en vez de la
-> de Docker local. Lo de acá abajo es solo el resumen rápido.
+> de Docker local. Lo de aquí abajo es solo el resumen rápido.
 
 Con un instalador ya generado (`dist/LumiSetup-<version>.exe` en Windows,
 `dist/LumiSetup-<version>.sh` en Linux/Pop!_OS): ejecutalo — verifica
@@ -133,7 +133,7 @@ pnpm db:up
 python3 tools/build.py release --testing   # "python" en Windows
 ```
 
-Luego abrí `http://localhost:3000` — te redirige a `/setup`, que instala
+Luego abre `http://localhost:3000` — te redirige a `/setup`, que instala
 las dependencias de Python, descarga los modelos, corre las migraciones y
 te pide la API key de Google Street View Static. Ver
 [`INSTALL.md`](./INSTALL.md) para el detalle de cada paso, la variante con
@@ -159,6 +159,7 @@ los empaqueta junto con el resto del proyecto (sin `node_modules` propios,
 entornos virtuales de Python, cachés de pesos de modelo ni historial de
 `.git`), y genera el instalador nativo de la plataforma en la que corriste
 el comando: `dist/LumiSetup-<version>.exe` (Inno Setup) en Windows,
+el comando: `dist/LumiSetup-<version>.exe` (Inno Setup) en Windows,
 `dist/LumiSetup-<version>.sh` (script bash autoextraíble, sin dependencias
 externas) en Linux. Ver el docstring de `tools/build.py` para las flags de
 `release` (`--version`, `--keep-staging`; `--nopublish`/`--versionnotes`
@@ -170,7 +171,7 @@ todavía no implementado).
 Todo el detalle de diseño y las decisiones de arquitectura viven en
 `docs/`: spec inicial del fork, setup de base de datos, pipeline de
 indexado, pass 1/pass 2 de búsqueda, tracking de coste, UI del dashboard y
-del wizard de setup. Es la referencia si querés levantar cada pieza a mano
+del wizard de setup. Es la referencia si quieres levantar cada pieza a mano
 o entender por qué se tomó tal o cual decisión.
 
 <h2 id="benchmarks"><img src="docs/assets/title-benchmarks.svg" alt="Benchmarks" /></h2>
