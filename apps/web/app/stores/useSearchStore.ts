@@ -14,6 +14,14 @@ export interface RefineProgress {
 interface SearchState {
   currentSearchId: string | null;
   queryImageName: string | null;
+  /** Both live here (not local component state) specifically so they
+   * survive a remount of the search page (e.g. navigating away via the
+   * nav rail and back) — the Zustand store is the only thing that
+   * persists across that, and results/queryImageName already did; the
+   * query photo itself was the one piece still resetting to null on
+   * remount, showing real results with no query image at all. */
+  queryImageUrl: string | null;
+  queryImageId: string | null;
   regions: SearchRegion[];
   candidatesByRegion: Record<string, SearchCandidate[]>;
   selectedRegionId: string | null;
@@ -24,6 +32,7 @@ interface SearchState {
   timeOfDay: { label: string; score: number } | null;
   weather: { label: string; score: number } | null;
   setSearching: (imageName: string) => void;
+  setQueryImage: (imageUrl: string | null, imageId: string | null) => void;
   setSearchResults: (res: SearchResponse, imageName: string) => void;
   selectRegion: (regionId: string) => void;
   setRefineResults: (regionId: string, candidates: SearchCandidate[]) => void;
@@ -39,6 +48,8 @@ interface SearchState {
 const INITIAL = {
   currentSearchId: null,
   queryImageName: null,
+  queryImageUrl: null as string | null,
+  queryImageId: null as string | null,
   regions: [] as SearchRegion[],
   candidatesByRegion: {} as Record<string, SearchCandidate[]>,
   selectedRegionId: null as string | null,
@@ -53,6 +64,7 @@ const INITIAL = {
 export const useSearchStore = create<SearchState>((set) => ({
   ...INITIAL,
   setSearching: (queryImageName) => set({ ...INITIAL, queryImageName, refineStatus: "searching" }),
+  setQueryImage: (queryImageUrl, queryImageId) => set({ queryImageUrl, queryImageId }),
   setSearchResults: (res, queryImageName) => {
     const regions = [...res.regions].sort((a, b) => b.aggregateScore - a.aggregateScore);
     set({

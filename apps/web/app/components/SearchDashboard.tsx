@@ -34,26 +34,27 @@ function formatEta(etaMs: number | null): string {
 export function SearchDashboard() {
   const activeModelId = RETRIEVAL_MODELS[0]?.id ?? "lumi-preview";
   const [map, setMap] = useState<any>(null);
-  const [queryImageUrl, setQueryImageUrl] = useState<string | null>(null);
-  const [queryImageId, setQueryImageId] = useState<string | null>(null);
 
-  const { 
-    refineStatus, 
-    refineProgress, 
-    regions, 
+  const {
+    refineStatus,
+    refineProgress,
+    regions,
     error,
     setSearching,
     setSearchResults,
     setError,
     dismissError,
     candidatesByRegion,
-    currentSearchId, 
-    setRefining, 
-    setRefineProgress, 
-    setRefineResults, 
+    currentSearchId,
+    setRefining,
+    setRefineProgress,
+    setRefineResults,
     selectRegion,
     setBatchProgress,
-    batchProgress
+    batchProgress,
+    queryImageUrl,
+    queryImageId,
+    setQueryImage
   } = useSearchStore();
   
   const setMode = useMapStore((s) => s.setMode);
@@ -117,7 +118,7 @@ export function SearchDashboard() {
 
     try {
       setSearching(queryImageName);
-      setQueryImageUrl(queryImageUrlSnapshot);
+      setQueryImage(queryImageUrlSnapshot, null);
       const imageIds: string[] = [];
       
       for (const s of selected) {
@@ -141,7 +142,7 @@ export function SearchDashboard() {
       });
       if (!ok || !data) throw new Error("No se pudo iniciar la búsqueda por lotes");
 
-      setQueryImageId(imageIds[0] ?? null);
+      setQueryImage(queryImageUrlSnapshot, imageIds[0] ?? null);
       pollBatchProgress(data.batchId, queryImageName);
 
       // Keep selected[0].url alive — it's now shown as the query thumbnail
