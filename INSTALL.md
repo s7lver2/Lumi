@@ -60,10 +60,10 @@ líneas cambiar.
 
 ```bash
 pnpm db:up
-pnpm db:migrate
 ```
 
-Listo, seguí al Paso 7.
+No hace falta correr las migraciones a mano acá — el wizard de `/setup`
+(Paso 8) las corre por vos. Seguí al Paso 7.
 
 ### Opción B — Base de datos remota
 
@@ -100,6 +100,12 @@ una base `netryx_test` en el servidor remoto (a mano, con tu cliente de
 Postgres de preferencia) y repetí el comando del paso anterior apuntando
 a esa base antes de correr `pnpm test`.
 
+Nota: el wizard de `/setup` (Paso 8) también tiene su propio paso
+"Migrar", pero corre `pnpm migrate:up` sin pasarle `TEST_DATABASE_URL` —
+por el mismo motivo del 6B.3, apunta a `localhost` y no a tu servidor
+remoto. Como ya migraste a mano acá, ese paso del wizard no hace nada útil
+para vos (no rompe nada, simplemente no aplica).
+
 ## Paso 7 — Levantar todo
 
 Por ahora, el comando a usar es:
@@ -123,12 +129,15 @@ No hace falta instalar nada de Python a mano — simplemente segui el
 wizard en pantalla y él se encarga de todo:
 
 1. Verifica los prerequisitos automáticamente.
-2. Crea el entorno virtual de `services/inference` e instala sus
+2. Corre las migraciones pendientes de la base de datos.
+3. Crea el entorno virtual de `services/inference` e instala sus
    dependencias (en Windows ofrece un toggle opcional para instalarlas
    dentro de WSL2 en vez de nativo — usalo solo si ya instalaste WSL2 vos
    mismo, Paso 1).
-3. Descarga los pesos de los modelos.
-4. Te pide la API key de **Google Street View Static API** (obligatoria) y
+4. Descarga los pesos de los modelos.
+5. Arranca (o reinicia) el propio servicio de inferencia con esas
+   dependencias ya instaladas.
+6. Te pide la API key de **Google Street View Static API** (obligatoria) y
    opcionalmente un token de **Mapbox** — estas se guardan cifradas en la
    base de datos, no van en `.env`.
 
