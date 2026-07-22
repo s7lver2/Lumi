@@ -143,6 +143,39 @@ wizard en pantalla y él se encarga de todo:
 
 Listo, la app queda funcionando.
 
+## Paso 9 (opcional) — Skill de Claude Code para geolocalizar fotos
+
+El repo trae una skill de Claude Code en
+`.claude/skills/lumi-geolocate/SKILL.md` que le permite a Claude usar la
+propia API de Lumi (subir una foto, esperar el refinamiento, mostrar el
+resultado) cuando le compartís una imagen y le preguntás dónde fue tomada.
+
+**Si corrés Claude Code con este repo como directorio de trabajo**, no
+hace falta instalar nada — Claude Code detecta automáticamente cualquier
+skill dentro de `.claude/skills/` del proyecto abierto.
+
+**Si querés que esté disponible en cualquier sesión de Claude Code, sin
+importar el directorio**, copiala a tu carpeta global de skills:
+
+**Linux/macOS:**
+
+```bash
+mkdir -p ~/.claude/skills
+cp -r .claude/skills/lumi-geolocate ~/.claude/skills/
+```
+
+**Windows (PowerShell):**
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.claude\skills"
+Copy-Item -Recurse .claude\skills\lumi-geolocate "$env:USERPROFILE\.claude\skills\"
+```
+
+No hace falta invocarla a mano con un `/comando` — Claude la detecta sola
+cuando le compartís una foto y le preguntás dónde fue tomada, siempre que
+Lumi esté corriendo (por defecto asume `http://localhost:3000`; si tu
+instancia está en otro host/puerto, mencionáselo en el mensaje).
+
 ## Troubleshooting
 
 | Síntoma | Causa | Solución |
