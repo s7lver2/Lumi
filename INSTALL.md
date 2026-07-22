@@ -100,35 +100,7 @@ una base `netryx_test` en el servidor remoto (a mano, con tu cliente de
 Postgres de preferencia) y repetí el comando del paso anterior apuntando
 a esa base antes de correr `pnpm test`.
 
-## Paso 7 — Servicio de inferencia (Python)
-
-**Linux:**
-
-```bash
-cd services/inference
-python3 -m venv venv
-venv/bin/pip install -r requirements.txt
-```
-
-**Windows:**
-
-```powershell
-cd services/inference
-python -m venv venv
-venv\Scripts\pip.exe install -r requirements.txt
-```
-
-El mismo comando de `pip install` sirve para GPU (NVIDIA + driver CUDA
-12.1 instalado aparte) o para CPU-only (cae solo, más lento). No hace
-falta ningún comando distinto por sistema operativo ni por GPU/CPU.
-
-```bash
-cd ../..
-```
-
-(volvés a la raíz del repo para el siguiente paso.)
-
-## Paso 8 — Levantar todo
+## Paso 7 — Levantar todo
 
 Por ahora, el comando a usar es:
 
@@ -139,18 +111,22 @@ python3 tools/build.py release --testing
 (en Windows, `python tools/build.py release --testing`). Esto compila
 `apps/web` y `apps/worker` igual que un release real, pero sin empaquetar
 ningún instalador — corre el build recién compilado directamente,
-reutilizando Postgres/migraciones/inferencia de este mismo checkout. Se
-abre solo en `http://localhost:3000`. Ctrl+C corta todo junto.
+reutilizando Postgres/migraciones de este mismo checkout. Todavía no hace
+falta tener nada de Python instalado — eso lo resuelve el wizard en el
+paso siguiente. Se abre solo en `http://localhost:3000`. Ctrl+C corta todo
+junto.
 
-## Paso 9 — Completar el wizard de primer arranque
+## Paso 8 — Ir a `/setup` y dejar que el wizard haga el resto
 
 Al abrir `http://localhost:3000` por primera vez te redirige a `/setup`.
-Seguí el wizard en pantalla:
+No hace falta instalar nada de Python a mano — simplemente segui el
+wizard en pantalla y él se encarga de todo:
 
-1. Verifica prerequisitos automáticamente.
-2. Te deja instalar dependencias de Python si no lo hiciste en el Paso 7
-   (en Windows ofrece un toggle opcional para instalarlas dentro de WSL2 —
-   usalo solo si ya instalaste WSL2 vos mismo).
+1. Verifica los prerequisitos automáticamente.
+2. Crea el entorno virtual de `services/inference` e instala sus
+   dependencias (en Windows ofrece un toggle opcional para instalarlas
+   dentro de WSL2 en vez de nativo — usalo solo si ya instalaste WSL2 vos
+   mismo, Paso 1).
 3. Descarga los pesos de los modelos.
 4. Te pide la API key de **Google Street View Static API** (obligatoria) y
    opcionalmente un token de **Mapbox** — estas se guardan cifradas en la
@@ -165,8 +141,7 @@ Listo, la app queda funcionando.
 | La migración falla en el primer `CREATE EXTENSION` | El rol remoto no tiene privilegio, o el proveedor no tiene la extensión disponible | Ver Paso 6B.1 |
 | La app conecta bien pero las tablas nunca existen | Las migraciones corrieron contra `localhost` en vez del servidor remoto | Repetí el Paso 6B.3 con los datos correctos |
 | `EPERM: operation not permitted, symlink` al compilar en Windows | Falta el Modo de desarrollador | Activarlo (Paso 1) |
-| `ModuleNotFoundError: No module named 'romatch'` | El `pip install -r requirements.txt` no corrió limpio, o es una instalación vieja | Repetir el Paso 7 |
-| `'python3' no se reconoce como un comando` | En Windows el binario se llama `python`, no `python3` | Usar los comandos de Windows del Paso 7/8 |
+| `ModuleNotFoundError: No module named 'romatch'` | La instalación de dependencias de Python del wizard no corrió limpio, o es una instalación vieja | Reintentar ese paso del wizard (Paso 8) |
 
 Para el historial de problemas ya resueltos al migrar de Postgres nativo a
 Docker en Windows, ver `docs/problems.md` (registro histórico, no hace
