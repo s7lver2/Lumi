@@ -188,5 +188,5 @@ detalle de qué modelos se usan y sus términos.
 
 <p align="center">
   <br/>
-  <img src="docs/assets/footer.svg" alt="Lumi" width="400" />
+  <img src="docs/assets/footer.svg" alt="Lumi" width="100%" />
 </p>
