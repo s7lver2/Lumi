@@ -140,8 +140,8 @@ export function BackgroundJobsTray() {
     if (!batch || batch.status === "done" || batch.status === "failed") return;
     let cancelled = false;
     const interval = setInterval(async () => {
-      const { data } = await fetchJson<SearchBatch>(`/api/search/batch/active`);
-      if (!cancelled) setBatch(data ?? null);
+      const { data } = await fetchJson<{ batch: SearchBatch | null }>(`/api/search/batch/active`);
+      if (!cancelled) setBatch(data?.batch ?? null);
     }, 1000);
     return () => {
       cancelled = true;
