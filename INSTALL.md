@@ -130,21 +130,17 @@ cd ../..
 
 ## Paso 8 — Levantar todo
 
-```bash
-python3 tools/build.py
-```
-
-(en Windows, `python tools/build.py`). Esto levanta Postgres si es local,
-corre migraciones pendientes, arranca el servicio de inferencia, el
-worker, y `next dev`. Se abre solo en `http://localhost:3000`. Ctrl+C
-corta todo junto.
-
-Alternativa con dashboard interactivo:
+Por ahora, el comando a usar es:
 
 ```bash
-pip install textual
-python3 tools/build.py --tui
+python3 tools/build.py release --testing
 ```
+
+(en Windows, `python tools/build.py release --testing`). Esto compila
+`apps/web` y `apps/worker` igual que un release real, pero sin empaquetar
+ningún instalador — corre el build recién compilado directamente,
+reutilizando Postgres/migraciones/inferencia de este mismo checkout. Se
+abre solo en `http://localhost:3000`. Ctrl+C corta todo junto.
 
 ## Paso 9 — Completar el wizard de primer arranque
 
