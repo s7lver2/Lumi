@@ -1,0 +1,20 @@
+<svg width="760" height="56" viewBox="0 0 760 56" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    @keyframes lumi-t-badge { 0%, 100% { opacity: .1; } 50% { opacity: .2; } }
+    @keyframes lumi-t-breathe { 0%, 100% { transform: scale(1); opacity: .85; } 50% { transform: scale(1.08); opacity: 1; } }
+    .lumi-t-badge { animation: lumi-t-badge 3s ease-in-out infinite; }
+    .lumi-t-icon { animation: lumi-t-breathe 2.6s ease-in-out infinite; transform-origin: 12px 12px; }
+    @media (prefers-reduced-motion: reduce) {
+      .lumi-t-badge, .lumi-t-icon { animation: none !important; }
+    }
+  </style>
+  <rect width="760" height="56" rx="12" fill="#14171a"/>
+  <rect x="0.5" y="0.5" width="759" height="55" rx="11.5" fill="none" stroke="#2a2d31"/>
+  <circle class="lumi-t-badge" cx="34" cy="28" r="16" fill="#9aa1ac"/>
+  <g transform="translate(25,19) scale(0.75)">
+    <g class="lumi-t-icon" stroke="#9aa1ac" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3l7 3v6c0 5-3.5 7.5-7 9-3.5-1.5-7-4-7-9V6l7-3Z"/>
+    </g>
+  </g>
+  <text x="66" y="35" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="600" fill="#e8e8e6">Licencia y atribución</text>
+</svg>

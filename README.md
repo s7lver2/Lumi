@@ -21,7 +21,7 @@
 <p align="center">
   <a href="./INSTALL.md"><b>Guía de instalación</b></a> ·
   <a href="docs/PROOF_OF_CONCEPT.md">Alcance y limitaciones</a> ·
-  <a href="#documentación">Documentación</a>
+  <a href="#documentacion">Documentación</a>
 </p>
 
 ---
@@ -35,16 +35,16 @@
 
 ## Contenido
 
-- [Qué hace, en capturas reales](#qué-hace-en-capturas-reales)
+- [Qué hace, en capturas reales](#capturas)
 - [Arquitectura](#arquitectura)
 - [Stack](#stack)
-- [Instalación](#instalación)
-- [Empaquetar un instalador distribuible](#empaquetar-un-instalador-distribuible-para-maintainers)
-- [Documentación](#documentación)
+- [Instalación](#instalacion)
+- [Empaquetar un instalador distribuible](#empaquetar)
+- [Documentación](#documentacion)
 - [Benchmarks](#benchmarks)
-- [Licencia y atribución](#licencia-y-atribución)
+- [Licencia y atribución](#licencia)
 
-## Qué hace, en capturas reales
+<h2 id="capturas"><img src="docs/assets/title-capturas.svg" alt="Qué hace, en capturas reales" /></h2>
 
 **1. Indexar un área.** Dibujás un polígono sobre el mapa, el sistema
 samplea puntos siguiendo la red de calles real (vía Overpass/OpenStreetMap,
@@ -68,7 +68,7 @@ radio de confianza), cada uno con su % de similitud y estado
 
 ---
 
-## Arquitectura
+<h2 id="arquitectura"><img src="docs/assets/title-arquitectura.svg" alt="Arquitectura" /></h2>
 
 ```
 Imagen query
@@ -101,7 +101,7 @@ Resultado final: coordenadas exactas + score + imagen(es) de referencia
 stack (Redis no tiene soporte oficial en Windows, que es el target de
 despliegue principal).
 
-## Stack
+<h2 id="stack"><img src="docs/assets/title-stack.svg" alt="Stack" /></h2>
 
 | Capa | Tecnología |
 |---|---|
@@ -112,7 +112,7 @@ despliegue principal).
 | Base de datos | PostgreSQL + pgvector + PostGIS |
 | Monorepo | pnpm workspaces |
 
-## Instalación
+<h2 id="instalacion"><img src="docs/assets/title-instalacion.svg" alt="Instalación" /></h2>
 
 > **[Ver la guía completa, paso a paso, comando a comando →](./INSTALL.md)**
 > Cubre Windows y Linux, y cómo usar una base de datos remota en vez de la
@@ -147,7 +147,7 @@ pnpm test        # tests de todo el monorepo
 pnpm build       # build de todo el monorepo
 ```
 
-## Empaquetar un instalador distribuible (para maintainers)
+<h2 id="empaquetar">Empaquetar un instalador distribuible (para maintainers)</h2>
 
 ```bash
 services/inference/venv/bin/pip install pyinstaller   # una vez — Scripts/pip.exe en Windows
@@ -165,7 +165,7 @@ externas) en Linux. Ver el docstring de `tools/build.py` para las flags de
 están reservadas para un futuro flujo de publicación a GitHub Releases,
 todavía no implementado).
 
-## Documentación
+<h2 id="documentacion"><img src="docs/assets/title-documentacion.svg" alt="Documentación" /></h2>
 
 Todo el detalle de diseño y las decisiones de arquitectura viven en
 `docs/`: spec inicial del fork, setup de base de datos, pipeline de
@@ -173,15 +173,20 @@ indexado, pass 1/pass 2 de búsqueda, tracking de coste, UI del dashboard y
 del wizard de setup. Es la referencia si querés levantar cada pieza a mano
 o entender por qué se tomó tal o cual decisión.
 
-## Benchmarks
+<h2 id="benchmarks"><img src="docs/assets/title-benchmarks.svg" alt="Benchmarks" /></h2>
 
 `scripts/benchmark.py` mide throughput de embedding, latencia de
 verificación geométrica, escala del índice pgvector y proyecta coste/tiempo
 de indexado por área. Ver [`docs/PROOF_OF_CONCEPT.md`](docs/PROOF_OF_CONCEPT.md#4-benchmarks)
 para el detalle y los resultados.
 
-## Licencia y atribución
+<h2 id="licencia"><img src="docs/assets/title-licencia.svg" alt="Licencia y atribución" /></h2>
 
 Este proyecto construye sobre pesos congelados de **MegaLoc** (MIT) y
 **RoMa**, sin fine-tuning propio. Ver `docs/PROOF_OF_CONCEPT.md` para el
 detalle de qué modelos se usan y sus términos.
+
+<p align="center">
+  <br/>
+  <img src="docs/assets/footer.svg" alt="Lumi" width="400" />
+</p>

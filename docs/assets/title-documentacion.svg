@@ -1,0 +1,21 @@
+<svg width="760" height="56" viewBox="0 0 760 56" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    @keyframes lumi-t-badge { 0%, 100% { opacity: .1; } 50% { opacity: .2; } }
+    @keyframes lumi-t-line  { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+    .lumi-t-badge { animation: lumi-t-badge 3s ease-in-out infinite; }
+    .lumi-t-l1 { animation: lumi-t-line 2s ease-in-out infinite; }
+    .lumi-t-l2 { animation: lumi-t-line 2s ease-in-out .5s infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .lumi-t-badge, .lumi-t-l1, .lumi-t-l2 { animation: none !important; }
+    }
+  </style>
+  <rect width="760" height="56" rx="12" fill="#14171a"/>
+  <rect x="0.5" y="0.5" width="759" height="55" rx="11.5" fill="none" stroke="#2a2d31"/>
+  <circle class="lumi-t-badge" cx="34" cy="28" r="16" fill="#85b7eb"/>
+  <g transform="translate(25,19) scale(0.75)" stroke="#85b7eb" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v14l-6.5-3L4 19V5Z"/>
+    <path class="lumi-t-l1" d="M8 6.5h6"/>
+    <path class="lumi-t-l2" d="M8 10h6"/>
+  </g>
+  <text x="66" y="35" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="600" fill="#e8e8e6">Documentación</text>
+</svg>

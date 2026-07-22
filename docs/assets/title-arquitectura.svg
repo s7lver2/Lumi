@@ -1,0 +1,23 @@
+<svg width="760" height="56" viewBox="0 0 760 56" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    @keyframes lumi-t-pulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+    @keyframes lumi-t-badge { 0%, 100% { opacity: .1; } 50% { opacity: .2; } }
+    .lumi-t-badge { animation: lumi-t-badge 3s ease-in-out infinite; }
+    .lumi-t-n1 { animation: lumi-t-pulse 1.8s ease-in-out infinite; }
+    .lumi-t-n2 { animation: lumi-t-pulse 1.8s ease-in-out .3s infinite; }
+    .lumi-t-n3 { animation: lumi-t-pulse 1.8s ease-in-out .6s infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .lumi-t-badge, .lumi-t-n1, .lumi-t-n2, .lumi-t-n3 { animation: none !important; }
+    }
+  </style>
+  <rect width="760" height="56" rx="12" fill="#14171a"/>
+  <rect x="0.5" y="0.5" width="759" height="55" rx="11.5" fill="none" stroke="#2a2d31"/>
+  <circle class="lumi-t-badge" cx="34" cy="28" r="16" fill="#5dcaa5"/>
+  <g stroke="#5dcaa5" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M27 27l9-5M27 29l9 5"/>
+    <circle class="lumi-t-n1" cx="24" cy="28" r="3.2" fill="#5dcaa5" fill-opacity="0.5"/>
+    <circle class="lumi-t-n2" cx="39" cy="20" r="3.2" fill="#5dcaa5" fill-opacity="0.5"/>
+    <circle class="lumi-t-n3" cx="39" cy="36" r="3.2" fill="#5dcaa5" fill-opacity="0.5"/>
+  </g>
+  <text x="66" y="35" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="600" fill="#e8e8e6">Arquitectura</text>
+</svg>

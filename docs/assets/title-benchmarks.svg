@@ -1,0 +1,22 @@
+<svg width="760" height="56" viewBox="0 0 760 56" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    @keyframes lumi-t-badge  { 0%, 100% { opacity: .1; } 50% { opacity: .2; } }
+    @keyframes lumi-t-needle { 0%, 100% { transform: rotate(-10deg); } 50% { transform: rotate(10deg); } }
+    .lumi-t-badge { animation: lumi-t-badge 3s ease-in-out infinite; }
+    .lumi-t-needle { animation: lumi-t-needle 2.2s ease-in-out infinite; transform-origin: 12px 15px; }
+    @media (prefers-reduced-motion: reduce) {
+      .lumi-t-badge, .lumi-t-needle { animation: none !important; }
+    }
+  </style>
+  <rect width="760" height="56" rx="12" fill="#14171a"/>
+  <rect x="0.5" y="0.5" width="759" height="55" rx="11.5" fill="none" stroke="#2a2d31"/>
+  <circle class="lumi-t-badge" cx="34" cy="28" r="16" fill="#7edca4"/>
+  <g transform="translate(25,19) scale(0.75)" stroke="#7edca4" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 15a8 8 0 1 1 16 0"/>
+    <g class="lumi-t-needle">
+      <path d="M12 15l4-5"/>
+      <circle cx="12" cy="15" r="1.1" fill="#7edca4"/>
+    </g>
+  </g>
+  <text x="66" y="35" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="600" fill="#e8e8e6">Benchmarks</text>
+</svg>

@@ -1,0 +1,21 @@
+<svg width="760" height="56" viewBox="0 0 760 56" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    @keyframes lumi-t-badge { 0%, 100% { opacity: .1; } 50% { opacity: .2; } }
+    @keyframes lumi-t-drop  { 0% { transform: translateY(-2px); opacity: .4; } 60% { transform: translateY(2px); opacity: 1; } 100% { transform: translateY(-2px); opacity: .4; } }
+    .lumi-t-badge { animation: lumi-t-badge 3s ease-in-out infinite; }
+    .lumi-t-icon { animation: lumi-t-drop 1.8s ease-in-out infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .lumi-t-badge, .lumi-t-icon { animation: none !important; }
+    }
+  </style>
+  <rect width="760" height="56" rx="12" fill="#14171a"/>
+  <rect x="0.5" y="0.5" width="759" height="55" rx="11.5" fill="none" stroke="#2a2d31"/>
+  <circle class="lumi-t-badge" cx="34" cy="28" r="16" fill="#f0c477"/>
+  <g transform="translate(25,19) scale(0.75)" stroke="#f0c477" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+    <g class="lumi-t-icon">
+      <path d="M12 3v10M8 9l4 4 4-4"/>
+    </g>
+  </g>
+  <text x="66" y="35" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="600" fill="#e8e8e6">Instalación</text>
+</svg>
