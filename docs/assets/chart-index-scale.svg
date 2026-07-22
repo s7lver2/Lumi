@@ -1,0 +1,39 @@
+<svg width="760" height="220" viewBox="0 0 760 220" xmlns="http://www.w3.org/2000/svg">
+  <rect width="760" height="220" rx="12" fill="#14171a"/>
+  <rect x="0.5" y="0.5" width="759" height="219" rx="11.5" fill="none" stroke="#2a2d31"/>
+
+  <text x="24" y="28" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="600" fill="#e8e8e6">Búsqueda coseno exacta en pgvector</text>
+  <text x="24" y="44" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9.5" fill="#6a6f75">latencia media (ms), escala logarítmica — sin índice ANN</text>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+    <!-- log gridlines at 10 / 100 / 1000 ms, mapped y: 10->178, 100->118, 1000->58 -->
+    <g stroke="#2a2d31" stroke-width="1">
+      <line x1="24" y1="178" x2="736" y2="178"/>
+      <line x1="24" y1="118" x2="736" y2="118"/>
+      <line x1="24" y1="58"  x2="736" y2="58"/>
+    </g>
+    <g font-size="9" fill="#6a6f75" text-anchor="end">
+      <text x="700" y="175">10ms</text>
+      <text x="700" y="115">100ms</text>
+      <text x="700" y="55">1000ms</text>
+    </g>
+
+    <!-- bars: 1000 rows -> 10.45ms (y=178, h=0, essentially baseline), 10000 -> 442ms, 50000 -> 724.7ms -->
+    <!-- baseline for bars is y=178 (10ms line); heights computed on the same log scale -->
+    <g fill="#5dcaa5">
+      <rect x="90"  y="177" width="70" height="1"   rx="0.5"/>
+      <rect x="330" y="102" width="70" height="76"  rx="4"/>
+      <rect x="570" y="87"  width="70" height="91"  rx="4"/>
+    </g>
+    <g font-size="10.5" fill="#e8e8e6" text-anchor="middle">
+      <text x="125" y="168">10.5ms</text>
+      <text x="365" y="94">442ms</text>
+      <text x="605" y="79">725ms</text>
+    </g>
+    <g font-size="10" fill="#9aa0a6" text-anchor="middle">
+      <text x="125" y="200">1,000 filas</text>
+      <text x="365" y="200">10,000 filas</text>
+      <text x="605" y="200">50,000 filas</text>
+    </g>
+  </g>
+</svg>

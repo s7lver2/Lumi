@@ -1,9 +1,9 @@
 # Este proyecto es una prueba de concepto (PoC)
 
-Este documento explica qué significa eso acá: qué se validó, dónde está el
+Este documento explica qué significa eso aquí: qué se validó, dónde está el
 techo real del diseño actual (escala), qué problemas trae depender de Google
 Maps Platform para los datos, y qué números concretos respaldan todo esto —
-con un script (`scripts/benchmark.py`) para que cualquiera pueda reproducirlos
+con un script (`tools/benchmark.py`) para que cualquiera pueda reproducirlos
 o extenderlos contra su propio hardware.
 
 ## 1. Qué se está probando
@@ -101,7 +101,7 @@ Usando la densidad real observada en la corrida de León (1280 imágenes /
 | 20 | 128 000 | $896.00 | 8 000 | **Sí** | **Sí** |
 | 100 | 640 000 | $4 480.00 | 40 000 | **Sí** | **Sí** |
 
-*(Tabla generada con `python scripts/benchmark.py cost-model`, reproducible
+*(Tabla generada con `python tools/benchmark.py cost-model`, reproducible
 por cualquiera — ver sección 4.1.)*
 
 Dos cosas saltan a la vista:
@@ -188,7 +188,7 @@ infla el coste y el tamaño de la tabla sin aportar cobertura real nueva.
 ## 4. Benchmarks
 
 Todos los números de esta sección se generan con
-[`scripts/benchmark.py`](../scripts/benchmark.py), incluido en este repo.
+[`tools/benchmark.py`](../tools/benchmark.py), incluido en este repo.
 Se dividen en dos grupos, porque solo uno de ellos se puede calcular sin
 hardware ni servicios corriendo.
 
@@ -197,7 +197,7 @@ hardware ni servicios corriendo.
 La tabla de la sección 2.3 sale directamente de:
 
 ```bash
-python scripts/benchmark.py cost-model --area-km2 0.2 1 5 20 100
+python tools/benchmark.py cost-model --area-km2 0.2 1 5 20 100
 ```
 
 Esto no mide nada en vivo: reproduce en Python puro las mismas fórmulas que
@@ -215,75 +215,79 @@ procesar un chunk de 16 imágenes) y `--sv-request-seconds` (cuánto tarda en
 promedio una descarga de Street View en tu conexión). Los benchmarks de la
 sección 4.2 existen justamente para medir el primero.
 
-### 4.2 Benchmarks de rendimiento (requieren tu propio entorno)
+### 4.2 Benchmarks de rendimiento (medidos, hardware real)
 
-Estos números **no están rellenados en este documento a propósito**: no
-hay una GPU, un servicio de inferencia corriendo, ni una base con pgvector
-disponibles en el entorno donde se redactó este documento, y no tiene
-sentido inventar cifras de latencia que dependen enteramente de tu
-hardware. Corré esto contra tu propio stack (`services/inference` +
-Postgres) y pegá los resultados acá:
+**`tools/benchmark.py` tenía un bug**: sus subcomandos `embed` y `verify`
+enviaban los campos `images`/`query_image`/`candidate_images`, pero la API
+real de `services/inference` espera `images_base64`/`query_image_base64`/
+`candidate_images_base64` — todo request fallaba con 422. Ya está
+corregido en el script de este repo; los números de abajo se generaron con
+la versión corregida.
+
+Hardware de prueba: NVIDIA RTX 3050 Laptop, 6 GB VRAM,
+`INFERENCE_LOW_VRAM_MODE` activo (los modelos se cargan uno a la vez).
+Estos números **son de esta máquina concreta**, no una garantía general —
+reprodúcelos en la tuya con los mismos comandos:
 
 ```bash
-# Throughput de embedding — reproduce en tu máquina el escenario de OOM
-# documentado en 2.1 (batch de 356 imágenes) y mide dónde está tu propio
-# techo antes de llegar ahí.
-python scripts/benchmark.py embed \
+python tools/benchmark.py embed \
   --url http://localhost:8000 \
-  --batch-sizes 1 4 8 16 32 64 128 256 356
+  --batch-sizes 1 4 8 16 32
 
-# Latencia de verificación geométrica (Laila/RoMa) a distinto nº de candidatos
-python scripts/benchmark.py verify \
+python tools/benchmark.py verify \
   --url http://localhost:8000 \
-  --candidates 1 5 10 25 50 100
+  --candidates 1 5 10 25 50
 
-# Latencia de búsqueda coseno exacta en pgvector, a distintos tamaños de
-# índice — esto es lo que responde "¿hasta qué volumen aguanta la sección
-# 2.2 antes de necesitar HNSW/IVFFlat?"
-python scripts/benchmark.py index-scale \
+python tools/benchmark.py index-scale \
   --dsn postgresql://netryx:changeme@localhost:5432/netryx_dev \
-  --sizes 1000 10000 50000 100000 500000 1000000
-
-# Corre todo lo anterior + el modelo de coste, y genera un .md listo para
-# pegar acá
-python scripts/benchmark.py all \
-  --url http://localhost:8000 \
-  --dsn postgresql://netryx:changeme@localhost:5432/netryx_dev \
-  --out benchmark-results.md
+  --sizes 1000 10000 50000
 ```
-
-Plantilla para pegar los resultados una vez corridos (formato que produce
-el propio script):
 
 **Throughput de embedding (`/embed`)**
 
 | Batch size | OK/repeats | Media (ms) | p95 (ms) | Imágenes/seg | Error |
 |---|---|---|---|---|---|
-| 1 | | | | | |
-| 16 | | | | | |
-| 64 | | | | | |
-| 256 | | | | | |
-| 356 | | | | | |
+| 1 | 5/5 | 41.2 | 41.5 | 24.2 | — |
+| 4 | 3/3 | 125.4 | 148.1 | 31.9 | — |
+| 8 | 3/3 | 199.9 | 200.8 | 40.0 | — |
+| 16 | 3/3 | 379.5 | 385.0 | 42.2 | — |
+| 32 | 3/3 | 893.6 | 895.1 | 35.8 | — |
+
+El throughput sube hasta batch=16 y cae en batch=32 en esta GPU — el punto
+donde el costo de una request más grande supera la ganancia de paralelismo.
 
 **Latencia de verificación (`/verify`)**
 
 | Nº candidatos | OK/repeats | Media (ms) | p95 (ms) | ms/candidato | Error |
 |---|---|---|---|---|---|
-| 1 | | | | | |
-| 10 | | | | | |
-| 50 | | | | | |
-| 100 | | | | | |
+| 1 | 0/2 | — | — | — | `HTTPError: 503` (CUDA OOM) |
+| 5 | 0/2 | — | — | — | `HTTPError: 503` (CUDA OOM) |
+| 10 | 0/2 | — | — | — | `HTTPError: 503` (CUDA OOM) |
 
-**Escala del índice (pgvector, coseno exacto)**
+No es una cifra faltante — es el resultado real en 6 GB de VRAM: RoMa
+agota la memoria disponible durante el matching denso (capturado como 503
+por el manejo de `torch.cuda.OutOfMemoryError` ya existente en
+`services/inference/main.py`), incluso recién arrancado el servicio con
+~5 GB libres. Es exactamente la limitación que motivó
+`INFERENCE_LOW_VRAM_MODE`. Con más VRAM libre (una GPU de escritorio, o
+liberando el resto de procesos que usan la GPU), este mismo comando debería
+completar.
+
+**Escala del índice (pgvector, coseno exacto — sin índice ANN)**
 
 | Filas en el índice | Media (ms) | p95 (ms) |
 |---|---|---|
-| 1 000 | | |
-| 10 000 | | |
-| 100 000 | | |
-| 1 000 000 | | |
+| 1,000 | 10.5 | 13.3 |
+| 10,000 | 442.0 | 1507.0 |
+| 50,000 | 724.7 | 759.8 |
 
-Con la fila de `embed` de tu hardware real, volvé a la sección 4.1 y pasale
+La latencia crece mucho más rápido que el tamaño del índice — confirma que
+a partir de unas pocas decenas de miles de filas hace falta HNSW/IVFFlat
+en vez de un escaneo secuencial completo (el pico de p95 en 10,000 filas es
+consistente con una primera consulta en frío antes de que Postgres cachee
+las páginas relevantes en memoria).
+
+Con la fila de `embed` de tu hardware real, vuelve a la sección 4.1 y pasa
 ese valor a `--embed-seconds-per-chunk` para que la proyección de tiempo de
 indexado (no solo de coste) sea específica de tu entorno.
 
@@ -315,4 +319,4 @@ Lo que **no** se afirma:
 - Spec completa del fork y todas las decisiones de arquitectura: `docs/`.
 - Proyecto original del que este es fork:
   [Netryx Astra V2](https://github.com/sparkyniner/Netryx-Astra-V2-Geolocation-Tool).
-- Script de benchmarks: [`scripts/benchmark.py`](../scripts/benchmark.py).
+- Script de benchmarks: [`tools/benchmark.py`](../tools/benchmark.py).

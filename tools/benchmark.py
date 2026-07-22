@@ -174,7 +174,7 @@ def bench_embed(url: str, batch_sizes: list[int], repeats: int, timeout_s: float
         for _ in range(repeats):
             t0 = time.perf_counter()
             try:
-                resp = requests.post(f"{url.rstrip('/')}/embed", json={"images": images}, timeout=timeout_s)
+                resp = requests.post(f"{url.rstrip('/')}/embed", json={"images_base64": images}, timeout=timeout_s)
                 resp.raise_for_status()
                 dt = (time.perf_counter() - t0) * 1000
                 latencies.append(dt)
@@ -217,7 +217,7 @@ def bench_verify(url: str, candidate_counts: list[int], repeats: int, timeout_s:
             try:
                 resp = requests.post(
                     f"{url.rstrip('/')}/verify",
-                    json={"query_image": query_image, "candidate_images": candidates},
+                    json={"query_image_base64": query_image, "candidate_images_base64": candidates},
                     timeout=timeout_s,
                 )
                 resp.raise_for_status()

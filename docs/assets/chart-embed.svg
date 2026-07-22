@@ -1,0 +1,71 @@
+<svg width="760" height="260" viewBox="0 0 760 260" xmlns="http://www.w3.org/2000/svg">
+  <rect width="760" height="260" rx="12" fill="#14171a"/>
+  <rect x="0.5" y="0.5" width="759" height="259" rx="11.5" fill="none" stroke="#2a2d31"/>
+
+  <text x="24" y="28" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="600" fill="#e8e8e6">POST /embed — throughput</text>
+  <text x="24" y="44" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9.5" fill="#6a6f75">imágenes/seg por tamaño de batch</text>
+
+  <text x="404" y="28" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="600" fill="#e8e8e6">POST /embed — latencia</text>
+  <text x="404" y="44" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9.5" fill="#6a6f75">ms promedio por tamaño de batch</text>
+
+  <!-- panel divider -->
+  <line x1="380" y1="20" x2="380" y2="230" stroke="#2a2d31" stroke-width="1"/>
+
+  <!-- Panel 1: throughput (img/s), baseline y=210, max value ~42.2 -> scale to 150px -->
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+    <line x1="24" y1="210" x2="356" y2="210" stroke="#2a2d31" stroke-width="1"/>
+
+    <!-- bars: batch 1,4,8,16,32 -> 24.2,31.9,40.0,42.2,35.8 img/s, max-ref 45 -->
+    <g fill="#5dcaa5">
+      <rect x="34"  y="146" width="42" height="64" rx="4"/>
+      <rect x="90"  y="126" width="42" height="84" rx="4"/>
+      <rect x="146" y="103" width="42" height="107" rx="4"/>
+      <rect x="202" y="98"  width="42" height="112" rx="4"/>
+      <rect x="258" y="115" width="42" height="95" rx="4"/>
+    </g>
+    <g font-size="9.5" fill="#e8e8e6" text-anchor="middle">
+      <text x="55"  y="140">24.2</text>
+      <text x="111" y="120">31.9</text>
+      <text x="167" y="97">40.0</text>
+      <text x="223" y="92">42.2</text>
+      <text x="279" y="109">35.8</text>
+    </g>
+    <g font-size="10" fill="#9aa0a6" text-anchor="middle">
+      <text x="55"  y="224">1</text>
+      <text x="111" y="224">4</text>
+      <text x="167" y="224">8</text>
+      <text x="223" y="224">16</text>
+      <text x="279" y="224">32</text>
+    </g>
+    <text x="190" y="242" font-size="9.5" fill="#6a6f75" text-anchor="middle">tamaño de batch</text>
+  </g>
+
+  <!-- Panel 2: mean latency ms, baseline y=210, max value ~893.6 -> scale to 150px -->
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+    <line x1="404" y1="210" x2="736" y2="210" stroke="#2a2d31" stroke-width="1"/>
+
+    <!-- bars: 41.2, 125.4, 199.9, 379.5, 893.6 ms, max-ref 900 -->
+    <g fill="#5dcaa5">
+      <rect x="414" y="203" width="42" height="7"   rx="3.5"/>
+      <rect x="470" y="189" width="42" height="21"  rx="4"/>
+      <rect x="526" y="176" width="42" height="34"  rx="4"/>
+      <rect x="582" y="146" width="42" height="64"  rx="4"/>
+      <rect x="638" y="60"  width="42" height="150" rx="4"/>
+    </g>
+    <g font-size="9.5" fill="#e8e8e6" text-anchor="middle">
+      <text x="435" y="198">41</text>
+      <text x="491" y="184">125</text>
+      <text x="547" y="171">200</text>
+      <text x="603" y="141">380</text>
+      <text x="659" y="55">894</text>
+    </g>
+    <g font-size="10" fill="#9aa0a6" text-anchor="middle">
+      <text x="435" y="224">1</text>
+      <text x="491" y="224">4</text>
+      <text x="547" y="224">8</text>
+      <text x="603" y="224">16</text>
+      <text x="659" y="224">32</text>
+    </g>
+    <text x="570" y="242" font-size="9.5" fill="#6a6f75" text-anchor="middle">tamaño de batch</text>
+  </g>
+</svg>

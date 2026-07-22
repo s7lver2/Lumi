@@ -138,7 +138,6 @@ los empaqueta junto con el resto del proyecto (sin `node_modules` propios,
 entornos virtuales de Python, cachés de pesos de modelo ni historial de
 `.git`), y genera el instalador nativo de la plataforma en la que corriste
 el comando: `dist/LumiSetup-<version>.exe` (Inno Setup) en Windows,
-el comando: `dist/LumiSetup-<version>.exe` (Inno Setup) en Windows,
 `dist/LumiSetup-<version>.sh` (script bash autoextraíble, sin dependencias
 externas) en Linux. Ver el docstring de `tools/build.py` para las flags de
 `release` (`--version`, `--keep-staging`; `--nopublish`/`--versionnotes`
@@ -155,10 +154,62 @@ o entender por qué se tomó tal o cual decisión.
 
 <h2 id="benchmarks"><img src="docs/assets/title-benchmarks.svg" alt="Benchmarks" /></h2>
 
-`scripts/benchmark.py` mide throughput de embedding, latencia de
-verificación geométrica, escala del índice pgvector y proyecta coste/tiempo
-de indexado por área. Ver [`docs/PROOF_OF_CONCEPT.md`](docs/PROOF_OF_CONCEPT.md#4-benchmarks)
-para el detalle y los resultados.
+Números reales, medidos con [`tools/benchmark.py`](tools/benchmark.py)
+contra este mismo hardware de prueba (NVIDIA RTX 3050 Laptop, 6 GB VRAM,
+`INFERENCE_LOW_VRAM_MODE` activo) — no son cifras inventadas ni
+extrapoladas. Cualquiera puede reproducirlos con los mismos comandos.
+
+<p align="center">
+  <img src="docs/assets/chart-embed.svg" alt="Throughput y latencia de POST /embed por tamaño de batch" width="100%" />
+</p>
+
+```bash
+python tools/benchmark.py embed --url http://localhost:8000 --batch-sizes 1 4 8 16 32
+```
+
+El throughput sube con el batch hasta 16 (~42 img/s) y cae en 32 — el
+punto donde el costo de una request más grande empieza a superar la
+ganancia de paralelismo en esta GPU concreta.
+
+<p align="center">
+  <img src="docs/assets/chart-index-scale.svg" alt="Latencia de búsqueda coseno en pgvector según tamaño del índice" width="100%" />
+</p>
+
+```bash
+python tools/benchmark.py index-scale --dsn postgresql://netryx:changeme@localhost:5432/netryx_dev --sizes 1000 10000 50000
+```
+
+Búsqueda coseno **exacta** (sin índice ANN todavía) — la latencia crece
+mucho más rápido que el tamaño del índice, la señal de que a partir de
+unas pocas decenas de miles de filas hace falta HNSW/IVFFlat en vez de un
+escaneo completo.
+
+**`POST /verify` (verificación geométrica con RoMa):** en este mismo
+hardware de 6 GB, `/verify` agota la VRAM disponible tras cargar el modelo
+de verificación (`torch.cuda.OutOfMemoryError`, capturado como 503) — un
+resultado real, no una cifra faltante. Es exactamente la limitación que
+motivó `INFERENCE_LOW_VRAM_MODE` y el aviso de OOM ya manejado en
+`services/inference/main.py`. Con más VRAM libre (o una GPU de escritorio),
+correr `python tools/benchmark.py verify --url http://localhost:8000
+--candidates 1 5 10 25 50` sí debería completar.
+
+Proyección de coste/tiempo de indexado (determinista, sin necesitar
+ningún servicio corriendo):
+
+```bash
+python tools/benchmark.py cost-model --area-km2 0.2 1 5 20 100
+```
+
+| Área (km²) | Imágenes | Coste (USD) | Chunks de embed | Tiempo est. (min) |
+|---|---|---|---|---|
+| 0.2 | 1,280 | $8.96 | 80 | 2.0 |
+| 1.0 | 6,400 | $44.80 | 400 | 9.9 |
+| 5.0 | 32,000 | $224.00 | 2,000 | 49.3 |
+| 20.0 | 128,000 | $896.00 | 8,000 | 197.3 |
+| 100.0 | 640,000 | $4,480.00 | 40,000 | 986.7 |
+
+Ver [`docs/PROOF_OF_CONCEPT.md`](docs/PROOF_OF_CONCEPT.md#4-benchmarks)
+para el detalle completo y cómo se generó cada número.
 
 <h2 id="licencia"><img src="docs/assets/title-licencia.svg" alt="Licencia y atribución" /></h2>
 
