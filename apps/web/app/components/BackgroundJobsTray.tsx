@@ -122,8 +122,21 @@ export function BackgroundJobsTray() {
 
     async function poll() {
       for (const id of trackedIds) {
-        const { data } = await fetchJson<BackgroundJob>(`/api/jobs/${id}`);
-        if (cancelled || !data) continue;
+        const { status, data } = await fetchJson<BackgroundJob>(`/api/jobs/${id}`);
+        if (cancelled) continue;
+        if (status === 404) {
+          // The job no longer exists server-side (deleted, or from a
+          // process that restarted mid-run and never persisted it) —
+          // untrack it instead of leaving its last-known state stuck
+          // forever in `jobs`.
+          untrackJob(id);
+          setJobs((prev) => {
+            const { [id]: _removed, ...rest } = prev;
+            return rest;
+          });
+          continue;
+        }
+        if (!data) continue;
         setJobs((prev) => ({ ...prev, [id]: data }));
       }
     }
