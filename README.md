@@ -115,29 +115,8 @@ despliegue principal).
 <h2 id="instalacion"><img src="docs/assets/title-instalacion.svg" alt="Instalación" /></h2>
 
 > **[Ver la guía completa, paso a paso, comando a comando →](./INSTALL.md)**
-> Cubre Windows y Linux, y cómo usar una base de datos remota en vez de la
-> de Docker local. Lo de aquí abajo es solo el resumen rápido.
-
-Con un instalador ya generado (`dist/LumiSetup-<version>.exe` en Windows,
-`dist/LumiSetup-<version>.sh` en Linux/Pop!_OS): ejecutalo — verifica
-Node.js/pnpm y Docker, crea `.env`, levanta Postgres, y deja un acceso
-directo que abre `/setup` en el navegador.
-
-Desde el código fuente, en cuatro comandos:
-
-```bash
-corepack enable && corepack prepare pnpm@9.7.0 --activate
-pnpm install
-cp .env.example .env
-pnpm db:up
-python3 tools/build.py release --testing   # "python" en Windows
-```
-
-Luego abre `http://localhost:3000` — te redirige a `/setup`, que instala
-las dependencias de Python, descarga los modelos, corre las migraciones y
-te pide la API key de Google Street View Static. Ver
-[`INSTALL.md`](./INSTALL.md) para el detalle de cada paso, la variante con
-base de datos remota, y troubleshooting.
+> Cubre Windows y Linux, prerequisitos, cómo usar una base de datos remota
+> en vez de la de Docker local, la skill de Claude Code, y troubleshooting.
 
 ```bash
 pnpm db:logs     # logs del contenedor de Postgres
