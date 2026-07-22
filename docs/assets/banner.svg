@@ -1,0 +1,71 @@
+<svg width="1200" height="280" viewBox="0 0 1200 280" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    @keyframes lumi-b-twinkle { 0%, 100% { opacity: .15; } 50% { opacity: .9; } }
+    @keyframes lumi-b-drift   { from { transform: translateX(0); } to { transform: translateX(-140px); } }
+    @keyframes lumi-b-orbit   { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .lumi-b-star  { animation: lumi-b-twinkle 3s ease-in-out infinite; }
+    .lumi-b-tex   { animation: lumi-b-drift 22s linear infinite; }
+    .lumi-b-orbit { animation: lumi-b-orbit 16s linear infinite; transform-origin: 1030px 150px; }
+    @media (prefers-reduced-motion: reduce) {
+      .lumi-b-star, .lumi-b-tex, .lumi-b-orbit { animation: none !important; }
+    }
+  </style>
+
+  <defs>
+    <clipPath id="lumi-b-frame">
+      <rect width="1200" height="280" rx="18"/>
+    </clipPath>
+    <clipPath id="lumi-b-planet">
+      <circle cx="1030" cy="150" r="112"/>
+    </clipPath>
+    <radialGradient id="lumi-b-planet-shade" cx="32%" cy="30%" r="75%">
+      <stop offset="0%" stop-color="transparent"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.6"/>
+    </radialGradient>
+  </defs>
+
+  <g clip-path="url(#lumi-b-frame)">
+    <rect width="1200" height="280" fill="#05070a"/>
+
+    <!-- stars -->
+    <g fill="#ffffff">
+      <circle class="lumi-b-star" cx="90" cy="36" r="1.3" style="animation-delay:0s"/>
+      <circle class="lumi-b-star" cx="240" cy="60" r="1" style="animation-delay:.6s"/>
+      <circle class="lumi-b-star" cx="420" cy="28" r="1.4" style="animation-delay:1.2s"/>
+      <circle class="lumi-b-star" cx="180" cy="220" r="1.1" style="animation-delay:.4s"/>
+      <circle class="lumi-b-star" cx="60" cy="150" r="1" style="animation-delay:1.8s"/>
+      <circle class="lumi-b-star" cx="700" cy="46" r="1.2" style="animation-delay:.9s"/>
+      <circle class="lumi-b-star" cx="820" cy="210" r="1" style="animation-delay:1.5s"/>
+      <circle class="lumi-b-star" cx="880" cy="60" r="1.3" style="animation-delay:2.1s"/>
+      <circle class="lumi-b-star" cx="330" cy="180" r="1" style="animation-delay:2.4s"/>
+      <circle class="lumi-b-star" cx="520" cy="130" r="1.2" style="animation-delay:.3s"/>
+    </g>
+
+    <!-- planet, bottom-right, echoing the setup screen's PlanetBackground -->
+    <g clip-path="url(#lumi-b-planet)">
+      <rect x="880" y="20" width="1200" height="280" fill="#3a3f47"/>
+      <g class="lumi-b-tex">
+        <ellipse cx="940" cy="110" rx="70" ry="46" fill="#ffffff" opacity="0.05"/>
+        <ellipse cx="1010" cy="170" rx="90" ry="56" fill="#000000" opacity="0.22"/>
+        <ellipse cx="1080" cy="120" rx="56" ry="44" fill="#ffffff" opacity="0.045"/>
+        <ellipse cx="1150" cy="190" rx="100" ry="66" fill="#000000" opacity="0.2"/>
+        <ellipse cx="1200" cy="100" rx="70" ry="46" fill="#ffffff" opacity="0.05"/>
+        <ellipse cx="1080" cy="260" rx="70" ry="46" fill="#ffffff" opacity="0.05"/>
+        <ellipse cx="1150" cy="330" rx="90" ry="56" fill="#000000" opacity="0.22"/>
+      </g>
+      <rect x="880" y="20" width="1200" height="280" fill="url(#lumi-b-planet-shade)"/>
+    </g>
+    <circle cx="1030" cy="150" r="112" fill="none" stroke="#2a2d31" stroke-width="1"/>
+
+    <!-- orbiting satellite -->
+    <g class="lumi-b-orbit">
+      <circle cx="1030" cy="18" r="3.2" fill="#f4f6f9"/>
+    </g>
+
+    <!-- wordmark -->
+    <text x="80" y="138" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="72" font-weight="600" fill="#e8e8e6" letter-spacing="1">Lumi</text>
+    <text x="82" y="176" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="19" fill="#9aa0a6">Geolocalización street-view, self-hosted</text>
+
+    <rect x="0.5" y="0.5" width="1199" height="279" rx="17.5" fill="none" stroke="#2a2d31" stroke-width="1"/>
+  </g>
+</svg>
