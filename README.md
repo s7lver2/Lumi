@@ -92,6 +92,10 @@ Resultado final: coordenadas exactas + score + imagen(es) de referencia
 
 ## Requisitos
 
+> Para una guía completa paso a paso (Windows y Linux, incluyendo cómo usar
+> una base de datos remota en vez de la de Docker local), ver
+> [`INSTALL.md`](./INSTALL.md). Lo de acá abajo es la versión rápida.
+
 - Node.js + [pnpm](https://pnpm.io/installation)
 - Python 3 (para `services/inference`)
 - Docker + Docker Compose (para Postgres con pgvector/PostGIS preinstalados)
