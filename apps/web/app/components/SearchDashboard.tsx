@@ -90,6 +90,12 @@ export function SearchDashboard() {
             setError("No se encontraron coincidencias para esta imagen. Prueba con otra foto o revisa que la zona esté indexada.");
           } else {
             setSearchResults(data.result, queryImageName);
+            // The default map view is the whole planet until a search
+            // resolves (spec: zoom-out-then-fly-in) — without an explicit
+            // fly here, a freshly found region's confidence circle exists
+            // on the map but is geographically invisible at that zoom.
+            const topRegion = [...data.result.regions].sort((a, b) => b.aggregateScore - a.aggregateScore)[0];
+            if (topRegion) flyToRegion(map, topRegion);
           }
         } else {
           setError("No se pudo completar la búsqueda para ninguna de las imágenes");

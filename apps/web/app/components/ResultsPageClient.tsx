@@ -9,6 +9,7 @@ import { ConfidenceCircleLayer } from "./ConfidenceCircleLayer";
 import { ResultsPanel } from "./ResultsPanel";
 import { BottomSummaryBar } from "./BottomSummaryBar";
 import { useSearchStore } from "../stores/useSearchStore";
+import { flyToRegion } from "../lib/map-camera";
 
 const activeModelId = RETRIEVAL_MODELS[0]?.id ?? "lumi-preview";
 
@@ -24,6 +25,15 @@ export function ResultsPageClient({ initialResult, searchId }: { initialResult: 
     // already copies candidatesByRegion verbatim, so refined data loaded
     // from the DB shows immediately without needing a live refine call.
   }, [initialResult, searchId, setSearchResults]);
+
+  useEffect(() => {
+    // The map starts at the whole-planet default view — without this, a
+    // region loaded straight from a shared /results/[searchId] URL has its
+    // confidence circle on the map but geographically invisible at that zoom.
+    if (!map) return;
+    const topRegion = [...initialResult.regions].sort((a, b) => b.aggregateScore - a.aggregateScore)[0];
+    if (topRegion) flyToRegion(map, topRegion);
+  }, [map, initialResult]);
 
   async function handleRefine(regionId: string) {
     selectRegion(regionId);
