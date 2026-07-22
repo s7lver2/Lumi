@@ -1,3 +1,14 @@
+<p align="center">
+  <img src="docs/assets/banner.svg" alt="Lumi — guía de instalación" width="100%" />
+</p>
+
+<p align="center">
+  <img alt="platform" src="https://img.shields.io/badge/platform-windows%20%7C%20linux-5dcaa5" />
+  <img alt="node" src="https://img.shields.io/badge/node-%E2%89%A520-3c873a" />
+  <img alt="pnpm" src="https://img.shields.io/badge/pnpm-9.7.0-f69220" />
+  <img alt="python" src="https://img.shields.io/badge/python-3.12-3776ab" />
+</p>
+
 # Guía de instalación — paso a paso
 
 Sigue estos pasos en orden. Cada uno indica el comando exacto a correr, y
@@ -176,7 +187,7 @@ cuando le compartes una foto y le preguntas dónde fue tomada, siempre que
 Lumi esté corriendo (por defecto asume `http://localhost:3000`; si tu
 instancia está en otro host/puerto, menciónaselo en el mensaje).
 
-## Troubleshooting
+<h2 id="troubleshooting"><img src="docs/assets/title-troubleshooting.svg" alt="Troubleshooting" /></h2>
 
 | Síntoma | Causa | Solución |
 |---|---|---|
@@ -188,3 +199,8 @@ instancia está en otro host/puerto, menciónaselo en el mensaje).
 Para el historial de problemas ya resueltos al migrar de Postgres nativo a
 Docker en Windows, ver `docs/problems.md` (registro histórico, no hace
 falta seguir esos pasos hoy).
+
+<p align="center">
+  <br/>
+  <img src="docs/assets/footer.svg" alt="Lumi" width="100%" />
+</p>
