@@ -127,7 +127,7 @@ async function main() {
     const retrievalModelId = (await settingsRepo.getSetting("RETRIEVAL_MODEL")) ?? "lumi-preview";
 
     await runEmbedPendingImagesJob(job.data, {
-      getPendingImages: (areaId) => getPendingEmbedImages(pool, areaId),
+      getPendingImages: (areaId) => getPendingEmbedImages(pool, areaId, retrievalModelId),
       readImageBase64: async (imagePath) => (await readFile(imagePath)).toString("base64"),
       embedImages: (base64s, url) => embedImages(base64s, url, pool),
       updateImageEmbeddings: (updates) => updateImageEmbeddings(pool, updates, retrievalModelId),

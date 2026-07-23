@@ -121,10 +121,15 @@ export interface PendingEmbedImage {
  * after a mismatched install" section). Deliberately does NOT touch
  * loadExistingPanoHeadings' dedup set — this has nothing to do with
  * re-downloading. */
-export async function getPendingEmbedImages(pool: Pool, areaId: string): Promise<PendingEmbedImage[]> {
+export async function getPendingEmbedImages(
+  pool: Pool,
+  areaId: string,
+  retrievalModelId: string
+): Promise<PendingEmbedImage[]> {
+  const col = embeddingColumn(retrievalModelId);
   const { rows } = await pool.query<{ id: string; image_path: string }>(
     `SELECT id, image_path FROM indexed_images
-     WHERE area_id = $1 AND embedding IS NULL AND image_path IS NOT NULL`,
+     WHERE area_id = $1 AND ${col} IS NULL AND image_path IS NOT NULL`,
     [areaId]
   );
   return rows.map((r) => ({ id: r.id, imagePath: r.image_path }));

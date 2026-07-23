@@ -45,7 +45,7 @@ afterAll(async () => {
 
 describe("getPendingEmbedImages", () => {
   it("returns only rows with embedding IS NULL AND image_path IS NOT NULL", async () => {
-    const pending = await getPendingEmbedImages(pool, AREA_ID);
+    const pending = await getPendingEmbedImages(pool, AREA_ID, "lumi-preview");
     expect(pending).toHaveLength(1);
     expect(pending[0].imagePath).toBe("/tmp/pending1_0.jpg");
   });
@@ -53,7 +53,7 @@ describe("getPendingEmbedImages", () => {
 
 describe("updateImageEmbeddings", () => {
   it("writes the embedding for the given row ids", async () => {
-    const [pending] = await getPendingEmbedImages(pool, AREA_ID);
+    const [pending] = await getPendingEmbedImages(pool, AREA_ID, "lumi-preview");
     await updateImageEmbeddings(pool, [{ id: pending.id, embedding: fakeEmbeddingArray(0.5) }], "lumi-preview");
 
     const { rows } = await pool.query("SELECT embedding::text FROM indexed_images WHERE id = $1", [pending.id]);
