@@ -15,6 +15,10 @@ function toVectorLiteral(v: number[]): string {
   return `[${v.join(",")}]`;
 }
 
+function embeddingColumn(retrievalModelId: string): "embedding" | "embedding_lumi2" {
+  return retrievalModelId === "lumi-2" ? "embedding_lumi2" : "embedding";
+}
+
 /** Parses pgvector's text output ("[1,2,3]") back into a number[]. */
 function parseVector(text: string): number[] {
   return text.slice(1, -1).split(",").map(Number);
@@ -29,21 +33,23 @@ export async function retrieveCandidates(
   pool: Pool,
   queryEmbedding: number[],
   k: number,
+  retrievalModelId: string,
   excludeIndexedImageId?: string,
   relativeSimilarityFloor = 0
 ): Promise<RetrievedCandidate[]> {
   const q = toVectorLiteral(queryEmbedding);
   const excludeId = excludeIndexedImageId ?? null;
+  const col = embeddingColumn(retrievalModelId);
 
   const perHeading = await pool.query(
     `SELECT id, pano_id, heading,
             ST_Y(location::geometry) AS lat,
             ST_X(location::geometry) AS lng,
-            1 - (embedding <=> $1) AS similarity,
-            embedding::text AS embedding_text
+            1 - (${col} <=> $1) AS similarity,
+            ${col}::text AS embedding_text
      FROM indexed_images
-     WHERE embedding IS NOT NULL AND ($3::uuid IS NULL OR id <> $3)
-     ORDER BY embedding <=> $1
+     WHERE ${col} IS NOT NULL AND ($3::uuid IS NULL OR id <> $3)
+     ORDER BY ${col} <=> $1
      LIMIT $2`,
     [q, k, excludeId]
   );
@@ -53,16 +59,16 @@ export async function retrieveCandidates(
     `SELECT img.id, img.pano_id, img.heading,
             ST_Y(img.location::geometry) AS lat,
             ST_X(img.location::geometry) AS lng,
-            1 - (img.embedding <=> $1) AS similarity,
-            img.embedding::text AS embedding_text
+            1 - (img.${col} <=> $1) AS similarity,
+            img.${col}::text AS embedding_text
      FROM (
        SELECT pano_id FROM indexed_points
-       WHERE embedding IS NOT NULL
-       ORDER BY embedding <=> $1
+       WHERE ${col} IS NOT NULL
+       ORDER BY ${col} <=> $1
        LIMIT $2
      ) AS near_panos
      JOIN indexed_images img ON img.pano_id = near_panos.pano_id
-     WHERE img.embedding IS NOT NULL AND ($3::uuid IS NULL OR img.id <> $3)`,
+     WHERE img.${col} IS NOT NULL AND ($3::uuid IS NULL OR img.id <> $3)`,
     [q, k, excludeId]
   );
 

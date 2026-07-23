@@ -74,12 +74,12 @@ export async function POST(request: Request, { params }: { params: { modelId: st
     newSearchId: () => randomUUID(),
     embedQuery: (b64) => embedQueryImage(b64, inferenceBaseUrl, pool),
     retrieve: (embedding) =>
-      retrieveCandidates(pool, embedding, DEFAULT_TOP_K, undefined, DEFAULT_RELATIVE_SIMILARITY_FLOOR),
+      retrieveCandidates(pool, embedding, DEFAULT_TOP_K, activeModelId, undefined, DEFAULT_RELATIVE_SIMILARITY_FLOOR),
     rerank: (embedding, candidates) =>
       queryExpansionRerank(embedding, candidates, DEFAULT_QUERY_EXPANSION_SIZE),
     cluster: (candidates) => clusterCandidates(candidates, DEFAULT_REGION_RADIUS_M),
     saveImage: (searchId, b, ext) => saveQueryImage(searchId, b, ext),
-    persist: (args) => persistSearch(pool, args),
+    persist: (args) => persistSearch(pool, { ...args, retrievalModelId: activeModelId }),
     ...(timeOfDayModel
       ? {
           classifyTimeOfDay: async (b64: string) => {

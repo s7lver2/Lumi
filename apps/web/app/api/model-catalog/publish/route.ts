@@ -144,6 +144,10 @@ export async function POST(request: Request) {
   const pool = getPool();
   const inferenceBaseUrl = INFERENCE_SERVICE_URL;
 
+  const activeRetrievalModel = RETRIEVAL_MODELS[0];
+  const bundleId = activeRetrievalModel?.id ?? "lumi-preview";
+  const version = activeRetrievalModel?.version ?? "1.0";
+
   const cases = await buildReferenceSet(pool);
   let benchmarkResult: Awaited<ReturnType<typeof runBenchmark>> | null = null;
   let retrievalBytes: number | null = null;
@@ -153,7 +157,8 @@ export async function POST(request: Request) {
       benchmarkResult = await runBenchmark(cases, {
         readImageBase64: async (imagePath) => (await readFile(imagePath)).toString("base64"),
         embedQuery: (imageBase64) => embedQueryImage(imageBase64, inferenceBaseUrl, pool),
-        retrieve: (embedding, excludeId) => retrieveCandidates(pool, embedding, DEFAULT_TOP_K, excludeId),
+        retrieve: (embedding, excludeId) =>
+          retrieveCandidates(pool, embedding, DEFAULT_TOP_K, bundleId, excludeId),
       });
     });
   } catch (err) {
@@ -205,10 +210,6 @@ export async function POST(request: Request) {
   if (!benchmarkPending && !passesBenchmarkThreshold(benchmark)) {
     return NextResponse.json({ benchmark }, { status: 409 });
   }
-
-  const activeRetrievalModel = RETRIEVAL_MODELS[0];
-  const bundleId = activeRetrievalModel?.id ?? "lumi-preview";
-  const version = activeRetrievalModel?.version ?? "1.0";
 
   // Must be the real repo checkout, not process.cwd()'s "../.." — see
   // repo-root.ts for why a packaged --testing run's cwd doesn't give that.

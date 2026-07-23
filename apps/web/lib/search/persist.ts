@@ -4,9 +4,14 @@ import type { SearchResponse, SearchRegion, SearchCandidate } from "@netryx/shar
 import type { RetrievedCandidate } from "./retrieval";
 import type { ClusteredRegion } from "./cluster";
 
+function queryEmbeddingColumn(retrievalModelId: string): "query_embedding" | "query_embedding_lumi2" {
+  return retrievalModelId === "lumi-2" ? "query_embedding_lumi2" : "query_embedding";
+}
+
 export interface PersistSearchArgs {
   queryImagePath: string;
   queryEmbedding: number[];
+  retrievalModelId: string;
   candidates: RetrievedCandidate[]; // already re-ranked, best-first
   regions: ClusteredRegion[];
   /** Not persisted to the DB — passed straight through into the returned
@@ -31,8 +36,9 @@ export async function persistSearch(
   try {
     await client.query("BEGIN");
 
+    const col = queryEmbeddingColumn(args.retrievalModelId);
     const search = await client.query(
-      `INSERT INTO searches (query_image_path, query_embedding)
+      `INSERT INTO searches (query_image_path, ${col})
        VALUES ($1, $2) RETURNING id`,
       [args.queryImagePath, `[${args.queryEmbedding.join(",")}]`]
     );

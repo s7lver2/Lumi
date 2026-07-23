@@ -17,7 +17,10 @@ export interface RunSearchDeps {
   rerank: (queryEmbedding: number[], candidates: RetrievedCandidate[]) => RetrievedCandidate[];
   cluster: (candidates: RetrievedCandidate[]) => ClusteredRegion[];
   saveImage: (searchId: string, bytes: Buffer, ext: string) => Promise<string>;
-  persist: (args: PersistSearchArgs) => Promise<SearchResponse>;
+  /** Omits retrievalModelId: runSearch itself is model-agnostic — the
+   * concrete deps built in route.ts close over the active model id and
+   * attach it before calling persistSearch (see estimate/route.ts). */
+  persist: (args: Omit<PersistSearchArgs, "retrievalModelId">) => Promise<SearchResponse>;
   /** Optional — omitted entirely when no active model serves the
    * time_of_day facet. Must never reject (the caller building this dep is
    * responsible for catching its own errors and resolving null instead —

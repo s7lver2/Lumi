@@ -44,6 +44,7 @@ d("persistSearch", () => {
     const res = await persistSearch(pool, {
       queryImagePath: "/tmp/q.jpg",
       queryEmbedding: new Array(8448).fill(0),
+      retrievalModelId: "lumi-preview",
       candidates,
       regions,
     });
@@ -67,6 +68,7 @@ d("persistSearch", () => {
     const res = await persistSearch(pool, {
       queryImagePath: "/tmp/q.jpg",
       queryEmbedding: new Array(8448).fill(0),
+      retrievalModelId: "lumi-preview",
       candidates,
       regions,
       timeOfDay: { label: "foto tomada al mediodía", score: 0.72 },
@@ -79,6 +81,7 @@ d("persistSearch", () => {
     const res = await persistSearch(pool, {
       queryImagePath: "/tmp/q.jpg",
       queryEmbedding: new Array(8448).fill(0),
+      retrievalModelId: "lumi-preview",
       candidates: [],
       regions: [],
     });

@@ -22,7 +22,7 @@ describe("retrieveCandidates with excludeIndexedImageId", () => {
       { id: "img-2", pano_id: "p2", heading: 0, lat: "0", lng: "0", similarity: "0.8", embedding_text: "[0.1,0.2]" },
     ]);
 
-    const results = await retrieveCandidates(pool, [0.1, 0.2], 10, "img-1");
+    const results = await retrieveCandidates(pool, [0.1, 0.2], 10, "lumi-preview", "img-1");
     expect(results.map((r) => r.indexedImageId)).toEqual(["img-2"]);
   });
 
@@ -30,7 +30,7 @@ describe("retrieveCandidates with excludeIndexedImageId", () => {
     const pool = makePool([
       { id: "img-1", pano_id: "p1", heading: 0, lat: "0", lng: "0", similarity: "0.9", embedding_text: "[0.1,0.2]" },
     ]);
-    const results = await retrieveCandidates(pool, [0.1, 0.2], 10);
+    const results = await retrieveCandidates(pool, [0.1, 0.2], 10, "lumi-preview");
     expect(results).toHaveLength(1);
   });
 });
@@ -73,7 +73,7 @@ d("retrieveCandidates", () => {
   it("returns candidates ordered by cosine similarity, best first", async () => {
     const query = new Array(8448).fill(0);
     query[0] = 1;
-    const results = await retrieveCandidates(pool, query, 10);
+    const results = await retrieveCandidates(pool, query, 10, "lumi-preview");
     expect(results.length).toBeGreaterThanOrEqual(2);
     expect(results[0].panoId).toBe("pano-a");
     expect(results[0].similarity).toBeGreaterThan(results[1].similarity);
