@@ -18,6 +18,14 @@ RETRIEVAL_MODELS = [
         "embedding_dim": 8448,
         "version": "1.0",
     },
+    {
+        "id": "lumi-2",
+        "display_name": "Lumi 2",
+        "base_model": "BoQ + DINOv2 (frozen)",
+        "status": "preview",
+        "embedding_dim": 12288,
+        "version": "1.0",
+    },
     # future retrieval models are added here, without touching the rest of the code
 ]
 

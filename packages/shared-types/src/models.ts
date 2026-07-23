@@ -27,6 +27,14 @@ export const RETRIEVAL_MODELS: RetrievalModelDefinition[] = [
     embeddingDim: 8448,
     version: "1.0",
   },
+  {
+    id: "lumi-2",
+    displayName: "Lumi 2",
+    baseModel: "BoQ + DINOv2 (frozen)",
+    status: "preview",
+    embeddingDim: 12288,
+    version: "1.0",
+  },
 ];
 
 // Ships empty on purpose — verification models are installed from the

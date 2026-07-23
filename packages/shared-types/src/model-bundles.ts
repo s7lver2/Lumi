@@ -29,6 +29,13 @@ export const MODEL_BUNDLES: ModelBundleDefinition[] = [
     version: "1.0",
     status: "preview",
   },
+  {
+    id: "lumi-2",
+    displayName: "Lumi 2",
+    retrievalModelId: "lumi-2",
+    version: "1.0",
+    status: "preview",
+  },
 ];
 
 /** Which bundle (if any) the current retrieval setting corresponds to —
