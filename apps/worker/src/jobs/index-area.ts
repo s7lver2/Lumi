@@ -39,11 +39,11 @@ export interface IndexAreaJobDeps {
         }
     ) => Promise<{ captures: StreetViewCapture[]; failedPoints: number; cancelled: boolean }>;
     embedImages: (imagesBase64: string[], inferenceBaseUrl: string) => Promise<number[][]>;
-    insertIndexedImages: (areaId: string, images: IndexedImageInsert[]) => Promise<void>;
+    insertIndexedImages: (areaId: string, images: IndexedImageInsert[], retrievalModelId?: string) => Promise<void>;
     updateAreaProgress: (areaId: string, update: AreaProgressUpdate) => Promise<void>;
     getSetting: (key: string) => Promise<string | null>;
     inferenceBaseUrl: string;
-    insertIndexedPoints: (areaId: string, points: IndexedPointInsert[]) => Promise<void>;
+    insertIndexedPoints: (areaId: string, points: IndexedPointInsert[], retrievalModelId?: string) => Promise<void>;
     saveCaptureImage: (panoId: string, heading: number, base64: string) => Promise<string>;
     getMonthlySpendUsd: () => Promise<number>;
     recordStreetViewUsage: (requests: number, pricePerImageUsd: number) => Promise<void>;

@@ -54,7 +54,7 @@ describe("getPendingEmbedImages", () => {
 describe("updateImageEmbeddings", () => {
   it("writes the embedding for the given row ids", async () => {
     const [pending] = await getPendingEmbedImages(pool, AREA_ID);
-    await updateImageEmbeddings(pool, [{ id: pending.id, embedding: fakeEmbeddingArray(0.5) }]);
+    await updateImageEmbeddings(pool, [{ id: pending.id, embedding: fakeEmbeddingArray(0.5) }], "lumi-preview");
 
     const { rows } = await pool.query("SELECT embedding::text FROM indexed_images WHERE id = $1", [pending.id]);
     expect(rows[0].embedding).toBe(fakeEmbeddingLiteral(0.5));

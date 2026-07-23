@@ -77,6 +77,8 @@ async function main() {
       throw new Error(`Malformed ${INDEX_AREA_JOB_NAME} payload: ${JSON.stringify(job.data)}`);
     }
 
+    const retrievalModelId = (await settingsRepo.getSetting("RETRIEVAL_MODEL")) ?? "lumi-preview";
+
     await runIndexAreaJob(job.data, {
       getArea: (id) => getArea(pool, id),
       getAreaPolygon: (id) => getAreaPolygon(pool, id),
@@ -85,11 +87,11 @@ async function main() {
       loadExistingPanoHeadings: () => loadExistingPanoHeadings(pool),
       downloadCaptures,
       embedImages: (base64s, url) => embedImages(base64s, url, pool),
-      insertIndexedImages: (areaId, images) => insertIndexedImages(pool, areaId, images),
+      insertIndexedImages: (areaId, images) => insertIndexedImages(pool, areaId, images, retrievalModelId),
       updateAreaProgress: (areaId, update) => updateAreaProgress(pool, areaId, update),
       getSetting: (key) => settingsRepo.getSetting(key),
       inferenceBaseUrl,
-      insertIndexedPoints: (areaId, points) => insertIndexedPoints(pool, areaId, points),
+      insertIndexedPoints: (areaId, points) => insertIndexedPoints(pool, areaId, points, retrievalModelId),
       saveCaptureImage: (panoId, heading, base64) => saveCaptureImage(panoId, heading, base64),
       getMonthlySpendUsd: () => getMonthlySpendUsd(pool),
       recordStreetViewUsage: (requests, price) => recordStreetViewUsage(pool, requests, price),
@@ -122,11 +124,13 @@ async function main() {
     if (!isEmbedPendingImagesJobPayload(job.data)) {
       throw new Error(`Malformed ${EMBED_PENDING_IMAGES_JOB_NAME} payload: ${JSON.stringify(job.data)}`);
     }
+    const retrievalModelId = (await settingsRepo.getSetting("RETRIEVAL_MODEL")) ?? "lumi-preview";
+
     await runEmbedPendingImagesJob(job.data, {
       getPendingImages: (areaId) => getPendingEmbedImages(pool, areaId),
       readImageBase64: async (imagePath) => (await readFile(imagePath)).toString("base64"),
       embedImages: (base64s, url) => embedImages(base64s, url, pool),
-      updateImageEmbeddings: (updates) => updateImageEmbeddings(pool, updates),
+      updateImageEmbeddings: (updates) => updateImageEmbeddings(pool, updates, retrievalModelId),
       updateAreaProgress: (areaId, update) => updateAreaProgress(pool, areaId, update),
       inferenceBaseUrl,
     });

@@ -11,7 +11,7 @@ export interface EmbedPendingImagesJobDeps {
   getPendingImages: (areaId: string) => Promise<PendingEmbedImageDep[]>;
   readImageBase64: (imagePath: string) => Promise<string>;
   embedImages: (imagesBase64: string[], inferenceBaseUrl: string) => Promise<number[][]>;
-  updateImageEmbeddings: (updates: { id: string; embedding: number[] }[]) => Promise<void>;
+  updateImageEmbeddings: (updates: { id: string; embedding: number[] }[], retrievalModelId?: string) => Promise<void>;
   updateAreaProgress: (areaId: string, update: AreaProgressUpdate) => Promise<void>;
   inferenceBaseUrl: string;
 }

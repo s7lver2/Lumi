@@ -4,6 +4,9 @@ import type { AreaRow } from "@netryx/shared-types";
 import type { IndexedImageInsert } from "./jobs/index-area";
 import type { IndexedPointInsert } from "./aggregate";
 
+function embeddingColumn(retrievalModelId: string): "embedding" | "embedding_lumi2" {
+  return retrievalModelId === "lumi-2" ? "embedding_lumi2" : "embedding";
+}
 
 /** Cooperative-cancellation check: has the web app flagged this area as cancelled? */
 export async function isAreaCancelled(pool: Pool, areaId: string): Promise<boolean> {
@@ -40,14 +43,15 @@ export async function getArea(pool: Pool, areaId: string): Promise<AreaRow> {
 export async function insertIndexedPoints(
   pool: Pool,
   areaId: string,
-  points: IndexedPointInsert[]
+  points: IndexedPointInsert[],
+  retrievalModelId: string
 ): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     for (const p of points) {
       await client.query(
-        `INSERT INTO indexed_points (area_id, pano_id, location, embedding)
+        `INSERT INTO indexed_points (area_id, pano_id, location, ${embeddingColumn(retrievalModelId)})
          VALUES ($1, $2, ST_GeogFromText($3), $4)
          ON CONFLICT (pano_id) DO NOTHING`,
         [areaId, p.panoId, `POINT(${p.lng} ${p.lat})`, `[${p.embedding.join(",")}]`]
@@ -75,14 +79,15 @@ export async function getAreaPolygon(pool: Pool, areaId: string): Promise<[numbe
 export async function insertIndexedImages(
   pool: Pool,
   areaId: string,
-  images: IndexedImageInsert[]
+  images: IndexedImageInsert[],
+  retrievalModelId: string
 ): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     for (const img of images) {
       await client.query(
-        `INSERT INTO indexed_images (area_id, pano_id, heading, location, street_view_date, embedding, image_path, embedded_at)
+        `INSERT INTO indexed_images (area_id, pano_id, heading, location, street_view_date, ${embeddingColumn(retrievalModelId)}, image_path, embedded_at)
          VALUES ($1, $2, $3, ST_GeogFromText($4), $5, $6, $7, now())
          ON CONFLICT (pano_id, heading) DO NOTHING`,
         [
@@ -127,14 +132,15 @@ export async function getPendingEmbedImages(pool: Pool, areaId: string): Promise
 
 export async function updateImageEmbeddings(
   pool: Pool,
-  updates: { id: string; embedding: number[] }[]
+  updates: { id: string; embedding: number[] }[],
+  retrievalModelId: string
 ): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     for (const update of updates) {
       await client.query(
-        `UPDATE indexed_images SET embedding = $2, embedded_at = now() WHERE id = $1`,
+        `UPDATE indexed_images SET ${embeddingColumn(retrievalModelId)} = $2, embedded_at = now() WHERE id = $1`,
         [update.id, `[${update.embedding.join(",")}]`]
       );
     }
