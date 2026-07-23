@@ -14,6 +14,12 @@ import { polygonToWkt } from "../../../lib/polygon-wkt";
 import { enqueueIndexAreaJob } from "../../../lib/queue";
 import { BudgetExceededError, getMonthlySpendUsd, freeAllowanceUsd, netCostBreakdown } from "@netryx/api-usage";
 
+// The GET below takes no request params, so Next's static-analysis treats it
+// as eligible for build-time prerendering by default — it would freeze the
+// areas list at whatever existed during the build (same fix as
+// apps/web/app/api/health/route.ts).
+export const dynamic = "force-dynamic";
+
 const SAMPLING_SPACING_METERS = 18;
 
 interface CreateAreaBody {

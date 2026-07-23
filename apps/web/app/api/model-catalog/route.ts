@@ -10,6 +10,12 @@ import { listActiveClassificationModels } from "../../../lib/model-catalog/class
 import { getPool } from "../../../lib/db";
 import { getSettingsRepo } from "../../../lib/settings-repo";
 
+// This route reads nothing from the request itself, so Next's static-analysis
+// treats it as eligible for build-time prerendering by default — it would hit
+// the DB/GitHub at build time instead of per-request (same fix as
+// apps/web/app/api/health/route.ts).
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   // Falling back to the static constant when nothing has ever been
   // installed via the catalog keeps today's out-of-the-box behavior — a

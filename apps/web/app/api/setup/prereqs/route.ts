@@ -6,6 +6,12 @@ import { getPool } from "../../../../lib/db";
 
 const execFileAsync = promisify(execFile);
 
+// The GET below takes no request params, so Next's static-analysis treats it
+// as eligible for build-time prerendering by default — it would freeze
+// prereq checks at build time instead of running them live (same fix as
+// apps/web/app/api/health/route.ts).
+export const dynamic = "force-dynamic";
+
 const IS_WIN = process.platform === "win32";
 
 // Informational only — never blocks Install. Detects whether WSL2 is present

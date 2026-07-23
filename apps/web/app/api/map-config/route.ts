@@ -8,6 +8,11 @@ import { getSettingsRepo } from "../../../lib/settings-repo";
 const MAPLIBRE_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 const MAPBOX_DARK_STYLE = "mapbox://styles/mapbox/dark-v11";
 
+// Reads MAPBOX_TOKEN from the DB — must not be prerendered at build time, or
+// the map would be frozen on whatever provider/token happened to resolve
+// during the build (same fix as apps/web/app/api/health/route.ts).
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   // Reading MAPBOX_TOKEN decrypts a secret from system_settings; if that fails
   // (missing/rotated key file, DB hiccup) fall back to the free keyless

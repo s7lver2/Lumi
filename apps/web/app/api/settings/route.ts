@@ -10,6 +10,12 @@ import { maskSecret } from "../../settings/mask";
 
 const MASK = "••••••••";
 
+// The GET below takes no request params, so Next's static-analysis treats it
+// as eligible for build-time prerendering by default — it would freeze
+// settings at whatever existed during the build (same fix as
+// apps/web/app/api/health/route.ts).
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const repo = getSettingsRepo();
   const result: Record<string, string> = {};

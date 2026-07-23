@@ -8,6 +8,12 @@ import { DATASET_SHARED_KEY } from "../../../lib/datasets/shared-key";
 import { decryptBuffer } from "@netryx/settings-repo";
 import { getSettingsRepo } from "../../../lib/settings-repo";
 
+// This route reads nothing from the request itself, so Next's static-analysis
+// treats it as eligible for build-time prerendering by default — it would hit
+// the DB/GitHub at build time instead of per-request (same fix as
+// apps/web/app/api/health/route.ts).
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const activeModel = await getActiveModelTag();
   // Unauthenticated GitHub reads are capped at 60 req/hour — trivially

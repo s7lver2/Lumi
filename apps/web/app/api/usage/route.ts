@@ -5,6 +5,10 @@ import { getPool } from "../../../lib/db";
 import { getSettingsRepo } from "../../../lib/settings-repo";
 import { freeAllowanceUsd } from "@netryx/api-usage";
 
+// Reads live spend/budget from the DB — must not be prerendered at build
+// time (same fix as apps/web/app/api/health/route.ts).
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const pool = getPool();
   const repo = getSettingsRepo();

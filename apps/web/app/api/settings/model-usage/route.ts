@@ -3,6 +3,10 @@ import { NextResponse } from "next/server";
 import { getModelUsageSummary } from "@netryx/model-usage";
 import { getPool } from "../../../../lib/db";
 
+// Reads live usage stats from the DB — must not be prerendered at build time
+// (same fix as apps/web/app/api/health/route.ts).
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const pool = getPool();
   const summary = await getModelUsageSummary(pool);

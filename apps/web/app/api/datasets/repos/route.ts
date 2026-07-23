@@ -3,6 +3,10 @@ import { NextResponse } from "next/server";
 import { getSettingsRepo } from "../../../../lib/settings-repo";
 import { listUserRepositories, getAuthenticatedLogin } from "../../../../lib/datasets/github";
 
+// Reads settings from the DB at request time — must not be prerendered at
+// build time (same fix as apps/web/app/api/health/route.ts).
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const token = await getSettingsRepo().getSetting("GITHUB_TOKEN");
   if (!token) {
