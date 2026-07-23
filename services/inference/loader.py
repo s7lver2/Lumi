@@ -23,6 +23,13 @@ def load_retrieval_model(model_id: str):
         # can intercept it.
         return torch.hub.load("gmberton/MegaLoc", "get_trained_model")
 
+    if model_id == "lumi-2":
+        # Confirmed live via the model's own repo (github.com/amaralibey/
+        # Bag-of-Queries): the only documented trained checkpoint loadable
+        # via torch.hub for the DINOv2 backbone, output_dim=12288 — this
+        # is the real released checkpoint, not a placeholder guess.
+        return torch.hub.load("amaralibey/bag-of-queries", "get_trained_boq", backbone_name="dinov2", output_dim=12288)
+
     raise UnknownModelError(f"No loader implemented for retrieval model id: {model_id}")
 
 
