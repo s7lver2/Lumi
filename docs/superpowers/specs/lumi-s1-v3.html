@@ -1,0 +1,587 @@
+<meta charset="utf-8">
+<title>Lumi v2 · fondo v1 + popups coherentes</title>
+<style>
+:root{
+  --bg:#0e0f11; --surface:#15171a; --panel:#1a1b1e; --elevated:#202226;
+  --border:#26282c; --fg:#e8e8e6; --muted:#9a9a95; --subtle:#6a6c70;
+  --accent:#f2f3f5; --draw:#378add; --draw-fg:#85b7eb;
+  --warn:#ef9f27; --warn-fg:#efb968; --danger:#a33; --danger-fg:#e88f8f;
+  /* sin verde: la paleta de la v1 no lo tiene. "hecho" es blanco, como el
+     paso done del stepper. "en curso" es el azul draw. */
+  --ok:var(--accent);
+  --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r:12px;
+  --e-expo:cubic-bezier(.16,1,.3,1);
+  --e-quint:cubic-bezier(.22,1,.36,1);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding:56px 32px 120px}
+h1{font-size:25px;font-weight:500;letter-spacing:-.02em;margin:0 0 6px}
+.lede{color:var(--muted);font-size:13px;max-width:64ch;margin:0 0 8px}
+.sect{margin-top:72px}
+.sect-head{display:flex;align-items:baseline;gap:12px;margin-bottom:6px;flex-wrap:wrap}
+.sect-n{font-family:var(--mono);font-size:11px;color:var(--subtle);
+  border:1px solid var(--border);border-radius:4px;padding:1px 6px}
+.sect h2{font-size:18px;font-weight:500;margin:0;letter-spacing:-.01em}
+.sect-note{color:var(--muted);font-size:12.5px;max-width:68ch;margin:8px 0 24px}
+.mono{font-family:var(--mono)} .dim{color:var(--muted)} .xs{font-size:11px}
+
+.win{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg);
+  box-shadow:0 30px 70px rgba(0,0,0,.6)}
+.tb{height:34px;display:flex;align-items:center;gap:7px;padding:0 12px;
+  background:#121316;border-bottom:1px solid var(--border)}
+.dot{width:10px;height:10px;border-radius:50%;background:#2a2c31}
+.tb-title{margin-left:8px;font-size:11px;color:var(--subtle);font-family:var(--mono)}
+.stage{height:552px;position:relative;overflow:hidden;display:flex;flex-direction:column}
+
+/* ══════════════════════════════════════════════════════════
+   FONDO — copiado literal de PlanetBackground.tsx de la v1.
+   Mismos 8 astros, mismos 520px, mismos 70s y 14s, misma
+   textura. Sin nebulosa, sin paralaje, sin luces de ciudad.
+   ══════════════════════════════════════════════════════════ */
+.sky{position:absolute;inset:0;overflow:hidden;background:#05070a}
+.star{position:absolute;width:2px;height:2px;border-radius:50%;background:#fff;
+  animation:tw 3s ease-in-out infinite}
+@keyframes tw{0%,100%{opacity:.2}50%{opacity:.9}}
+.planet{position:absolute;right:-160px;bottom:-208px;width:520px;height:520px;
+  border-radius:50%;overflow:hidden;background:#33383f;
+  box-shadow:0 0 130px 24px rgba(150,160,175,.10), inset -34px -22px 90px rgba(0,0,0,.65)}
+.planet b{position:absolute;left:0;top:0;height:100%;width:200%;
+  animation:roll 70s linear infinite;
+  background:
+    radial-gradient(70px 46px at 8% 32%,rgba(255,255,255,.06),transparent 70%),
+    radial-gradient(90px 56px at 26% 64%,rgba(0,0,0,.28),transparent 70%),
+    radial-gradient(56px 44px at 44% 40%,rgba(255,255,255,.05),transparent 70%),
+    radial-gradient(100px 66px at 62% 72%,rgba(0,0,0,.24),transparent 70%),
+    radial-gradient(70px 46px at 58% 32%,rgba(255,255,255,.06),transparent 70%),#3a3f47}
+.planet i{position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(circle at 30% 28%,transparent 42%,rgba(0,0,0,.55) 100%)}
+@keyframes roll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.orbit{position:absolute;bottom:-128px;left:50%;margin-left:-260px;width:520px;height:520px;
+  animation:orb 14s linear infinite}
+.orbit s{position:absolute;top:-1px;left:50%;margin-left:-3px;width:7px;height:7px;
+  border-radius:50%;background:#f4f6f9;box-shadow:0 0 10px 2px rgba(255,255,255,.6)}
+@keyframes orb{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
+/* estado `dead` de la v1, tal cual: planeta apagado, órbita punteada ámbar,
+   restos cayendo. Reutilizado para servidor degradado. */
+.sky.dead .planet{filter:saturate(.55) brightness(.75)}
+.sky.dead .planet b{animation-duration:220s}
+.sky.dead .star{animation-duration:5s;opacity:.5}
+.sky.dead .orbit{display:none}
+.deadring{position:absolute;bottom:-128px;left:50%;margin-left:-260px;width:520px;height:520px;
+  border-radius:50%;border:1px dashed rgba(239,159,39,.22);
+  clip-path:polygon(0 0,100% 0,100% 62%,0 62%);display:none}
+.sky.dead .deadring{display:block}
+.debris{position:absolute;bottom:-128px;left:50%;display:none}
+.sky.dead .debris{display:block}
+.debris i{position:absolute;top:-4px;border-radius:50%;
+  animation:tumble 4.2s cubic-bezier(.55,0,.75,1) infinite}
+@keyframes tumble{
+  0%  {transform:rotate(224deg) translateY(-260px) rotate(-224deg);opacity:1}
+  10% {transform:rotate(224deg) translateY(-260px) rotate(-224deg);opacity:1}
+  78% {transform:rotate(224deg) translateY(-260px) translate(-96px,150px);opacity:.5}
+  100%{transform:rotate(224deg) translateY(-260px) translate(-150px,250px);opacity:0}}
+@media(prefers-reduced-motion:reduce){
+  .planet b,.orbit,.star,.debris i{animation:none!important}}
+
+/* ═══ franja de telemetría ═══ */
+.telem{display:flex;align-items:stretch;border-bottom:1px solid var(--border);
+  background:rgba(21,23,26,.94);height:70px;position:relative;z-index:3;
+  transition:height .5s var(--e-quint)}
+.telem.slim{height:28px}
+.telem.slim .tcell{padding:0 14px;flex-direction:row;align-items:center;gap:9px}
+.telem.slim .tlabel{font-size:9px}.telem.slim .tval{font-size:11px}
+.telem.slim .bar,.telem.slim .spark2,.telem.slim .tstat{display:none}
+.tcell{flex:1;padding:11px 15px;border-right:1px solid var(--border);display:flex;
+  flex-direction:column;justify-content:center;gap:5px;min-width:0}
+.tcell:last-of-type{border-right:none}
+.tlabel{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--subtle);white-space:nowrap}
+.tval{font-family:var(--mono);font-size:14px;color:var(--fg);white-space:nowrap;
+  display:flex;align-items:center;gap:7px}
+.tval.sm{font-size:12px}
+.tstat{font-family:var(--mono);font-size:10px;white-space:nowrap}
+.bar{height:3px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--draw);border-radius:2px;
+  transition:width 1s var(--e-expo)}
+.spark2{display:flex;align-items:flex-end;gap:2px;height:15px}
+.spark2 i{width:3px;background:rgba(133,183,235,.5);border-radius:1px;
+  animation:pump 2.6s ease-in-out infinite}
+@keyframes pump{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.5)}}
+.lockicon{color:var(--warn);flex-shrink:0;animation:lockGlow 3.4s ease-in-out infinite}
+@keyframes lockGlow{0%,100%{opacity:.7}50%{opacity:1;filter:drop-shadow(0 0 4px rgba(239,159,39,.5))}}
+.tcollapse{background:none;border:none;color:var(--subtle);cursor:pointer;font-size:10px;
+  font-family:var(--mono);padding:0 12px;border-left:1px solid var(--border)}
+.tcollapse:hover{color:var(--fg)}
+
+/* ═══ wizard — vocabulario único, lo usan también los popups ═══ */
+.body{flex:1;position:relative;overflow:hidden}
+.pane{position:relative;z-index:2;max-width:552px;margin:0 auto;padding:34px 24px}
+.brandline{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.spark{color:var(--fg);animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.42}}
+.brandline span{font-size:17px;font-weight:500;letter-spacing:-.01em}
+.sub{font-size:12px;color:var(--muted);margin:0 0 22px}
+.step{position:relative;display:flex;justify-content:space-between;align-items:flex-start;
+  margin-bottom:22px}
+.step .rail,.step .fill{position:absolute;left:6%;right:6%;top:14px;height:2px}
+.step .rail{background:rgba(255,255,255,.09)}
+.step .fill{right:auto;background:var(--accent);border-radius:2px;
+  transition:width .9s var(--e-expo)}
+.step .s{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+.bub{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:11px;border:1px solid rgba(255,255,255,.15);
+  background:rgba(255,255,255,.05);color:var(--subtle);font-family:var(--mono);
+  transition:all .55s var(--e-quint)}
+.bub.done{background:var(--accent);color:#000;border-color:var(--accent)}
+.bub.now{border:2px solid var(--accent);background:var(--bg);color:var(--fg)}
+.bub.now::before{content:"";position:absolute;top:0;width:28px;height:28px;border-radius:50%;
+  border:1px solid var(--accent);animation:ping 2.6s var(--e-expo) infinite}
+@keyframes ping{0%{opacity:.5;transform:scale(1)}70%,100%{opacity:0;transform:scale(1.7)}}
+.step .s span{font-size:10.5px;color:var(--subtle);text-align:center;line-height:1.25}
+.step .s.now span{color:var(--fg)}
+
+.card{border-radius:var(--r);border:1px solid rgba(255,255,255,.13);
+  background:rgba(16,19,25,.66);backdrop-filter:blur(18px);padding:20px;
+  box-shadow:0 10px 30px rgba(0,0,0,.4)}
+label{display:block;font-size:11px;color:var(--muted);margin-bottom:7px;letter-spacing:.02em}
+.input{width:100%;background:#0d0f12;border:1px solid var(--border);border-radius:8px;
+  padding:10px 12px;color:var(--fg);font-family:var(--mono);font-size:12.5px;outline:none;
+  transition:border-color .4s var(--e-expo),box-shadow .4s var(--e-expo)}
+.input.focus{border-color:rgba(242,243,245,.42);box-shadow:0 0 0 3px rgba(242,243,245,.055)}
+.btn{border-radius:8px;padding:9px 18px;font-size:12px;font-weight:500;border:1px solid transparent;
+  cursor:pointer;font-family:inherit;transition:transform .4s var(--e-quint),background .3s}
+.btn:active{transform:translateY(1px)}
+.btn.p{background:var(--accent);color:#000} .btn.p:hover{background:#fff}
+.btn.g{background:transparent;border-color:rgba(255,255,255,.15);color:var(--fg)}
+.btn.g:hover{border-color:rgba(255,255,255,.3)}
+.btn.d{opacity:.35;cursor:default}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+
+/* log — el mismo bloque que usa el paso de instalación */
+.term{background:#08090b;border:1px solid var(--border);border-radius:8px;
+  font-family:var(--mono);font-size:11px;line-height:1.7;padding:12px 14px;
+  overflow-x:auto;white-space:pre}
+.c-ok{color:var(--ok)} .c-w{color:var(--warn-fg)} .c-d{color:var(--subtle)}
+.c-b{color:var(--draw-fg)} .c-r{color:var(--danger-fg)} .c-a{color:#fff}
+.spin::after{content:"⠋";color:var(--draw-fg);animation:braille .72s steps(1,end) infinite}
+@keyframes braille{0%{content:"⠋"}10%{content:"⠙"}20%{content:"⠹"}30%{content:"⠸"}40%{content:"⠼"}
+  50%{content:"⠴"}60%{content:"⠦"}70%{content:"⠧"}80%{content:"⠇"}90%{content:"⠏"}}
+
+/* punto de estado, en línea con el título. Sin cajita. */
+.sdot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.sdot.wait{background:var(--draw-fg);animation:beat 1.5s ease-in-out infinite}
+.sdot.err{background:var(--danger-fg)}
+@keyframes beat{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.75)}}
+
+/* ═══ iconos — patrón extraído de la v1 ═══
+   viewBox 0 0 24 24 siempre · tamaño por width/height · stroke-width 1.6–2
+   sin adelgazar al crecer · fill none · caps y joins redondos · todo blanco */
+.ico{flex-shrink:0;stroke:currentColor;fill:none;stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round;color:var(--fg)}
+.i-ok,.i-wait,.i-err,.i-warn,.i-off{color:var(--fg)}
+
+/* icono grande centrado arriba de la card — 32 px, el máximo que usa la v1
+   (LoadingScreen, estado de servicio caído). stroke 1.6, igual que allí. */
+.bigico{display:block;margin:2px auto 16px;width:32px;height:32px;
+  stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;
+  stroke-linejoin:round;color:var(--fg);
+  animation:jg-fade-rise .6s .1s var(--e-expo) both}
+.bigwrap{position:relative;display:flex;justify-content:center;color:var(--fg)}
+.bigwrap::before{content:"";position:absolute;top:0;width:64px;height:34px;
+  border-radius:50%;filter:blur(18px);opacity:.10;background:currentColor}
+
+/* ── acento de estado ──
+   Solo dos sitios: el halo detrás del icono y el detalle con significado
+   dentro de él. La estructura del icono se queda blanca. currentColor se
+   resuelve por elemento, así que basta con teñir el <g> o el <path>. */
+/* el icono grande va entero en su color; el halo lo acompaña */
+.bigico.c-err {color:var(--danger-fg)}
+.bigico.c-warn{color:var(--warn)}
+.bigico.c-wait{color:var(--draw-fg)}
+.bigico.c-off {color:var(--subtle)}
+.bigico{transition:color .5s var(--e-expo)}
+.bigwrap.st-err::before  {background:var(--danger-fg);opacity:.15}
+.bigwrap.st-warn::before {background:var(--warn);opacity:.14}
+.bigwrap.st-wait::before {background:var(--draw-fg);opacity:.13}
+.bigwrap.st-off::before  {background:var(--subtle);opacity:.14}
+/* los detalles pequeños de las líneas siguen siendo acentos sueltos */
+.tint-err {color:var(--danger-fg);transition:color .5s var(--e-expo)}
+.tint-warn{color:var(--warn);transition:color .5s var(--e-expo)}
+/* al abrirse ya no es una advertencia: el candado entero vuelve a blanco */
+.bigico.lock.open{color:var(--fg)}
+
+/* ── keyframes: nombres y amplitudes del globals.css de la v1 ── */
+@keyframes jg-fade-rise{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes lumi-spin{to{transform:rotate(360deg)}}
+@keyframes jg-lock-breathe{0%,100%{opacity:.7;transform:scale(1)}50%{opacity:1;transform:scale(1.06)}}
+/* el ! del triángulo respira; el triángulo se queda quieto */
+@keyframes jg-alert-pulse{0%,100%{opacity:.5}50%{opacity:1}}
+/* los arcos de señal buscan hacia fuera, uno tras otro */
+@keyframes jg-scan{0%,70%,100%{opacity:.22}25%{opacity:1}}
+
+.spin-slow{animation:lumi-spin 2.6s linear infinite;transform-origin:50% 50%}
+.spin-tiny{animation:lumi-spin 1.1s linear infinite;transform-origin:50% 50%}
+.breathe{animation:jg-fade-rise .6s .1s var(--e-expo) both,
+                   jg-lock-breathe 2.6s .7s ease-in-out infinite;
+  transform-origin:50% 50%}
+.alert-mark{animation:jg-alert-pulse 2.2s ease-in-out infinite}
+.arc{animation:jg-scan 2.4s ease-in-out infinite}
+.arc:nth-of-type(2){animation-delay:.18s}
+.arc:nth-of-type(3){animation-delay:.36s}
+
+/* el candado se abre: el arco sube y gira sobre su base izquierda */
+.shackle{transform-box:fill-box;transform-origin:0% 100%;
+  transition:transform .75s var(--e-expo)}
+.lock.open .shackle{transform:translateY(-2.2px) rotate(-17deg)}
+/* abierto deja de respirar y se queda en claro */
+.lock.open{animation:none;opacity:1;transform:none}
+
+/* ═══ el popup: MISMA composición del wizard, atenuado detrás ═══ */
+.scrim{position:absolute;inset:0;z-index:20;background:rgba(5,7,10,.55);
+  backdrop-filter:blur(3px);animation:sIn .5s var(--e-expo) both}
+@keyframes sIn{from{opacity:0}to{opacity:1}}
+.scrim .pane{animation:pIn .6s var(--e-expo) both}
+@keyframes pIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.behind{opacity:.28;filter:blur(1px)}
+
+/* línea de estado dentro de la tarjeta, mismo tono que el resto */
+.sline{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--muted);
+  padding:6px 0}
+.sline b{font-weight:400;color:var(--fg)}
+.sline .t{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--subtle)}
+.hr{height:1px;background:var(--border);margin:12px 0}
+
+.tabs{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
+.tab{background:var(--panel);border:1px solid var(--border);color:var(--muted);border-radius:7px;
+  padding:6px 13px;font-size:11.5px;cursor:pointer;font-family:inherit;
+  transition:all .35s var(--e-expo)}
+.tab:hover{color:var(--fg);border-color:rgba(255,255,255,.2)}
+.tab.on{background:var(--accent);color:#000;border-color:var(--accent)}
+.hidden{display:none!important}
+.verdict{border:1px solid var(--border);border-radius:var(--r);background:var(--panel);
+  padding:20px 22px;margin-top:30px}
+.verdict h4{margin:0 0 10px;font-size:13px;font-weight:500}
+.verdict ul{margin:0;padding-left:18px;color:var(--muted);font-size:12.5px}
+.verdict li{margin-bottom:6px} .verdict li b{color:var(--fg);font-weight:500}
+</style>
+
+<div class="wrap">
+
+<h1>Fondo v1 restaurado · popups sin componente nuevo</h1>
+<p class="lede">El fondo vuelve a ser el de <span class="mono xs">PlanetBackground.tsx</span>, valor
+por valor. Los popups dejan de ser un componente aparte: son la misma composición del wizard.</p>
+
+<!-- ═══ 01 ═══ -->
+<section class="sect">
+  <div class="sect-head"><span class="sect-n">01</span><h2>Pairing — fondo original</h2></div>
+  <p class="sect-note">Ocho estrellas en sus posiciones originales, planeta de 520 px girando en
+  70 s, satélite en órbita de 14 s, misma textura. Cero añadidos. El único movimiento nuevo está
+  en la UI: la tarjeta entra, el stepper se rellena, la huella se bloquea carácter a carácter.</p>
+
+  <div class="win">
+    <div class="tb"><i class="dot"></i><i class="dot"></i><i class="dot"></i>
+      <span class="tb-title">Lumi Station · 192.168.1.40</span></div>
+    <div class="stage">
+      <div class="telem" id="telA">
+        <div class="tcell" style="flex:0 0 198px"><div class="tlabel">Servidor</div>
+          <div class="tval sm">192.168.1.40<span class="dim">:7717</span></div>
+          <div class="tstat" style="color:var(--ok)">● verificado · nativo</div></div>
+        <div class="tcell"><div class="tlabel">gpu0 · 4090</div><div class="tval sm">0% <span class="dim">· 0.4/24</span></div><div class="bar"><i style="width:2%"></i></div></div>
+        <div class="tcell"><div class="tlabel">gpu1 · 4090</div><div class="tval sm">0% <span class="dim">· 0.4/24</span></div><div class="bar"><i style="width:2%"></i></div></div>
+        <div class="tcell"><div class="tlabel">gpu2 · 3090</div><div class="tval sm">0% <span class="dim">· 0.3/24</span></div><div class="bar"><i style="width:1%"></i></div></div>
+        <div class="tcell"><div class="tlabel">gpu3 · 3090</div><div class="tval sm">0% <span class="dim">· 0.3/24</span></div><div class="bar"><i style="width:1%"></i></div></div>
+        <div class="tcell" style="flex:0 0 108px"><div class="tlabel">cpu · 24c</div>
+          <div class="spark2" id="spkA"></div></div>
+        <div class="tcell" style="flex:0 0 94px"><div class="tlabel">Cola</div>
+          <div class="tval">—</div><div class="tstat dim">sin provisionar</div></div>
+        <button class="tcollapse" onclick="this.parentNode.classList.toggle('slim')">⌃</button>
+      </div>
+      <div class="body">
+        <div class="sky" id="skyA"></div>
+        <div class="pane">
+          <div class="brandline"><span class="spark">✦</span><span>Vamos a preparar Lumi</span></div>
+          <p class="sub">Paso 1 de 6 · vincula la app con tu servidor.</p>
+          <div class="step">
+            <div class="rail"></div><div class="fill" style="width:0"></div>
+            <div class="s now"><div class="bub now">1</div><span>Vincular</span></div>
+            <div class="s"><div class="bub">2</div><span>Admin</span></div>
+            <div class="s"><div class="bub">3</div><span>Runtime</span></div>
+            <div class="s"><div class="bub">4</div><span>Datos</span></div>
+            <div class="s"><div class="bub">5</div><span>Modelos</span></div>
+            <div class="s"><div class="bub">6</div><span>Listo</span></div>
+          </div>
+          <div class="card">
+            <label>Clave de vinculación</label>
+            <input class="input focus" value="lumi1.192.168.1.40:7717.k7Fq2xM9pL.3Hn8vQ…">
+            <div class="hr"></div>
+            <div class="sline"><span class="sdot" style="background:var(--ok)"></span>
+              Huella <b class="mono" id="fpA"></b> verificada<span class="t">18 ms</span></div>
+            <p class="xs dim" style="margin:4px 0 0;max-width:50ch">Coincide con la que viaja dentro
+            de la clave. Nadie se ha interpuesto en la conexión.</p>
+          </div>
+          <div class="row"><button class="btn g d">Atrás</button><button class="btn p">Siguiente</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 02 ═══ -->
+<section class="sect">
+  <div class="sect-head"><span class="sect-n">02</span><h2>Popups de estado</h2></div>
+  <p class="sect-note">Misma <span class="mono">.pane</span>, mismo ancho de 552 px, misma
+  <span class="mono">.card</span> de cristal, misma fila de botones. Lo único que cambia respecto a
+  un paso normal: el stepper desaparece y el wizard se atenúa detrás. Leído desde el fondo del
+  planeta, es el wizard mostrándote otra cosa, no una ventana ajena.</p>
+
+  <div class="tabs">
+    <button class="tab on" data-s="reboot">Reiniciando</button>
+    <button class="tab" data-s="error">Error</button>
+    <button class="tab" data-s="sealed">Sellado</button>
+    <button class="tab" data-s="lost">Sin conexión</button>
+  </div>
+
+  <div class="win">
+    <div class="tb"><i class="dot"></i><i class="dot"></i><i class="dot"></i>
+      <span class="tb-title" id="tbT">Lumi Station · 192.168.1.40</span></div>
+    <div class="stage" style="height:520px">
+      <div class="telem">
+        <div class="tcell" style="flex:0 0 210px"><div class="tlabel">Servidor</div>
+          <div class="tval sm">
+            <svg class="lockicon hidden" id="lockI" width="12" height="12" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="1.8"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="11" width="14" height="9" rx="1.5"/>
+              <path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+            <span>192.168.1.40<span class="dim">:7717</span></span></div>
+          <div class="tstat" id="tStat" style="color:var(--draw-fg)">● reiniciando</div></div>
+        <div class="tcell"><div class="tlabel">gpu0 · 4090</div><div class="tval sm" id="g0">—</div><div class="bar"><i id="g0b" style="width:0%"></i></div></div>
+        <div class="tcell"><div class="tlabel">gpu1 · 4090</div><div class="tval sm" id="g1">—</div><div class="bar"><i id="g1b" style="width:0%"></i></div></div>
+        <div class="tcell" style="flex:0 0 124px"><div class="tlabel">Cola</div>
+          <div class="tval" id="qN">14</div><div class="tstat" id="qS" style="color:var(--warn-fg)">en pausa</div></div>
+        <div class="tcell" style="flex:0 0 124px"><div class="tlabel">Última señal</div>
+          <div class="tval sm" id="lastS">hace 4 s</div></div>
+      </div>
+
+      <div class="body">
+        <div class="sky dead" id="skyB"></div>
+
+        <!-- wizard atenuado detrás -->
+        <div class="pane behind">
+          <div class="brandline"><span class="spark">✦</span><span>Vamos a preparar Lumi</span></div>
+          <p class="sub">Paso 3 de 6 · instalando el runtime de inferencia.</p>
+          <div class="step">
+            <div class="rail"></div><div class="fill" style="width:35.2%"></div>
+            <div class="s"><div class="bub done">✓</div><span>Vincular</span></div>
+            <div class="s"><div class="bub done">✓</div><span>Admin</span></div>
+            <div class="s now"><div class="bub now">3</div><span>Runtime</span></div>
+            <div class="s"><div class="bub">4</div><span>Datos</span></div>
+            <div class="s"><div class="bub">5</div><span>Modelos</span></div>
+            <div class="s"><div class="bub">6</div><span>Listo</span></div>
+          </div>
+          <div class="card" style="height:126px"></div>
+        </div>
+
+        <!-- ── reiniciando ── -->
+        <div class="scrim" data-p="reboot">
+          <div class="pane">
+            <div class="brandline"><span class="spark">✦</span><span>Reiniciando</span></div>
+            <p class="sub">Vuelve solo. Nada perdido.</p>
+            <div class="card">
+              <div class="bigwrap st-wait">
+                <svg class="bigico c-wait spin-slow" viewBox="0 0 24 24">
+                  <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3.5V9h-5.5"/></svg>
+              </div>
+              <div class="sline">
+                <svg class="ico" width="13" height="13" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>
+                Cola congelada · <b>14</b><span class="t">04:12:07</span></div>
+              <div class="sline">
+                <svg class="ico spin-tiny" width="13" height="13" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/></svg>
+                Esperando<span class="t">18 s</span></div>
+            </div>
+            <div class="row">
+              <span class="xs dim mono">reintento en 5 s</span>
+              <button class="btn p">Reintentar ya</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── error ── -->
+        <div class="scrim hidden" data-p="error">
+          <div class="pane">
+            <div class="brandline"><span class="spark">✦</span><span>Fallo al arrancar</span></div>
+            <p class="sub">Las GPUs no responden. Paso 3 detenido.</p>
+            <div class="card">
+              <div class="bigwrap st-err">
+                <svg class="bigico c-err" viewBox="0 0 24 24">
+                  <path d="M12 3.2 22.2 20.8H1.8z"/>
+                  <g class="alert-mark"><path d="M12 9.8v4.4"/>
+                    <circle cx="12" cy="17.4" r=".6" fill="currentColor" stroke="none"/></g></svg>
+              </div>
+              <div class="sline">
+                <svg class="ico" width="13" height="13" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>
+                Cola congelada · <b>14</b><span class="t">04:12:31</span></div>
+              <div class="hr"></div>
+              <div class="term"><span class="c-r">FATAL</span> nvml_init: Driver/library version mismatch
+      driver cargado  <span class="c-a">560.35.03</span>
+      módulo kernel   <span class="c-a">550.90.07</span>
+<span class="c-d">arreglo:</span> <span class="c-a">sudo modprobe -r nvidia && sudo modprobe nvidia</span></div>
+            </div>
+            <div class="row">
+              <button class="btn g">Copiar informe</button>
+              <button class="btn p">Reintentar</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── sellado ── -->
+        <div class="scrim hidden" data-p="sealed">
+          <div class="pane">
+            <div class="brandline"><span class="spark">✦</span><span>Servidor sellado</span></div>
+            <p class="sub">Nada se ha descifrado.</p>
+            <div class="card">
+              <div class="bigwrap st-warn">
+                <svg class="bigico c-warn lock breathe" id="lockBig" viewBox="0 0 24 24" stroke-width="1.8">
+                  <rect x="5" y="11" width="14" height="9" rx="1.5"/>
+                  <path class="shackle" d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+              </div>
+              <div class="sline" id="lockLine">
+                <svg class="ico tint-warn" width="13" height="13" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>
+                Clave maestra bloqueada · <b>14</b> esperando<span class="t">04:12:44</span></div>
+              <div class="hr"></div>
+              <label>Frase de desbloqueo</label>
+              <input class="input focus" value="••••••••••••••••••••">
+            </div>
+            <div class="row">
+              <span class="xs dim mono">solo administradores</span>
+              <button class="btn p" id="unlockBtn">Desbloquear y reanudar</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── sin conexión ── -->
+        <div class="scrim hidden" data-p="lost">
+          <div class="pane">
+            <div class="brandline"><span class="spark">✦</span><span>Sin conexión</span></div>
+            <p class="sub">Puede ser tu red. Allí todo sigue corriendo.</p>
+            <div class="card">
+              <div class="bigwrap st-off">
+                <svg class="bigico c-off" viewBox="0 0 24 24">
+                  <path class="arc" d="M4.5 9.6a12 12 0 0 1 15 0"/>
+                  <path class="arc" d="M7.7 13.1a7.6 7.6 0 0 1 8.6 0"/>
+                  <path class="arc" d="M10.8 16.5a3.2 3.2 0 0 1 2.4 0"/>
+                  <circle cx="12" cy="19.4" r=".6" fill="currentColor" stroke="none"/>
+                  <path d="M3.8 3.8 20.2 20.2"/></svg>
+              </div>
+              <div class="sline">
+                <svg class="ico spin-tiny" width="13" height="13" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/></svg>
+                Reconectando<span class="t">intento 4</span></div>
+              <div class="sline">
+                <svg class="ico" width="13" height="13" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+                Estado local guardado<span class="t">04:11:58</span></div>
+            </div>
+            <div class="row">
+              <span class="xs dim mono">siguiente intento en 8 s</span>
+              <button class="btn g">Trabajar sin conexión</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sect">
+  <div class="verdict">
+    <h4>Lo que arregla esta pasada</h4>
+    <ul>
+      <li><b>Fuera el icono en cajita de color.</b> El estado va en un punto de 7 px en línea con
+      el texto, o en el propio glifo <span class="mono">✦</span> teñido. Cero contenedores nuevos.</li>
+      <li><b>El popup no inventa componentes.</b> Reusa <span class="mono">.pane</span>,
+      <span class="mono">.card</span>, <span class="mono">.sline</span> y la fila de botones del
+      wizard. Un componente menos que mantener y cero deriva visual.</li>
+      <li><b>El fondo es el de la v1, literal.</b> Incluido su estado <span class="mono">dead</span>
+      con órbita punteada ámbar y restos cayendo, que ya existía y encaja exacto con
+      servidor degradado.</li>
+      <li><b>El log crudo vive dentro de la tarjeta de siempre</b>, con el mismo bloque
+      <span class="mono">.term</span> del paso de instalación.</li>
+    </ul>
+  </div>
+</section>
+</div>
+
+<script>
+const STARS=[["8%","12%","0s"],["16%","76%",".6s"],["26%","40%","1.2s"],["12%","58%","1.8s"],
+             ["70%","8%",".4s"],["82%","30%","2.1s"],["60%","88%","1.5s"],["40%","92%",".9s"]];
+function sky(el){
+  STARS.forEach(([t,l,d])=>{
+    const s=document.createElement("i");s.className="star";
+    s.style.top=t;s.style.left=l;s.style.animationDelay=d;el.appendChild(s);
+  });
+  el.insertAdjacentHTML("beforeend",
+    `<div class="planet"><b></b><i></i></div>
+     <div class="orbit"><s></s></div>
+     <div class="deadring"></div>
+     <div class="debris">
+       <i style="width:8px;height:8px;margin-left:-4px;background:var(--danger-fg);box-shadow:0 0 9px 2px rgba(239,159,39,.4)"></i>
+       <i style="width:6px;height:6px;margin-left:-3px;background:rgba(239,159,39,.55);animation-delay:-.22s"></i>
+       <i style="width:4px;height:4px;margin-left:-2px;background:rgba(239,159,39,.3);animation-delay:-.4s"></i>
+     </div>`);
+}
+sky(document.getElementById("skyA"));sky(document.getElementById("skyB"));
+
+const spk=document.getElementById("spkA");
+[22,34,18,46,27,38,21,52,29,24,41,19].forEach((h,i)=>{
+  const b=document.createElement("i");b.style.height=h+"%";b.style.animationDelay=(i*.1)+"s";spk.appendChild(b);
+});
+
+// huella bloqueándose carácter a carácter
+const fp=document.getElementById("fpA");
+[..."k7Fq2xM9pL"].forEach((c,i)=>{
+  const s=document.createElement("span");s.textContent=c;s.style.opacity=0;
+  s.style.animation=`pIn .4s ${(.4+i*.06)}s cubic-bezier(.16,1,.3,1) forwards`;fp.appendChild(s);
+});
+
+// el candado se abre al desbloquear: el arco sube y gira, y la línea de
+// estado cambia. Clic otra vez para volver a sellar y verlo de nuevo.
+document.getElementById("unlockBtn").onclick=function(){
+  const l=document.getElementById("lockBig"),ln=document.getElementById("lockLine"),
+        li=document.getElementById("lockI");
+  const open=l.classList.toggle("open");
+  ln.innerHTML=open
+    ? `<svg class="ico" width="13" height="13" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+       Clave maestra en memoria · reanudando <b>14</b><span class="t">ahora</span>`
+    : `<svg class="ico tint-warn" width="13" height="13" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>
+       Clave maestra bloqueada · <b>14</b> esperando<span class="t">04:12:44</span>`;
+  this.textContent=open?"Sellar de nuevo":"Desbloquear y reanudar";
+  li.classList.toggle("hidden",open);
+  // el halo ámbar del icono se apaga al abrirse
+  l.parentNode.classList.toggle("st-warn",!open);
+};
+
+const CFG={
+ reboot:{st:["● reiniciando","var(--draw-fg)"],lock:0,g:["—","—"],gb:[0,0],q:["14","en pausa","var(--warn-fg)"],last:"hace 4 s",t:"Lumi Station · 192.168.1.40"},
+ error :{st:["● error","var(--danger-fg)"],lock:0,g:["—","—"],gb:[0,0],q:["14","congelada","var(--danger-fg)"],last:"hace 12 s",t:"Lumi Station · 192.168.1.40 — error"},
+ sealed:{st:["● sellado","var(--warn-fg)"],lock:1,g:["0% · 0.4/24","0% · 0.4/24"],gb:[2,2],q:["14","en pausa","var(--warn-fg)"],last:"ahora",t:"Lumi Station · 192.168.1.40 — sellado"},
+ lost  :{st:["● sin conexión","var(--subtle)"],lock:0,g:["—","—"],gb:[0,0],q:["?","desconocido","var(--subtle)"],last:"hace 41 s",t:"Lumi Station · reconectando…"}};
+document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x===t));
+  const s=t.dataset.s,c=CFG[s];
+  document.querySelectorAll(".scrim[data-p]").forEach(p=>p.classList.toggle("hidden",p.dataset.p!==s));
+  const on=document.querySelector('.scrim[data-p="'+s+'"]');
+  on.style.animation="none";void on.offsetWidth;on.style.animation="";
+  const st=document.getElementById("tStat");st.textContent=c.st[0];st.style.color=c.st[1];
+  document.getElementById("lockI").classList.toggle("hidden",!c.lock);
+  document.getElementById("g0").textContent=c.g[0];document.getElementById("g1").textContent=c.g[1];
+  document.getElementById("g0b").style.width=c.gb[0]+"%";document.getElementById("g1b").style.width=c.gb[1]+"%";
+  document.getElementById("qN").textContent=c.q[0];
+  const q=document.getElementById("qS");q.textContent=c.q[1];q.style.color=c.q[2];
+  document.getElementById("lastS").textContent=c.last;
+  document.getElementById("tbT").textContent=c.t;
+});
+</script>

@@ -1,0 +1,9 @@
+# workflow/ es un repo aparte (ClaudeChan), clonado por el bootstrap
+workflow/
+
+node_modules/
+target/
+dist/
+.env
+.env.local
+*.log
