@@ -8,7 +8,7 @@ export function Wizard({ step, title, subtitle, children, onBack, onNext, nextLa
   onBack?: () => void; onNext?: () => void; nextLabel?: string; nextDisabled?: boolean;
 }) {
   return (
-    <div className="relative z-10 mx-auto max-w-xl px-6 py-9">
+    <div className="relative z-10 mx-auto w-full max-w-xl px-6 py-9">
       <div className="mb-1 flex items-center gap-2.5" style={{ animation: "jg-fade-rise .7s both" }}>
         <span className="text-fg" style={{ animation: "jg-lock-breathe 2.4s ease-in-out infinite" }}>✦</span>
         <span className="text-[17px] font-medium text-fg">{title}</span>
@@ -17,15 +17,19 @@ export function Wizard({ step, title, subtitle, children, onBack, onNext, nextLa
         Paso {step + 1} de {STEPS.length} · {subtitle}
       </p>
 
-      <div className="relative mb-6 flex items-start justify-between" style={{ animation: "jg-fade-rise .7s .12s both" }}>
+      {/* gap-x-2 es un backstop: sin él, un flex-1 con min-width:auto deja
+          que el texto de la columna se desborde sobre la vecina cuando la
+          palabra ("Vincular", "Runtime") es más ancha que su porción
+          equitativa — es justo lo que se veía pegado en la captura. */}
+      <div className="relative mb-6 flex items-start justify-between gap-x-2" style={{ animation: "jg-fade-rise .7s .12s both" }}>
         <div className="absolute left-[6%] right-[6%] top-3.5 h-0.5 bg-white/[.09]" />
         <div className="absolute left-[6%] top-3.5 h-0.5 rounded bg-accent transition-[width] duration-[900ms] ease-expo"
           style={{ width: `${(step / (STEPS.length - 1)) * 88}%` }} />
         {STEPS.map((label, i) => {
           const state = i < step ? "done" : i === step ? "now" : "todo";
           return (
-            <div key={label} className="relative flex flex-1 flex-col items-center gap-1.5">
-              <div className={`flex h-7 w-7 items-center justify-center rounded-full font-mono text-[11px] transition-all duration-500 ease-expo ${
+            <div key={label} className="relative flex min-w-0 flex-1 flex-col items-center gap-1.5">
+              <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-[11px] transition-all duration-500 ease-expo ${
                 state === "done" ? "border border-accent bg-accent text-black"
                 : state === "now" ? "border-2 border-accent bg-bg text-fg"
                 : "border border-white/15 bg-white/5 text-subtle"}`}>

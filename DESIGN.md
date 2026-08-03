@@ -47,7 +47,10 @@ telemetría (mayúsculas, `letter-spacing: .1em`).
 Panel de cristal (solo sobre mapa o sobre el fondo de planeta):
 `border border-white/[.13] bg-[rgba(16,19,25,.66)] backdrop-blur-xl shadow-lg shadow-black/40`
 
-Ancho del wizard: `max-w-xl` (552px), centrado.
+Ancho del wizard: `max-w-xl` (552px), centrado. Mismo valor que la v1: el desbordamiento
+del stepper ("Vincular" pisando "Admin") no era un problema de ancho, era que Inter nunca se
+cargaba de verdad — caía a la fuente del sistema, más ancha — y por eso el ancho por sí solo
+nunca lo habría arreglado. Ver "Tipografía" más abajo.
 
 ## Iconos
 

@@ -1,3 +1,11 @@
+/* La v1 cargaba Inter de verdad vía next/font/google (autoalojado, sin CDN
+   en runtime). Aquí tailwind.config.ts declaraba "Inter" en la pila de
+   fuentes pero nadie la cargaba: caía a system-ui (Segoe UI en Windows),
+   con métricas más anchas que Inter para estas palabras — esa es la causa
+   real de que "Vincular" desbordara su columna del stepper, no la escala. */
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
