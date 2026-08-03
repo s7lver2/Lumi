@@ -198,3 +198,28 @@ pub struct AccountReq {
     pub username: String,
     pub password: String,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AdminRequest {
+    pub id: i64,
+    pub display_name: String,
+    pub message: String,
+    pub source_ip: String,
+    /// La solicitud viene de fuera del rango privado. Lo calcula el servidor
+    /// para que la interfaz no tenga que saber de rangos de red.
+    pub external: bool,
+    pub status: String,
+    pub reason: Option<String>,
+    pub created_at: i64,
+    pub expires_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResolveReq {
+    pub approve: bool,
+    #[serde(default)]
+    pub reason: Option<String>,
+    /// Solo al aprobar. Vacío o ausente: hereda los modelos del global.
+    #[serde(default)]
+    pub granted_models: Option<Vec<String>>,
+}
