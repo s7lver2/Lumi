@@ -21,3 +21,4 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 bs58 = "0.5"
 rand.workspace = true
+async-stream = "0.3"

@@ -1,0 +1,137 @@
+//! Runner de tareas del servidor.
+//!
+//! Las instalaciones pesadas (torch, CUDA, base de datos) no son peticiones
+//! HTTP largas: corren aquí, escriben a un log persistente y el cliente se
+//! engancha y desengancha por offset. Cerrar la app no aborta nada.
+//!
+//! Es el mismo primitivo que consumirá la cola del subsistema 4.
+
+use crate::App;
+use anyhow::Result;
+use lumi_proto::api::{TaskKind, TaskStatus};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use tokio::io::{AsyncBufReadExt, BufReader};
+
+pub fn log_path(dir: &Path, id: &str) -> PathBuf {
+    dir.join("tasks").join(format!("{id}.log"))
+}
+
+fn now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+}
+
+/// El comando de cada tipo de tarea. Un script por tipo, no un motor de
+/// pipelines: hay dos tipos y no se esperan más en este subsistema.
+fn command(kind: TaskKind, dir: &Path) -> (String, Vec<String>) {
+    let venv = dir.join("venv");
+    match kind {
+        TaskKind::InferenceRuntime => (
+            "/bin/sh".into(),
+            vec![
+                "-c".into(),
+                format!(
+                    "set -e; python3 -m venv {v}; {v}/bin/pip install --upgrade pip; \
+                     {v}/bin/pip install --retries 5 --timeout 60 \
+                     torch --index-url https://download.pytorch.org/whl/cu126",
+                    v = venv.display()
+                ),
+            ],
+        ),
+        TaskKind::Database => (
+            "/bin/sh".into(),
+            vec!["-c".into(), "echo 'esquema aplicado por lumid al arrancar'".into()],
+        ),
+    }
+}
+
+pub fn spawn(app: &App, kind: TaskKind) -> Result<String> {
+    let id = crate::routes::claim::new_token()[..12].to_string();
+    std::fs::create_dir_all(app.dir.join("tasks"))?;
+    let path = log_path(&app.dir, &id);
+    std::fs::File::create(&path)?;
+
+    app.store.conn().execute(
+        "INSERT INTO tasks (id, kind, running, exit_code, started_at) VALUES (?1, ?2, 1, NULL, ?3)",
+        rusqlite::params![id, serde_json::to_string(&kind)?, now()],
+    )?;
+
+    let (bin, args) = command(kind, &app.dir);
+    let store = app.store.clone();
+    let id2 = id.clone();
+    tokio::spawn(async move {
+        let mut child = match tokio::process::Command::new(bin)
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                let _ = append(&path, &format!("FATAL no se pudo lanzar: {e}\n"));
+                finish(&store, &id2, Some(-1));
+                return;
+            }
+        };
+        // stdout y stderr al mismo log, en orden de llegada: es lo que el
+        // operador quiere leer, no dos flujos que casar a mano.
+        let out = BufReader::new(child.stdout.take().unwrap());
+        let err = BufReader::new(child.stderr.take().unwrap());
+        let p1 = path.clone();
+        let p2 = path.clone();
+        let a = tokio::spawn(async move {
+            let mut l = out.lines();
+            while let Ok(Some(line)) = l.next_line().await {
+                let _ = append(&p1, &format!("{line}\n"));
+            }
+        });
+        let b = tokio::spawn(async move {
+            let mut l = err.lines();
+            while let Ok(Some(line)) = l.next_line().await {
+                let _ = append(&p2, &format!("{line}\n"));
+            }
+        });
+        let code = child.wait().await.ok().and_then(|s| s.code());
+        let _ = a.await;
+        let _ = b.await;
+        finish(&store, &id2, code);
+    });
+    Ok(id)
+}
+
+fn append(path: &Path, line: &str) -> std::io::Result<()> {
+    std::fs::OpenOptions::new()
+        .append(true)
+        .open(path)?
+        .write_all(line.as_bytes())
+}
+
+fn finish(store: &crate::store::Store, id: &str, code: Option<i32>) {
+    let _ = store.conn().execute(
+        "UPDATE tasks SET running = 0, exit_code = ?2 WHERE id = ?1",
+        rusqlite::params![id, code],
+    );
+}
+
+pub fn status(app: &App, id: &str) -> Option<TaskStatus> {
+    let (kind, running, exit_code): (String, i64, Option<i32>) = app
+        .store
+        .conn()
+        .query_row(
+            "SELECT kind, running, exit_code FROM tasks WHERE id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .ok()?;
+    Some(TaskStatus {
+        id: id.into(),
+        kind: serde_json::from_str(&kind).ok()?,
+        running: running == 1,
+        exit_code,
+        log_len: std::fs::metadata(log_path(&app.dir, id)).map(|m| m.len()).unwrap_or(0),
+    })
+}

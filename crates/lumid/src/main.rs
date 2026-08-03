@@ -1,6 +1,7 @@
 mod master;
 mod routes;
 mod store;
+mod tasks;
 mod tls;
 
 use axum::{routing::get, Router};
@@ -48,6 +49,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin", post(routes::claim::create_admin))
         .route("/v1/auth/login", post(routes::auth::login))
         .route("/v1/unseal", post(routes::auth::unseal))
+        .route("/v1/tasks", post(routes::tasks::create))
+        .route("/v1/tasks/:id", get(routes::tasks::get))
+        .route("/v1/tasks/:id/log", get(routes::tasks::log_sse))
         .with_state(app);
 
     let port: u16 = std::env::var("LUMI_PORT")
