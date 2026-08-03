@@ -41,9 +41,13 @@ async fn main() -> anyhow::Result<()> {
         dir: dir.clone(),
     };
 
+    use axum::routing::post;
     let router = Router::new()
         .route("/v1/hello", get(routes::hello::get))
-        .route("/v1/unseal", axum::routing::post(routes::auth::unseal))
+        .route("/v1/claim", post(routes::claim::claim))
+        .route("/v1/admin", post(routes::claim::create_admin))
+        .route("/v1/auth/login", post(routes::auth::login))
+        .route("/v1/unseal", post(routes::auth::unseal))
         .with_state(app);
 
     let port: u16 = std::env::var("LUMI_PORT")

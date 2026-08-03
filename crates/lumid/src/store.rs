@@ -43,6 +43,11 @@ pub struct Store(Mutex<Connection>);
 impl Store {
     pub fn open(dir: &Path) -> Result<Self> {
         let c = Connection::open(dir.join("lumi.db"))?;
+        // ponytail: la sesión de bootstrap usa user_id = 0 como centinela (no
+        // hay usuario con ese id todavía). El build bundled de SQLite activa
+        // foreign_keys por defecto y rompería ese diseño; se desactiva
+        // explícitamente, que es el comportamiento estándar de SQLite.
+        c.execute_batch("PRAGMA foreign_keys = OFF;")?;
         c.execute_batch(SCHEMA)?;
         Ok(Self(Mutex::new(c)))
     }
