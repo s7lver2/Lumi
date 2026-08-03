@@ -103,3 +103,166 @@ pub async fn resolve_request(
     tracing::info!("solicitud #{id} {} por el usuario {admin}", if req.approve { "aprobada" } else { "rechazada" });
     Ok(StatusCode::NO_CONTENT)
 }
+
+use lumi_proto::api::{AdminUser, DeviceRow, PatchLimitsReq, PatchUserReq, SessionInfo, UserDetail};
+
+fn user_row(app: &App, id: i64) -> Option<AdminUser> {
+    let base: (i64, String, Option<String>, i64, i64, i64, i64) = app
+        .store
+        .conn()
+        .query_row(
+            "SELECT id, username, display_name, is_admin, blocked, must_change_password, created_at
+             FROM users WHERE id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)),
+        )
+        .ok()?;
+    Some(AdminUser {
+        id: base.0,
+        username: base.1,
+        display_name: base.2,
+        is_admin: base.3 == 1,
+        blocked: base.4 == 1,
+        must_change_password: base.5 == 1,
+        created_at: base.6,
+        limits: crate::limits::effective(&app.store, id),
+    })
+}
+
+pub async fn list_users(
+    State(app): State<App>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<AdminUser>>, StatusCode> {
+    require_admin(&app, &bearer(&headers))?;
+    let ids: Vec<i64> = {
+        let c = app.store.conn();
+        let mut q = c
+            .prepare("SELECT id FROM users ORDER BY created_at")
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let v = q.query_map([], |r| r.get(0)).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        v.flatten().collect()
+    };
+    // Los ids se recogen antes de soltar el mutex: `user_row` vuelve a pedirlo.
+    Ok(Json(ids.into_iter().filter_map(|i| user_row(&app, i)).collect()))
+}
+
+pub async fn get_user(
+    State(app): State<App>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+) -> Result<Json<UserDetail>, StatusCode> {
+    require_admin(&app, &bearer(&headers))?;
+    let user = user_row(&app, id).ok_or(StatusCode::NOT_FOUND)?;
+    let global = crate::limits::global(&app.store);
+    let overrides = crate::limits::overrides(&app.store, id);
+    let c = app.store.conn();
+    let mut dq = c
+        .prepare("SELECT name, os, first_seen, last_seen FROM devices WHERE user_id = ?1 ORDER BY last_seen DESC")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let devices: Vec<DeviceRow> = dq
+        .query_map([id], |r| {
+            Ok(DeviceRow { name: r.get(0)?, os: r.get(1)?, first_seen: r.get(2)?, last_seen: r.get(3)? })
+        })
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .flatten()
+        .collect();
+    let mut sq = c
+        .prepare(
+            "SELECT s.public_id, d.name, d.os, s.created_at, s.last_seen
+             FROM sessions s LEFT JOIN devices d ON d.id = s.device_id
+             WHERE s.user_id = ?1 AND s.public_id IS NOT NULL AND s.expires_at > ?2
+             ORDER BY s.created_at DESC",
+        )
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let sessions: Vec<SessionInfo> = sq
+        .query_map(rusqlite::params![id, now()], |r| {
+            Ok(SessionInfo {
+                public_id: r.get(0)?,
+                device_name: r.get(1)?,
+                os: r.get(2)?,
+                created_at: r.get(3)?,
+                last_seen: r.get(4)?,
+                // "La sesión actual" es del que mira, y quien mira es el admin,
+                // no este usuario: aquí nunca hay sesión propia que marcar.
+                current: false,
+            })
+        })
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .flatten()
+        .collect();
+    Ok(Json(UserDetail { user, global, overrides, devices, sessions }))
+}
+
+pub async fn patch_user(
+    State(app): State<App>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+    Json(req): Json<PatchUserReq>,
+) -> Result<Json<UserDetail>, (StatusCode, String)> {
+    let admin = require_admin(&app, &bearer(&headers))
+        .map_err(|c| (c, "hace falta ser administrador".to_string()))?;
+    let bad = |m: &str| (StatusCode::BAD_REQUEST, m.to_string());
+    if id == admin && req.blocked == Some(true) {
+        return Err(bad("no puedes bloquearte a ti mismo"));
+    }
+    {
+        let c = app.store.conn();
+        if let Some(b) = req.blocked {
+            c.execute("UPDATE users SET blocked = ?1 WHERE id = ?2", rusqlite::params![b as i64, id])
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            // Bloquear corta el acceso YA: dejar viva una sesión de 12 h
+            // convertiría el bloqueo en una sugerencia. Los trabajos ya
+            // encolados siguen: qué hacer con ellos es del subsistema 4.
+            if b {
+                let _ = c.execute("DELETE FROM sessions WHERE user_id = ?1", [id]);
+            }
+        }
+        if let Some(m) = req.must_change_password {
+            c.execute(
+                "UPDATE users SET must_change_password = ?1 WHERE id = ?2",
+                rusqlite::params![m as i64, id],
+            )
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        }
+    }
+    for (k, v) in &req.limits {
+        let r = if v.is_null() {
+            crate::limits::clear(&app.store, Some(id), k)
+        } else {
+            crate::limits::set(&app.store, Some(id), k, v)
+        };
+        r.map_err(|e| bad(&e.to_string()))?;
+    }
+    // Se devuelve el detalle recalculado para que la interfaz no tenga que
+    // adivinar el resultado ni volver a pedirlo.
+    get_user(State(app), Path(id), headers)
+        .await
+        .map(|d| d)
+        .map_err(|c| (c, "no se pudo releer el usuario".to_string()))
+}
+
+pub async fn get_limits(
+    State(app): State<App>,
+    headers: HeaderMap,
+) -> Result<Json<lumi_proto::api::Limits>, StatusCode> {
+    require_admin(&app, &bearer(&headers))?;
+    Ok(Json(crate::limits::global(&app.store)))
+}
+
+pub async fn patch_limits(
+    State(app): State<App>,
+    headers: HeaderMap,
+    Json(req): Json<PatchLimitsReq>,
+) -> Result<Json<lumi_proto::api::Limits>, (StatusCode, String)> {
+    require_admin(&app, &bearer(&headers))
+        .map_err(|c| (c, "hace falta ser administrador".to_string()))?;
+    for (k, v) in &req.limits {
+        let r = if v.is_null() {
+            crate::limits::clear(&app.store, None, k)
+        } else {
+            crate::limits::set(&app.store, None, k, v)
+        };
+        r.map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    }
+    Ok(Json(crate::limits::global(&app.store)))
+}

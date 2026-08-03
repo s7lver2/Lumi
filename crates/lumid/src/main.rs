@@ -64,6 +64,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/sessions/:public_id", axum::routing::delete(routes::auth::revoke_session))
         .route("/v1/admin/access-requests", get(routes::admin::list_requests))
         .route("/v1/admin/access-requests/:id/resolve", post(routes::admin::resolve_request))
+        .route("/v1/admin/users", get(routes::admin::list_users))
+        .route("/v1/admin/users/:id", get(routes::admin::get_user).patch(routes::admin::patch_user))
+        .route("/v1/admin/limits", get(routes::admin::get_limits).patch(routes::admin::patch_limits))
         .with_state(app);
 
     let port: u16 = std::env::var("LUMI_PORT")

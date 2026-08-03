@@ -223,3 +223,52 @@ pub struct ResolveReq {
     #[serde(default)]
     pub granted_models: Option<Vec<String>>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AdminUser {
+    pub id: i64,
+    pub username: String,
+    pub display_name: Option<String>,
+    pub is_admin: bool,
+    pub blocked: bool,
+    pub must_change_password: bool,
+    pub created_at: i64,
+    /// Lo que rige de verdad para este usuario.
+    pub limits: Limits,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DeviceRow {
+    pub name: String,
+    pub os: Option<String>,
+    pub first_seen: i64,
+    pub last_seen: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserDetail {
+    pub user: AdminUser,
+    /// Los valores del servidor, para poder decir "anulado · global 50".
+    pub global: Limits,
+    /// Solo las palancas anuladas para este usuario.
+    pub overrides: std::collections::HashMap<String, serde_json::Value>,
+    pub devices: Vec<DeviceRow>,
+    pub sessions: Vec<SessionInfo>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PatchUserReq {
+    #[serde(default)]
+    pub blocked: Option<bool>,
+    #[serde(default)]
+    pub must_change_password: Option<bool>,
+    /// Palanca → valor. `null` como valor QUITA la anulación: el usuario
+    /// vuelve a heredar del global. Es la única forma de volver atrás.
+    #[serde(default)]
+    pub limits: std::collections::HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PatchLimitsReq {
+    pub limits: std::collections::HashMap<String, serde_json::Value>,
+}
