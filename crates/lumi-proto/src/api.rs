@@ -149,3 +149,30 @@ pub struct DeviceInfo {
     pub name: String,
     pub os: Option<String>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AccessReq {
+    pub display_name: String,
+    pub message: String,
+}
+
+/// El ticket se devuelve UNA sola vez. El servidor guarda su hash.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AccessRes {
+    pub ticket: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AccessStatus {
+    /// pending | approved | rejected
+    pub status: String,
+    pub display_name: String,
+    /// Motivo del rechazo, escrito por el admin. Se muestra tal cual.
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AccountReq {
+    pub username: String,
+    pub password: String,
+}

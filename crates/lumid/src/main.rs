@@ -56,6 +56,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/tasks/:id", get(routes::tasks::get))
         .route("/v1/tasks/:id/log", get(routes::tasks::log_sse))
         .route("/v1/telemetry", get(routes::telemetry::sse))
+        .route("/v1/access-requests", post(routes::access::create))
+        .route("/v1/access-requests/status", get(routes::access::status))
+        .route("/v1/accounts", post(routes::access::create_account))
         .with_state(app);
 
     let port: u16 = std::env::var("LUMI_PORT")
@@ -65,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("lumid escuchando en https://{addr}");
     axum_server::bind_rustls(addr, tls_cfg)
-        .serve(router.into_make_service())
+        .serve(router.into_make_service_with_connect_info::<SocketAddr>())
         .await?;
     Ok(())
 }
