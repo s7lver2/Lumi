@@ -2,6 +2,7 @@ mod master;
 mod routes;
 mod store;
 mod tasks;
+mod telemetry;
 mod tls;
 
 use axum::{routing::get, Router};
@@ -52,6 +53,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/tasks", post(routes::tasks::create))
         .route("/v1/tasks/:id", get(routes::tasks::get))
         .route("/v1/tasks/:id/log", get(routes::tasks::log_sse))
+        .route("/v1/telemetry", get(routes::telemetry::sse))
         .with_state(app);
 
     let port: u16 = std::env::var("LUMI_PORT")
