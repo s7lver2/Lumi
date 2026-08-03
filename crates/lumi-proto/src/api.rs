@@ -57,12 +57,34 @@ pub struct AdminReq {
 pub struct LoginReq {
     pub username: String,
     pub password: String,
+    /// Opcional: el CLI y las pruebas por curl no lo mandan.
+    #[serde(default)]
+    pub device: Option<DeviceInfo>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginRes {
     pub token: String,
+    pub username: String,
     pub is_admin: bool,
+    /// Si es `true`, el token solo sirve para `POST /v1/auth/change-password`.
+    pub must_change_password: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChangePasswordReq {
+    pub current: String,
+    pub new: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SessionInfo {
+    pub public_id: String,
+    pub device_name: Option<String>,
+    pub os: Option<String>,
+    pub created_at: i64,
+    pub last_seen: i64,
+    pub current: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

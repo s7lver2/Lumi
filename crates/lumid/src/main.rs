@@ -59,6 +59,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/access-requests", post(routes::access::create))
         .route("/v1/access-requests/status", get(routes::access::status))
         .route("/v1/accounts", post(routes::access::create_account))
+        .route("/v1/auth/change-password", post(routes::auth::change_password))
+        .route("/v1/me/sessions", get(routes::auth::my_sessions))
+        .route("/v1/sessions/:public_id", axum::routing::delete(routes::auth::revoke_session))
         .with_state(app);
 
     let port: u16 = std::env::var("LUMI_PORT")
