@@ -1,6 +1,10 @@
 [workspace]
 resolver = "2"
 members = ["crates/lumi-proto", "crates/lumid", "crates/lumi-cli"]
+# ponytail: client/src-tauri es un proyecto Cargo aparte (lo gestiona `tauri`,
+# no este workspace); sin excluirlo, cargo lo reclama igual por estar bajo
+# este árbol de directorios.
+exclude = ["client/src-tauri"]
 
 [workspace.package]
 version = "2.0.0"

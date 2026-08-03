@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+body { background: #0e0f11; color: #e8e8e6; overflow: hidden; }
+
+/* Keyframes heredados de globals.css de la v1. Mismos nombres y tiempos. */
+@keyframes lumi-planet-spin { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes lumi-orbit { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes lumi-twinkle { 0%, 100% { opacity: .2; } 50% { opacity: .9; } }
+@keyframes lumi-spin { to { transform: rotate(360deg); } }
+@keyframes jg-fade-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes jg-lock-breathe { 0%, 100% { opacity: .7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.06); } }
+@keyframes jg-alert-pulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+@keyframes jg-scan { 0%, 70%, 100% { opacity: .22; } 25% { opacity: 1; } }
+@keyframes lumi-tumble-fall {
+  0%   { transform: rotate(224deg) translateY(-260px) rotate(-224deg); opacity: 1; }
+  10%  { transform: rotate(224deg) translateY(-260px) rotate(-224deg); opacity: 1; }
+  78%  { transform: rotate(224deg) translateY(-260px) translate(-96px, 150px); opacity: .5; }
+  100% { transform: rotate(224deg) translateY(-260px) translate(-150px, 250px); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .lumi-anim { animation: none !important; } }
