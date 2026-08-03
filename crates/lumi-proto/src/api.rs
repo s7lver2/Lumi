@@ -114,3 +114,38 @@ pub struct GpuSample {
     pub vram_total_mb: u64,
     pub temp_c: Option<u32>,
 }
+
+/// Las seis palancas de la spec. Se serializa entera hacia el cliente; se
+/// almacena descompuesta en filas clave/valor para poder anular una sola.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Limits {
+    pub models: Vec<String>,
+    pub max_concurrent: i64,
+    pub max_daily: i64,
+    pub max_storage_gb: i64,
+    pub queue_priority: i64,
+    pub can_create_projects: bool,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            models: vec!["mini".into()],
+            max_concurrent: 2,
+            max_daily: 50,
+            max_storage_gb: 20,
+            queue_priority: 0,
+            can_create_projects: true,
+        }
+    }
+}
+
+/// Identidad del equipo desde el que se inicia sesión. Registro PASIVO: audita
+/// y permite revocar, NO autentica. Copiar el fichero del cliente copia la
+/// identidad, y eso es a propósito.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceInfo {
+    pub client_id: String,
+    pub name: String,
+    pub os: Option<String>,
+}
