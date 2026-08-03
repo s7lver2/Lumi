@@ -2,6 +2,10 @@ import { useState } from "react";
 import { loadServers, loadSession, type Server } from "../lib/session";
 import { LoginForm } from "./LoginForm";
 import { AddServerForm } from "./AddServerForm";
+import { RequestForm } from "./RequestForm";
+import { WaitingScreen } from "./WaitingScreen";
+import { ResolvedScreen } from "./ResolvedScreen";
+import type { AccessStatus } from "../lib/api";
 
 export type EntryView = "login" | "add" | "request" | "waiting" | "resolved" | "password";
 
@@ -35,6 +39,7 @@ export function EntryScreen({ onSignedIn, onOwnerKey }: {
   const [view, setView] = useState<EntryView>(
     saved.length === 0 ? "add" : loadSession()?.ticket ? "waiting" : "login",
   );
+  const [resolved, setResolved] = useState<AccessStatus | null>(null);
 
   if (view === "add") {
     return (
@@ -42,6 +47,36 @@ export function EntryScreen({ onSignedIn, onOwnerKey }: {
         <AddServerForm
           onAdded={(addr) => { setServer(loadServers().find((s) => s.addr === addr) ?? null); setView("login"); }}
           onOwnerKey={onOwnerKey}
+          onBack={() => setView("login")} />
+      </Pane>
+    );
+  }
+
+  if (view === "request") {
+    return (
+      <Pane title="Solicitar acceso" subtitle="el administrador recibirá tu petición.">
+        <RequestForm server={server} onSent={() => setView("waiting")} onBack={() => setView("login")} />
+      </Pane>
+    );
+  }
+  if (view === "waiting") {
+    return (
+      <Pane title="Solicitud enviada" subtitle="esperando a que el administrador responda.">
+        <WaitingScreen server={server}
+          onResolved={(s) => { setResolved(s); setView("resolved"); }}
+          onCancel={() => setView("login")} />
+      </Pane>
+    );
+  }
+
+  if (view === "resolved" && resolved) {
+    const ok = resolved.status === "approved";
+    return (
+      <Pane title={ok ? "Acceso aprobado" : "Solicitud rechazada"}
+        subtitle={ok ? "crea tu cuenta para empezar." : "el administrador no ha concedido el acceso."}>
+        <ResolvedScreen status={resolved}
+          onCreated={() => setView("login")}
+          onRetry={() => setView("request")}
           onBack={() => setView("login")} />
       </Pane>
     );

@@ -60,4 +60,9 @@ body { background: #0e0f11; color: #e8e8e6; overflow: hidden; }
   78%  { transform: rotate(224deg) translateY(-260px) translate(-96px, 150px); opacity: .5; }
   100% { transform: rotate(224deg) translateY(-260px) translate(-150px, 250px); opacity: 0; }
 }
+@keyframes jg-sweep { to { transform: rotate(360deg) } }
+@keyframes jg-core-pulse {
+  0%, 100% { opacity: .55; transform: scale(1) }
+  50%      { opacity: 1;   transform: scale(1.2) }
+}
 @media (prefers-reduced-motion: reduce) { .lumi-anim { animation: none !important; } }
