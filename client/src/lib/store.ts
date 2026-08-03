@@ -3,16 +3,19 @@ import type { Hello, Sample } from "./api";
 
 interface ServerState {
   key: string; hello: Hello | null; token: string | null; sample: Sample | null;
+  bootstrapToken: string;
   setKey: (k: string) => void;
   setHello: (h: Hello | null) => void;
   setToken: (t: string | null) => void;
   setSample: (s: Sample | null) => void;
+  setBootstrapToken: (t: string) => void;
 }
 
 export const useServer = create<ServerState>((set) => ({
-  key: "", hello: null, token: null, sample: null,
+  key: "", hello: null, token: null, sample: null, bootstrapToken: "",
   setKey: (key) => set({ key }),
   setHello: (hello) => set({ hello }),
   setToken: (token) => set({ token }),
   setSample: (sample) => set({ sample }),
+  setBootstrapToken: (bootstrapToken) => set({ bootstrapToken }),
 }));

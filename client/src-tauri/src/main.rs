@@ -147,11 +147,51 @@ async fn start_telemetry(
     Ok(())
 }
 
+/// Igual que la telemetría, pero para el log de una tarea. El `from` permite
+/// reengancharse en el punto exacto en que se cortó.
+#[tauri::command]
+async fn start_task_log(
+    id: String, from: u64, token: String, app: tauri::AppHandle, state: tauri::State<'_, Shared>,
+) -> Result<(), String> {
+    use futures_util::StreamExt;
+    use tauri::Emitter;
+    let (base, client) = {
+        let c = state.lock().unwrap();
+        (c.base.clone().ok_or("sin servidor")?, c.client.clone().ok_or("sin cliente")?)
+    };
+    tokio::spawn(async move {
+        let url = format!("{base}/v1/tasks/{id}/log?from={from}");
+        let Ok(res) = client.get(url).bearer_auth(&token).send().await else {
+            let _ = app.emit("task-log-down", ());
+            return;
+        };
+        let mut stream = res.bytes_stream();
+        let mut buf = String::new();
+        while let Some(Ok(chunk)) = stream.next().await {
+            buf.push_str(&String::from_utf8_lossy(&chunk));
+            while let Some(i) = buf.find("\n\n") {
+                let frame = buf[..i].to_string();
+                buf.drain(..i + 2);
+                let data: String = frame
+                    .lines()
+                    .filter_map(|l| l.strip_prefix("data: "))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if !data.is_empty() {
+                    let _ = app.emit("task-log", data);
+                }
+            }
+        }
+        let _ = app.emit("task-log-down", ());
+    });
+    Ok(())
+}
+
 fn main() {
     rustls::crypto::ring::default_provider().install_default().ok();
     tauri::Builder::default()
         .manage(Shared::default())
-        .invoke_handler(tauri::generate_handler![pair, request, start_telemetry])
+        .invoke_handler(tauri::generate_handler![pair, request, start_telemetry, start_task_log])
         .run(tauri::generate_context!())
         .expect("error al arrancar Tauri");
 }
