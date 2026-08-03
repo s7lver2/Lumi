@@ -29,21 +29,23 @@ export interface Server {
 const KEY = "lumi.session";
 const SERVERS = "lumi.servers";
 const DEVICE = "lumi.device";
-const ENV = "lumi.env";
+const ENV_PARAM = "env";
 
 // Namespacing de entornos para el orbe de debug (solo dev, ver
 // client/src/dev/DebugOrb.tsx). El entorno "1" usa las claves de siempre sin
 // sufijo, para no invalidar sesiones que ya existieran de antes de esto.
 //
-// El PUNTERO de qué entorno está activo va en sessionStorage, no en
-// localStorage: localStorage se comparte entre todas las ventanas del mismo
-// origen, así que cambiar de entorno en una ventana movía también el
-// puntero de las demás (solo se notaba al recargarlas). sessionStorage es
-// por ventana — cada una puede tener su propio entorno activo a la vez.
-// Los DATOS de cada entorno sí siguen en localStorage: eso es lo que
-// permite verlos desde el panel de admin sin importar qué ventana los creó.
+// El PUNTERO de qué entorno está activo va en la URL de la ventana (?env=N),
+// no en almacenamiento. Se probó primero con localStorage (compartido entre
+// TODAS las ventanas del origen: cambiar en una movía a las demás) y luego
+// con sessionStorage (WebView2, el motor de Tauri en Windows, lo compartió
+// igual entre ventanas — no se puede confiar en que aísle por ventana ahí).
+// La URL sí es inherentemente por ventana: no hay ninguna forma de que dos
+// ventanas compartan la suya. Los DATOS de cada entorno sí siguen en
+// localStorage: eso es lo que permite verlos desde el panel de admin sin
+// importar qué ventana los creó.
 function currentEnv(): string {
-  return sessionStorage.getItem(ENV) ?? "1";
+  return new URLSearchParams(location.search).get(ENV_PARAM) ?? "1";
 }
 function nsKey(base: string): string {
   const env = currentEnv();
@@ -52,8 +54,13 @@ function nsKey(base: string): string {
 export function getEnv(): string {
   return currentEnv();
 }
+/** No cambia nada por sí sola: hace falta recargar para que las funciones de
+ *  este módulo (que leen `location.search` en el momento) empiecen a usar
+ *  el namespace nuevo. El orbe llama a `location.reload()` justo después. */
 export function setEnv(env: string) {
-  sessionStorage.setItem(ENV, env);
+  const url = new URL(location.href);
+  url.searchParams.set(ENV_PARAM, env);
+  history.replaceState(null, "", url);
 }
 
 export function loadSession(): Session | null {
