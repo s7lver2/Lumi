@@ -1,3 +1,4 @@
+mod master;
 mod routes;
 mod store;
 mod tls;
@@ -36,12 +37,13 @@ async fn main() -> anyhow::Result<()> {
         fingerprint,
         mode: if std::path::Path::new("/.dockerenv").exists() { Mode::Docker } else { Mode::Native },
         gpus: gpus(),
-        master: Arc::new(RwLock::new(None)),
+        master: Arc::new(RwLock::new(master::load_at_boot(&dir))),
         dir: dir.clone(),
     };
 
     let router = Router::new()
         .route("/v1/hello", get(routes::hello::get))
+        .route("/v1/unseal", axum::routing::post(routes::auth::unseal))
         .with_state(app);
 
     let port: u16 = std::env::var("LUMI_PORT")
