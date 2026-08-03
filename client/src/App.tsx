@@ -6,18 +6,20 @@ import { Wizard } from "./wizard/Wizard";
 import { PairStep } from "./wizard/PairStep";
 import { AdminStep } from "./wizard/AdminStep";
 import { ProvisionStep } from "./wizard/ProvisionStep";
-import { ReloginStep } from "./wizard/ReloginStep";
 import { TelemetryStrip } from "./ui/TelemetryStrip";
 import { StatusOverlay } from "./ui/StatusOverlay";
+import { EntryScreen } from "./entry/EntryScreen";
+import { AdminPanel } from "./admin/AdminPanel";
 import { useServer } from "./lib/store";
 import { api, type Hello, type Sample } from "./lib/api";
-import { clearSession, loadSession, updateSession } from "./lib/session";
+import { loadSession, updateSession } from "./lib/session";
 
 export default function App() {
   const [step, setStep] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
-  const [needsRelogin, setNeedsRelogin] = useState(false);
   const [resuming, setResuming] = useState(true);
+  const [mode, setMode] = useState<"entry" | "wizard" | "app" | "admin">("entry");
+  const [notifs, setNotifs] = useState(0);
   const hello = useServer((s) => s.hello);
   const bootstrapToken = useServer((s) => s.bootstrapToken);
   const [status, setStatus] = useState<"ok" | "reboot" | "error" | "sealed" | "lost">("ok");
@@ -30,48 +32,49 @@ export default function App() {
 
   // Al reabrir la app, retomar donde estabas en vez de exigir la clave de
   // vinculación otra vez (es de un solo uso: para entonces ya está gastada).
-  // La decisión de en qué paso aterrizar sale de la VERDAD del servidor
-  // (hello.state), no de un número de paso guardado a ciegas — así, si el
-  // servidor se reinstaló entretanto, no se intenta retomar algo que ya no
-  // existe.
+  // La decisión de en qué modo aterrizar sale de la VERDAD del servidor
+  // (hello.state, /v1/auth/me), no de un número de paso guardado a ciegas.
   useEffect(() => {
     const session = loadSession();
-    if (!session?.addr || !session?.fingerprint) {
-      setResuming(false);
-      return;
-    }
+    if (!session?.addr || !session?.fingerprint) { setResuming(false); return; }
     (async () => {
       try {
         const h = await api.reconnect(session.addr, session.fingerprint);
         useServer.getState().setHello(h);
         useServer.getState().setAddr(session.addr);
 
+        // Servidor sin reclamar: esto es el flujo del owner, no el de entrada.
         if (h.state === "unclaimed") {
           if (session.bootstrapToken) {
-            // Vinculado y canjeado, pero cerraste antes de crear el admin.
-            // La sesión de bootstrap dura 10 min: se intenta, y si ya
-            // venció, AdminStep mostrará el error del servidor tal cual.
             useServer.getState().setBootstrapToken(session.bootstrapToken);
             setStep(1);
+            setMode("wizard");
           } else {
-            clearSession();
+            setMode("entry");
           }
-        } else if (session.token) {
-          try {
-            await api.get("/v1/auth/me", session.token);
-            useServer.getState().setToken(session.token);
-            await invoke("start_telemetry", { token: session.token });
-            setStep(2);
-          } catch {
-            updateSession({ token: undefined });
-            setNeedsRelogin(true);
-          }
-        } else {
-          setNeedsRelogin(true);
+          return;
         }
+        if (session.token) {
+          try {
+            const me = await api.get<{ username: string; is_admin: boolean }>("/v1/auth/me", session.token);
+            useServer.getState().setToken(session.token);
+            useServer.getState().setUser(me.username, me.is_admin);
+            await invoke("start_telemetry", { token: session.token });
+            // El aprovisionamiento sigue siendo cosa del owner: si el servidor
+            // no está listo del todo, se vuelve al wizard donde se dejó.
+            if (me.is_admin && h.state !== "ready") { setStep(2); setMode("wizard"); }
+            else setMode(me.is_admin ? "admin" : "app");
+            return;
+          } catch {
+            // 403 (cambio pendiente) o token caducado: la entrada lo resuelve.
+            updateSession({ token: undefined });
+          }
+        }
+        setMode("entry");
       } catch {
         // No se pudo reconectar (servidor apagado, red, dirección cambiada).
         // No se borra la sesión por un fallo puntual: puede ser pasajero.
+        setMode("entry");
       } finally {
         setResuming(false);
       }
@@ -107,7 +110,12 @@ export default function App() {
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       <PlanetBackground dead={status !== "ok"} />
-      <TelemetryStrip collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
+      <TelemetryStrip collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)}
+        notifs={notifs}
+        onNotifs={mode === "app" || mode === "admin" ? () => {
+          setNotifs(0);
+          setMode(useServer.getState().isAdmin ? "admin" : "app");
+        } : undefined} />
       {/* El wizard se centra en el espacio que deja la franja, en vez de
           colgar de arriba dejando media pantalla vacía. */}
       <div className="relative flex flex-1 items-center justify-center overflow-y-auto">
@@ -121,23 +129,28 @@ export default function App() {
           onRetry={() => setStatus("ok")}
           onUnseal={unseal}
         />
-      ) : needsRelogin ? (
-        <ReloginStep onDone={() => setNeedsRelogin(false)} />
-      ) : (
+      ) : mode === "entry" ? (
+        <EntryScreen
+          onSignedIn={() => setMode(useServer.getState().isAdmin ? "admin" : "app")}
+          onOwnerKey={(key) => { useServer.getState().setKey(key); setStep(0); setMode("wizard"); }} />
+      ) : mode === "admin" ? (
+        <AdminPanel token={useServer.getState().token!} onClose={() => setMode("app")} />
+      ) : mode === "wizard" ? (
         <Wizard step={step} title="Lumi Station" subtitle="vincular servidor"
           onBack={step > 0 ? () => setStep((s) => s - 1) : undefined}
           onNext={() => {
-            if (step === 1) {
-              document.getElementById("admin-submit")?.click();
-              return;
-            }
+            if (step === 1) { document.getElementById("admin-submit")?.click(); return; }
             setStep((s) => s + 1);
           }}
           nextDisabled={step === 0 && !hello}>
           {step === 0 && <PairStep onDone={() => setStep(1)} />}
           {step === 1 && <AdminStep bootstrapToken={bootstrapToken} onDone={() => setStep(2)} />}
-          {step === 2 && <ProvisionStep onDone={() => setStep(3)} />}
+          {step === 2 && <ProvisionStep onDone={() => setMode("app")} />}
         </Wizard>
+      ) : (
+        <div className="text-xs text-muted">
+          Sesión iniciada como {useServer.getState().username}. Los proyectos llegan en el subsistema 6.
+        </div>
       )}
       </div>
     </div>

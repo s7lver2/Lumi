@@ -186,6 +186,18 @@ curl -skN "https://localhost:7717/v1/tasks/<ID>/log?from=0"
 fallará porque lanza `/bin/sh`: verás el error de spawn en el log, lo que confirma que el
 runner en sí funciona.
 
+### Auth, usuarios y permisos (subsistema 2)
+
+Escotilla de emergencia y tarjeta pública, desde el host:
+
+```bash
+sudo lumi card                      # la tarjeta pública que se reparte al equipo
+sudo lumi admin requests            # solicitudes pendientes
+sudo lumi admin reset-password ana  # contraseña temporal + cambio obligatorio
+sudo lumi admin unblock ana
+sudo lumi admin accept-requests off # cierra la aceptación de nuevas solicitudes
+```
+
 ## 4. Probar el modo sellado
 
 Con `lumid` parado:

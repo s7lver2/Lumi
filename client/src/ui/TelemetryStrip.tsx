@@ -1,5 +1,6 @@
 import { useServer } from "../lib/store";
 import { Icon, LockIcon } from "./Icon";
+import { Bell } from "./Bell";
 
 function Cell({ label, children, className = "", style }: {
   label: string; children: React.ReactNode; className?: string; style?: React.CSSProperties;
@@ -21,7 +22,9 @@ function Bar({ pct, tone = "draw" }: { pct: number; tone?: "draw" | "warning" })
   );
 }
 
-export function TelemetryStrip({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+export function TelemetryStrip({ collapsed, onToggle, notifs = 0, onNotifs }: {
+  collapsed: boolean; onToggle: () => void; notifs?: number; onNotifs?: () => void;
+}) {
   const { hello, sample, addr } = useServer();
   if (!hello) return null;
   return (
@@ -76,6 +79,14 @@ export function TelemetryStrip({ collapsed, onToggle }: { collapsed: boolean; on
       {/* Empuja el botón de colapsar al borde derecho: sin esto las celdas de
           ancho fijo se amontonan a la izquierda y dejan la barra a medias. */}
       <div className="flex-1 border-r border-border" />
+
+      {/* La campana vive en la franja y no en cada pantalla: es lo que
+          permite que la aprobación se encienda sin diálogo que interrumpa. */}
+      {onNotifs && (
+        <div className="flex-none border-r border-border px-2">
+          <Bell count={notifs} onClick={onNotifs} />
+        </div>
+      )}
 
       <button onClick={onToggle} aria-label={collapsed ? "Expandir" : "Colapsar"}
         className="flex-none px-3 text-subtle transition-colors hover:text-fg">

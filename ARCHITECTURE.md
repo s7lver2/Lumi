@@ -128,7 +128,7 @@ spec → plan → implementación, y cada una debe producir software que funcion
 | # | Subsistema | Qué cubre | Estado |
 |---|---|---|---|
 | **1** | **Instalador CLI y vinculación** | Bootstrap del owner, clave de un solo uso, primer contacto cliente↔servidor, cuenta de administrador | **Terminado y aprobado** |
-| **2** | **Auth, usuarios y permisos** | Solicitudes de acceso, creación de cuentas, roles, límites por usuario, dispositivos de confianza | **En curso** |
+| **2** | **Auth, usuarios y permisos** | Solicitudes de acceso, creación de cuentas, roles, límites por usuario, dispositivos de confianza | **Terminado** |
 | **3** | **Panel de administración** | Hardware, monitorización, notificaciones, mantenimiento, gestión de modelos | Pendiente |
 | **4** | **Cola y planificador** | Cientos de usuarios, pausa por desconexión, prioridades, multi-GPU y GPU+CPU | Pendiente |
 | **5** | **Motor de inferencia** | Lumi Mini / Pro / Vision, ensemble de verificadores geométricos | Pendiente |
@@ -209,6 +209,20 @@ en verificación real de identidad del servidor.
 
 La misma estructura la reutilizará la invitación de usuarios del subsistema 2, cambiando solo
 el rol que otorga.
+
+**Segundo formato, del subsistema 2: la tarjeta de servidor pública.**
+
+```
+lumi1s_<host:puerto>_<huella>
+```
+
+Es la misma huella, pero sin secreto. No autentica ni se consume: es la información pública
+que hace falta para conectar VERIFICADO y pedir acceso sin credenciales todavía. Compartirla
+no filtra nada (a diferencia de la clave de vinculación, que sí es un secreto de un solo
+uso). Sin ella, un usuario nuevo con solo una IP no podría conectar sin abrir una grieta en
+el anclaje TLS, y esa grieta la usaría un MITM para responder "aprobado, crea tu cuenta
+aquí". Se emite con `lumi card` y convive con `lumi1_` sin confusión: `PairKey::parse`
+rechaza explícitamente una tarjeta con `BadPrefix` en vez de tragársela como clave rota.
 
 ### Cifrado
 
@@ -359,6 +373,20 @@ documentarlo en `lumi key reissue`.
 
 **Frontera Rust↔Python.** Hay que definirla antes del subsistema 5. El runner de tareas ya
 la roza al lanzar el instalador de Python.
+
+**`limits::effective` es la frontera con los subsistemas 4 y 6.** Aquí (subsistema 2) los
+límites por usuario se definen, se almacenan en dos niveles (global/anulación) y se exponen.
+Este subsistema **no los aplica**: la cola (4) y los proyectos (6) deben llamar siempre a
+`limits::effective`, nunca leer la tabla `limits` por su cuenta, o la precedencia de dos
+niveles se duplica y se desincroniza.
+
+**Bloquear a un usuario no detiene sus trabajos ya encolados.** `PATCH /v1/admin/users/:id`
+con `blocked: true` cierra sesiones y corta el acceso al momento, pero qué hacer con el
+trabajo que ese usuario ya tenía en la cola es una decisión del subsistema 4, no de este.
+
+`POST /v1/access-requests` es la primera ruta escribible sin credenciales de todo el
+proyecto. El interruptor `accept_requests` (meta del store, `lumi admin accept-requests
+<on|off>`) la cierra por completo cuando un servidor expuesto empieza a recibir ruido.
 
 **Aprovisionamiento por la app.** Es el punto frágil de dejar el CLI fino. Mitigado con el
 runner, el log persistente y las descargas reanudables, pero sigue siendo más superficie que
