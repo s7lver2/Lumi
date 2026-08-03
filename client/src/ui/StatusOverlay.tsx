@@ -34,9 +34,10 @@ export function StatusOverlay({ status, detail, queue, onRetry, onUnseal }: {
   const tone = TONE[status];
 
   return (
-    <div className="absolute inset-0 z-30 bg-[rgba(5,7,10,.55)] backdrop-blur-[3px]"
-      style={{ animation: "jg-fade-rise .5s both" }}>
-      <div className="mx-auto max-w-xl px-6 py-9" style={{ animation: "jg-fade-rise .6s both" }}>
+    // No es una capa flotante sobre el wizard: sustituye su contenido en el
+    // mismo hueco. La franja de telemetría es hermana de este bloque, no su
+    // ancestro, así que sigue visible sin que haga falta excluirla a mano.
+    <div className="relative z-10 mx-auto w-full max-w-xl px-6 py-9" style={{ animation: "jg-fade-rise .6s both" }}>
         <div className="mb-1 flex items-center gap-2.5">
           <span className="text-fg" style={{ animation: "jg-lock-breathe 2.4s ease-in-out infinite" }}>✦</span>
           <span className="text-[17px] font-medium text-fg">{title}</span>
@@ -96,7 +97,6 @@ export function StatusOverlay({ status, detail, queue, onRetry, onUnseal }: {
             {status === "sealed" ? "Desbloquear y reanudar" : "Reintentar"}
           </button>
         </div>
-      </div>
     </div>
   );
 }

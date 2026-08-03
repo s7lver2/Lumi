@@ -56,29 +56,33 @@ export default function App() {
       {/* El wizard se centra en el espacio que deja la franja, en vez de
           colgar de arriba dejando media pantalla vacía. */}
       <div className="relative flex flex-1 items-center justify-center overflow-y-auto">
-      <Wizard step={step} title="Lumi Station" subtitle="vincular servidor"
-        onBack={step > 0 ? () => setStep((s) => s - 1) : undefined}
-        onNext={() => {
-          if (step === 1) {
-            document.getElementById("admin-submit")?.click();
-            return;
-          }
-          setStep((s) => s + 1);
-        }}
-        nextDisabled={step === 0 && !hello}>
-        {step === 0 && <PairStep onDone={() => setStep(1)} />}
-        {step === 1 && <AdminStep bootstrapToken={bootstrapToken} onDone={() => setStep(2)} />}
-        {step === 2 && <ProvisionStep onDone={() => setStep(3)} />}
-      </Wizard>
-      </div>
-      {status !== "ok" && (
+      {status !== "ok" ? (
+        // Sustituye al wizard en el mismo hueco: no es una capa flotante
+        // encima ("popup"), es lo que se ve mientras dure el estado. La
+        // franja de arriba es hermana de este bloque, por eso sigue visible.
         <StatusOverlay
           status={status}
           queue={useServer.getState().sample?.queue_depth ?? 0}
           onRetry={() => setStatus("ok")}
           onUnseal={unseal}
         />
+      ) : (
+        <Wizard step={step} title="Lumi Station" subtitle="vincular servidor"
+          onBack={step > 0 ? () => setStep((s) => s - 1) : undefined}
+          onNext={() => {
+            if (step === 1) {
+              document.getElementById("admin-submit")?.click();
+              return;
+            }
+            setStep((s) => s + 1);
+          }}
+          nextDisabled={step === 0 && !hello}>
+          {step === 0 && <PairStep onDone={() => setStep(1)} />}
+          {step === 1 && <AdminStep bootstrapToken={bootstrapToken} onDone={() => setStep(2)} />}
+          {step === 2 && <ProvisionStep onDone={() => setStep(3)} />}
+        </Wizard>
       )}
+      </div>
     </div>
   );
 }

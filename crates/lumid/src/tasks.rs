@@ -27,8 +27,14 @@ fn now() -> i64 {
 
 /// El comando de cada tipo de tarea. Un script por tipo, no un motor de
 /// pipelines: hay dos tipos y no se esperan más en este subsistema.
-fn command(kind: TaskKind, dir: &Path) -> (String, Vec<String>) {
-    let venv = dir.join("venv");
+///
+/// `models_dir` es donde el instalador (paso "almacenamiento") dejó
+/// configurado que vivan el venv y los pesos descargados; puede ser otro
+/// disco o volumen. Si no está configurado (arranque sin `lumi install`,
+/// p. ej. en desarrollo), cae a `dir/runtime`.
+fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec<String>) {
+    let base = models_dir.map(PathBuf::from).unwrap_or_else(|| dir.join("runtime"));
+    let venv = base.join("venv");
     match kind {
         TaskKind::InferenceRuntime => (
             "/bin/sh".into(),
@@ -60,7 +66,8 @@ pub fn spawn(app: &App, kind: TaskKind) -> Result<String> {
         rusqlite::params![id, serde_json::to_string(&kind)?, now()],
     )?;
 
-    let (bin, args) = command(kind, &app.dir);
+    let models_dir = app.store.get_meta("models_dir");
+    let (bin, args) = command(kind, &app.dir, models_dir.as_deref());
     let store = app.store.clone();
     let id2 = id.clone();
     tokio::spawn(async move {

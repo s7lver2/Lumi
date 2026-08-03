@@ -83,4 +83,10 @@ impl Store {
             .execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?1, ?2)", (k, v))?;
         Ok(())
     }
+
+    pub fn get_meta(&self, k: &str) -> Option<String> {
+        self.conn()
+            .query_row("SELECT v FROM meta WHERE k = ?1", [k], |r| r.get(0))
+            .ok()
+    }
 }

@@ -125,6 +125,26 @@ pub fn run(auto: bool) -> Result<PairKey> {
     };
     let passphrase = passphrase.as_deref();
 
+    ui::head("almacenamiento");
+    let default_models_dir = format!("{DATA}/runtime");
+    let models_dir = if auto {
+        println!("  {} {default_models_dir}   (automático — recomendado)", console::style("›").cyan());
+        default_models_dir
+    } else {
+        let input: String = dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
+            .with_prompt("dónde se descargarán el entorno de Python y los modelos")
+            .default(default_models_dir.clone())
+            .interact_text()?;
+        let input = input.trim().to_string();
+        if !input.starts_with('/') {
+            bail!("la ruta debe ser absoluta (empezar por /)");
+        }
+        input
+    };
+    fs::create_dir_all(&models_dir)
+        .with_context(|| format!("no se pudo crear {models_dir}: revisa permisos o espacio en disco"))?;
+    ui::ok(&format!("{models_dir}"));
+
     ui::head("instalación");
     fs::create_dir_all(DATA).context("no se pudo crear /var/lib/lumi")?;
 
@@ -167,7 +187,8 @@ pub fn run(auto: bool) -> Result<PairKey> {
             secret_phc TEXT NOT NULL,
             expires_at INTEGER,
             consumed INTEGER NOT NULL DEFAULT 0
-        );",
+        );
+        CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);",
     )?;
     let expires = if std::env::var("LUMI_NO_EXPIRY").is_ok() {
         None
@@ -177,6 +198,12 @@ pub fn run(auto: bool) -> Result<PairKey> {
     db.execute(
         "INSERT OR REPLACE INTO pair_key (id, secret_phc, expires_at, consumed) VALUES (1, ?1, ?2, 0)",
         rusqlite::params![hash_password(&key.secret)?, expires],
+    )?;
+    // lumid lo lee al lanzar la tarea de runtime en vez del venv fijo bajo
+    // /var/lib/lumi: el owner puede querer los pesos en otro disco/volumen.
+    db.execute(
+        "INSERT OR REPLACE INTO meta (k, v) VALUES ('models_dir', ?1)",
+        [&models_dir],
     )?;
 
     Ok(key)
