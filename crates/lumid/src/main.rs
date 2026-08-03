@@ -12,7 +12,7 @@ use lumi_proto::caps::Mode;
 use lumi_proto::crypto::MasterKey;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 
 #[derive(Clone)]
@@ -26,6 +26,11 @@ pub struct App {
     /// está sana y solo falta desbloquear.
     pub master: Arc<RwLock<Option<MasterKey>>>,
     pub dir: PathBuf,
+    /// `sysinfo` calcula el % de CPU por diferencia entre dos lecturas: un
+    /// `System` nuevo en cada muestra siempre daría 0%, en cualquier
+    /// plataforma. Se mantiene vivo entre muestras para que la diferencia
+    /// exista.
+    pub sysinfo: Arc<Mutex<sysinfo::System>>,
 }
 
 #[tokio::main]
@@ -42,6 +47,7 @@ async fn main() -> anyhow::Result<()> {
         gpus: gpus(),
         master: Arc::new(RwLock::new(master::load_at_boot(&dir))),
         dir: dir.clone(),
+        sysinfo: Arc::new(Mutex::new(sysinfo::System::new_all())),
     };
 
     use axum::routing::post;

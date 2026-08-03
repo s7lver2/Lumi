@@ -27,13 +27,19 @@ pub fn sample(app: &App) -> Sample {
         Err(_) => vec![],
     };
 
-    let mut s = sysinfo::System::new();
-    s.refresh_cpu_all();
-    s.refresh_memory();
-    let cpu_pct = if s.cpus().is_empty() {
-        0.0
-    } else {
-        s.cpus().iter().map(|c| c.cpu_usage()).sum::<f32>() / s.cpus().len() as f32
+    // Un `System` nuevo en cada muestra siempre daría 0%: sysinfo calcula el
+    // uso de CPU por diferencia entre esta lectura y la anterior, así que
+    // necesita seguir vivo entre muestras (viene de `App`, no se crea aquí).
+    let (cpu_pct, ram_used_mb) = {
+        let mut s = app.sysinfo.lock().expect("mutex de sysinfo envenenado");
+        s.refresh_cpu_all();
+        s.refresh_memory();
+        let cpu = if s.cpus().is_empty() {
+            0.0
+        } else {
+            s.cpus().iter().map(|c| c.cpu_usage()).sum::<f32>() / s.cpus().len() as f32
+        };
+        (cpu, s.used_memory() / 1024 / 1024)
     };
     let disks = sysinfo::Disks::new_with_refreshed_list();
     let disk_free_mb = disks
@@ -46,7 +52,7 @@ pub fn sample(app: &App) -> Sample {
     Sample {
         gpus,
         cpu_pct,
-        ram_used_mb: s.used_memory() / 1024 / 1024,
+        ram_used_mb,
         disk_free_mb,
         // La cola llega en el subsistema 4. Hasta entonces, cero y no pausada:
         // la franja ya tiene su celda y no habrá que rediseñarla.
