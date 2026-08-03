@@ -137,7 +137,10 @@ export default function App() {
         <AdminPanel token={useServer.getState().token!} onClose={() => setMode("app")} />
       ) : mode === "wizard" ? (
         <Wizard step={step} title="Lumi Station" subtitle="vincular servidor"
-          onBack={step > 0 ? () => setStep((s) => s - 1) : undefined}
+          // Del paso 3 (runtime) no se puede volver al 2 (admin): la cuenta ya
+          // se creó y el token de bootstrap ya se consumió, así que no hay
+          // nada que "deshacer" volviendo atrás.
+          onBack={step > 0 && step !== 2 ? () => setStep((s) => s - 1) : undefined}
           onNext={() => {
             if (step === 1) { document.getElementById("admin-submit")?.click(); return; }
             setStep((s) => s + 1);
