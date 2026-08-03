@@ -36,6 +36,38 @@ CREATE TABLE IF NOT EXISTS tasks (
     exit_code INTEGER,
     started_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS access_requests (
+    id             INTEGER PRIMARY KEY,
+    display_name   TEXT NOT NULL,
+    message        TEXT NOT NULL,
+    ticket_phc     TEXT NOT NULL,
+    source_ip      TEXT NOT NULL,
+    status         TEXT NOT NULL,
+    reason         TEXT,
+    granted_models TEXT,
+    created_at     INTEGER NOT NULL,
+    expires_at     INTEGER NOT NULL,
+    resolved_at    INTEGER,
+    resolved_by    INTEGER
+);
+CREATE TABLE IF NOT EXISTS devices (
+    id         INTEGER PRIMARY KEY,
+    user_id    INTEGER NOT NULL,
+    client_id  TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    os         TEXT,
+    first_seen INTEGER NOT NULL,
+    last_seen  INTEGER NOT NULL,
+    UNIQUE(user_id, client_id)
+);
+CREATE TABLE IF NOT EXISTS limits (
+    id      INTEGER PRIMARY KEY,
+    user_id INTEGER,
+    key     TEXT NOT NULL,
+    value   TEXT NOT NULL,
+    UNIQUE(user_id, key)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS limits_global ON limits(key) WHERE user_id IS NULL;
 ";
 
 pub struct Store(Mutex<Connection>);
@@ -49,6 +81,7 @@ impl Store {
         // explícitamente, que es el comportamiento estándar de SQLite.
         c.execute_batch("PRAGMA foreign_keys = OFF;")?;
         c.execute_batch(SCHEMA)?;
+        migrate(&c);
         Ok(Self(Mutex::new(c)))
     }
 
@@ -88,5 +121,70 @@ impl Store {
         self.conn()
             .query_row("SELECT v FROM meta WHERE k = ?1", [k], |r| r.get(0))
             .ok()
+    }
+}
+
+/// Columnas añadidas después de la primera versión del esquema.
+///
+/// ponytail: no hay tabla de versiones ni motor de migraciones. `ALTER TABLE
+/// ADD COLUMN` falla con "duplicate column name" si ya existe, y ese fallo es
+/// exactamente la señal de "ya está aplicada". El techo es el día en que haga
+/// falta transformar datos y no solo añadir columnas; ahí sí toca versionar.
+fn migrate(c: &Connection) {
+    for (table, col, decl) in [
+        ("users", "display_name", "TEXT"),
+        ("users", "blocked", "INTEGER NOT NULL DEFAULT 0"),
+        ("users", "must_change_password", "INTEGER NOT NULL DEFAULT 0"),
+        ("sessions", "device_id", "INTEGER"),
+        ("sessions", "created_at", "INTEGER NOT NULL DEFAULT 0"),
+        ("sessions", "last_seen", "INTEGER NOT NULL DEFAULT 0"),
+        ("sessions", "public_id", "TEXT"),
+    ] {
+        let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
+    }
+    // Las sesiones anteriores a esta versión tienen public_id NULL. SQLite
+    // admite varios NULL en un índice único, así que conviven sin conflicto:
+    // simplemente no se pueden listar ni revocar por id, y caducan solas.
+    let _ = c.execute_batch(
+        "CREATE UNIQUE INDEX IF NOT EXISTS sessions_public ON sessions(public_id);",
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn el_indice_parcial_protege_los_globales_que_unique_no_protege() {
+        let dir = std::env::temp_dir().join(format!("lumi-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let s = Store::open(&dir).unwrap();
+        let c = s.conn();
+        c.execute("INSERT INTO limits (user_id, key, value) VALUES (NULL, 'max_daily', '50')", [])
+            .unwrap();
+        // Sin el índice parcial esto pasaría: para UNIQUE, NULL != NULL.
+        assert!(c
+            .execute("INSERT INTO limits (user_id, key, value) VALUES (NULL, 'max_daily', '99')", [])
+            .is_err());
+        // Y la anulación del mismo límite para un usuario sí debe entrar.
+        c.execute("INSERT INTO limits (user_id, key, value) VALUES (7, 'max_daily', '99')", [])
+            .unwrap();
+        drop(c);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn abrir_dos_veces_migra_sin_romper() {
+        let dir = std::env::temp_dir().join(format!("lumi-mig-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        drop(Store::open(&dir).unwrap());
+        // La segunda apertura vuelve a lanzar los ALTER TABLE: si no fueran
+        // idempotentes, el daemon no arrancaría nunca una segunda vez.
+        let s = Store::open(&dir).unwrap();
+        s.conn()
+            .query_row("SELECT blocked FROM users WHERE 0", [], |_| Ok(()))
+            .ok();
+        drop(s);
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
