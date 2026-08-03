@@ -28,6 +28,18 @@ const PATHS: Record<string, React.JSX.Element> = {
       <path d="M3.8 3.8 20.2 20.2" />
     </>
   ),
+  x: <path d="M18 6 6 18M6 6l12 12" />,
+  user: <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></>,
+  clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+  device: <><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></>,
+  shield: <path d="M12 3l8 4v5c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V7l8-4z" />,
+  plus: <path d="M12 5v14M5 12h14" />,
+  bell: (
+    <>
+      <path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8" />
+      <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+    </>
+  ),
 };
 
 /** El candado es aparte: su arco se anima al abrirse. */
