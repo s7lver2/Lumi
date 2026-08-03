@@ -10,6 +10,7 @@ import { TelemetryStrip } from "./ui/TelemetryStrip";
 import { StatusOverlay } from "./ui/StatusOverlay";
 import { EntryScreen } from "./entry/EntryScreen";
 import { AdminPanel } from "./admin/AdminPanel";
+import { ConnectionBanner } from "./ui/ConnectionBanner";
 import { DebugOrb } from "./dev/DebugOrb";
 import { useServer } from "./lib/store";
 import { api, type Hello, type Sample } from "./lib/api";
@@ -27,6 +28,16 @@ export default function App() {
   const bootstrapToken = useServer((s) => s.bootstrapToken);
   const [status, setStatus] = useState<"ok" | "reboot" | "error" | "sealed" | "lost">("ok");
   const fails = useRef(0);
+  // `mode` fresco dentro del intervalo: el efecto de sondeo no se reinicia
+  // cuando cambias de modo (solo depende de `paired`), así que sin esto la
+  // comprobación de expulsión vería siempre el modo de cuando arrancó.
+  const modeRef = useRef(mode);
+  useEffect(() => { modeRef.current = mode; }, [mode]);
+  // Desde cuándo lleva caída la conexión. `null` mientras responde. Sirve
+  // para expulsar al login tras demasiado tiempo sin servidor, no solo para
+  // decidir el tono del aviso.
+  const downSince = useRef<number | null>(null);
+  const KICK_AFTER_MS = 2 * 60 * 1000;
 
   useEffect(() => {
     const un = listen<Sample>("telemetry", (e) => useServer.getState().setSample(e.payload));
@@ -97,10 +108,24 @@ export default function App() {
         useServer.getState().setHello(h);
         const wasDown = fails.current > 0;
         fails.current = 0;
+        downSince.current = null;
         setStatus(h.locked ? "sealed" : wasDown ? "reboot" : "ok");
       } catch {
         fails.current += 1;
-        if (fails.current >= 2) setStatus(fails.current > 20 ? "lost" : "reboot");
+        if (downSince.current === null) downSince.current = Date.now();
+        setStatus(fails.current > 20 ? "lost" : "reboot");
+        // Solo afecta a una sesión de usuario ya dentro (app/admin): durante
+        // el wizard del owner, `StatusOverlay` ya cubre esto con reintento
+        // manual, y no tiene sentido "desloguear" a quien está instalando.
+        const kicked = modeRef.current === "app" || modeRef.current === "admin";
+        if (kicked && Date.now() - downSince.current > KICK_AFTER_MS) {
+          updateSession({ token: undefined });
+          useServer.getState().setToken(null);
+          setMode("entry");
+          setStatus("ok");
+          fails.current = 0;
+          downSince.current = null;
+        }
       }
     }, 3000);
     return () => clearInterval(t);
@@ -109,6 +134,8 @@ export default function App() {
   async function unseal(passphrase: string) {
     await api.post("/v1/unseal", { passphrase });
   }
+
+  const blockedByDisconnect = status !== "ok" && (mode === "app" || mode === "admin");
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
@@ -124,10 +151,17 @@ export default function App() {
             setMode(useServer.getState().isAdmin ? "admin" : "app");
           } : undefined} />
       )}
+      {/* Para app/admin, la desconexión es un banner + bloqueo, no una
+          pantalla completa: la sesión de un usuario normal no tiene un
+          formulario de desbloqueo que mostrar, solo hay que impedir que
+          actúe sobre datos que pueden estar desactualizados. El wizard del
+          owner sigue usando el StatusOverlay de página completa, porque
+          "sellado" y "error de arranque" sí necesitan su propio hueco. */}
+      {blockedByDisconnect && <ConnectionBanner />}
       {/* El wizard se centra en el espacio que deja la franja, en vez de
           colgar de arriba dejando media pantalla vacía. */}
-      <div className="relative flex flex-1 items-center justify-center overflow-y-auto">
-      {resuming ? null : status !== "ok" ? (
+      <div className={`relative flex flex-1 items-center justify-center overflow-y-auto ${blockedByDisconnect ? "pointer-events-none opacity-50" : ""}`}>
+      {resuming ? null : status !== "ok" && !blockedByDisconnect ? (
         // Sustituye al wizard en el mismo hueco: no es una capa flotante
         // encima ("popup"), es lo que se ve mientras dure el estado. La
         // franja de arriba es hermana de este bloque, por eso sigue visible.
@@ -170,7 +204,16 @@ export default function App() {
         </Wizard>
       ) : (
         <div className="text-xs text-muted">
-          Sesión iniciada como {useServer.getState().username}. Los proyectos llegan en el subsistema 6.
+          <p>Sesión iniciada como {useServer.getState().username}. Los proyectos llegan en el subsistema 6.</p>
+          {/* Sin esto, un admin que pulsaba "Cerrar" en su propio panel se
+              quedaba aquí sin ninguna forma visible de volver: la única
+              salida era la campana de la franja, que no es obvia. */}
+          {useServer.getState().isAdmin && (
+            <button onClick={() => setMode("admin")}
+              className="mt-3 rounded-lg border border-white/15 px-4 py-2 text-xs text-fg active:translate-y-px">
+              Volver al panel de administración
+            </button>
+          )}
         </div>
       )}
       </div>
