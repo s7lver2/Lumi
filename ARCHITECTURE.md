@@ -127,8 +127,8 @@ spec → plan → implementación, y cada una debe producir software que funcion
 
 | # | Subsistema | Qué cubre | Estado |
 |---|---|---|---|
-| **1** | **Instalador CLI y vinculación** | Bootstrap del owner, clave de un solo uso, primer contacto cliente↔servidor, cuenta de administrador | **Implementado**, en pruebas |
-| **2** | **Auth, usuarios y permisos** | Solicitudes de acceso, creación de cuentas, roles, límites por usuario, dispositivos de confianza | Pendiente |
+| **1** | **Instalador CLI y vinculación** | Bootstrap del owner, clave de un solo uso, primer contacto cliente↔servidor, cuenta de administrador | **Terminado y aprobado** |
+| **2** | **Auth, usuarios y permisos** | Solicitudes de acceso, creación de cuentas, roles, límites por usuario, dispositivos de confianza | **En curso** |
 | **3** | **Panel de administración** | Hardware, monitorización, notificaciones, mantenimiento, gestión de modelos | Pendiente |
 | **4** | **Cola y planificador** | Cientos de usuarios, pausa por desconexión, prioridades, multi-GPU y GPU+CPU | Pendiente |
 | **5** | **Motor de inferencia** | Lumi Mini / Pro / Vision, ensemble de verificadores geométricos | Pendiente |
@@ -310,22 +310,37 @@ stepper. El color solo entra cuando significa estado: `draw-fg` en curso, `dange
 
 ## 9. Estado actual
 
-**Subsistema 1 implementado y parcialmente probado.** 16 tareas, 24 commits.
+**Subsistema 1 terminado y aprobado.** Verificado de punta a punta por el owner con
+servidor real en WSL y cliente Tauri nativo en Windows: instalación, vinculación con
+anclaje de huella, creación del administrador, runner de tareas con log en vivo,
+telemetría, y persistencia de sesión al cerrar y reabrir la app.
 
-Verificado en WSL con hardware real:
-- `lumi install` / `lumi uninstall`, detección de entorno y GPU vía NVML
-- `POST /v1/claim` → `POST /v1/admin`
-- `cargo test -p lumi-proto` (clave, cripto, capacidades)
+### Bugs encontrados durante las pruebas y corregidos
 
-Verificado en el cliente Tauri sobre Windows:
-- Ventana nativa, fondo de planeta, wizard y stepper
-- Vinculación con anclaje de huella
+Vale la pena conservarlos: varios eran de diseño, no de tecleo, y sus causas se repetirán
+en los subsistemas siguientes.
 
-Sin verificar todavía:
-- Runner de tareas de punta a punta desde el cliente
-- Telemetría en vivo en la franja
-- Modo sellado desde la app
-- Rechazo de huella alterada (la prueba que valida todo el modelo de confianza)
+| Síntoma | Causa real |
+|---|---|
+| Reconexión fantasma antes de pegar la clave | El sondeo de `/v1/hello` arrancaba al abrir la app, fallaba con "sin servidor vinculado" y a los dos fallos levantaba el overlay |
+| «Instalar runtime» no hacía nada | Crear el administrador no deja sesión iniciada; nadie llamaba a `/v1/auth/login`, así que el token era nulo y la petición recibía 401 |
+| La telemetría nunca aparecía | Nadie invocaba `start_telemetry` |
+| Texto del stepper solapado | `Inter` estaba declarada en Tailwind pero **nunca se cargaba**: caía a la fuente del sistema, más ancha. No era un problema de escala, y por eso ni `zoom` ni `transform: scale()` lo arreglaban |
+| El planeta "se quedaba" al cambiar de estado | Los grupos vivo/muerto se montaban y desmontaban con renderizado condicional, sin fundido |
+| Cerrar la app perdía todo el progreso | No había persistencia, y la clave de vinculación es de un solo uso: no se podía ni reintentar |
+| «Instalando» eterno pese a un FATAL en el log | El SSE del log no corta al terminar el proceso, y nadie sondeaba el estado real de la tarea |
+| Estado y log de tareas legibles sin sesión | `GET /v1/tasks/:id` y `.../log` no exigían token, a diferencia del `POST` que sí |
+
+Lecciones que aplican al resto del proyecto: **el estado real vive en el servidor**
+(retomar según `hello.state`, no según un paso guardado en el cliente), y **cada ruta nueva
+necesita decidir explícitamente su autenticación**, porque el descuido no se nota hasta que
+alguien lo busca.
+
+### Límite conocido del entorno de pruebas
+
+En WSL, elegir una ruta bajo `/mnt/...` para el runtime falla al crear el venv: DrvFs no
+soporta los enlaces simbólicos que necesita `python3 -m venv`. No es un fallo del código;
+hay que usar el filesystem nativo de Linux.
 
 ---
 
