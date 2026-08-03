@@ -10,6 +10,7 @@ import { TelemetryStrip } from "./ui/TelemetryStrip";
 import { StatusOverlay } from "./ui/StatusOverlay";
 import { EntryScreen } from "./entry/EntryScreen";
 import { AdminPanel } from "./admin/AdminPanel";
+import { DebugOrb } from "./dev/DebugOrb";
 import { useServer } from "./lib/store";
 import { api, type Hello, type Sample } from "./lib/api";
 import { loadSession, updateSession } from "./lib/session";
@@ -165,6 +166,7 @@ export default function App() {
         </div>
       )}
       </div>
+      {import.meta.env.DEV && <DebugOrb />}
     </div>
   );
 }

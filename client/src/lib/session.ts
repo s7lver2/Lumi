@@ -29,10 +29,28 @@ export interface Server {
 const KEY = "lumi.session";
 const SERVERS = "lumi.servers";
 const DEVICE = "lumi.device";
+const ENV = "lumi.env";
+
+// Namespacing de entornos para el orbe de debug (solo dev, ver
+// client/src/dev/DebugOrb.tsx). El entorno "1" usa las claves de siempre sin
+// sufijo, para no invalidar sesiones que ya existieran de antes de esto.
+function currentEnv(): string {
+  return localStorage.getItem(ENV) ?? "1";
+}
+function nsKey(base: string): string {
+  const env = currentEnv();
+  return env === "1" ? base : `${base}::${env}`;
+}
+export function getEnv(): string {
+  return currentEnv();
+}
+export function setEnv(env: string) {
+  localStorage.setItem(ENV, env);
+}
 
 export function loadSession(): Session | null {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(nsKey(KEY));
     return raw ? (JSON.parse(raw) as Session) : null;
   } catch {
     return null;
@@ -40,7 +58,7 @@ export function loadSession(): Session | null {
 }
 
 export function saveSession(s: Session) {
-  localStorage.setItem(KEY, JSON.stringify(s));
+  localStorage.setItem(nsKey(KEY), JSON.stringify(s));
 }
 
 export function updateSession(patch: Partial<Session>) {
@@ -49,12 +67,12 @@ export function updateSession(patch: Partial<Session>) {
 }
 
 export function clearSession() {
-  localStorage.removeItem(KEY);
+  localStorage.removeItem(nsKey(KEY));
 }
 
 export function loadServers(): Server[] {
   try {
-    return JSON.parse(localStorage.getItem(SERVERS) ?? "[]") as Server[];
+    return JSON.parse(localStorage.getItem(nsKey(SERVERS)) ?? "[]") as Server[];
   } catch {
     return [];
   }
@@ -64,22 +82,30 @@ export function addServer(s: Server) {
   // Se indexa por dirección: volver a añadir el mismo servidor actualiza su
   // huella (rotación de certificado) en vez de duplicar la entrada.
   const rest = loadServers().filter((x) => x.addr !== s.addr);
-  localStorage.setItem(SERVERS, JSON.stringify([s, ...rest]));
+  localStorage.setItem(nsKey(SERVERS), JSON.stringify([s, ...rest]));
 }
 
 export function forgetServer(addr: string) {
-  localStorage.setItem(SERVERS, JSON.stringify(loadServers().filter((s) => s.addr !== addr)));
+  localStorage.setItem(nsKey(SERVERS), JSON.stringify(loadServers().filter((s) => s.addr !== addr)));
 }
 
 /** Identidad del equipo. Registro PASIVO: audita y permite revocar, no
  *  autentica. Copiar este valor copia la identidad, y es a propósito. */
 export function deviceId(): string {
-  let id = localStorage.getItem(DEVICE);
+  let id = localStorage.getItem(nsKey(DEVICE));
   if (!id) {
     id = crypto.randomUUID();
-    localStorage.setItem(DEVICE, id);
+    localStorage.setItem(nsKey(DEVICE), id);
   }
   return id;
+}
+
+/** Borra todas las claves del entorno activo. Usado por "reset" del orbe de
+ *  debug: repetir una prueba desde cero sin cambiar de entorno. */
+export function resetEnv() {
+  localStorage.removeItem(nsKey(KEY));
+  localStorage.removeItem(nsKey(SERVERS));
+  localStorage.removeItem(nsKey(DEVICE));
 }
 
 export function deviceName(): string {
