@@ -1,4 +1,6 @@
 mod detect;
+mod install;
+mod ui;
 
 use clap::{Parser, Subcommand};
 
@@ -15,6 +17,16 @@ enum Cmd {
     Install,
     /// Muestra el entorno y el hardware detectados
     Status,
+    /// Revoca la clave anterior y emite otra
+    Key {
+        #[command(subcommand)]
+        action: KeyAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum KeyAction {
+    Reissue,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -31,7 +43,29 @@ fn main() -> anyhow::Result<()> {
             }
             println!("{}", detect::cpu_summary());
         }
-        Cmd::Install => println!("pendiente: tarea 6"),
+        Cmd::Install => {
+            let mode = if std::path::Path::new("/.dockerenv").exists() {
+                lumi_proto::caps::Mode::Docker
+            } else {
+                lumi_proto::caps::Mode::Native
+            };
+            let sealed = std::env::var("LUMI_SEALED").is_ok();
+            let pass = std::env::var("LUMI_PASSPHRASE").ok();
+            let key = install::run(mode, sealed, pass.as_deref())?;
+            println!();
+            println!("  ────────────────────────────────────────────────────────");
+            println!("  Clave de vinculación · un solo uso · caduca en 24 h");
+            println!();
+            println!("  {key}");
+            println!();
+            println!("  Solo se muestra ahora. El servidor guarda su hash.");
+            println!("  Perdida: lumi key reissue");
+            println!("  ────────────────────────────────────────────────────────");
+        }
+        Cmd::Key { action: KeyAction::Reissue } => {
+            let key = install::reissue()?;
+            println!("\n  {key}\n");
+        }
     }
     Ok(())
 }
