@@ -96,21 +96,38 @@ async fn reconnect(addr: String, fingerprint: String, state: tauri::State<'_, Sh
     connect(&addr, &fingerprint, &state).await
 }
 
+/// La tarjeta pública NO lleva secreto: solo dirección y huella. Se parsea en
+/// Rust y no en TS para que el error sea el mismo que el de la clave de
+/// vinculación, escrito una sola vez en `lumi-proto`.
+#[tauri::command]
+async fn pair_card(card: String, state: tauri::State<'_, Shared>) -> Result<serde_json::Value, String> {
+    let c = lumi_proto::key::ServerCard::parse(&card).map_err(|e| e.to_string())?;
+    connect(&c.addr, &c.fingerprint, &state).await
+}
+
 #[tauri::command]
 async fn request(
-    method: String, path: String, body: Option<String>, token: Option<String>,
+    method: String, path: String, body: Option<String>,
+    token: Option<String>, ticket: Option<String>,
     state: tauri::State<'_, Shared>,
 ) -> Result<String, String> {
     let (base, client) = {
         let c = state.lock().unwrap();
         (c.base.clone().ok_or("sin servidor vinculado")?, c.client.clone().ok_or("sin cliente")?)
     };
+    let url = format!("{base}{path}");
     let mut rb = match method.as_str() {
-        "POST" => client.post(format!("{base}{path}")),
-        _ => client.get(format!("{base}{path}")),
+        "POST" => client.post(url),
+        "PATCH" => client.patch(url),
+        "DELETE" => client.delete(url),
+        _ => client.get(url),
     };
     if let Some(t) = token {
         rb = rb.bearer_auth(t);
+    }
+    // El ticket va en cabecera, nunca en la ruta: es un secreto.
+    if let Some(t) = ticket {
+        rb = rb.header("authorization", format!("Ticket {t}"));
     }
     if let Some(b) = body {
         rb = rb.header("content-type", "application/json").body(b);
@@ -204,7 +221,7 @@ fn main() {
     rustls::crypto::ring::default_provider().install_default().ok();
     tauri::Builder::default()
         .manage(Shared::default())
-        .invoke_handler(tauri::generate_handler![pair, reconnect, request, start_telemetry, start_task_log])
+        .invoke_handler(tauri::generate_handler![pair, pair_card, reconnect, request, start_telemetry, start_task_log])
         .run(tauri::generate_context!())
         .expect("error al arrancar Tauri");
 }

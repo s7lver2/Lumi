@@ -11,7 +11,40 @@ export interface Sample {
   queue_depth: number;
   queue_paused: boolean;
 }
-export interface LoginRes { token: string; is_admin: boolean }
+export interface LoginRes {
+  token: string;
+  username: string;
+  is_admin: boolean;
+  must_change_password: boolean;
+}
+export interface Limits {
+  models: string[];
+  max_concurrent: number;
+  max_daily: number;
+  max_storage_gb: number;
+  queue_priority: number;
+  can_create_projects: boolean;
+}
+export interface AccessStatus { status: "pending" | "approved" | "rejected"; display_name: string; reason: string | null }
+export interface AdminRequest {
+  id: number; display_name: string; message: string; source_ip: string;
+  external: boolean; status: string; reason: string | null;
+  created_at: number; expires_at: number;
+}
+export interface SessionInfo {
+  public_id: string; device_name: string | null; os: string | null;
+  created_at: number; last_seen: number; current: boolean;
+}
+export interface DeviceRow { name: string; os: string | null; first_seen: number; last_seen: number }
+export interface AdminUser {
+  id: number; username: string; display_name: string | null; is_admin: boolean;
+  blocked: boolean; must_change_password: boolean; created_at: number; limits: Limits;
+}
+export interface UserDetail {
+  user: AdminUser; global: Limits;
+  overrides: Record<string, unknown>;
+  devices: DeviceRow[]; sessions: SessionInfo[];
+}
 export interface TaskStatus {
   id: string;
   kind: "inference_runtime" | "database";
@@ -37,14 +70,41 @@ export function addrFromKey(key: string): string {
   return parts.length >= 3 ? parts.slice(0, -2).join("_") : "";
 }
 
+/** `lumi1s_<host:puerto>_<huella>`. Se parte desde la derecha: la dirección
+ *  lleva puntos y dos puntos. */
+export function addrFromCard(card: string): string {
+  const rest = card.trim().replace(/^lumi1s_/, "");
+  const i = rest.lastIndexOf("_");
+  return i > 0 ? rest.slice(0, i) : "";
+}
+export function fingerprintFromCard(card: string): string {
+  const rest = card.trim().replace(/^lumi1s_/, "");
+  const i = rest.lastIndexOf("_");
+  return i > 0 ? rest.slice(i + 1) : "";
+}
+export function isCard(s: string): boolean {
+  return s.trim().startsWith("lumi1s_");
+}
+
+const call = (method: string, path: string, body: unknown, token?: string, ticket?: string) =>
+  invoke<string>("request", {
+    method, path, body: body === undefined ? null : JSON.stringify(body), token, ticket,
+  });
+
 export const api = {
   pair: (key: string) => invoke<Hello>("pair", { key }),
+  pairCard: (card: string) => invoke<Hello>("pair_card", { card }),
   /** Reestablece el cliente TLS anclado sin la clave original (ya gastada):
-   *  basta con la dirección y la huella persistidas del primer `pair`. */
+   *  basta con la dirección y la huella persistidas. */
   reconnect: (addr: string, fingerprint: string) => invoke<Hello>("reconnect", { addr, fingerprint }),
-  get: <T>(path: string, token?: string) =>
-    invoke<string>("request", { method: "GET", path, body: null, token }).then(t => JSON.parse(t) as T),
+  get: <T>(path: string, token?: string) => call("GET", path, undefined, token).then(t => JSON.parse(t) as T),
   post: <T>(path: string, body: unknown, token?: string) =>
-    invoke<string>("request", { method: "POST", path, body: JSON.stringify(body), token })
-      .then(t => (t ? (JSON.parse(t) as T) : (null as T))),
+    call("POST", path, body, token).then(t => (t ? (JSON.parse(t) as T) : (null as T))),
+  patch: <T>(path: string, body: unknown, token?: string) =>
+    call("PATCH", path, body, token).then(t => (t ? (JSON.parse(t) as T) : (null as T))),
+  del: (path: string, token?: string) => call("DELETE", path, undefined, token).then(() => undefined),
+  ticketGet: <T>(path: string, ticket: string) =>
+    call("GET", path, undefined, undefined, ticket).then(t => JSON.parse(t) as T),
+  ticketPost: <T>(path: string, body: unknown, ticket: string) =>
+    call("POST", path, body, undefined, ticket).then(t => (t ? (JSON.parse(t) as T) : (null as T))),
 };
