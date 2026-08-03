@@ -1,10 +1,20 @@
 import { useState } from "react";
 import { api } from "../lib/api";
+import { updateSession } from "../lib/session";
 import { useServer } from "../lib/store";
 import { Icon } from "../ui/Icon";
 
-export function ChangePasswordForm({ onDone }: { onDone: () => void }) {
+export function ChangePasswordForm({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
   const token = useServer((s) => s.token);
+
+  // Descarta el intento sin cambiar nada: no cierra la sesión en el
+  // servidor (el token de "solo cambiar contraseña" expira solo), solo deja
+  // de usarlo aquí para poder loguear con otra cuenta.
+  function cancel() {
+    useServer.getState().setToken(null);
+    updateSession({ token: undefined });
+    onCancel();
+  }
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [repeat, setRepeat] = useState("");
@@ -53,7 +63,10 @@ export function ChangePasswordForm({ onDone }: { onDone: () => void }) {
         </div>
       )}
 
-      <div className="mt-4 flex justify-end">
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <button onClick={cancel} className="rounded-lg border border-white/15 px-4 py-2 text-xs text-fg active:translate-y-px">
+          Cancelar
+        </button>
         <button onClick={submit} disabled={busy || next.length < 12 || mismatch || !current}
           className="rounded-lg bg-accent px-5 py-2 text-xs font-medium text-black transition-transform duration-300 ease-expo active:translate-y-px disabled:opacity-40">
           {busy ? "Guardando" : "Cambiar y continuar"}

@@ -6,6 +6,7 @@ import { RequestForm } from "./RequestForm";
 import { WaitingScreen } from "./WaitingScreen";
 import { ResolvedScreen } from "./ResolvedScreen";
 import { ChangePasswordForm } from "./ChangePasswordForm";
+import { WavesBackground } from "./WavesBackground";
 import type { AccessStatus } from "../lib/api";
 
 export type EntryView = "login" | "add" | "request" | "waiting" | "resolved" | "password";
@@ -16,13 +17,16 @@ export function Pane({ title, subtitle, children }: {
   title: string; subtitle: string; children: React.ReactNode;
 }) {
   return (
-    <div className="relative z-10 mx-auto w-full max-w-xl px-6 py-9">
+    <div className="relative z-10 mx-auto w-full max-w-sm px-6 py-9">
+      {/* fixed, no absolute: Pane es una columna estrecha, no toda la
+          pantalla. Sustituye visualmente al planeta detrás de esta vista. */}
+      <WavesBackground />
       <div className="mb-1 flex items-center gap-2.5" style={{ animation: "jg-fade-rise .7s both" }}>
         <span className="text-fg" style={{ animation: "jg-lock-breathe 2.4s ease-in-out infinite" }}>✦</span>
         <span className="text-[17px] font-medium text-fg">{title}</span>
       </div>
       <p className="mb-6 text-xs text-muted" style={{ animation: "jg-fade-rise .7s .06s both" }}>{subtitle}</p>
-      <div className="rounded-card border border-white/[.13] bg-[rgba(16,19,25,.66)] p-5 shadow-lg shadow-black/40 backdrop-blur-xl"
+      <div className="rounded-card border border-white/[.13] bg-[rgba(16,19,25,.66)] p-4 shadow-lg shadow-black/40 backdrop-blur-xl"
         style={{ animation: "jg-fade-rise .8s .18s both" }}>
         {children}
       </div>
@@ -48,7 +52,7 @@ export function EntryScreen({ onSignedIn, onOwnerKey }: {
         <AddServerForm
           onAdded={(addr) => { setServer(loadServers().find((s) => s.addr === addr) ?? null); setView("login"); }}
           onOwnerKey={onOwnerKey}
-          onBack={() => setView("login")} />
+          onBack={saved.length > 0 ? () => setView("login") : undefined} />
       </Pane>
     );
   }
@@ -86,7 +90,7 @@ export function EntryScreen({ onSignedIn, onOwnerKey }: {
   if (view === "password") {
     return (
       <Pane title="Cambia tu contraseña" subtitle="hace falta antes de entrar.">
-        <ChangePasswordForm onDone={onSignedIn} />
+        <ChangePasswordForm onDone={onSignedIn} onCancel={() => setView("login")} />
       </Pane>
     );
   }

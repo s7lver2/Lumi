@@ -63,9 +63,12 @@ export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMu
       )}
 
       <div className="mt-4 flex items-center justify-between gap-4">
-        <button onClick={onRequest} className="whitespace-nowrap text-[11px] text-muted underline-offset-4 hover:text-fg hover:underline">
-          ¿Sin cuenta? · Solicitar acceso
-        </button>
+        {/* Sin servidor elegido no hay a quién pedirle acceso. */}
+        {server ? (
+          <button onClick={onRequest} className="whitespace-nowrap text-[11px] text-muted underline-offset-4 hover:text-fg hover:underline">
+            ¿Sin cuenta? · Solicitar acceso
+          </button>
+        ) : <span />}
         <button onClick={submit} disabled={busy || !server}
           className="shrink-0 rounded-lg bg-accent px-5 py-2 text-xs font-medium text-black transition-transform duration-300 ease-expo active:translate-y-px disabled:opacity-40">
           {busy ? "Entrando" : "Entrar"}

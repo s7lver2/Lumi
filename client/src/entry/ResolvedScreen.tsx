@@ -88,7 +88,12 @@ export function ResolvedScreen({ status, onCreated, onRetry, onBack }: {
         </div>
       )}
 
-      <div className="mt-4 flex justify-end">
+      <div className="mt-4 flex items-center justify-between gap-3">
+        {/* El ticket no se toca: sigue vivo sus 48h. Si sigue aprobado, la
+            próxima apertura de la app vuelve a aterrizar aquí. */}
+        <button onClick={onBack} className="rounded-lg border border-white/15 px-4 py-2 text-xs text-fg active:translate-y-px">
+          Más tarde
+        </button>
         <button onClick={create} disabled={busy || password.length < 12 || !username.trim()}
           className="rounded-lg bg-accent px-5 py-2 text-xs font-medium text-black transition-transform duration-300 ease-expo active:translate-y-px disabled:opacity-40">
           {busy ? "Creando" : "Crear cuenta"}

@@ -7,3 +7,6 @@ dist/
 .env
 .env.local
 *.log
+client/src-tauri/target
+.superpowers/
+.claude/worktrees/

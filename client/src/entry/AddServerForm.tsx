@@ -4,7 +4,7 @@ import { addServer } from "../lib/session";
 import { Icon } from "../ui/Icon";
 
 export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
-  onAdded: (addr: string) => void; onOwnerKey: (key: string) => void; onBack: () => void;
+  onAdded: (addr: string) => void; onOwnerKey: (key: string) => void; onBack?: () => void;
 }) {
   const [text, setText] = useState("");
   const [label, setLabel] = useState("");
@@ -77,10 +77,14 @@ export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
       )}
 
       <div className="mt-4 flex items-center justify-between gap-3">
-        <button onClick={onBack}
-          className="rounded-lg border border-white/15 px-4 py-2 text-xs text-fg transition-transform duration-300 ease-expo active:translate-y-px">
-          Atrás
-        </button>
+        {/* Sin servidores guardados, no hay login al que volver: "Atrás"
+            dejaría un callejón sin salida. */}
+        {onBack ? (
+          <button onClick={onBack}
+            className="rounded-lg border border-white/15 px-4 py-2 text-xs text-fg transition-transform duration-300 ease-expo active:translate-y-px">
+            Atrás
+          </button>
+        ) : <span />}
         <button onClick={save} disabled={!hello}
           className="rounded-lg bg-accent px-5 py-2 text-xs font-medium text-black transition-transform duration-300 ease-expo active:translate-y-px disabled:opacity-40">
           Guardar servidor
