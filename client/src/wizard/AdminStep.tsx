@@ -29,9 +29,12 @@ export function AdminStep({ bootstrapToken, onDone, onBusyChange }: {
       // responde 401.
       const res = await api.post<LoginRes>("/v1/auth/login", { username, password });
       setToken(res.token);
+      // Sin esto el store no sabe quién es el owner: la app ya logueada
+      // mostraba "sesión iniciada como ." con el usuario vacío.
+      useServer.getState().setUser(res.username, res.is_admin);
       // bootstrapToken ya está gastado (/v1/admin lo consume); el token de
       // sesión es lo único que hace falta a partir de ahora para retomar.
-      updateSession({ token: res.token, bootstrapToken: undefined });
+      updateSession({ token: res.token, bootstrapToken: undefined, username: res.username });
       await invoke("start_telemetry", { token: res.token });
       onDone();
     } catch (e) {

@@ -147,8 +147,9 @@ export default function App() {
             if (step === 1) { document.getElementById("admin-submit")?.click(); return; }
             // Datos y Modelos (subsistemas 3-5) todavía no existen: el paso 2
             // (runtime) es el último construido, así que terminar de instalar
-            // lleva directo a la app en vez de a un paso vacío.
-            if (step === 2) { setMode("app"); return; }
+            // lleva directo a la app en vez de a un paso vacío. El owner es
+            // admin, así que va al panel — igual que al reabrir la app.
+            if (step === 2) { setMode(useServer.getState().isAdmin ? "admin" : "app"); return; }
             setStep((s) => s + 1);
           }}
           nextDisabled={(step === 0 && !hello) || (step === 2 && !runtimeDone)}
