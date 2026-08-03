@@ -4,7 +4,9 @@ import { api, type LoginRes } from "../lib/api";
 import { useServer } from "../lib/store";
 import { updateSession } from "../lib/session";
 
-export function AdminStep({ bootstrapToken, onDone }: { bootstrapToken: string; onDone: () => void }) {
+export function AdminStep({ bootstrapToken, onDone, onBusyChange }: {
+  bootstrapToken: string; onDone: () => void; onBusyChange?: (busy: boolean) => void;
+}) {
   const [username, setUser] = useState("");
   const [password, setPass] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -16,6 +18,10 @@ export function AdminStep({ bootstrapToken, onDone }: { bootstrapToken: string; 
       setError("La contraseña necesita al menos 12 caracteres.");
       return;
     }
+    // Crear admin → login → telemetría es una cadena de tres peticiones: sin
+    // avisar de que está "ocupado", el botón de Siguiente parece congelado
+    // durante ese rato.
+    onBusyChange?.(true);
     try {
       await api.post("/v1/admin", { bootstrap_token: bootstrapToken, username, password });
       // Crear el administrador no deja sesión iniciada: sin este login el
@@ -30,6 +36,7 @@ export function AdminStep({ bootstrapToken, onDone }: { bootstrapToken: string; 
       onDone();
     } catch (e) {
       setError(String(e));
+      onBusyChange?.(false);
     }
   }
 

@@ -3,9 +3,9 @@ import { Icon } from "../ui/Icon";
 
 export const STEPS = ["Vincular", "Admin", "Runtime", "Datos", "Modelos", "Listo"] as const;
 
-export function Wizard({ step, title, subtitle, children, onBack, onNext, nextLabel = "Siguiente", nextDisabled }: {
+export function Wizard({ step, title, subtitle, children, onBack, onNext, nextLabel = "Siguiente", nextDisabled, nextBusy }: {
   step: number; title: string; subtitle: string; children: ReactNode;
-  onBack?: () => void; onNext?: () => void; nextLabel?: string; nextDisabled?: boolean;
+  onBack?: () => void; onNext?: () => void; nextLabel?: string; nextDisabled?: boolean; nextBusy?: boolean;
 }) {
   return (
     <div className="relative z-10 mx-auto w-full max-w-xl px-6 py-9">
@@ -52,9 +52,13 @@ export function Wizard({ step, title, subtitle, children, onBack, onNext, nextLa
           Atrás
         </button>
         {onNext && (
-          <button onClick={onNext} disabled={nextDisabled}
-            className="rounded-lg bg-accent px-5 py-2 text-xs font-medium text-black transition-transform duration-300 ease-expo active:translate-y-px disabled:opacity-40">
-            {nextLabel}
+          // Sin esto, una cadena de peticiones (crear admin → login →
+          // telemetría) se veía como el botón "pensando" varios segundos sin
+          // ningún indicio de que algo estaba pasando.
+          <button onClick={onNext} disabled={nextDisabled || nextBusy}
+            className="flex items-center gap-2 rounded-lg bg-accent px-5 py-2 text-xs font-medium text-black transition-transform duration-300 ease-expo active:translate-y-px disabled:opacity-40">
+            {nextBusy && <Icon name="spinner" size={12} />}
+            {nextBusy ? "Un momento" : nextLabel}
           </button>
         )}
       </div>

@@ -6,13 +6,19 @@ import { useServer } from "../lib/store";
 import { loadSession, updateSession } from "../lib/session";
 import { Icon } from "../ui/Icon";
 
-export function ProvisionStep({ onDone }: { onDone: () => void }) {
+export function ProvisionStep({ onDone, onStatusChange }: {
+  onDone: () => void; onStatusChange?: (done: boolean) => void;
+}) {
   const token = useServer((s) => s.token);
   const [log, setLog] = useState("");
   const [running, setRunning] = useState(false);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [exitCode, setExitCode] = useState<number | null>(null);
   const box = useRef<HTMLPreElement>(null);
+  const done = !running && exitCode === 0;
+  // "Siguiente" en el wizard depende de esto: no debe poder avanzar mientras
+  // no haya un "instalado" confirmado por el servidor.
+  useEffect(() => { onStatusChange?.(done); }, [done, onStatusChange]);
 
   useEffect(() => {
     const un = listen<string>("task-log", (e) => setLog((l) => l + e.payload));
@@ -78,7 +84,6 @@ export function ProvisionStep({ onDone }: { onDone: () => void }) {
   }
 
   const failed = !running && exitCode !== null && exitCode !== 0;
-  const done = !running && exitCode === 0;
 
   return (
     <>

@@ -20,6 +20,8 @@ export default function App() {
   const [resuming, setResuming] = useState(true);
   const [mode, setMode] = useState<"entry" | "wizard" | "app" | "admin">("entry");
   const [notifs, setNotifs] = useState(0);
+  const [adminBusy, setAdminBusy] = useState(false);
+  const [runtimeDone, setRuntimeDone] = useState(false);
   const hello = useServer((s) => s.hello);
   const bootstrapToken = useServer((s) => s.bootstrapToken);
   const [status, setStatus] = useState<"ok" | "reboot" | "error" | "sealed" | "lost">("ok");
@@ -145,10 +147,11 @@ export default function App() {
             if (step === 1) { document.getElementById("admin-submit")?.click(); return; }
             setStep((s) => s + 1);
           }}
-          nextDisabled={step === 0 && !hello}>
+          nextDisabled={(step === 0 && !hello) || (step === 2 && !runtimeDone)}
+          nextBusy={step === 1 && adminBusy}>
           {step === 0 && <PairStep onDone={() => setStep(1)} />}
-          {step === 1 && <AdminStep bootstrapToken={bootstrapToken} onDone={() => setStep(2)} />}
-          {step === 2 && <ProvisionStep onDone={() => setMode("app")} />}
+          {step === 1 && <AdminStep bootstrapToken={bootstrapToken} onDone={() => setStep(2)} onBusyChange={setAdminBusy} />}
+          {step === 2 && <ProvisionStep onDone={() => setMode("app")} onStatusChange={setRuntimeDone} />}
         </Wizard>
       ) : (
         <div className="text-xs text-muted">
