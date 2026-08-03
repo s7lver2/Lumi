@@ -243,6 +243,17 @@ antes de pegarla. Debe rechazar la conexión con *"la huella del certificado no 
 el botón «Siguiente» debe seguir deshabilitado. Si en cambio conecta, el anclaje de huella no
 está funcionando.
 
+## Desinstalar
+
+```bash
+sudo target/debug/lumi uninstall
+```
+
+Pide confirmación (el mismo estilo de sección `── desinstalación ──…` y advertencia antes
+de borrar, porque `/var/lib/lumi` puede tener administradores y proyectos reales) y luego
+detiene `lumid.service`, borra la unit, el binario y todo `/var/lib/lumi`. Con `--yes` se
+salta la confirmación.
+
 ## Apagar todo
 
 ```bash

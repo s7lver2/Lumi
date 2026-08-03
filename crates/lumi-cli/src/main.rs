@@ -20,6 +20,12 @@ enum Cmd {
         #[arg(short = 'y', long)]
         yes: bool,
     },
+    /// Detiene el servicio y borra el binario y todo su estado en /var/lib/lumi
+    Uninstall {
+        /// Sin confirmación
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
     /// Muestra el entorno y el hardware detectados
     Status,
     /// Revoca la clave anterior y emite otra
@@ -60,6 +66,7 @@ fn main() -> anyhow::Result<()> {
             println!("  Perdida: lumi key reissue");
             println!("  ────────────────────────────────────────────────────────");
         }
+        Cmd::Uninstall { yes } => install::uninstall(yes)?,
         Cmd::Key { action: KeyAction::Reissue } => {
             let key = install::reissue()?;
             println!("\n  {key}\n");

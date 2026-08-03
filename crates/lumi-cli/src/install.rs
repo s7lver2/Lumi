@@ -245,6 +245,49 @@ fn local_ip() -> Option<String> {
         .map(str::to_string)
 }
 
+/// `yes`: sin confirmación. `/var/lib/lumi` puede tener administradores y
+/// proyectos reales, así que sin ese flag se pide confirmación explícita
+/// antes de borrar nada.
+pub fn uninstall(yes: bool) -> Result<()> {
+    ui::head("desinstalación");
+    let has_state = Path::new(DATA).exists();
+    if has_state {
+        ui::warn(&format!(
+            "{DATA} contiene el certificado, la clave maestra y la base de datos: usuarios, proyectos y claves emitidas"
+        ));
+    } else {
+        ui::warn(&format!("{DATA} no existe: puede que ya esté desinstalado"));
+    }
+
+    if !yes {
+        let confirmed = dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())
+            .with_prompt("borrar el servicio y todo su estado, sin poder deshacerlo")
+            .default(false)
+            .interact()
+            .unwrap_or(false);
+        if !confirmed {
+            bail!("cancelado, nada se ha tocado");
+        }
+    }
+
+    let pb = ui::step("deteniendo el servicio");
+    run_quiet("systemctl", &["disable", "--now", "lumid.service"]);
+    pb.finish_and_clear();
+    ui::ok("lumid.service detenido");
+
+    let pb = ui::step("eliminando ficheros");
+    let _ = fs::remove_file("/etc/systemd/system/lumid.service");
+    run_quiet("systemctl", &["daemon-reload"]);
+    let _ = fs::remove_file(BIN);
+    if has_state {
+        fs::remove_dir_all(DATA).context("no se pudo borrar /var/lib/lumi")?;
+    }
+    pb.finish_and_clear();
+    ui::ok(&format!("lumid.service, {BIN} y {DATA} eliminados"));
+
+    Ok(())
+}
+
 /// Tener shell en la máquina ya es prueba de propiedad: no hace falta más
 /// ceremonia que ejecutar esto.
 pub fn reissue() -> Result<PairKey> {
