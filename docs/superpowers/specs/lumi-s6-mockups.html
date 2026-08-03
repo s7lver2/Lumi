@@ -1,0 +1,289 @@
+<meta charset="utf-8">
+<title>Lumi Station · Subsistema 6 (esqueleto) — proyectos, casos y mapa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;padding:40px 28px 80px;background:#0e0f11;color:#e8e8e6;
+       font-family:Inter,system-ui,sans-serif;font-size:14px;line-height:1.55;}
+  main{max-width:920px;margin:0 auto;}
+  h2{font-size:20px;font-weight:500;margin:0 0 6px;}
+  h3{font-size:15px;font-weight:500;}
+  .subtitle{color:#9a9a95;font-size:12.5px;margin:0 0 12px;}
+  code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;color:#9a9a95;}
+  .options{display:flex;flex-direction:column;gap:8px;}
+  .option{display:flex;gap:11px;border:1px solid #26282c;border-radius:10px;padding:11px 13px;}
+  .option .letter{width:20px;height:20px;border-radius:50%;border:1px solid #4a4e55;
+       display:flex;align-items:center;justify-content:center;font-size:11px;color:#c8c8c4;flex:0 0 auto;}
+  .option h3{margin:0 0 3px;font-size:13px;}
+  .option p{margin:0;color:#9a9a95;font-size:12px;}
+</style>
+<main>
+<style>
+  .rv { --fg:#e8e8e6; --muted:#9a9a95; --subtle:#6a6c70; --border:#26282c;
+        --link:#a8c8ea; --warn:#efb968; }
+  .rv { position:relative; height:400px; border-radius:12px; overflow:hidden;
+        border:1px solid var(--border); color:var(--fg); font-size:11px; background:#14161a; }
+  .rv .map { position:absolute; inset:0;
+        background:linear-gradient(168deg,#1b1e23 0%,#15181c 45%,#101215 100%); }
+  .rv .plane { position:absolute; inset:-18% -12%;
+        transform:perspective(700px) rotateX(52deg) rotate(-14deg); }
+  .rv .b { position:absolute; background:#22262c; border-top:1px solid #2b3038;
+        box-shadow:2px 4px 0 rgba(0,0,0,.35); }
+  .rv .conf { position:absolute; border-radius:50%; border:1px solid rgba(255,255,255,.5);
+        background:rgba(255,255,255,.055); }
+  .rv .mk { position:absolute; width:19px; height:19px; border-radius:50%;
+        background:#101215; border:1px solid rgba(255,255,255,.22);
+        display:flex; align-items:center; justify-content:center; font-size:9.5px; }
+  .rv .mk.top { background:#fff; color:#000; border-color:#fff; }
+  .rv .mk.exif { border-color:var(--warn); color:var(--warn); }
+  .rv .mk.off { border-style:dashed; color:var(--subtle); border-color:#3a3e44; }
+  .rv .rail { position:absolute; left:0; top:0; bottom:0; width:40px; z-index:5;
+        background:rgba(13,15,17,.86); backdrop-filter:blur(8px);
+        display:flex; flex-direction:column; align-items:center; gap:15px; padding:11px 0; }
+  .rv .rail s { width:15px; height:15px; display:block; border:1.4px solid var(--subtle); border-radius:3px; }
+  .rv .rail s.logo { border-color:var(--fg); transform:rotate(45deg); }
+  .rv .rail s.on { border-color:var(--fg); }
+  .rv .rail s.round { border-radius:50%; }
+  .rv .rail .gap { flex:1; }
+  .rv .strip { position:absolute; top:0; left:40px; right:0; z-index:6; padding:5px 12px;
+        display:flex; gap:15px; align-items:center; background:rgba(13,15,17,.8);
+        backdrop-filter:blur(8px); border-bottom:1px solid rgba(255,255,255,.06); }
+  .rv .strip span { font-size:8px; letter-spacing:.1em; text-transform:uppercase; color:var(--subtle); }
+  .rv .strip b { font-weight:400; color:var(--fg); font-family:ui-monospace,monospace; }
+  .rv .float { position:absolute; z-index:4; border-radius:10px;
+        background:rgba(24,26,30,.93); border:1px solid rgba(255,255,255,.07);
+        box-shadow:0 10px 30px rgba(0,0,0,.5); }
+  .rv .k { font-size:8px; letter-spacing:.11em; text-transform:uppercase; color:var(--subtle); }
+  .rv .mono { font-family:ui-monospace,SFMono-Regular,monospace; font-size:10px; }
+  .rv .link { color:var(--link); }
+  .rv .pill { border:1px solid #33373d; border-radius:4px; padding:1px 5px;
+        font-size:8.5px; color:var(--subtle); }
+  .rv .ring { width:15px; height:15px; border-radius:50%; flex:0 0 auto;
+        border:1.6px solid #33373d; border-top-color:var(--fg); border-right-color:var(--fg);
+        transform:rotate(24deg); }
+  .rv .item { border:1px solid rgba(255,255,255,.07); border-radius:7px;
+        padding:8px 9px; margin-bottom:7px; background:rgba(255,255,255,.018); }
+  .rv .item.on { border-color:rgba(255,255,255,.22); background:rgba(255,255,255,.05); }
+  .rv .item .r1 { display:flex; align-items:baseline; gap:6px; }
+  .rv .item .r1 i { font-style:normal; color:var(--subtle); font-size:9px; }
+  .rv .item .r1 b { font-weight:400; font-size:11.5px; flex:1; }
+  .rv .bar { position:absolute; left:0; right:0; bottom:0; z-index:4; padding:8px 14px;
+        display:flex; align-items:flex-end; justify-content:space-between;
+        background:linear-gradient(to top,rgba(10,11,13,.92),rgba(10,11,13,0)); }
+  .rv .bar .f { margin-right:22px; }
+  .rv .bar .v { font-size:11.5px; }
+  .rv .pct { font-size:26px; line-height:.9; text-align:right; }
+  .rv .side { position:absolute; right:0; top:0; bottom:0; width:196px; z-index:4;
+        background:rgba(16,18,21,.9); backdrop-filter:blur(10px);
+        border-left:1px solid rgba(255,255,255,.06); padding:10px; overflow:hidden; }
+  .rv .crumb { position:absolute; z-index:6; left:50px; top:34px; display:flex;
+        align-items:center; gap:6px; font-size:11px; color:var(--muted); }
+  .rv .crumb b { font-weight:400; color:var(--fg); }
+  .rv .crumb em { font-style:normal; color:var(--subtle); }
+  .step { margin-bottom:30px; }
+  .step h3 { margin:0 0 3px; }
+  .step .n { display:inline-block; width:17px; height:17px; border-radius:50%;
+        border:1px solid #4a4e55; text-align:center; line-height:15px; font-size:10px;
+        margin-right:7px; color:#c8c8c4; }
+  .q { border:1px solid #33373d; border-radius:10px; padding:14px 16px; margin-top:8px; }
+</style>
+
+<h2>Proyecto → caso → análisis</h2>
+<p class="subtitle">La jerarquía de Burp, en el lenguaje visual de las capturas. Un proyecto se elige <b>antes</b> de entrar; dentro hay casos; dentro de un caso, sus imágenes y sus análisis. Nada de un proyecto se ve desde otro.</p>
+
+<!-- ── 1 ── -->
+<div class="step">
+  <h3><span class="n">1</span>Arranque · elegir proyecto</h3>
+  <p class="subtitle">Tras iniciar sesión, antes que nada. El mapa está en vista mundo y desenfocado detrás: la app ya está ahí, solo que aún no tiene proyecto. Sin carril de iconos todavía, porque no hay nada que navegar.</p>
+  <div class="rv" data-choice="arranque" onclick="toggleSelect(this)">
+    <div class="map" style="background:radial-gradient(120% 100% at 50% 55%,#1a1f26,#12151a 55%,#0c0e11);filter:blur(2.5px)">
+      <div style="position:absolute;left:50%;top:58%;transform:translate(-50%,-50%);
+           width:320px;height:320px;border-radius:50%;
+           background:radial-gradient(circle at 38% 32%,#232a33,#141920 70%,#0f1318)"></div>
+    </div>
+    <div style="position:absolute;inset:0;background:rgba(10,11,13,.55)"></div>
+    <div class="strip" style="left:0"><span>cpu <b>34%</b></span><span>gpu0 <b>71%</b> · 62°</span><span>ram <b>18/64 GB</b></span><span>cola <b>0</b></span><span style="margin-left:auto;color:var(--muted)">nerea@costa</span></div>
+
+    <div class="float" style="left:50%;top:52%;transform:translate(-50%,-50%);width:330px;padding:16px 18px">
+      <div style="font-size:13px;margin-bottom:2px">Elige un proyecto</div>
+      <div style="color:var(--muted);font-size:10.5px;margin-bottom:11px">Cada proyecto tiene sus casos y sus imágenes, separados del resto.</div>
+      <div class="item on">
+        <div class="r1"><b>Costa norte</b><span class="mono" style="color:var(--subtle)">hace 2 h</span></div>
+        <div class="mono" style="color:var(--muted);margin-top:4px">3 casos · 14 imágenes · 2.1 GB</div>
+      </div>
+      <div class="item">
+        <div class="r1"><b>Caso 114 — tráfico</b><span class="mono" style="color:var(--subtle)">ayer</span></div>
+        <div class="mono" style="color:var(--muted);margin-top:4px">1 caso · 3 imágenes · 180 MB</div>
+      </div>
+      <div class="item" style="border-style:dashed;text-align:center;color:var(--subtle)">+ nuevo proyecto</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:11px">
+        <span class="mono" style="color:var(--subtle)">2 de 10 proyectos · 2.3 de 20 GB</span>
+        <span style="background:var(--fg);color:#000;border-radius:6px;padding:4px 12px;font-size:11px">Abrir</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 2 ── -->
+<div class="step">
+  <h3><span class="n">2</span>Dentro del proyecto · los casos</h3>
+  <p class="subtitle">Ya hay carril y ya hay mapa. El cajón de casos vive donde antes iba el de proyectos, y el mapa muestra a la vez todo lo que el proyecto ha resuelto: cada caso, su marcador.</p>
+  <div class="rv" data-choice="casos" onclick="toggleSelect(this)">
+    <div class="map">
+      <div class="plane">
+        <div class="b" style="left:14%;top:20%;width:15%;height:9%"></div>
+        <div class="b" style="left:33%;top:15%;width:11%;height:13%"></div>
+        <div class="b" style="left:49%;top:24%;width:17%;height:8%"></div>
+        <div class="b" style="left:22%;top:38%;width:13%;height:11%"></div>
+        <div class="b" style="left:41%;top:42%;width:19%;height:10%"></div>
+        <div class="b" style="left:64%;top:35%;width:12%;height:14%"></div>
+        <div class="b" style="left:28%;top:58%;width:16%;height:9%"></div>
+      </div>
+      <div class="conf" style="left:44%;top:36%;width:120px;height:120px"></div>
+      <div class="conf" style="left:62%;top:50%;width:70px;height:70px;opacity:.55"></div>
+      <div class="mk top" style="left:52%;top:49%">1</div>
+      <div class="mk" style="left:66%;top:56%">2</div>
+      <div class="mk off" style="left:40%;top:62%">3</div>
+    </div>
+    <div class="rail"><s class="logo"></s><s class="on"></s><s class="round"></s><s></s><div class="gap"></div><s></s></div>
+    <div class="strip"><span>cpu <b>34%</b></span><span>gpu0 <b>71%</b> · 62°</span><span>ram <b>18/64 GB</b></span><span>cola <b>0</b></span></div>
+
+    <div class="float" style="left:40px;top:26px;bottom:0;width:236px;border-radius:0;
+         border-top:none;border-bottom:none;border-left:none;padding:12px;
+         background:rgba(16,18,21,.94);backdrop-filter:blur(12px)">
+      <div style="display:flex;align-items:center;gap:6px;color:var(--muted);margin-bottom:2px">
+        <span class="link" style="font-size:10.5px">‹ proyectos</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin:6px 0 9px">
+        <span style="font-size:13px">Costa norte</span><span class="k">3 casos</span>
+      </div>
+      <div class="item on">
+        <div class="r1"><i>1</i><b>Playa de Riazor</b><span class="pill">resuelto</span></div>
+        <div class="mono" style="color:var(--muted);margin-top:4px">6 imágenes · 6 análisis</div>
+      </div>
+      <div class="item">
+        <div class="r1"><i>2</i><b>Puerto — turno noche</b></div>
+        <div class="mono" style="color:var(--muted);margin-top:4px">5 imágenes · 3 análisis</div>
+      </div>
+      <div class="item">
+        <div class="r1"><i>3</i><b>Sin clasificar</b><span class="pill">pendiente</span></div>
+        <div class="mono" style="color:var(--subtle);margin-top:4px">3 imágenes · esperando al motor</div>
+      </div>
+      <div class="item" style="border-style:dashed;text-align:center;color:var(--subtle)">+ nuevo caso</div>
+      <div class="k" style="margin-top:10px">Almacenamiento del proyecto</div>
+      <div style="height:2px;border-radius:2px;background:#2a2e34;margin-top:5px">
+        <div style="width:42%;height:100%;background:var(--fg);border-radius:2px"></div></div>
+      <div class="mono" style="color:var(--subtle);margin-top:4px">2.1 GB · 4.2 de 20 GB en total</div>
+    </div>
+
+    <div class="bar">
+      <div style="display:flex;align-items:flex-end;margin-left:236px">
+        <div class="f"><div class="k">Proyecto</div><div class="v">Costa norte</div></div>
+        <div class="f"><div class="k">Casos resueltos</div><div class="v">2 de 3</div></div>
+        <div class="f"><div class="k">Pendientes</div><div class="v" style="color:var(--subtle)">3 imágenes · sin motor</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 3 ── -->
+<div class="step">
+  <h3><span class="n">3</span>Dentro del caso · los análisis</h3>
+  <p class="subtitle">La pantalla de la v1, intacta. El cajón se colapsa a la ruta de migas y el mapa vuela al caso. A la derecha, los análisis de <b>este</b> caso y nada más.</p>
+  <div class="rv" data-choice="analisis" onclick="toggleSelect(this)">
+    <div class="map">
+      <div class="plane">
+        <div class="b" style="left:12%;top:18%;width:15%;height:9%"></div>
+        <div class="b" style="left:31%;top:14%;width:11%;height:13%"></div>
+        <div class="b" style="left:47%;top:22%;width:17%;height:8%"></div>
+        <div class="b" style="left:18%;top:36%;width:13%;height:11%"></div>
+        <div class="b" style="left:38%;top:40%;width:19%;height:10%"></div>
+        <div class="b" style="left:62%;top:33%;width:12%;height:14%"></div>
+        <div class="b" style="left:24%;top:57%;width:16%;height:9%"></div>
+        <div class="b" style="left:50%;top:60%;width:14%;height:12%"></div>
+      </div>
+      <div class="conf" style="left:34%;top:36%;width:152px;height:152px"></div>
+      <div class="mk top" style="left:46%;top:52%">1</div>
+      <div class="mk" style="left:59%;top:38%">2</div>
+      <div class="mk exif" style="left:53%;top:59%">E</div>
+    </div>
+    <div class="rail"><s class="logo"></s><s class="on"></s><s class="round"></s><s></s><div class="gap"></div><s></s></div>
+    <div class="strip"><span>cpu <b>34%</b></span><span>gpu0 <b>71%</b> · 62°</span><span>ram <b>18/64 GB</b></span><span>cola <b>0</b></span></div>
+
+    <div class="crumb"><em>Costa norte</em> <span style="color:#3a3e44">/</span> <b>Playa de Riazor</b> <span style="color:var(--subtle)">▾</span></div>
+
+    <div class="float" style="left:50%;top:60px;transform:translateX(-50%);width:268px;padding:13px 15px">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:9px">
+        <span class="ring"></span><span style="font-size:13px">72% · Resultado principal</span></div>
+      <div style="color:var(--muted);font-size:10.5px">Posible ubicación: A Coruña, Galicia.</div>
+      <div style="color:var(--muted);font-size:10.5px">Radio de búsqueda: 1.40 km.</div>
+      <div style="color:var(--warn);font-size:10.5px">El EXIF declara un GPS a 300 m de aquí.</div>
+      <div style="text-align:center;margin-top:9px"><span class="link">Comparar con lo declarado</span></div>
+    </div>
+
+    <div class="float" style="left:50px;bottom:46px;display:flex;gap:5px;padding:6px">
+      <u style="width:40px;height:30px;border-radius:4px;display:block;background:linear-gradient(150deg,#3a4048,#20242a);outline:1px solid #fff"></u>
+      <u style="width:40px;height:30px;border-radius:4px;display:block;background:linear-gradient(150deg,#2f343b,#1c1f24)"></u>
+      <u style="width:40px;height:30px;border-radius:4px;display:block;background:linear-gradient(150deg,#2f343b,#1c1f24)"></u>
+      <u style="width:40px;height:30px;border-radius:4px;display:block;border:1px dashed #3a3e44"></u>
+    </div>
+
+    <div class="side">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+        <u style="width:38px;height:30px;border-radius:4px;display:block;background:linear-gradient(150deg,#3a4048,#20242a)"></u>
+        <div class="mono" style="color:var(--muted)">IMG_2291.jpg</div>
+      </div>
+      <div class="k" style="margin-bottom:7px">Caso · 6 imágenes, 6 análisis</div>
+      <div class="item on">
+        <div class="r1"><i>1</i><b>A Coruña</b><span class="pill">sin verificar</span></div>
+        <div style="display:flex;align-items:center;gap:6px;margin:5px 0 4px;color:var(--muted)">
+          <span class="ring"></span><span style="font-size:10.5px">72% similitud</span></div>
+        <div class="mono" style="color:var(--muted)">43.361200, −8.410400</div>
+      </div>
+      <div class="item">
+        <div class="r1"><i>2</i><b>Ferrol</b><span class="pill">sin verificar</span></div>
+        <div style="display:flex;align-items:center;gap:6px;margin:5px 0 4px;color:var(--muted)">
+          <span class="ring" style="border-top-color:#33373d"></span><span style="font-size:10.5px">31% similitud</span></div>
+        <div class="mono" style="color:var(--muted)">43.484100, −8.233300</div>
+      </div>
+      <div class="item" style="border-color:rgba(239,185,104,.3)">
+        <div class="r1"><b style="color:var(--warn)">EXIF declarado</b></div>
+        <div class="mono" style="color:var(--muted);margin-top:4px">43.363400, −8.407900<br>Canon EOS R6 · 2024-06-11</div>
+      </div>
+    </div>
+
+    <div class="bar">
+      <div style="display:flex;align-items:flex-end">
+        <div class="f"><div class="k">Identificado</div><div class="v">A Coruña, Galicia</div></div>
+        <div class="f"><div class="k">Coordenadas</div><div class="v mono">43.361200, −8.410400</div></div>
+        <div class="f"><div class="k">Radio de búsqueda</div><div class="v">~1.40 km</div></div>
+      </div>
+      <div><div class="pct">72%</div><div class="k" style="text-align:right">coincidencia</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="q">
+  <h3 style="margin:0 0 6px">Lo que esta estructura deja sin decidir</h3>
+  <p class="subtitle" style="margin:0 0 10px">Burp guarda los proyectos en un archivo local del que solo tú dispones. Aquí el servidor es compartido por todo el equipo, así que la pregunta se plantea sola:</p>
+  <div class="options">
+    <div class="option" data-choice="privados" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content"><h3>Los proyectos son de quien los crea</h3>
+        <p>Nadie más los ve, ni siquiera el admin. Es lo más cercano a Burp y lo más simple de implementar: cada consulta filtra por <code>owner_id</code> y ya está.</p></div>
+    </div>
+    <div class="option" data-choice="compartibles" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content"><h3>Privados por defecto, compartibles a mano</h3>
+        <p>Se crean tuyos, y puedes invitar a otros investigadores a un proyecto concreto. Requiere una tabla de miembros y decidir qué puede hacer un invitado.</p></div>
+    </div>
+    <div class="option" data-choice="servidor" onclick="toggleSelect(this)">
+      <div class="letter">C</div>
+      <div class="content"><h3>Del servidor, todos los ven</h3>
+        <p>Una sola bolsa de proyectos para el equipo entero. Simple y colaborativo, pero cualquiera puede abrir la investigación de cualquiera.</p></div>
+    </div>
+  </div>
+</div>
+
+</main>
