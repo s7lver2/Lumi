@@ -192,10 +192,12 @@ vuelve a tocar.
 
 ## 4. Fronteras con lo que ya existe
 
-**Los límites se preguntan, nunca se leen.** Tres de las seis claves de `limits::KEYS` se
-aplican aquí, y son las tres primeras que se aplican en todo el proyecto:
+**Los límites se preguntan, nunca se leen.** Cuatro de las seis claves de `limits::KEYS` se
+aplican aquí, y son las primeras que se aplican en todo el proyecto:
 `can_create_projects` gatea `POST /v1/projects`, `max_storage_gb` gatea la subida de
-imágenes, y `max_daily` gatea la creación de análisis. Los tres vía `limits::effective`, jamás
+imágenes, y `max_daily` y `models` gatean la creación de análisis — uno por cantidad diaria
+y el otro porque pedir un modelo que tu cuenta no tiene concedido es la forma más obvia de
+saltarse la concesión. Los cuatro vía `limits::effective`, jamás
 consultando la tabla `limits` por su cuenta. Es la condición que
 [`ARCHITECTURE.md` §10](../../../ARCHITECTURE.md) dejó escrita: leer la tabla directamente
 duplica la precedencia de dos niveles y la desincroniza.
@@ -271,10 +273,32 @@ POST   /v1/cases/:id/analyses              { image_ids, model } · ← max_daily
 GET    /v1/analyses/:id
 DELETE /v1/analyses/:id
 
+GET    /v1/me/usage                        bytes ocupados, tope y su origen
+GET    /v1/map/config                      proveedor y motivo · NUNCA la clave
 GET    /v1/map/style                       estilo con las fuentes reescritas al proxy
 GET    /v1/map/tiles/:z/:x/:y              proxy + caché en disco
 PATCH  /v1/admin/map                       ← admin · { provider, key, style }
 ```
+
+`/v1/map/config` existe aparte del estilo porque el cliente necesita saber **por qué** no hay
+mapa antes de intentar cargarlo: sin esa ruta, "nadie ha configurado el proveedor" y "el
+proveedor está caído" se verían igual.
+
+### El canal de binarios
+
+Tres de estas rutas devuelven bytes y no JSON: la imagen, su miniatura y la tesela. El puente
+que el cliente ya tiene (`invoke("request")`) devuelve `String`, y el webview **no puede**
+hablar con el daemon por su cuenta: el certificado es autofirmado y el anclaje por huella
+vive en Rust.
+
+La salida es un **esquema URI propio de Tauri**, `lumi://`, registrado en el proceso nativo:
+el webview pide `lumi://localhost/v1/images/7/thumb` como pediría cualquier URL, y por dentro
+sale por el mismo cliente TLS anclado. Sirve igual para `<img src>` que para las fuentes de
+MapLibre, y el token de sesión viaja en cabecera desde el lado nativo, nunca en la URL.
+
+La subida va en sentido contrario y por otro camino: el cliente manda **rutas de archivo**, no
+bytes, y Rust las lee y las reenvía como multipart. Mandar 30 MB por el canal de IPC de Tauri
+costaría serializarlos por el camino.
 
 Las teselas se cachean en `{DATA}/tiles/<provider>/<z>/<x>/<y>`. El caché no caduca en este
 subsistema: los mapas base cambian de año en año, y el coste de una tesela obsoleta es
