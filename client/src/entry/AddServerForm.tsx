@@ -11,13 +11,14 @@ export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
   const [hello, setHello] = useState<Hello | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Una clave lumi1_ pegada aquí no es un error: significa "soy el owner y
+  // vengo a aprovisionar". Pero no se salta sola al asistente: espera un
+  // clic explícito, igual que guardar un servidor espera "Guardar servidor".
+  const ownerKey = isCard(text.trim()) ? null : text.trim() || null;
 
   async function verify() {
     const s = text.trim();
-    if (!s) return;
-    // Una clave lumi1_ pegada aquí no es un error: significa "soy el owner y
-    // vengo a aprovisionar". Se acepta y se lleva a su flujo.
-    if (!isCard(s)) { onOwnerKey(s); return; }
+    if (!s || !isCard(s)) return;
     setBusy(true); setError(null);
     try {
       setHello(await api.pairCard(s));
@@ -47,6 +48,19 @@ export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
         <div className="mt-3.5 flex items-center gap-2.5 text-xs text-muted">
           <Icon name="spinner" /> Comprobando el servidor
         </div>
+      )}
+
+      {ownerKey && (
+        <>
+          <div className="my-3 h-px bg-border" />
+          <div className="flex items-start gap-2.5 text-xs text-warning-fg">
+            <Icon name="alert" className="mt-0.5" />
+            <span className="text-muted">
+              Esta parece una clave de administrador, no una tarjeta de servidor: te
+              llevaría al asistente de instalación en vez de a iniciar sesión.
+            </span>
+          </div>
+        </>
       )}
 
       {hello && (
@@ -85,10 +99,17 @@ export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
             Atrás
           </button>
         ) : <span />}
-        <button onClick={save} disabled={!hello}
-          className="rounded-lg bg-accent px-5 py-2 text-xs font-medium text-black transition-transform duration-300 ease-expo active:translate-y-px disabled:opacity-40">
-          Guardar servidor
-        </button>
+        {ownerKey ? (
+          <button onClick={() => onOwnerKey(ownerKey)}
+            className="rounded-lg bg-accent px-5 py-2 text-xs font-medium text-black transition-transform duration-300 ease-expo active:translate-y-px">
+            Continuar como administrador
+          </button>
+        ) : (
+          <button onClick={save} disabled={!hello}
+            className="rounded-lg bg-accent px-5 py-2 text-xs font-medium text-black transition-transform duration-300 ease-expo active:translate-y-px disabled:opacity-40">
+            Guardar servidor
+          </button>
+        )}
       </div>
     </>
   );

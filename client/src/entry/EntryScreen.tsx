@@ -39,11 +39,11 @@ export function EntryScreen({ onSignedIn, onOwnerKey }: {
 }) {
   const saved = loadServers();
   const [server, setServer] = useState<Server | null>(saved[0] ?? null);
-  // Con un ticket guardado se aterriza en la espera, no en el login: es lo que
-  // el usuario estaba haciendo, y sobrevive a cerrar la app.
-  const [view, setView] = useState<EntryView>(
-    saved.length === 0 ? "add" : loadSession()?.ticket ? "waiting" : "login",
-  );
+  // El login es SIEMPRE la pantalla por defecto, con servidores guardados o
+  // sin ellos: añadir uno vive dentro del desplegable, no reemplaza al login.
+  // Excepción: con un ticket guardado se aterriza en la espera, porque es lo
+  // que el usuario estaba haciendo y sobrevive a cerrar la app.
+  const [view, setView] = useState<EntryView>(loadSession()?.ticket ? "waiting" : "login");
   const [resolved, setResolved] = useState<AccessStatus | null>(null);
 
   if (view === "add") {
@@ -52,7 +52,7 @@ export function EntryScreen({ onSignedIn, onOwnerKey }: {
         <AddServerForm
           onAdded={(addr) => { setServer(loadServers().find((s) => s.addr === addr) ?? null); setView("login"); }}
           onOwnerKey={onOwnerKey}
-          onBack={saved.length > 0 ? () => setView("login") : undefined} />
+          onBack={() => setView("login")} />
       </Pane>
     );
   }
