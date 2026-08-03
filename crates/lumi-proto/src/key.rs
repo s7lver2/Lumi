@@ -15,6 +15,7 @@ pub const FP_BYTES: usize = 16;
 pub const SECRET_BYTES: usize = 20;
 
 const PREFIX: &str = "lumi1";
+const CARD_PREFIX: &str = "lumi1s";
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum KeyError {
@@ -53,7 +54,14 @@ impl PairKey {
     }
 
     pub fn parse(s: &str) -> Result<Self, KeyError> {
-        let rest = s.trim().strip_prefix(PREFIX).ok_or(KeyError::BadPrefix)?;
+        let s = s.trim();
+        // `lumi1s_…` también empieza por `lumi1`: hay que descartarlo antes de
+        // partir por campos, o una tarjeta se leería como una clave malformada
+        // y el error mandaría al usuario a buscar un secreto que no existe.
+        if s.starts_with(CARD_PREFIX) {
+            return Err(KeyError::BadPrefix);
+        }
+        let rest = s.strip_prefix(PREFIX).ok_or(KeyError::BadPrefix)?;
         let rest = rest.strip_prefix('_').ok_or(KeyError::BadPrefix)?;
         // Desde la derecha: el campo de dirección puede llevar puntos y dos puntos.
         let mut it = rest.rsplitn(3, '_');
@@ -92,9 +100,72 @@ impl fmt::Display for PairKey {
     }
 }
 
+/// Tarjeta de servidor pública: `lumi1s_<host:puerto>_<huella>`.
+///
+/// No lleva secreto y no se consume. Es la huella de un certificado público:
+/// compartirla no filtra nada, y con ella cualquiera del equipo puede conectar
+/// VERIFICADO para pedir acceso. Sin esto, un usuario nuevo con solo una IP no
+/// podría conectar sin abrir una grieta en el anclaje, y esa grieta la usaría
+/// un MITM para responder "aprobado, crea tu cuenta aquí".
+#[derive(Debug, Clone, PartialEq)]
+pub struct ServerCard {
+    pub addr: String,
+    pub fingerprint: String,
+}
+
+impl ServerCard {
+    pub fn new(addr: &str, cert_der: &[u8]) -> Self {
+        Self { addr: addr.to_string(), fingerprint: fingerprint(cert_der) }
+    }
+
+    pub fn parse(s: &str) -> Result<Self, KeyError> {
+        let rest = s
+            .trim()
+            .strip_prefix(CARD_PREFIX)
+            .and_then(|r| r.strip_prefix('_'))
+            .ok_or(KeyError::BadPrefix)?;
+        // Desde la derecha: la dirección lleva puntos y dos puntos.
+        let (addr, fp) = rest.rsplit_once('_').ok_or(KeyError::BadShape)?;
+        if addr.is_empty() {
+            return Err(KeyError::BadShape);
+        }
+        let raw = bs58::decode(fp).into_vec().map_err(|_| KeyError::BadEncoding)?;
+        if raw.len() != FP_BYTES {
+            return Err(KeyError::BadFingerprintLen);
+        }
+        Ok(Self { addr: addr.to_string(), fingerprint: fp.to_string() })
+    }
+
+    pub fn matches_cert(&self, cert_der: &[u8]) -> bool {
+        fingerprint(cert_der) == self.fingerprint
+    }
+}
+
+impl fmt::Display for ServerCard {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{CARD_PREFIX}_{}_{}", self.addr, self.fingerprint)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tarjeta_publica_y_no_confusion_con_la_clave() {
+        let cert = b"certificado de mentira";
+        let c = ServerCard::new("192.168.1.40:7717", cert);
+        let s = c.to_string();
+        assert!(s.starts_with("lumi1s_"));
+        assert_eq!(ServerCard::parse(&s).unwrap(), c);
+        assert!(c.matches_cert(cert));
+        // La tarjeta no lleva secreto: es información pública.
+        assert_eq!(s.split('_').count(), 3);
+        // Y los dos formatos no se confunden en ninguna dirección.
+        let k = PairKey::generate("192.168.1.40:7717", cert);
+        assert_eq!(PairKey::parse(&s).unwrap_err(), KeyError::BadPrefix);
+        assert_eq!(ServerCard::parse(&k.to_string()).unwrap_err(), KeyError::BadPrefix);
+    }
 
     #[test]
     fn roundtrip_con_ipv4_y_rechazo_de_basura() {
