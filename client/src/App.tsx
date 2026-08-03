@@ -145,9 +145,14 @@ export default function App() {
           onBack={step > 0 && step !== 2 ? () => setStep((s) => s - 1) : undefined}
           onNext={() => {
             if (step === 1) { document.getElementById("admin-submit")?.click(); return; }
+            // Datos y Modelos (subsistemas 3-5) todavía no existen: el paso 2
+            // (runtime) es el último construido, así que terminar de instalar
+            // lleva directo a la app en vez de a un paso vacío.
+            if (step === 2) { setMode("app"); return; }
             setStep((s) => s + 1);
           }}
           nextDisabled={(step === 0 && !hello) || (step === 2 && !runtimeDone)}
+          nextLabel={step === 2 ? "Terminar" : "Siguiente"}
           nextBusy={step === 1 && adminBusy}>
           {step === 0 && <PairStep onDone={() => setStep(1)} />}
           {step === 1 && <AdminStep bootstrapToken={bootstrapToken} onDone={() => setStep(2)} onBusyChange={setAdminBusy} />}
