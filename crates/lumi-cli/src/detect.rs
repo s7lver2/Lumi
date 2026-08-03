@@ -103,6 +103,17 @@ pub fn gpus() -> Vec<GpuInfo> {
         .collect()
 }
 
+/// El kernel de WSL2 se anuncia como `...-microsoft-standard-WSL2`. En WSL2
+/// el driver NVIDIA vive en Windows, no dentro de la distro: instalar un
+/// paquete `nvidia-driver-*` aquí no engancharía ninguna GPU real.
+pub fn is_wsl(kernel: &str) -> bool {
+    kernel.to_lowercase().contains("microsoft")
+}
+
+pub fn has_cmd(cmd: &str) -> bool {
+    Command::new("which").arg(cmd).output().is_ok_and(|o| o.status.success())
+}
+
 pub fn cpu_summary() -> String {
     let mut s = sysinfo::System::new();
     s.refresh_cpu_all();

@@ -49,7 +49,10 @@ pub fn run(auto: bool) -> Result<PairKey> {
     ui::ok(&format!("{} · {}", e.os, e.kernel));
     match &e.driver {
         Some(d) => ui::ok(&format!("driver NVIDIA {d}")),
-        None => ui::warn("sin driver NVIDIA: el servidor arrancará, pero sin inferencia"),
+        None => {
+            ui::warn("sin driver NVIDIA: el servidor arrancará, pero sin inferencia");
+            offer_driver_install(&e.kernel, auto)?;
+        }
     }
     if !e.port_free {
         bail!("el puerto {} ya está ocupado", lumi_proto::PORT);
@@ -80,7 +83,7 @@ pub fn run(auto: bool) -> Result<PairKey> {
             ("nativo", "recomendado — sharding, offload, telemetría completa"),
             ("docker", "capacidades recortadas, ver más abajo"),
         ];
-        if ui::choose(&opts, 0)? == 0 { Mode::Native } else { Mode::Docker }
+        if ui::choose("modo", &opts, 0)? == 0 { Mode::Native } else { Mode::Docker }
     };
 
     ui::head("capacidades");
@@ -105,7 +108,7 @@ pub fn run(auto: bool) -> Result<PairKey> {
             ("automática", "arranca sola tras reiniciar"),
             ("sellada", "un admin desbloquea desde la app en cada arranque"),
         ];
-        if ui::choose(&opts, 0)? == 0 {
+        if ui::choose("clave maestra", &opts, 0)? == 0 {
             (false, None)
         } else {
             print!("  frase de desbloqueo: ");
@@ -211,6 +214,47 @@ fn seed_master(sealed: bool, passphrase: Option<&str>) -> Result<()> {
         // informativo, no un fallo: se descarta a propósito para no romper
         // la salida limpia del instalador.
     }
+    Ok(())
+}
+
+/// Ofrece instalar el driver NVIDIA cuando falta. En WSL2 el driver vive en
+/// Windows, no dentro de la distro: un paquete `nvidia-driver-*` aquí no
+/// engancharía ninguna GPU real, así que en vez de ofrecer una instalación
+/// que no haría nada se explica dónde instalarlo de verdad. `auto` nunca
+/// pregunta: instalar un driver de kernel es una acción pesada (puede pedir
+/// reinicio) y no entra en "los defectos recomendados sin preguntar".
+fn offer_driver_install(kernel: &str, auto: bool) -> Result<()> {
+    if detect::is_wsl(kernel) {
+        ui::warn("WSL2 detectado: el driver se instala en Windows, no aquí");
+        println!("      https://developer.nvidia.com/cuda/wsl · reinicia WSL después (wsl --shutdown)");
+        return Ok(());
+    }
+    if auto {
+        return Ok(());
+    }
+    if !detect::has_cmd("ubuntu-drivers") {
+        ui::warn("sin ubuntu-drivers: instala el driver a mano para tu distribución");
+        return Ok(());
+    }
+    let install_now = dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())
+        .with_prompt("instalar el driver NVIDIA recomendado ahora (ubuntu-drivers autoinstall)")
+        .default(false)
+        .interact()
+        .unwrap_or(false);
+    if !install_now {
+        return Ok(());
+    }
+    let pb = ui::step("instalando el driver NVIDIA");
+    let out = Command::new("ubuntu-drivers").arg("autoinstall").output()?;
+    pb.finish_and_clear();
+    if !out.status.success() {
+        ui::warn(&format!(
+            "ubuntu-drivers autoinstall falló: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+        return Ok(());
+    }
+    ui::ok("driver instalado · hace falta reiniciar la máquina para que cargue el módulo del kernel");
     Ok(())
 }
 

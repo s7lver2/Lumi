@@ -53,7 +53,10 @@ pub fn head(title: &str) {
 /// resuelve el modo crudo de terminal y el redibujado; no hace falta
 /// reinventar la lectura de teclado. Si la terminal no soporta modo crudo
 /// (pipe, CI), cae a `default` en vez de fallar la instalación entera.
-pub fn choose(options: &[(&str, &str)], default: usize) -> std::io::Result<usize> {
+///
+/// `title` es obligatorio: sin `.with_prompt(...)`, dialoguer borra el menú
+/// al confirmar y no deja ningún rastro de qué se elegió.
+pub fn choose(title: &str, options: &[(&str, &str)], default: usize) -> std::io::Result<usize> {
     let items: Vec<String> = options
         .iter()
         .map(|(label, hint)| {
@@ -65,6 +68,7 @@ pub fn choose(options: &[(&str, &str)], default: usize) -> std::io::Result<usize
         })
         .collect();
     dialoguer::Select::with_theme(&dialoguer::theme::ColorfulTheme::default())
+        .with_prompt(title)
         .items(&items)
         .default(default)
         .interact_opt()
