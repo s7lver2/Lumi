@@ -36,6 +36,11 @@ export function PairStep({ onDone }: { onDone: () => void }) {
   }
 
   const fp = hello?.fingerprint ?? "";
+  // Sin esto, una clave lumi1_ de un servidor ya reclamado (huella válida,
+  // sin problema en /v1/hello) te dejaba entrar al asistente igual, y el
+  // fallo solo aparecía dos pasos después al crear el admin: "sesión de
+  // bootstrap inválida" con nombre y contraseña ya escritos.
+  const alreadyClaimed = hello && hello.state !== "unclaimed";
 
   return (
     <>
@@ -68,6 +73,19 @@ export function PairStep({ onDone }: { onDone: () => void }) {
           <p className="mt-2 max-w-[50ch] text-[11px] text-muted">
             Coincide con la que viaja dentro de la clave. Nadie se ha interpuesto en la conexión.
           </p>
+        </>
+      )}
+
+      {alreadyClaimed && (
+        <>
+          <div className="my-3 h-px bg-border" />
+          <div className="flex items-start gap-2.5 text-xs text-warning-fg">
+            <Icon name="alert" className="mt-0.5" />
+            <span className="text-muted">
+              Este servidor ya tiene administrador: esta clave ya se canjeó. No puedes
+              configurarlo otra vez; inicia sesión en vez de continuar aquí.
+            </span>
+          </div>
         </>
       )}
 

@@ -113,12 +113,17 @@ export default function App() {
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       <PlanetBackground dead={status !== "ok"} />
-      <TelemetryStrip collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)}
-        notifs={notifs}
-        onNotifs={mode === "app" || mode === "admin" ? () => {
-          setNotifs(0);
-          setMode(useServer.getState().isAdmin ? "admin" : "app");
-        } : undefined} />
+      {/* Nunca en "entry": una reconexión a medio hacer deja `hello` con
+          datos aunque no haya sesión válida, y la franja se veía encima del
+          login sin que hubiera nada real que mostrar todavía. */}
+      {mode !== "entry" && (
+        <TelemetryStrip collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)}
+          notifs={notifs}
+          onNotifs={mode === "app" || mode === "admin" ? () => {
+            setNotifs(0);
+            setMode(useServer.getState().isAdmin ? "admin" : "app");
+          } : undefined} />
+      )}
       {/* El wizard se centra en el espacio que deja la franja, en vez de
           colgar de arriba dejando media pantalla vacía. */}
       <div className="relative flex flex-1 items-center justify-center overflow-y-auto">
@@ -153,7 +158,10 @@ export default function App() {
             if (step === 2) { setMode(useServer.getState().isAdmin ? "admin" : "app"); return; }
             setStep((s) => s + 1);
           }}
-          nextDisabled={(step === 0 && !hello) || (step === 2 && !runtimeDone)}
+          nextDisabled={
+            (step === 0 && (!hello || hello.state !== "unclaimed")) ||
+            (step === 2 && !runtimeDone)
+          }
           nextLabel={step === 2 ? "Terminar" : "Siguiente"}
           nextBusy={step === 1 && adminBusy}>
           {step === 0 && <PairStep onDone={() => setStep(1)} />}

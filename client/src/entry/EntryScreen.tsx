@@ -18,9 +18,6 @@ export function Pane({ title, subtitle, children }: {
 }) {
   return (
     <div className="relative z-10 mx-auto w-full max-w-sm px-6 py-9">
-      {/* fixed, no absolute: Pane es una columna estrecha, no toda la
-          pantalla. Sustituye visualmente al planeta detrás de esta vista. */}
-      <WavesBackground />
       <div className="mb-1 flex items-center gap-2.5" style={{ animation: "jg-fade-rise .7s both" }}>
         <span className="text-fg" style={{ animation: "jg-lock-breathe 2.4s ease-in-out infinite" }}>✦</span>
         <span className="text-[17px] font-medium text-fg">{title}</span>
@@ -46,8 +43,12 @@ export function EntryScreen({ onSignedIn, onOwnerKey }: {
   const [view, setView] = useState<EntryView>(loadSession()?.ticket ? "waiting" : "login");
   const [resolved, setResolved] = useState<AccessStatus | null>(null);
 
+  // Fuera de las ramas de `view`: EntryScreen no se remonta al cambiar de
+  // vista, así que esto tampoco — la animación de las capas sigue su ciclo
+  // sin reiniciarse cada vez que pasas de login a "añadir servidor" y vuelta.
+  let pane;
   if (view === "add") {
-    return (
+    pane = (
       <Pane title="Añadir un servidor" subtitle="pega la clave que te han pasado.">
         <AddServerForm
           onAdded={(addr) => { setServer(loadServers().find((s) => s.addr === addr) ?? null); setView("login"); }}
@@ -55,28 +56,23 @@ export function EntryScreen({ onSignedIn, onOwnerKey }: {
           onBack={() => setView("login")} />
       </Pane>
     );
-  }
-
-  if (view === "request") {
-    return (
+  } else if (view === "request") {
+    pane = (
       <Pane title="Solicitar acceso" subtitle="el administrador recibirá tu petición.">
         <RequestForm server={server} onSent={() => setView("waiting")} onBack={() => setView("login")} />
       </Pane>
     );
-  }
-  if (view === "waiting") {
-    return (
+  } else if (view === "waiting") {
+    pane = (
       <Pane title="Solicitud enviada" subtitle="esperando a que el administrador responda.">
         <WaitingScreen server={server}
           onResolved={(s) => { setResolved(s); setView("resolved"); }}
           onCancel={() => setView("login")} />
       </Pane>
     );
-  }
-
-  if (view === "resolved" && resolved) {
+  } else if (view === "resolved" && resolved) {
     const ok = resolved.status === "approved";
-    return (
+    pane = (
       <Pane title={ok ? "Acceso aprobado" : "Solicitud rechazada"}
         subtitle={ok ? "crea tu cuenta para empezar." : "el administrador no ha concedido el acceso."}>
         <ResolvedScreen status={resolved}
@@ -85,21 +81,24 @@ export function EntryScreen({ onSignedIn, onOwnerKey }: {
           onBack={() => setView("login")} />
       </Pane>
     );
-  }
-
-  if (view === "password") {
-    return (
+  } else if (view === "password") {
+    pane = (
       <Pane title="Cambia tu contraseña" subtitle="hace falta antes de entrar.">
         <ChangePasswordForm onDone={onSignedIn} onCancel={() => setView("login")} />
       </Pane>
     );
+  } else {
+    pane = (
+      <Pane title="Lumi Station" subtitle="inicia sesión en tu servidor.">
+        <LoginForm server={server} onServer={setServer} onAdd={() => setView("add")}
+          onRequest={() => setView("request")} onSignedIn={onSignedIn}
+          onMustChange={() => setView("password")} />
+      </Pane>
+    );
   }
 
-  return (
-    <Pane title="Lumi Station" subtitle="inicia sesión en tu servidor.">
-      <LoginForm server={server} onServer={setServer} onAdd={() => setView("add")}
-        onRequest={() => setView("request")} onSignedIn={onSignedIn}
-        onMustChange={() => setView("password")} />
-    </Pane>
-  );
+  // El fondo va FUERA del if/else: EntryScreen no se remonta al cambiar de
+  // vista, así que esto tampoco — la animación de las capas sigue su ciclo
+  // sin reiniciarse cada vez que pasas de login a "añadir servidor" y vuelta.
+  return <><WavesBackground />{pane}</>;
 }
