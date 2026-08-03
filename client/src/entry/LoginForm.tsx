@@ -18,7 +18,12 @@ export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMu
     if (!server || !username || !password) return;
     setBusy(true); setError(null);
     try {
-      await api.reconnect(server.addr, server.fingerprint);
+      // Sin guardar esto, `hello` se queda en null: la franja de telemetría
+      // no se muestra (exige `hello`) y el sondeo de conexión ni arranca
+      // (depende de `hello !== null`) — quien entra por aquí en vez de por
+      // el asistente del owner se queda sin heartbeat para siempre.
+      const h = await api.reconnect(server.addr, server.fingerprint);
+      useServer.getState().setHello(h);
       const res = await api.post<LoginRes>("/v1/auth/login", {
         username, password,
         device: { client_id: deviceId(), name: deviceName(), os: navigator.userAgent },
