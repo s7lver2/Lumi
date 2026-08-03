@@ -13,6 +13,16 @@
 html, body, #root { height: 100%; }
 body { background: #0e0f11; color: #e8e8e6; overflow: hidden; }
 
+/* Scrollbar minimalista: sin pista visible, hilo fino que solo se nota al
+   pasar el ratón. WebView2 (Windows) y webkit2gtk (Linux) son ambos
+   Chromium/WebKit, así que estos pseudo-elementos cubren las dos
+   plataformas sin JS ni una librería. */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, .2); }
+::-webkit-scrollbar-corner { background: transparent; }
+
 /* La interfaz se diseñó a escala web (max-w-xl, tipografía de 10-17px). En una
    ventana de escritorio maximizada se queda diminuta y perdida.
    `zoom` (probado antes) recalcula el layout con las métricas de fuente ya
