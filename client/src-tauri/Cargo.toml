@@ -27,3 +27,4 @@ lumi-proto = { path = "../../crates/lumi-proto" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-manual-roots", "stream"] }
 rustls = "0.23"
 tokio = { version = "1", features = ["full"] }
+futures-util = "0.3"

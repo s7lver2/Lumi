@@ -108,11 +108,50 @@ async fn request(
     if status.is_success() { Ok(text) } else { Err(text) }
 }
 
+/// SSE del daemon reemitido como evento de Tauri. El frontend solo escucha.
+#[tauri::command]
+async fn start_telemetry(
+    token: String, app: tauri::AppHandle, state: tauri::State<'_, Shared>,
+) -> Result<(), String> {
+    use tauri::Emitter;
+    let (base, client) = {
+        let c = state.lock().unwrap();
+        (c.base.clone().ok_or("sin servidor")?, c.client.clone().ok_or("sin cliente")?)
+    };
+    tokio::spawn(async move {
+        loop {
+            let res = client.get(format!("{base}/v1/telemetry")).bearer_auth(&token).send().await;
+            let Ok(res) = res else {
+                let _ = app.emit("telemetry-down", ());
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                continue;
+            };
+            let mut stream = res.bytes_stream();
+            use futures_util::StreamExt;
+            let mut buf = String::new();
+            while let Some(Ok(chunk)) = stream.next().await {
+                buf.push_str(&String::from_utf8_lossy(&chunk));
+                while let Some(i) = buf.find("\n\n") {
+                    let frame = buf[..i].to_string();
+                    buf.drain(..i + 2);
+                    if let Some(d) = frame.strip_prefix("data: ") {
+                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(d) {
+                            let _ = app.emit("telemetry", v);
+                        }
+                    }
+                }
+            }
+            let _ = app.emit("telemetry-down", ());
+        }
+    });
+    Ok(())
+}
+
 fn main() {
     rustls::crypto::ring::default_provider().install_default().ok();
     tauri::Builder::default()
         .manage(Shared::default())
-        .invoke_handler(tauri::generate_handler![pair, request])
+        .invoke_handler(tauri::generate_handler![pair, request, start_telemetry])
         .run(tauri::generate_context!())
         .expect("error al arrancar Tauri");
 }
