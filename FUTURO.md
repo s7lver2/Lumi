@@ -45,16 +45,22 @@ aunque hoy siempre tenga una fila. Falta la interfaz —seleccionar varias tomas
 escena y lanzarlas como una unidad— y, sobre todo, decidir qué hace la cola cuando una
 unidad compuesta falla a medias. Eso último es del subsistema 4, no de la interfaz.
 
-### Varias candidatas por análisis
+### Alternativas cuando el motor duda de verdad
 
-Se eligió que un análisis devuelva **una** ubicación con su radio y su confianza. La v1 en
-cambio devolvía regiones con varias candidatas ordenadas
-(`CandidateComparisonCard`, `OtherCandidatesList`), y el argumento central del producto es
-que *"la precisión sale de la competencia entre verificadores"*: con Lumi Vision corriendo
-tres o cuatro a la vez, hoy tres de esos cuatro no dejan rastro en la interfaz.
+Un análisis devuelve **una** ubicación con su radio y su confianza. La v1 en cambio listaba
+siempre todas las candidatas ordenadas por similitud
+(`CandidateComparisonCard`, `OtherCandidatesList`), y sesenta y cuatro candidatos «sin
+verificar» no ayudan a decidir nada: la lista se vuelve ruido.
 
-Migrar es acotado: los cuatro campos `result_*` de `analyses` se vacían y nace
-`analysis_candidates`. Merece decidirse **antes** del subsistema 5, no después.
+La dirección acordada es intermedia y ya está en el spec: el motor **podrá** añadir
+alternativas, pero solo cuando genuinamente no pueda discriminar entre dos o tres hipótesis.
+No se rellena la lista con lo siguiente mejor puntuado, y un falso positivo evidente no es
+una alternativa.
+
+Lo que queda pendiente es construirlo, y es trabajo del subsistema 5: definir qué cuenta
+como duda real —un umbral de separación entre hipótesis, no un top-N— y crear
+`analysis_candidates` el día que el motor reporte la primera. Hasta entonces los cuatro
+campos `result_*` de `analyses` bastan y no hay nada que migrar.
 
 ### Geocodificación inversa
 

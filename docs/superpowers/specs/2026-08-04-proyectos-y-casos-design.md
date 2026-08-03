@@ -52,7 +52,7 @@ encajan sin romper una pantalla que ya funciona**.
 | 1 | **Jerarquía de tres niveles: proyecto → caso → análisis**, al estilo del arranque de Burp Suite. El proyecto se elige antes de entrar a la app | proyectos planos con las imágenes dentro; casos como etiquetas en vez de contenedores |
 | 2 | **Proyectos privados con invitación.** Se crean tuyos; el dueño puede añadir miembros | de quien los crea y de nadie más; una sola bolsa visible para todo el servidor |
 | 3 | **Dos roles y nada más**: `owner` y `member` | un tercer rol de solo lectura |
-| 4 | **El resultado de un análisis es una ubicación**: coordenada, radio de incertidumbre y confianza | varias candidatas ordenadas, una por verificador (que es lo que hacía la v1) |
+| 4 | **El resultado de un análisis es una ubicación**: coordenada, radio de incertidumbre y confianza. El motor podrá añadir alternativas, pero solo ante una duda real | varias candidatas ordenadas siempre, una por verificador (que es lo que hacía la v1) |
 | 5 | **`analysis_images` desde el primer día**, aunque hoy siempre tenga una fila | referencia directa a una sola imagen, migrar cuando haga falta |
 | 6 | **El servidor hace de proxy de teselas y de estilo.** Ni la clave ni las coordenadas salen del cliente | teselas pedidas por el cliente con la clave entregada al iniciar sesión; paquete de mapas local instalado por el owner |
 | 7 | **Proveedor de mapa configurable por el admin** (Mapbox u OpenStreetMap) desde el panel provisional | fijo en el código; solo por CLI; un paso del asistente de aprovisionamiento |
@@ -86,6 +86,17 @@ que no hacer nada.
 recibe esta herramienta ya lleva las coordenadas dentro. Ocultarlo contradice de frente el
 principio de que nada desaparece en silencio. El riesgo de que un EXIF esté falsificado se
 cubre etiquetándolo como **declarado** y pintándolo distinto, no escondiéndolo.
+
+**Una ubicación, y alternativas solo si la duda es real.** La v1 listaba siempre todas las
+candidatas, ordenadas por similitud, y eso convierte la lista en ruido: sesenta y cuatro
+candidatos «sin verificar» no ayudan a decidir nada. Aquí el resultado es uno. El motor
+podrá añadir alternativas cuando **genuinamente no pueda discriminar** entre dos o tres
+hipótesis, y ese es el listón: no se rellena la lista con lo siguiente mejor puntuado, y un
+falso positivo evidente no es una alternativa.
+
+Esto no cambia nada de este subsistema —no hay motor que dude todavía— pero fija el contrato
+para el 5, y fija también cuándo nace `analysis_candidates`: el día que el motor reporte la
+primera alternativa, no antes. Hasta entonces, los cuatro campos `result_*` bastan.
 
 **Por qué el archivo original no se toca.** Borrar el EXIF del archivo almacenado protegería
 a quien aparece en la foto, pero destruye el original, que en contexto forense es justo lo
