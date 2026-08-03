@@ -5,6 +5,14 @@
 html, body, #root { height: 100%; }
 body { background: #0e0f11; color: #e8e8e6; overflow: hidden; }
 
+/* La interfaz se diseñó a escala web (max-w-xl, tipografía de 10-17px). En una
+   ventana de escritorio maximizada se queda diminuta y perdida. `zoom` escala
+   el árbol entero, incluidos los tamaños en px literales, sin tener que
+   reescribir cada valor del sistema de diseño. */
+@media (min-width: 1100px) { #root { zoom: 1.2; } }
+@media (min-width: 1500px) { #root { zoom: 1.4; } }
+@media (min-width: 2000px) { #root { zoom: 1.65; } }
+
 /* Keyframes heredados de globals.css de la v1. Mismos nombres y tiempos. */
 @keyframes lumi-planet-spin { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 @keyframes lumi-orbit { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

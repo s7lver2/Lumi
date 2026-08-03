@@ -1,3 +1,4 @@
+import { addrFromKey } from "../lib/api";
 import { useServer } from "../lib/store";
 import { Icon, LockIcon } from "./Icon";
 
@@ -22,11 +23,11 @@ function Bar({ pct, tone = "draw" }: { pct: number; tone?: "draw" | "warning" })
 }
 
 export function TelemetryStrip({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
-  const { hello, sample } = useServer();
+  const { hello, sample, key } = useServer();
   if (!hello) return null;
-  const addr = hello.fingerprint ? "" : "";
+  const addr = addrFromKey(key);
   return (
-    <div className={`relative z-20 flex items-stretch border-b border-border bg-surface/95 transition-[height] duration-500 ease-expo ${collapsed ? "h-7" : "h-[70px]"}`}>
+    <div className={`relative z-20 flex w-full items-stretch border-b border-border bg-surface/95 transition-[height] duration-500 ease-expo ${collapsed ? "h-7" : "h-[70px]"}`}>
       <Cell label="Servidor" className="flex-none basis-[210px]">
         <div className="flex items-center gap-[7px] whitespace-nowrap font-mono text-xs text-fg">
           {hello.locked && <LockIcon size={12} className="text-warning" />}
@@ -53,17 +54,33 @@ export function TelemetryStrip({ collapsed, onToggle }: { collapsed: boolean; on
         );
       })}
 
-      <Cell label="Cola" className="flex-none basis-[112px]">
+      {hello.gpus.length === 0 && (
+        <Cell label="cpu">
+          <div className="whitespace-nowrap font-mono text-xs text-fg">
+            {sample ? `${sample.cpu_pct.toFixed(0)}%` : "—"}
+            <span className="text-muted">
+              {sample ? ` · ${(sample.ram_used_mb / 1024).toFixed(1)} GB` : ""}
+            </span>
+          </div>
+          {!collapsed && <Bar pct={sample?.cpu_pct ?? 0} />}
+        </Cell>
+      )}
+
+      <Cell label="Cola" className="flex-none basis-[132px]">
         <div className="font-mono text-sm text-fg">{sample ? sample.queue_depth : "—"}</div>
         {!collapsed && (
-          <div className={`font-mono text-[10px] ${sample?.queue_paused ? "text-warning-fg" : "text-subtle"}`}>
+          <div className={`whitespace-nowrap font-mono text-[10px] ${sample?.queue_paused ? "text-warning-fg" : "text-subtle"}`}>
             {sample?.queue_paused ? "en pausa" : "sin provisionar"}
           </div>
         )}
       </Cell>
 
+      {/* Empuja el botón de colapsar al borde derecho: sin esto las celdas de
+          ancho fijo se amontonan a la izquierda y dejan la barra a medias. */}
+      <div className="flex-1 border-r border-border" />
+
       <button onClick={onToggle} aria-label={collapsed ? "Expandir" : "Colapsar"}
-        className="border-l border-border px-3 text-subtle transition-colors hover:text-fg">
+        className="flex-none px-3 text-subtle transition-colors hover:text-fg">
         <Icon name="chevron" size={11} className={collapsed ? "" : "rotate-180"} />
       </button>
     </div>

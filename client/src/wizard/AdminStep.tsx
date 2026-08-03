@@ -1,15 +1,28 @@
 import { useState } from "react";
-import { api } from "../lib/api";
+import { invoke } from "@tauri-apps/api/core";
+import { api, type LoginRes } from "../lib/api";
+import { useServer } from "../lib/store";
 
 export function AdminStep({ bootstrapToken, onDone }: { bootstrapToken: string; onDone: () => void }) {
   const [username, setUser] = useState("");
   const [password, setPass] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const setToken = useServer((s) => s.setToken);
 
   async function submit() {
     setError(null);
+    if (password.length < 12) {
+      setError("La contraseña necesita al menos 12 caracteres.");
+      return;
+    }
     try {
       await api.post("/v1/admin", { bootstrap_token: bootstrapToken, username, password });
+      // Crear el administrador no deja sesión iniciada: sin este login el
+      // token queda nulo y todo lo que exige admin (lanzar tareas, telemetría)
+      // responde 401.
+      const res = await api.post<LoginRes>("/v1/auth/login", { username, password });
+      setToken(res.token);
+      await invoke("start_telemetry", { token: res.token });
       onDone();
     } catch (e) {
       setError(String(e));

@@ -11,6 +11,7 @@ export interface Sample {
   queue_depth: number;
   queue_paused: boolean;
 }
+export interface LoginRes { token: string; is_admin: boolean }
 export interface Hello {
   version: string;
   state: "unclaimed" | "claimed" | "provisioning" | "ready";
@@ -19,6 +20,14 @@ export interface Hello {
   fingerprint: string;
   capabilities: Capability[];
   gpus: GpuInfo[];
+}
+
+/** `lumi1_<host:puerto>_<huella>_<secreto>`. Se parte desde la derecha porque
+ *  el campo de dirección lleva puntos y dos puntos. */
+export function addrFromKey(key: string): string {
+  const rest = key.trim().replace(/^lumi1_/, "");
+  const parts = rest.split("_");
+  return parts.length >= 3 ? parts.slice(0, -2).join("_") : "";
 }
 
 export const api = {

@@ -23,7 +23,13 @@ export default function App() {
     return () => { un.then((f) => f()); };
   }, []);
 
+  // Sondear solo DESPUÉS de vincular. Antes no hay servidor al que sondear:
+  // `request` falla con "sin servidor vinculado" y el contador de fallos
+  // levantaba el overlay de reconexión sin que el usuario hubiera pegado
+  // siquiera la clave.
+  const paired = hello !== null;
   useEffect(() => {
+    if (!paired) return;
     const t = setInterval(async () => {
       try {
         const h = await api.get<Hello>("/v1/hello");
@@ -37,16 +43,19 @@ export default function App() {
       }
     }, 3000);
     return () => clearInterval(t);
-  }, []);
+  }, [paired]);
 
   async function unseal(passphrase: string) {
     await api.post("/v1/unseal", { passphrase });
   }
 
   return (
-    <div className="relative h-full overflow-hidden">
+    <div className="relative flex h-full flex-col overflow-hidden">
       <PlanetBackground dead={status !== "ok"} />
       <TelemetryStrip collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
+      {/* El wizard se centra en el espacio que deja la franja, en vez de
+          colgar de arriba dejando media pantalla vacía. */}
+      <div className="relative flex flex-1 items-center justify-center overflow-y-auto">
       <Wizard step={step} title="Lumi Station" subtitle="vincular servidor"
         onBack={step > 0 ? () => setStep((s) => s - 1) : undefined}
         onNext={() => {
@@ -61,6 +70,7 @@ export default function App() {
         {step === 1 && <AdminStep bootstrapToken={bootstrapToken} onDone={() => setStep(2)} />}
         {step === 2 && <ProvisionStep onDone={() => setStep(3)} />}
       </Wizard>
+      </div>
       {status !== "ok" && (
         <StatusOverlay
           status={status}
