@@ -14,7 +14,12 @@ struct Cli {
 #[derive(Subcommand)]
 enum Cmd {
     /// Instala el daemon y emite la clave de vinculación
-    Install,
+    Install {
+        /// Sin preguntas: modo nativo y clave maestra automática, los
+        /// defectos recomendados. Se imprimen igual, solo que no se piden.
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
     /// Muestra el entorno y el hardware detectados
     Status,
     /// Revoca la clave anterior y emite otra
@@ -43,15 +48,8 @@ fn main() -> anyhow::Result<()> {
             }
             println!("{}", detect::cpu_summary());
         }
-        Cmd::Install => {
-            let mode = if std::path::Path::new("/.dockerenv").exists() {
-                lumi_proto::caps::Mode::Docker
-            } else {
-                lumi_proto::caps::Mode::Native
-            };
-            let sealed = std::env::var("LUMI_SEALED").is_ok();
-            let pass = std::env::var("LUMI_PASSPHRASE").ok();
-            let key = install::run(mode, sealed, pass.as_deref())?;
+        Cmd::Install { yes } => {
+            let key = install::run(yes)?;
             println!();
             println!("  ────────────────────────────────────────────────────────");
             println!("  Clave de vinculación · un solo uso · caduca en 24 h");

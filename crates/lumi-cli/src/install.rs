@@ -35,7 +35,11 @@ Environment=LUMI_DATA=/var/lib/lumi
 WantedBy=multi-user.target
 ";
 
-pub fn run(mode: Mode, sealed: bool, passphrase: Option<&str>) -> Result<PairKey> {
+/// `auto`: sin preguntas, elige los defectos recomendados (nativo si no hay
+/// Docker, clave maestra automática) y los imprime igual que si se hubieran
+/// elegido a mano. "Nada desaparece en silencio": el modo se ve, solo que no
+/// se pregunta.
+pub fn run(auto: bool) -> Result<PairKey> {
     if !Path::new("/run/systemd/system").exists() {
         bail!("este host no usa systemd; instala en modo Docker o en una máquina con systemd");
     }
@@ -52,9 +56,7 @@ pub fn run(mode: Mode, sealed: bool, passphrase: Option<&str>) -> Result<PairKey
     }
     if e.ufw_active {
         ui::warn("ufw activo: se añadirá la regla para el puerto");
-        let _ = Command::new("ufw")
-            .args(["allow", &format!("{}/tcp", lumi_proto::PORT)])
-            .status();
+        run_quiet("ufw", &["allow", &format!("{}/tcp", lumi_proto::PORT)]);
     }
 
     ui::head("hardware");
@@ -63,6 +65,23 @@ pub fn run(mode: Mode, sealed: bool, passphrase: Option<&str>) -> Result<PairKey
         println!("  gpu{}  {}  {} MB  {}", g.index, g.name, g.vram_total_mb, g.pcie);
     }
     println!("  {}", detect::cpu_summary());
+
+    let in_docker = Path::new("/.dockerenv").exists();
+    ui::head("modo");
+    let mode = if in_docker {
+        // Ya se está ejecutando dentro de un contenedor: no hay elección real.
+        println!("  {} docker   (detectado: /.dockerenv presente)", console::style("›").cyan());
+        Mode::Docker
+    } else if auto {
+        println!("  {} nativo   (automático — recomendado)", console::style("›").cyan());
+        Mode::Native
+    } else {
+        let opts = [
+            ("nativo", "recomendado — sharding, offload, telemetría completa"),
+            ("docker", "capacidades recortadas, ver más abajo"),
+        ];
+        if ui::choose(&opts, 0)? == 0 { Mode::Native } else { Mode::Docker }
+    };
 
     ui::head("capacidades");
     for c in lumi_proto::caps::matrix(mode, gpus.len()) {
@@ -76,6 +95,32 @@ pub fn run(mode: Mode, sealed: bool, passphrase: Option<&str>) -> Result<PairKey
             }
         }
     }
+
+    ui::head("clave maestra");
+    let (sealed, passphrase) = if auto {
+        println!("  {} automática   (systemd-creds · arranca sola tras reiniciar)", console::style("›").cyan());
+        (false, None)
+    } else {
+        let opts = [
+            ("automática", "arranca sola tras reiniciar"),
+            ("sellada", "un admin desbloquea desde la app en cada arranque"),
+        ];
+        if ui::choose(&opts, 0)? == 0 {
+            (false, None)
+        } else {
+            print!("  frase de desbloqueo: ");
+            use std::io::Write;
+            std::io::stdout().flush()?;
+            let mut line = String::new();
+            std::io::stdin().read_line(&mut line)?;
+            let pw = line.trim().to_string();
+            if pw.is_empty() {
+                bail!("el modo sellado necesita una frase no vacía");
+            }
+            (true, Some(pw))
+        }
+    };
+    let passphrase = passphrase.as_deref();
 
     ui::head("instalación");
     fs::create_dir_all(DATA).context("no se pudo crear /var/lib/lumi")?;
@@ -150,24 +195,37 @@ fn seed_master(sealed: bool, passphrase: Option<&str>) -> Result<()> {
             .args(["encrypt", "--name=lumi-master", "-", &path])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
             .spawn()
             .context("systemd-creds no disponible")?;
         use std::io::Write;
         out.stdin.as_ref().context("stdin")?.write_all(mk.as_bytes())?;
-        let st = out.wait_with_output()?;
-        if !st.status.success() {
-            bail!("systemd-creds encrypt falló");
+        let out = out.wait_with_output()?;
+        if !out.status.success() {
+            bail!(
+                "systemd-creds encrypt falló: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            );
         }
+        // El aviso de "credential secret no está en medio cifrado" es
+        // informativo, no un fallo: se descarta a propósito para no romper
+        // la salida limpia del instalador.
     }
     Ok(())
 }
 
 fn run_ok(cmd: &str, args: &[&str]) -> Result<()> {
-    let st = Command::new(cmd).args(args).status()?;
-    if !st.success() {
-        bail!("{cmd} {} falló", args.join(" "));
+    let out = Command::new(cmd).args(args).output()?;
+    if !out.status.success() {
+        bail!("{cmd} {} falló: {}", args.join(" "), String::from_utf8_lossy(&out.stderr).trim());
     }
     Ok(())
+}
+
+/// Como `run_ok`, pero un fallo no aborta la instalación: se usa para pasos
+/// de conveniencia (regla de ufw) que no son estrictamente necesarios.
+fn run_quiet(cmd: &str, args: &[&str]) {
+    let _ = Command::new(cmd).args(args).output();
 }
 
 fn now() -> i64 {
