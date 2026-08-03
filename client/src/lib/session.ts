@@ -34,8 +34,16 @@ const ENV = "lumi.env";
 // Namespacing de entornos para el orbe de debug (solo dev, ver
 // client/src/dev/DebugOrb.tsx). El entorno "1" usa las claves de siempre sin
 // sufijo, para no invalidar sesiones que ya existieran de antes de esto.
+//
+// El PUNTERO de qué entorno está activo va en sessionStorage, no en
+// localStorage: localStorage se comparte entre todas las ventanas del mismo
+// origen, así que cambiar de entorno en una ventana movía también el
+// puntero de las demás (solo se notaba al recargarlas). sessionStorage es
+// por ventana — cada una puede tener su propio entorno activo a la vez.
+// Los DATOS de cada entorno sí siguen en localStorage: eso es lo que
+// permite verlos desde el panel de admin sin importar qué ventana los creó.
 function currentEnv(): string {
-  return localStorage.getItem(ENV) ?? "1";
+  return sessionStorage.getItem(ENV) ?? "1";
 }
 function nsKey(base: string): string {
   const env = currentEnv();
@@ -45,7 +53,7 @@ export function getEnv(): string {
   return currentEnv();
 }
 export function setEnv(env: string) {
-  localStorage.setItem(ENV, env);
+  sessionStorage.setItem(ENV, env);
 }
 
 export function loadSession(): Session | null {
