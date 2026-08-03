@@ -36,14 +36,25 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec
     let base = models_dir.map(PathBuf::from).unwrap_or_else(|| dir.join("runtime"));
     let venv = base.join("venv");
     match kind {
+        // Si el venv ya tiene torch importable, no se recrea ni se vuelve a
+        // invocar pip: sin esto, cada "Instalar runtime" (o cada reinicio
+        // durante pruebas) volvía a descargar ~2 GB aunque nada hubiera
+        // cambiado. pip ya cachea localmente, pero recrear el venv desde
+        // cero seguía siendo trabajo y tiempo de sobra.
         TaskKind::InferenceRuntime => (
             "/bin/sh".into(),
             vec![
                 "-c".into(),
                 format!(
-                    "set -e; python3 -m venv {v}; {v}/bin/pip install --upgrade pip; \
-                     {v}/bin/pip install --retries 5 --timeout 60 \
-                     torch --index-url https://download.pytorch.org/whl/cu126",
+                    "set -e; \
+                     if {v}/bin/python3 -c 'import torch' 2>/dev/null; then \
+                       echo 'runtime ya instalado, nada que hacer'; \
+                     else \
+                       python3 -m venv {v}; \
+                       {v}/bin/pip install --upgrade pip; \
+                       {v}/bin/pip install --retries 5 --timeout 60 \
+                       torch --index-url https://download.pytorch.org/whl/cu126; \
+                     fi",
                     v = venv.display()
                 ),
             ],

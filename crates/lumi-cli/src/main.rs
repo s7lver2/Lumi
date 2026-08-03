@@ -26,6 +26,11 @@ enum Cmd {
         /// Sin confirmación
         #[arg(short = 'y', long)]
         yes: bool,
+        /// Borra también el venv de inferencia (torch ya descargado). Sin
+        /// esta flag se conserva, para no forzar una descarga de ~2 GB en
+        /// la siguiente instalación.
+        #[arg(long)]
+        pip: bool,
     },
     /// Muestra el entorno y el hardware detectados
     Status,
@@ -86,7 +91,7 @@ fn main() -> anyhow::Result<()> {
             println!("  Perdida: lumi key reissue");
             println!("  ────────────────────────────────────────────────────────");
         }
-        Cmd::Uninstall { yes } => install::uninstall(yes)?,
+        Cmd::Uninstall { yes, pip } => install::uninstall(yes, pip)?,
         Cmd::Key { action: KeyAction::Reissue } => {
             let key = install::reissue()?;
             println!("\n  {key}\n");

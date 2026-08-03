@@ -11,7 +11,7 @@ use lumi_proto::caps::{CapState, Mode};
 use lumi_proto::crypto::{hash_password, MasterKey};
 use lumi_proto::key::PairKey;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub const DATA: &str = "/var/lib/lumi";
@@ -316,16 +316,39 @@ pub fn local_ip() -> Option<String> {
         .map(str::to_string)
 }
 
+/// El venv de inferencia (torch descargado, ~2 GB) vive bajo `models_dir`,
+/// leído de la misma base que usó la instalación. Si no se puede leer, el
+/// valor por defecto que puso `run` es la mejor suposición.
+fn models_dir() -> PathBuf {
+    rusqlite::Connection::open(format!("{DATA}/lumi.db"))
+        .ok()
+        .and_then(|c| c.query_row("SELECT v FROM meta WHERE k = 'models_dir'", [], |r| r.get::<_, String>(0)).ok())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(format!("{DATA}/runtime")))
+}
+
 /// `yes`: sin confirmación. `/var/lib/lumi` puede tener administradores y
 /// proyectos reales, así que sin ese flag se pide confirmación explícita
-/// antes de borrar nada.
-pub fn uninstall(yes: bool) -> Result<()> {
+/// antes de borrar nada. `pip`: además de lo anterior, borra también el venv
+/// con los paquetes ya descargados; sin esta flag se preserva, para no
+/// forzar una descarga de ~2 GB en la siguiente instalación solo porque se
+/// desinstaló para probar otra cosa.
+pub fn uninstall(yes: bool, pip: bool) -> Result<()> {
     ui::head("desinstalación");
     let has_state = Path::new(DATA).exists();
+    let runtime = models_dir();
+    // Solo hay algo que preservar si el runtime vive DENTRO de DATA (el
+    // caso por defecto, `{DATA}/runtime`): si el owner lo puso en otro
+    // disco, borrar DATA nunca lo tocó y no hace falta ninguna excepción.
+    let runtime_inside_data = has_state && runtime.starts_with(DATA);
     if has_state {
         ui::warn(&format!(
             "{DATA} contiene el certificado, la clave maestra y la base de datos: usuarios, proyectos y claves emitidas"
         ));
+        if !pip {
+            let where_ = if runtime_inside_data { "se conserva".to_string() } else { format!("en {}, no se toca", runtime.display()) };
+            ui::warn(&format!("el runtime de inferencia (venv con torch ya descargado) {where_}: usa --pip para borrarlo también"));
+        }
     } else {
         ui::warn(&format!("{DATA} no existe: puede que ya esté desinstalado"));
     }
@@ -351,10 +374,29 @@ pub fn uninstall(yes: bool) -> Result<()> {
     run_quiet("systemctl", &["daemon-reload"]);
     let _ = fs::remove_file(BIN);
     if has_state {
-        fs::remove_dir_all(DATA).context("no se pudo borrar /var/lib/lumi")?;
+        if pip || !runtime_inside_data {
+            fs::remove_dir_all(DATA).context("no se pudo borrar /var/lib/lumi")?;
+        } else {
+            // Borra todo dentro de DATA salvo el subárbol del runtime.
+            for entry in fs::read_dir(DATA).context("no se pudo leer /var/lib/lumi")? {
+                let entry = entry?;
+                if entry.path() == runtime {
+                    continue;
+                }
+                if entry.path().is_dir() {
+                    fs::remove_dir_all(entry.path())?;
+                } else {
+                    fs::remove_file(entry.path())?;
+                }
+            }
+        }
+        if pip && !runtime_inside_data {
+            let _ = fs::remove_dir_all(&runtime);
+        }
     }
     pb.finish_and_clear();
-    ui::ok(&format!("lumid.service, {BIN} y {DATA} eliminados"));
+    let extra = if pip { ", runtime incluido" } else { "" };
+    ui::ok(&format!("lumid.service, {BIN} y {DATA} eliminados{extra}"));
 
     Ok(())
 }
