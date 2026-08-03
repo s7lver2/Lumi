@@ -14,7 +14,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-const DATA: &str = "/var/lib/lumi";
+pub const DATA: &str = "/var/lib/lumi";
 const BIN: &str = "/usr/local/bin/lumid";
 
 const UNIT: &str = "\
@@ -308,7 +308,7 @@ fn now() -> i64 {
 
 /// ponytail: primera IPv4 no loopback. Con varias interfaces el owner corrige
 /// la dirección en la clave a mano; un selector interactivo se añade si pasa.
-fn local_ip() -> Option<String> {
+pub fn local_ip() -> Option<String> {
     let out = Command::new("hostname").arg("-I").output().ok()?;
     String::from_utf8_lossy(&out.stdout)
         .split_whitespace()

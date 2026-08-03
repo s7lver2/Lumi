@@ -1009,6 +1009,7 @@ name = "lumi-cli"
 version = "2.0.0"
 dependencies = [
  "anyhow",
+ "bs58",
  "clap",
  "console",
  "dialoguer",

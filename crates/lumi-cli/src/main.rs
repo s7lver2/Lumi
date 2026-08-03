@@ -1,3 +1,4 @@
+mod admin;
 mod detect;
 mod install;
 mod ui;
@@ -33,11 +34,30 @@ enum Cmd {
         #[command(subcommand)]
         action: KeyAction,
     },
+    /// Imprime la tarjeta pública del servidor: lo que se reparte al equipo
+    Card,
+    /// Escotilla de emergencia sobre cuentas, desde el host
+    Admin {
+        #[command(subcommand)]
+        action: AdminAction,
+    },
 }
 
 #[derive(Subcommand)]
 enum KeyAction {
     Reissue,
+}
+
+#[derive(Subcommand)]
+enum AdminAction {
+    /// Genera una contraseña temporal y exige el cambio al entrar
+    ResetPassword { username: String },
+    /// Levanta el bloqueo de una cuenta
+    Unblock { username: String },
+    /// Lista las solicitudes de acceso
+    Requests,
+    /// Abre o cierra la aceptación de nuevas solicitudes de acceso
+    AcceptRequests { on: String },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -71,6 +91,39 @@ fn main() -> anyhow::Result<()> {
             let key = install::reissue()?;
             println!("\n  {key}\n");
         }
+        Cmd::Card => {
+            let card = admin::card()?;
+            println!();
+            println!("  ────────────────────────────────────────────────────────");
+            println!("  Tarjeta del servidor · pública · no caduca");
+            println!();
+            println!("  {card}");
+            println!();
+            println!("  Repártela al equipo. No es un secreto: sirve para que");
+            println!("  cualquiera conecte verificado y pida acceso.");
+            println!("  ────────────────────────────────────────────────────────");
+        }
+        Cmd::Admin { action } => match action {
+            AdminAction::ResetPassword { username } => {
+                let temp = admin::reset_password(&username)?;
+                println!("\n  contraseña temporal de {username}: {temp}");
+                println!("  Se pedirá cambiarla al entrar. Solo se muestra ahora.\n");
+            }
+            AdminAction::Unblock { username } => {
+                admin::unblock(&username)?;
+                println!("\n  {username} desbloqueado\n");
+            }
+            AdminAction::Requests => admin::requests()?,
+            AdminAction::AcceptRequests { on } => {
+                let on = match on.as_str() {
+                    "on" => true,
+                    "off" => false,
+                    _ => anyhow::bail!("usa 'on' o 'off'"),
+                };
+                admin::accept(on)?;
+                println!("\n  solicitudes de acceso: {}\n", if on { "abiertas" } else { "cerradas" });
+            }
+        },
     }
     Ok(())
 }

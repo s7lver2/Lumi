@@ -21,3 +21,4 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 serde.workspace = true
 serde_json.workspace = true
 rand.workspace = true
+bs58.workspace = true
