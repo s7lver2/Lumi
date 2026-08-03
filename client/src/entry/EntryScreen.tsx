@@ -5,6 +5,7 @@ import { AddServerForm } from "./AddServerForm";
 import { RequestForm } from "./RequestForm";
 import { WaitingScreen } from "./WaitingScreen";
 import { ResolvedScreen } from "./ResolvedScreen";
+import { ChangePasswordForm } from "./ChangePasswordForm";
 import type { AccessStatus } from "../lib/api";
 
 export type EntryView = "login" | "add" | "request" | "waiting" | "resolved" | "password";
@@ -78,6 +79,14 @@ export function EntryScreen({ onSignedIn, onOwnerKey }: {
           onCreated={() => setView("login")}
           onRetry={() => setView("request")}
           onBack={() => setView("login")} />
+      </Pane>
+    );
+  }
+
+  if (view === "password") {
+    return (
+      <Pane title="Cambia tu contraseña" subtitle="hace falta antes de entrar.">
+        <ChangePasswordForm onDone={onSignedIn} />
       </Pane>
     );
   }
