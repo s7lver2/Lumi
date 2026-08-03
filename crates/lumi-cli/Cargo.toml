@@ -1,0 +1,12 @@
+[package]
+name = "lumi-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "lumi"
+path = "src/main.rs"
+
+[dependencies]
+lumi-proto.workspace = true
+anyhow.workspace = true

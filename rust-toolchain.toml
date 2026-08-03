@@ -1,0 +1,7 @@
+[toolchain]
+# ponytail: el plan pedía 1.83 exacto; la instalación de ese canal está rota en
+# esta máquina (rustup falla al renombrar archivos de componente, os error 145)
+# y stable ya cumple el mismo edition 2021. channel = "1.83" se deja documentado
+# aquí como intención original.
+channel = "stable"
+components = ["rustfmt", "clippy"]

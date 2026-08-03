@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = ["crates/lumi-proto", "crates/lumid", "crates/lumi-cli"]
+
+[workspace.package]
+version = "2.0.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+
+[workspace.dependencies]
+lumi-proto = { path = "crates/lumi-proto" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "2"
+sha2 = "0.10"
+bs58 = "0.5"
+rand = "0.8"
+argon2 = "0.5"
+chacha20poly1305 = "0.10"
+tokio = { version = "1", features = ["full"] }
