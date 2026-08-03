@@ -1,4 +1,3 @@
-import { addrFromKey } from "../lib/api";
 import { useServer } from "../lib/store";
 import { Icon, LockIcon } from "./Icon";
 
@@ -23,9 +22,8 @@ function Bar({ pct, tone = "draw" }: { pct: number; tone?: "draw" | "warning" })
 }
 
 export function TelemetryStrip({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
-  const { hello, sample, key } = useServer();
+  const { hello, sample, addr } = useServer();
   if (!hello) return null;
-  const addr = addrFromKey(key);
   return (
     <div className={`relative z-20 flex w-full items-stretch border-b border-border bg-surface/95 transition-[height] duration-500 ease-expo ${collapsed ? "h-7" : "h-[70px]"}`}>
       <Cell label="Servidor" className="flex-none basis-[210px]">

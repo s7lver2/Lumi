@@ -70,3 +70,28 @@ pub fn require_admin(app: &App, token: &str) -> Result<i64, StatusCode> {
         )
         .map_err(|_| StatusCode::UNAUTHORIZED)
 }
+
+pub fn bearer(h: &axum::http::HeaderMap) -> String {
+    h.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// Comprueba una sesión persistida sin volver a pedir usuario/contraseña.
+/// El cliente lo usa al reabrir la app: si el token guardado ya no vale
+/// (caducó a las 12h, o se borraron las sesiones), aquí se sabe antes de
+/// intentar retomar un paso que necesita admin.
+pub async fn me(
+    State(app): State<App>,
+    headers: axum::http::HeaderMap,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let uid = require_admin(&app, &bearer(&headers))?;
+    let username: String = app
+        .store
+        .conn()
+        .query_row("SELECT username FROM users WHERE id = ?1", [uid], |r| r.get(0))
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    Ok(Json(serde_json::json!({ "username": username, "is_admin": true })))
+}

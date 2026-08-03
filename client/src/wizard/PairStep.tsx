@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { api } from "../lib/api";
+import { addrFromKey, api } from "../lib/api";
 import { useServer } from "../lib/store";
+import { updateSession } from "../lib/session";
 import { Icon } from "../ui/Icon";
 
 export function PairStep({ onDone }: { onDone: () => void }) {
@@ -13,11 +14,18 @@ export function PairStep({ onDone }: { onDone: () => void }) {
     try {
       const h = await api.pair(key.trim());
       setHello(h);
+      const addr = addrFromKey(key);
+      useServer.getState().setAddr(addr);
+      // Persistido ya en este punto, no solo al terminar el wizard: si la
+      // app se cierra aquí, reabrirla puede reconectar sin la clave
+      // original (que a partir del canje de abajo queda gastada).
+      updateSession({ addr, fingerprint: h.fingerprint });
       // El secreto es el último campo de la clave: lumi1_<addr>_<huella>_<secreto>.
       const secret = key.trim().split("_").pop() ?? "";
       if (h.state === "unclaimed") {
         const claim = await api.post<{ bootstrap_token: string }>("/v1/claim", { secret });
         useServer.getState().setBootstrapToken(claim.bootstrap_token);
+        updateSession({ bootstrapToken: claim.bootstrap_token });
       }
     } catch (e) {
       setHello(null);

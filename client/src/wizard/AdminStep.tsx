@@ -2,6 +2,7 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { api, type LoginRes } from "../lib/api";
 import { useServer } from "../lib/store";
+import { updateSession } from "../lib/session";
 
 export function AdminStep({ bootstrapToken, onDone }: { bootstrapToken: string; onDone: () => void }) {
   const [username, setUser] = useState("");
@@ -22,6 +23,9 @@ export function AdminStep({ bootstrapToken, onDone }: { bootstrapToken: string; 
       // responde 401.
       const res = await api.post<LoginRes>("/v1/auth/login", { username, password });
       setToken(res.token);
+      // bootstrapToken ya está gastado (/v1/admin lo consume); el token de
+      // sesión es lo único que hace falta a partir de ahora para retomar.
+      updateSession({ token: res.token, bootstrapToken: undefined });
       await invoke("start_telemetry", { token: res.token });
       onDone();
     } catch (e) {

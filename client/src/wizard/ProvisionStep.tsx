@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { api } from "../lib/api";
+import { api, type TaskStatus } from "../lib/api";
 import { useServer } from "../lib/store";
+import { loadSession, updateSession } from "../lib/session";
 import { Icon } from "../ui/Icon";
 
 export function ProvisionStep({ onDone }: { onDone: () => void }) {
@@ -18,8 +19,30 @@ export function ProvisionStep({ onDone }: { onDone: () => void }) {
 
   useEffect(() => { box.current?.scrollTo(0, box.current.scrollHeight); }, [log]);
 
+  // Si al reabrir la app ya había una tarea en marcha (persistida en la
+  // tarea de vinculación), reengancharse solo en vez de mostrar "sin
+  // iniciar" y obligar a pulsar el botón otra vez. El log se reproduce
+  // desde el principio: SSE de tareas es barato, no como el de telemetría.
+  useEffect(() => {
+    const id = loadSession()?.taskId;
+    if (!id || !token) return;
+    (async () => {
+      try {
+        const status = await api.get<TaskStatus>(`/v1/tasks/${id}`, token);
+        setRunning(status.running);
+        await invoke("start_task_log", { id, from: 0, token });
+      } catch {
+        // La tarea ya no existe (base de datos borrada, reinstalación) o el
+        // token venció: se descarta el id persistido y se deja el botón.
+        updateSession({ taskId: undefined });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function start() {
     const t = await api.post<{ id: string }>("/v1/tasks", { kind: "inference_runtime" }, token!);
+    updateSession({ taskId: t.id });
     setRunning(true);
     await invoke("start_task_log", { id: t.id, from: 0, token });
   }

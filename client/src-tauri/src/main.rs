@@ -64,11 +64,9 @@ fn client_for(fingerprint: &str) -> Result<reqwest::Client, String> {
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-async fn pair(key: String, state: tauri::State<'_, Shared>) -> Result<serde_json::Value, String> {
-    let pk = PairKey::parse(&key).map_err(|e| e.to_string())?;
-    let client = client_for(&pk.fingerprint)?;
-    let base = format!("https://{}", pk.addr);
+async fn connect(addr: &str, fingerprint: &str, state: &Shared) -> Result<serde_json::Value, String> {
+    let client = client_for(fingerprint)?;
+    let base = format!("https://{addr}");
     let hello: serde_json::Value = client
         .get(format!("{base}/v1/hello"))
         .send()
@@ -81,6 +79,21 @@ async fn pair(key: String, state: tauri::State<'_, Shared>) -> Result<serde_json
     c.base = Some(base);
     c.client = Some(client);
     Ok(hello)
+}
+
+#[tauri::command]
+async fn pair(key: String, state: tauri::State<'_, Shared>) -> Result<serde_json::Value, String> {
+    let pk = PairKey::parse(&key).map_err(|e| e.to_string())?;
+    connect(&pk.addr, &pk.fingerprint, &state).await
+}
+
+/// Reestablece el cliente TLS anclado tras reabrir la app, sin la clave de
+/// vinculación original: esa clave ya se gastó en el primer canje. Solo hace
+/// falta la dirección y la huella, que sí sobreviven (se persisten en el
+/// lado TS tras el primer `pair` con éxito).
+#[tauri::command]
+async fn reconnect(addr: String, fingerprint: String, state: tauri::State<'_, Shared>) -> Result<serde_json::Value, String> {
+    connect(&addr, &fingerprint, &state).await
 }
 
 #[tauri::command]
@@ -191,7 +204,7 @@ fn main() {
     rustls::crypto::ring::default_provider().install_default().ok();
     tauri::Builder::default()
         .manage(Shared::default())
-        .invoke_handler(tauri::generate_handler![pair, request, start_telemetry, start_task_log])
+        .invoke_handler(tauri::generate_handler![pair, reconnect, request, start_telemetry, start_task_log])
         .run(tauri::generate_context!())
         .expect("error al arrancar Tauri");
 }

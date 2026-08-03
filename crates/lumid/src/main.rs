@@ -49,6 +49,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/claim", post(routes::claim::claim))
         .route("/v1/admin", post(routes::claim::create_admin))
         .route("/v1/auth/login", post(routes::auth::login))
+        .route("/v1/auth/me", get(routes::auth::me))
         .route("/v1/unseal", post(routes::auth::unseal))
         .route("/v1/tasks", post(routes::tasks::create))
         .route("/v1/tasks/:id", get(routes::tasks::get))

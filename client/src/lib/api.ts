@@ -12,6 +12,13 @@ export interface Sample {
   queue_paused: boolean;
 }
 export interface LoginRes { token: string; is_admin: boolean }
+export interface TaskStatus {
+  id: string;
+  kind: "inference_runtime" | "database";
+  running: boolean;
+  exit_code: number | null;
+  log_len: number;
+}
 export interface Hello {
   version: string;
   state: "unclaimed" | "claimed" | "provisioning" | "ready";
@@ -32,6 +39,9 @@ export function addrFromKey(key: string): string {
 
 export const api = {
   pair: (key: string) => invoke<Hello>("pair", { key }),
+  /** Reestablece el cliente TLS anclado sin la clave original (ya gastada):
+   *  basta con la dirección y la huella persistidas del primer `pair`. */
+  reconnect: (addr: string, fingerprint: string) => invoke<Hello>("reconnect", { addr, fingerprint }),
   get: <T>(path: string, token?: string) =>
     invoke<string>("request", { method: "GET", path, body: null, token }).then(t => JSON.parse(t) as T),
   post: <T>(path: string, body: unknown, token?: string) =>
