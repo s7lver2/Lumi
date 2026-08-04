@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useDismissable } from "../lib/useDismissable";
 import { Backdrop, FloatingCard, Pop } from "./FloatingCard";
-import { centerInWorkspace } from "./layout";
+import { Center } from "./layout";
 
 /** Un popup para un solo campo de texto: crear un proyecto, un caso. Antes
  *  era un input que aparecía dentro de la lista y se confirmaba al perder el
@@ -33,8 +33,8 @@ export function PromptDialog({
   return (
     <>
       <Backdrop closing={closing} onClick={busy ? undefined : onClose} />
-      <Pop closing={closing} style={chrome ? centerInWorkspace : { left: "50%", top: "50%" }}
-        className="absolute z-[45] w-[360px] -translate-x-1/2 -translate-y-1/2">
+      <Center chrome={chrome} className="z-[45]">
+      <Pop closing={closing} className="w-[360px]">
         <FloatingCard className="p-5">
           <p className="text-[13px] text-fg">{title}</p>
           {subtitle && <p className="mt-1 text-[11px] leading-relaxed text-muted">{subtitle}</p>}
@@ -60,6 +60,7 @@ export function PromptDialog({
           </div>
         </FloatingCard>
       </Pop>
+      </Center>
     </>
   );
 }

@@ -1,7 +1,6 @@
 import type { Analysis, Image } from "../lib/api";
 import { FloatingCard } from "../ui/FloatingCard";
 import { Icon } from "../ui/Icon";
-import { RAIL_W } from "../ui/layout";
 
 /** Metros entre dos coordenadas. Haversine con el radio medio de la Tierra:
  *  la precisión de sobra para decir "el EXIF declara un GPS a 300 m de aquí". */
@@ -30,32 +29,34 @@ function Ring({ pct }: { pct: number }) {
   );
 }
 
-/** Flota sobre el mapa. `offset` es lo que el llamante tiene que correrla
- *  cuando la barra lateral de resultados está montada: centrada a secas,
- *  quedaba medio tapada por ella. */
+/** Flota sobre el mapa, centrada horizontalmente en el lienzo visible (a la
+ *  derecha del carril, y a la izquierda de la barra de resultados si está
+ *  montada — `offset` es su ancho). El centrado es flexbox, no `left: 50%` +
+ *  `translate`: solo hace falta ajustar los bordes del contenedor, sin
+ *  calcular a mano dónde cae el punto medio. La distancia al techo (66px) es
+ *  aparte, vía `margin-top` en el hijo, porque esta tarjeta cuelga cerca de
+ *  arriba y no en medio de la pantalla. */
 export function ResultCard({ analysis, image, offset = 0 }:
   { analysis: Analysis | null; image: Image | null; offset?: number }) {
   if (!analysis) return null;
 
-  // El centro visual del lienzo de trabajo no es el centro de la ventana: el
-  // carril de 44px se lo lleva por delante. `offset` (la barra lateral de
-  // resultados, si está montada) empuja hacia la izquierda; el carril, hacia
-  // la derecha — de ahí el signo distinto de cada término.
-  const pos = { left: `calc(50% + ${RAIL_W / 2 - offset / 2}px)` };
+  const frame = "pointer-events-none absolute left-11 top-0 z-20 flex justify-center";
 
   if (analysis.state !== "hecho") {
     const fallo = analysis.state === "error";
     return (
-      <FloatingCard style={pos} className="absolute top-[66px] z-20 w-[286px] -translate-x-1/2 p-3.5">
-        <div style={{ animation: "jg-popup-scale-in 220ms cubic-bezier(.2,.85,.35,1) both" }}>
-          <p className="text-[13px] text-fg">{fallo ? "El análisis falló" : "Análisis en cola"}</p>
-          <p className={`mt-1 text-[10.5px] leading-snug ${fallo ? "text-danger-fg" : "text-subtle"}`}>
-            {fallo
-              ? analysis.error ?? "el análisis falló y no dejó motivo"
-              : "esperando al motor de inferencia"}
-          </p>
-        </div>
-      </FloatingCard>
+      <div className={frame} style={{ right: offset }}>
+        <FloatingCard className="pointer-events-auto mt-[66px] w-[286px] p-3.5">
+          <div style={{ animation: "jg-popup-scale-in 220ms cubic-bezier(.2,.85,.35,1) both" }}>
+            <p className="text-[13px] text-fg">{fallo ? "El análisis falló" : "Análisis en cola"}</p>
+            <p className={`mt-1 text-[10.5px] leading-snug ${fallo ? "text-danger-fg" : "text-subtle"}`}>
+              {fallo
+                ? analysis.error ?? "el análisis falló y no dejó motivo"
+                : "esperando al motor de inferencia"}
+            </p>
+          </div>
+        </FloatingCard>
+      </div>
     );
   }
 
@@ -67,39 +68,41 @@ export function ResultCard({ analysis, image, offset = 0 }:
       : null;
 
   return (
-    <FloatingCard style={pos} className="absolute top-[66px] z-20 w-[286px] -translate-x-1/2 p-3.5">
-      <div style={{ animation: "jg-popup-scale-in 240ms cubic-bezier(.2,.85,.35,1) both" }}>
-        <div className="flex items-center gap-[11px] text-fg">
-          <Ring pct={pct} />
-          <div className="min-w-0">
-            <p className="text-[15px]">{pct} % · Resultado principal</p>
-            <p className="mt-0.5 truncate font-mono text-[10px] text-muted">
-              {analysis.result_lat!.toFixed(6)}, {analysis.result_lng!.toFixed(6)}
-            </p>
+    <div className={frame} style={{ right: offset }}>
+      <FloatingCard className="pointer-events-auto mt-[66px] w-[286px] p-3.5">
+        <div style={{ animation: "jg-popup-scale-in 240ms cubic-bezier(.2,.85,.35,1) both" }}>
+          <div className="flex items-center gap-[11px] text-fg">
+            <Ring pct={pct} />
+            <div className="min-w-0">
+              <p className="text-[15px]">{pct} % · Resultado principal</p>
+              <p className="mt-0.5 truncate font-mono text-[10px] text-muted">
+                {analysis.result_lat!.toFixed(6)}, {analysis.result_lng!.toFixed(6)}
+              </p>
+            </div>
           </div>
-        </div>
 
-        <div className="my-3 h-px bg-white/[.07]" />
+          <div className="my-3 h-px bg-white/[.07]" />
 
-        <div className="flex justify-between">
-          <Field k="Radio" v={`${km} km`} />
-          <Field k="Modelo" v={analysis.model} />
-          {/* Nadie ha comprobado este resultado contra el terreno, y decirlo es
-              parte del trabajo forense, no un adorno. */}
-          <Field k="Estado" v="sin verificar" dim />
-        </div>
-
-        {gap !== null && (
-          <div className="mt-[11px] flex items-start gap-[7px] border-t border-warning/20 pt-[11px]">
-            <Icon name="alert" size={12} className="mt-px shrink-0 text-warning-fg" />
-            <p className="text-[10.5px] leading-snug text-warning-fg">
-              El EXIF declara un GPS a{" "}
-              {gap < 1000 ? `${Math.round(gap)} m` : `${(gap / 1000).toFixed(1)} km`} de aquí.
-            </p>
+          <div className="flex justify-between">
+            <Field k="Radio" v={`${km} km`} />
+            <Field k="Modelo" v={analysis.model} />
+            {/* Nadie ha comprobado este resultado contra el terreno, y decirlo
+                es parte del trabajo forense, no un adorno. */}
+            <Field k="Estado" v="sin verificar" dim />
           </div>
-        )}
-      </div>
-    </FloatingCard>
+
+          {gap !== null && (
+            <div className="mt-[11px] flex items-start gap-[7px] border-t border-warning/20 pt-[11px]">
+              <Icon name="alert" size={12} className="mt-px shrink-0 text-warning-fg" />
+              <p className="text-[10.5px] leading-snug text-warning-fg">
+                El EXIF declara un GPS a{" "}
+                {gap < 1000 ? `${Math.round(gap)} m` : `${(gap / 1000).toFixed(1)} km`} de aquí.
+              </p>
+            </div>
+          )}
+        </div>
+      </FloatingCard>
+    </div>
   );
 }
 

@@ -28,7 +28,6 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [resuming, setResuming] = useState(true);
   const [mode, setMode] = useState<"entry" | "wizard" | "picker" | "project" | "case" | "admin">("entry");
-  const [notifs, setNotifs] = useState(0);
   const [adminBusy, setAdminBusy] = useState(false);
   const [runtimeDone, setRuntimeDone] = useState(false);
   const [members, setMembers] = useState(false);
@@ -193,13 +192,7 @@ export default function App() {
           que un investigador normal necesite ver en cada pantalla. */}
       {mode !== "entry" && isAdmin && (
         <TelemetryStrip collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)}
-          notifs={notifs}
-          // La campana avisa de solicitudes de acceso pendientes, que solo un
-          // administrador puede resolver, y solo se resuelven en su panel. Un
-          // investigador normal no tiene ninguna notificación que recibir en
-          // este subsistema: la suya llevaba al selector de proyectos, que no
-          // es una notificación, es un sitio al azar.
-          onNotifs={mode !== "wizard" ? () => { setNotifs(0); setMode("admin"); } : undefined} />
+          onOpenAdmin={() => setMode("admin")} />
       )}
       {/* Para app/admin, la desconexión es un banner + bloqueo, no una
           pantalla completa: la sesión de un usuario normal no tiene un

@@ -1,6 +1,6 @@
 import { useServer } from "../lib/store";
 import { Icon, LockIcon } from "./Icon";
-import { Bell } from "./Bell";
+import { NotificationsPopover } from "./NotificationsPopover";
 
 function Cell({ label, children, className = "", style }: {
   label: string; children: React.ReactNode; className?: string; style?: React.CSSProperties;
@@ -22,8 +22,8 @@ function Bar({ pct, tone = "draw" }: { pct: number; tone?: "draw" | "warning" })
   );
 }
 
-export function TelemetryStrip({ collapsed, onToggle, notifs = 0, onNotifs }: {
-  collapsed: boolean; onToggle: () => void; notifs?: number; onNotifs?: () => void;
+export function TelemetryStrip({ collapsed, onToggle, onOpenAdmin }: {
+  collapsed: boolean; onToggle: () => void; onOpenAdmin: () => void;
 }) {
   const { hello, sample, addr } = useServer();
   if (!hello) return null;
@@ -49,11 +49,9 @@ export function TelemetryStrip({ collapsed, onToggle, notifs = 0, onNotifs }: {
           )}
           <span>cola {sample ? sample.queue_depth : "—"}</span>
         </div>
-        {onNotifs && (
-          <div className="flex shrink-0 items-center">
-            <Bell count={notifs} onClick={onNotifs} />
-          </div>
-        )}
+        <div className="flex shrink-0 items-center">
+          <NotificationsPopover onOpenAdmin={onOpenAdmin} />
+        </div>
         <button onClick={onToggle} aria-label="Expandir"
           className="flex shrink-0 items-center px-1.5 text-subtle transition-colors hover:text-fg">
           <Icon name="chevron" size={11} />
@@ -115,11 +113,9 @@ export function TelemetryStrip({ collapsed, onToggle, notifs = 0, onNotifs }: {
       {/* `flex items-center` es lo que faltaba: el padre usa `items-stretch`
           para que cada celda ocupe toda la altura, y sin centrar el contenido
           de esta la campana se quedaba pegada arriba en vez de en medio. */}
-      {onNotifs && (
-        <div className="flex flex-none items-center border-r border-border px-2">
-          <Bell count={notifs} onClick={onNotifs} />
-        </div>
-      )}
+      <div className="flex flex-none items-center border-r border-border px-2">
+        <NotificationsPopover onOpenAdmin={onOpenAdmin} />
+      </div>
 
       <button onClick={onToggle} aria-label="Colapsar"
         className="flex flex-none items-center px-3 text-subtle transition-colors hover:text-fg">

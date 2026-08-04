@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type AdminRequest } from "../lib/api";
+import { KNOWN_MODELS as MODELS } from "../lib/models";
 import { Icon } from "../ui/Icon";
-
-const MODELS = ["mini", "pro", "vision"];
 
 export function RequestsView({ token }: { token: string }) {
   const [rows, setRows] = useState<AdminRequest[]>([]);

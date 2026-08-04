@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { api, type Analysis, type Case, type Image, type Project, type Usage } from "../lib/api";
 import { pickPaths, uploadPaths } from "../lib/bridge";
+import { KNOWN_MODELS } from "../lib/models";
 import { useServer } from "../lib/store";
 import { useDismissable } from "../lib/useDismissable";
 import { DropFrame, DropTarget } from "./DropTarget";
@@ -27,10 +28,12 @@ export function CaseView({
   const rawModels = useServer((s) => s.limits?.models) ?? [];
   // El servidor ya deja pasar cualquier modelo a un administrador
   // (`routes/analyses.rs` salta la comprobación si `is_admin`), igual que
-  // salta `can_create_projects`. Sin esto, un administrador cuya cuenta no
-  // tuviera ningún modelo en `limits.models` veía el selector vacío y el
-  // botón bloqueado por un límite que el propio servidor no le aplica.
-  const models = isAdmin && rawModels.length === 0 ? ["mini"] : rawModels;
+  // salta `can_create_projects`. La cuenta del owner nace con los límites por
+  // defecto (`["mini"]`) porque nunca pasa por "aprobar una solicitud" — ahí
+  // es donde se conceden `pro` y `vision` a cualquier otra cuenta. La unión
+  // con lo que ya tenga (en vez de sustituirlo) es para no perder nada si
+  // algún día su cuenta lleva algo que el catálogo conocido no incluye.
+  const models = isAdmin ? Array.from(new Set([...rawModels, ...KNOWN_MODELS])) : rawModels;
   const [images, setImages] = useState<Image[] | null>(null);
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);

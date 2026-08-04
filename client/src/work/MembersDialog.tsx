@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type Project, type ProjectMember } from "../lib/api";
 import { useServer } from "../lib/store";
 import { Avatar } from "../ui/Avatar";
+import { Center } from "../ui/layout";
 
 export function MembersDialog({ project, onClose }: { project: Project; onClose: () => void }) {
   const token = useServer((s) => s.token) ?? undefined;
@@ -41,13 +42,7 @@ export function MembersDialog({ project, onClose }: { project: Project; onClose:
   }
 
   return (
-    // El carril y la barra superior se dibujan encima de esta misma capa, no
-    // le restan espacio real: centrar en `inset-0` a secas deja el diálogo
-    // corrido hacia esa esquina. `pl-11 pt-[38px]` descuentan justo lo que
-    // ocupan, así el centro percibido es el del mapa visible, no el de la
-    // ventana entera.
-    <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 pl-11 pt-[38px]"
-      onClick={onClose}>
+    <Center className="z-40 bg-black/50" blocking onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
         className="w-[360px] rounded-card border border-white/[.13] bg-[rgba(16,19,25,.9)] p-5 shadow-lg shadow-black/40 backdrop-blur-xl">
         <p className="text-[13px] text-fg">Quién entra en {project.name}</p>
@@ -88,6 +83,6 @@ export function MembersDialog({ project, onClose }: { project: Project; onClose:
           <button onClick={onClose} className="text-[11px] text-muted hover:text-fg">Cerrar</button>
         </div>
       </div>
-    </div>
+    </Center>
   );
 }

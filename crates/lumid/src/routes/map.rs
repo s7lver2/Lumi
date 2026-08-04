@@ -79,20 +79,33 @@ pub async fn config(State(app): State<App>, headers: HeaderMap) -> Result<Json<M
 ///
 /// Devuelve `Err` si el JSON no tiene la forma esperada. Es deliberado: fallar
 /// ruidosamente es la única alternativa aceptable a servir el estilo crudo.
-fn rewrite(mut style: serde_json::Value) -> Result<serde_json::Value, String> {
+///
+/// El segundo elemento del resultado es el tileset de Mapbox que haya
+/// encontrado (si alguno), para que `style()` lo recuerde y `tile()` sepa
+/// contra qué tileset pedir cada pieza — un estilo hecho en Mapbox Studio casi
+/// nunca trae `tiles` a secas, trae `"url": "mapbox://…"` señalando un
+/// TileJSON compuesto, y ESE identificador es justo lo que la API de teselas
+/// v4 de Mapbox acepta tal cual, sin tener que resolver el TileJSON aparte.
+fn rewrite(mut style: serde_json::Value) -> Result<(serde_json::Value, Option<String>), String> {
     let sources = style
         .get_mut("sources")
         .and_then(|s| s.as_object_mut())
         .ok_or("el estilo no trae un objeto `sources`")?;
     let mut tocadas = 0;
+    let mut tileset = None;
     for (name, src) in sources.iter_mut() {
         let Some(obj) = src.as_object_mut() else { continue };
-        // Fuente con `url`: es un TileJSON que habría que resolver aparte, y
-        // ese TileJSON llevaría la clave dentro. No se sirve a medias.
-        if obj.contains_key("url") {
-            return Err(format!(
-                "la fuente `{name}` usa `url` (TileJSON) y este proxy solo sabe reescribir `tiles`"
-            ));
+        if let Some(u) = obj.get("url").and_then(|v| v.as_str()).map(str::to_string) {
+            let Some(id) = u.strip_prefix("mapbox://") else {
+                return Err(format!(
+                    "la fuente `{name}` usa `url` pero no es un tileset de Mapbox ({u}); este proxy no sabe resolver TileJSON de otros proveedores"
+                ));
+            };
+            tileset = Some(id.to_string());
+            obj.remove("url");
+            obj.insert("tiles".into(), serde_json::json!(["/v1/map/tiles/{z}/{x}/{y}"]));
+            tocadas += 1;
+            continue;
         }
         if let Some(tiles) = obj.get_mut("tiles").and_then(|t| t.as_array_mut()) {
             for t in tiles.iter_mut() {
@@ -110,7 +123,7 @@ fn rewrite(mut style: serde_json::Value) -> Result<serde_json::Value, String> {
         o.remove("sprite");
         o.remove("glyphs");
     }
-    Ok(style)
+    Ok((style, tileset))
 }
 
 pub async fn style(State(app): State<App>, headers: HeaderMap) -> Result<Json<serde_json::Value>, Fail> {
@@ -134,12 +147,18 @@ pub async fn style(State(app): State<App>, headers: HeaderMap) -> Result<Json<se
         .json()
         .await
         .map_err(|e| err(StatusCode::BAD_GATEWAY, &format!("el estilo del proveedor no es JSON: {e}")))?;
-    let fixed = rewrite(raw).map_err(|e| {
+    let (fixed, tileset) = rewrite(raw).map_err(|e| {
         err(
             StatusCode::BAD_GATEWAY,
             &format!("no se pudo reescribir el estilo y servirlo crudo filtraría la clave: {e}"),
         )
     })?;
+    // Se recuerda para que `tile()` pida ESTE tileset y no el genérico por
+    // defecto: un estilo compuesto (varios tilesets Mapbox separados por
+    // comas) es indistinguible del sencillo si no se guarda cuál era.
+    if let Some(t) = tileset {
+        let _ = app.store.set_meta("map_mapbox_tileset", &t);
+    }
     Ok(Json(fixed))
 }
 
@@ -172,9 +191,16 @@ pub async fn tile(
 
     let key = app.store.get_meta("map_key").unwrap_or_default();
     let upstream = match p.as_str() {
-        "mapbox" => format!(
-            "https://api.mapbox.com/v4/mapbox.mapbox-streets-v8/{z}/{x}/{y}.vector.pbf?access_token={key}"
-        ),
+        // El tileset real es el que `style()` dejó anotado al reescribir el
+        // estilo. Sin uno guardado (estilo aún no pedido, o de antes de este
+        // cambio) se cae al streets-v8 de siempre.
+        "mapbox" => {
+            let tileset = app
+                .store
+                .get_meta("map_mapbox_tileset")
+                .unwrap_or_else(|| "mapbox.mapbox-streets-v8".into());
+            format!("https://api.mapbox.com/v4/{tileset}/{z}/{x}/{y}.vector.pbf?access_token={key}")
+        }
         "osm" => format!("https://tiles.openfreemap.org/data/planet/{z}/{x}/{y}.pbf"),
         _ => return Err(err(StatusCode::SERVICE_UNAVAILABLE, "no hay proveedor de mapas configurado")),
     };
