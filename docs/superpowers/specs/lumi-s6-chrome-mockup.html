@@ -196,21 +196,25 @@
   /* Estado del análisis, encima de la propia foto. La miniatura ya está ahí:
      no hace falta una lista aparte que diga qué se está procesando. */
   .thumb .veil{
-    position:absolute;inset:0;border-radius:7px;backdrop-filter:blur(3.5px);
-    background:rgba(10,12,14,.42);animation:popIn .3s var(--expo) both}
-  .thumb .ring{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
-  .thumb .ring .bg{fill:none;stroke:rgba(255,255,255,.16);stroke-width:2.4}
-  .thumb .ring .fg{fill:none;stroke:var(--fg);stroke-width:2.4;stroke-linecap:round;
-    transition:stroke-dashoffset .7s var(--expo)}
-  /* Sin porcentaje que enseñar, el arco gira: dice «trabajando» sin mentir
-     sobre cuánto falta. */
-  .thumb.queued .ring{animation:spin 1.15s linear infinite}
-  .thumb.queued .ring .fg{stroke:var(--muted)}
-  @keyframes spin{to{transform:rotate(270deg)}}
-  .thumb .pbar{position:absolute;left:4px;right:4px;bottom:4px;height:2px;border-radius:2px;
-    background:rgba(255,255,255,.16);overflow:hidden}
-  .thumb .pbar i{display:block;height:100%;background:var(--fg);border-radius:2px;
+    position:absolute;inset:0;border-radius:7px;backdrop-filter:blur(2.5px);
+    background:rgba(10,12,14,.34);animation:popIn .3s var(--expo) both}
+  /* Sin anillo: en 38 px se comía la foto entera. Una barra pegada al borde de
+     abajo y un punto que late arriba dicen lo mismo ocupando casi nada. */
+  .thumb .pbar{position:absolute;left:0;right:0;bottom:0;height:2px;
+    background:rgba(255,255,255,.14);overflow:hidden;border-radius:0 0 7px 7px}
+  .thumb .pbar i{display:block;height:100%;background:var(--fg);
     transition:width .7s var(--expo)}
+  .thumb .live{
+    position:absolute;top:4px;right:4px;width:4px;height:4px;border-radius:50%;
+    background:var(--fg);animation:live 1.5s var(--expo) infinite}
+  @keyframes live{0%,100%{opacity:.28;transform:scale(.85)}50%{opacity:1;transform:scale(1)}}
+  /* En cola no hay porcentaje que enseñar: un barrido lento y el puesto. */
+  .thumb.queued .veil{overflow:hidden}
+  .thumb.queued .veil::after{
+    content:"";position:absolute;inset:0;
+    background:linear-gradient(105deg,transparent 38%,rgba(255,255,255,.11) 50%,transparent 62%);
+    animation:sweep 1.9s linear infinite}
+  @keyframes sweep{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
   .thumb .qn{position:absolute;inset:0;display:grid;place-items:center;
     font:9px ui-monospace,Menlo,monospace;color:var(--muted)}
   .thumb.failed{border-color:rgba(163,51,51,.7)}
@@ -321,6 +325,42 @@
   .ctx button[disabled]{opacity:.35;cursor:default}
   .ctx button[disabled]:hover{background:none;color:var(--muted)}
 
+  /* ---------- cajón de invitar ----------
+     Mismo carril que el de resultados y misma anchura: son dos cosas que
+     piden el mismo hueco, así que solo puede haber una abierta. */
+  .drawer{
+    position:absolute;top:var(--bar);right:0;bottom:0;width:var(--side);z-index:24;
+    border-left:1px solid var(--border);background:rgba(16,18,21,.94);backdrop-filter:blur(16px);
+    padding:12px;display:flex;flex-direction:column;gap:8px;
+    transform:translateX(100%);transition:transform .42s var(--expo);
+  }
+  .drawer.on{transform:none}
+  .drawer .top{display:flex;align-items:center;gap:8px;margin-bottom:2px}
+  .drawer .top .t{font-size:12px;flex:1}
+  .member{display:flex;align-items:center;gap:8px;padding:6px;border-radius:9px;
+    border:1px solid var(--border)}
+  .member .nm{flex:1;min-width:0;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .member.pending .nm{color:var(--muted)}
+  .member .rl{font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--subtle)}
+  .member .x{background:none;border:0;color:var(--subtle);cursor:pointer;font-size:11px;padding:0 2px}
+  .member .x:hover{color:var(--danger-fg)}
+  .invrow{position:relative;display:flex;gap:6px;margin-top:4px}
+  .invrow input{
+    flex:1;min-width:0;border:1px solid var(--border);border-radius:9px;background:#0d0f12;
+    color:var(--fg);font:inherit;font-size:12px;padding:7px 9px;outline:none;
+    transition:border-color .3s var(--expo)}
+  .invrow input:focus{border-color:rgba(255,255,255,.4)}
+  .sugg{
+    position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:5;max-height:150px;overflow:auto;
+    border:1px solid rgba(255,255,255,.1);border-radius:9px;background:rgba(20,22,26,.98);
+    box-shadow:0 16px 34px -12px rgba(0,0,0,.7);padding:4px;display:none;
+    animation:popIn .16s var(--expo) both}
+  .sugg.on{display:block}
+  .sugg button{display:flex;align-items:center;gap:8px;width:100%;background:none;border:0;
+    color:inherit;font:inherit;font-size:11.5px;text-align:left;padding:6px;border-radius:7px;
+    cursor:pointer;transition:background .2s var(--expo)}
+  .sugg button:hover{background:rgba(255,255,255,.05)}
+
   /* ---------- popovers ---------- */
   .pop{
     position:absolute;z-index:60;border:1px solid rgba(255,255,255,.12);border-radius:12px;
@@ -339,6 +379,36 @@
   .kv span:first-child{color:var(--subtle)}
   .kv span:last-child{font-family:ui-monospace,Menlo,monospace;color:var(--fg)}
   .note{border-top:1px solid var(--border);margin-top:8px;padding-top:8px}
+  /* ---------- notificaciones ---------- */
+  .nhead{display:flex;align-items:center;gap:8px;padding:10px 11px 8px;border-bottom:1px solid var(--border)}
+  .nt{font-size:11.5px;font-weight:500;flex:1}
+  .nlink{background:none;border:0;color:var(--subtle);font:inherit;font-size:10.5px;cursor:pointer;
+    transition:color .25s var(--expo)}
+  .nlink:hover{color:var(--fg)}
+  .nlist{max-height:290px;overflow:auto;padding:4px}
+  .nsep{font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#4a4d52;padding:8px 8px 4px}
+  .nitem{
+    position:relative;display:flex;gap:9px;padding:8px 9px 8px 12px;border-radius:9px;
+    transition:background .25s var(--expo)}
+  .nitem:hover{background:rgba(255,255,255,.04)}
+  /* Lo no leído se marca con un punto en el margen, no con un fondo de color:
+     cuatro fondos distintos convierten la lista en un semáforo. */
+  .nitem.unread::before{
+    content:"";position:absolute;left:4px;top:15px;width:4px;height:4px;border-radius:50%;
+    background:var(--draw)}
+  .nav{width:22px;height:22px;flex:none;display:grid;place-items:center;border-radius:50%;
+    font-size:11px;color:var(--muted);background:rgba(255,255,255,.05)}
+  .nav .avatar{width:22px;height:22px;font-size:10px}
+  .nav.ok{color:var(--draw-fg);background:rgba(55,138,221,.12)}
+  .nav.bad{color:var(--danger-fg);background:rgba(163,51,51,.16)}
+  .nav.admin{color:var(--warning-fg);background:rgba(239,159,39,.12)}
+  .nbody{flex:1;min-width:0}
+  .ntx{font-size:11.5px;color:var(--muted);line-height:1.45}
+  .ntx b{color:var(--fg);font-weight:500}
+  .nact{display:flex;gap:6px;margin-top:7px}
+  .nwhen{font:9.5px ui-monospace,Menlo,monospace;color:#4a4d52;flex:none;padding-top:2px}
+  .nfoot{border-top:1px solid var(--border);padding:8px 11px;text-align:center}
+
   .menuitem{display:block;width:100%;text-align:left;background:none;border:0;color:var(--muted);
     font:inherit;font-size:11.5px;padding:6px 8px;border-radius:8px;cursor:pointer;
     transition:background .25s var(--expo),color .25s var(--expo)}
@@ -530,6 +600,34 @@
   .sbs .cmp{aspect-ratio:4/3;cursor:default;width:auto}
   .sbs .cmp .idx{clip-path:none}
   .sbs .cmp .bar{display:none}
+
+  /* ---------- modales de crear ----------
+     Un solo formulario: un nombre. Todo lo demás se decide después, dentro,
+     donde se ve lo que estás decidiendo. */
+  .modal{
+    position:absolute;z-index:50;left:50%;top:50%;transform:translate(-50%,-50%);
+    width:340px;display:none;padding:16px;
+    border:1px solid rgba(255,255,255,.13);border-radius:12px;
+    background:rgba(16,19,25,.92);backdrop-filter:blur(20px);
+    box-shadow:0 24px 60px -18px rgba(0,0,0,.72);
+    animation:upIn .22s var(--expo) both;
+  }
+  .modal.on{display:block}
+  .modal .mh{display:flex;align-items:center;gap:10px;margin-bottom:13px}
+  .modal .mi{
+    width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none;
+    background:rgba(255,255,255,.06);color:var(--fg)}
+  .modal .mt{font-size:12.5px;font-weight:500}
+  .modal .ms{font-size:10.5px;color:var(--subtle)}
+  .modal input{
+    width:100%;border:1px solid var(--border);border-radius:9px;background:#0d0f12;
+    color:var(--fg);font:inherit;font-size:13px;padding:9px 11px;outline:none;
+    transition:border-color .3s var(--expo)}
+  .modal input:focus{border-color:rgba(255,255,255,.42)}
+  .modal .warn{font-size:10.5px;color:var(--warning-fg);margin-top:6px;display:none}
+  .modal .warn.on{display:block}
+  .modal .mf{display:flex;align-items:center;gap:8px;margin-top:14px}
+  .modal .kbhint{font:10px ui-monospace,Menlo,monospace;color:#4a4d52;margin-right:auto}
 
   /* ---------- popup de subida: igual que el que ya existe ---------- */
   .backdrop{position:absolute;inset:0;z-index:44;background:rgba(0,0,0,.5);display:none;
@@ -968,24 +1066,57 @@
         <div class="note"><p>Solo los administradores ven esta píldora. Antes eran 70 px de franja fija en todas las pantallas.</p></div>
       </div>
 
-      <div class="pop" id="popBell" style="display:none;top:44px;right:96px;width:280px">
-        <h4>Notificaciones</h4>
-        <div class="row" style="margin-top:8px">
-          <div class="k">Invitación</div>
-          <div class="v">marta te invitó a «Puerto sur»</div>
-          <div style="display:flex;gap:6px;margin-top:7px">
-            <button class="primary" style="padding:5px 10px;font-size:10.5px">Aceptar</button>
-            <button class="ghost" style="padding:4px 10px;font-size:10.5px">Rechazar</button>
+      <div class="pop" id="popBell" style="display:none;top:44px;right:96px;width:308px;padding:0">
+        <div class="nhead">
+          <span class="nt">Notificaciones</span>
+          <button class="nlink" id="nReadAll">Marcar todas</button>
+        </div>
+
+        <div class="nlist" id="nlist">
+          <div class="nitem unread">
+            <span class="nav"><span class="avatar">M</span></span>
+            <div class="nbody">
+              <p class="ntx"><b>marta</b> te invitó a «Puerto sur»</p>
+              <div class="nact">
+                <button class="primary" style="padding:4px 10px;font-size:10.5px">Aceptar</button>
+                <button class="ghost" style="padding:3px 10px;font-size:10.5px">Rechazar</button>
+              </div>
+            </div>
+            <span class="nwhen">2 min</span>
+          </div>
+
+          <div class="nitem unread">
+            <span class="nav admin"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M8 1.8 3 3.6v4.1c0 3 2.1 5.2 5 6.5 2.9-1.3 5-3.5 5-6.5V3.6L8 1.8Z"/></svg></span>
+            <div class="nbody">
+              <p class="ntx"><b>portátil-lab</b> pide una cuenta</p>
+              <div class="nact">
+                <button class="primary" style="padding:4px 10px;font-size:10.5px">Aprobar</button>
+                <button class="ghost" style="padding:3px 10px;font-size:10.5px">Rechazar</button>
+              </div>
+            </div>
+            <span class="nwhen">18 min</span>
+          </div>
+
+          <div class="nsep">Antes</div>
+
+          <div class="nitem">
+            <span class="nav ok"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3.4 8.4 6.6 11.6 12.8 5"/></svg></span>
+            <div class="nbody">
+              <p class="ntx">«Muelle 7» terminó · 9 de 12 resueltas</p>
+            </div>
+            <span class="nwhen">1 h</span>
+          </div>
+
+          <div class="nitem">
+            <span class="nav bad">!</span>
+            <div class="nbody">
+              <p class="ntx">IMG_4420.jpg falló · sin memoria en la GPU</p>
+            </div>
+            <span class="nwhen">1 h</span>
           </div>
         </div>
-        <div class="row" style="margin-top:6px">
-          <div class="k">Solicitud de acceso</div>
-          <div class="v">«portátil-lab» quiere una cuenta</div>
-          <div style="display:flex;gap:6px;margin-top:7px">
-            <button class="primary" style="padding:5px 10px;font-size:10.5px">Aprobar</button>
-            <button class="ghost" style="padding:4px 10px;font-size:10.5px">Rechazar</button>
-          </div>
-        </div>
+
+        <div class="nfoot"><button class="nlink">Ver todo el historial</button></div>
       </div>
 
       <div class="pop" id="popWho" style="display:none;top:44px;right:96px;width:190px">
@@ -1104,6 +1235,76 @@
           </div>
         </div>
       </div>
+
+      <!-- ====== crear proyecto / crear caso ====== -->
+      <div class="modal" id="mkProject">
+        <div class="mh">
+          <span class="mi"><svg width="15" height="15"><use href="#i-case"/></svg></span>
+          <div>
+            <div class="mt">Nuevo proyecto</div>
+            <div class="ms">agrupa casos y a quien trabaja en ellos</div>
+          </div>
+        </div>
+        <input id="mkProjectName" placeholder="Costa norte" autocomplete="off" />
+        <p class="warn" id="mkProjectWarn">ya tienes un proyecto con ese nombre</p>
+        <div class="mf">
+          <span class="kbhint">↵ crear · esc cancelar</span>
+          <button class="ghost" data-mkcancel>Cancelar</button>
+          <button class="primary" data-mkok>Crear</button>
+        </div>
+      </div>
+
+      <div class="modal" id="mkCase">
+        <div class="mh">
+          <span class="mi"><svg width="15" height="15"><use href="#i-pin"/></svg></span>
+          <div>
+            <div class="mt">Nuevo caso en «Costa norte»</div>
+            <div class="ms">un caso, un sitio que averiguar</div>
+          </div>
+        </div>
+        <input id="mkCaseName" placeholder="Muelle 7" autocomplete="off" />
+        <p class="warn" id="mkCaseWarn">ya hay un caso con ese nombre</p>
+        <div class="mf">
+          <span class="kbhint">↵ crear · esc cancelar</span>
+          <button class="ghost" data-mkcancel>Cancelar</button>
+          <button class="primary" data-mkok>Crear</button>
+        </div>
+      </div>
+
+      <!-- ====== cajón de invitar ====== -->
+      <aside class="drawer" id="invite">
+        <div class="top">
+          <span class="t">Quién entra en «Costa norte»</span>
+          <button class="iconbtn" id="invClose" aria-label="Cerrar">
+            <svg width="11" height="11" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.1">
+              <path d="M.8.8l8.4 8.4M9.2.8L.8 9.2"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="member">
+          <span class="avatar">I</span><span class="nm">inigo</span><span class="rl">dueño</span>
+        </div>
+        <div class="member">
+          <span class="avatar">M</span><span class="nm">marta</span><span class="rl">dentro</span>
+          <button class="x" aria-label="Quitar">✕</button>
+        </div>
+        <div class="member pending">
+          <span class="avatar">L</span><span class="nm">luis</span><span class="rl">pendiente</span>
+          <button class="x" aria-label="Quitar">✕</button>
+        </div>
+
+        <div class="invrow">
+          <input id="invInput" placeholder="nombre de usuario" autocomplete="off" />
+          <button class="ghost" style="padding:7px 11px">Invitar</button>
+          <div class="sugg" id="sugg"></div>
+        </div>
+
+        <span class="grow"></span>
+        <p style="font-size:10.5px;color:var(--subtle)">
+          Una invitación no entra hasta que se acepta.
+        </p>
+      </aside>
 
       <div class="ctx" id="ctx"></div>
 
@@ -1233,6 +1434,46 @@
         con el borde rojo y un «!». Al terminar, un latido y la foto vuelve a verse.
         Pruébalo con «Avanzar el análisis».
       </p>
+      <p style="margin-top:8px">
+        El anillo que rodeaba la miniatura entera se ha ido: en 38 px se comía la foto. Queda una
+        barra pegada al borde de abajo y un punto que late en la esquina, del mismo tamaño que el
+        «!» del error.
+      </p>
+    </div>
+    <div class="note-card">
+      <span class="tag">invitar</span>
+      <h3>Un cajón, no un diálogo en medio</h3>
+      <p>
+        Invitar es mirar una lista y escribir un nombre; no hace falta tapar el mapa para eso. Sale
+        del carril, por el mismo lado y con la misma anchura que el de resultados — y ahí está la
+        regla: <b>solo puede haber un cajón abierto</b>. Abrir el de invitar recoge el de resultados
+        y al revés, así que el dock nunca tiene que decidir a qué borde perseguir. La pestaña se
+        queda siempre pegada al canto del que esté abierto. Las sugerencias aparecen al escribir y
+        se eligen con el ratón sin que el campo pierda el foco antes de tiempo.
+      </p>
+    </div>
+    <div class="note-card">
+      <span class="tag">crear</span>
+      <h3>Un campo y ya</h3>
+      <p>
+        Crear un proyecto o un caso es poner un nombre; todo lo demás —invitar, subir, elegir
+        modelo— se decide después, dentro, donde se ve lo que estás decidiendo. Los dos modales son
+        el mismo con distinto icono y distinta frase. El choque de nombres se avisa mientras
+        escribes y deshabilita «Crear», en vez de dejarte confirmar para enterarte luego. Enter
+        crea, Esc cancela, y está escrito debajo.
+      </p>
+    </div>
+    <div class="note-card">
+      <span class="tag">notificaciones</span>
+      <h3>Una bandeja, no un montón de tarjetas</h3>
+      <p>
+        La campana y su indicador se quedan tal cual. Dentro cambia todo: filas en vez de tarjetas,
+        con avatar de quien te escribe o un icono del tipo de aviso —escudo para lo administrativo,
+        check para lo terminado, «!» para lo que falló—, la hora relativa a la derecha, y los
+        botones solo en lo que de verdad hay que responder. Lo no leído se marca con un punto en el
+        margen, no con un fondo de color: cuatro fondos distintos convierten la lista en un semáforo.
+        Arriba, «Marcar todas»; abajo, el historial.
+      </p>
     </div>
     <div class="note-card">
       <span class="tag">menús</span>
@@ -1311,8 +1552,13 @@
 
   /* ---- carril ---- */
   $$("[data-rail]").forEach((b) => (b.onclick = () => {
-    if (b.dataset.rail === "leave") return show("picker");
+    if (b.dataset.rail === "leave") { setDrawer(null); return show("picker"); }
     $$("[data-rail]").forEach((x) => x.classList.toggle("on", x === b));
+    if (b.dataset.rail === "members") {
+      setDrawer($("#invite").classList.contains("on") ? null : "invite");
+    } else if (b.dataset.rail === "cases") {
+      setDrawer(null);
+    }
   }));
 
   /* ---- rol ---- */
@@ -1342,14 +1588,26 @@
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePops(); });
   pops.forEach((p) => ($("#" + p).onclick = (e) => e.stopPropagation()));
 
-  /* ---- panel lateral ---- */
-  $("#sidetab").onclick = () => {
-    const abierto = $("#side").classList.toggle("on");
+  /* ---- cajones laterales ----
+     Resultados e invitar piden el mismo hueco, así que hay uno solo: abrir
+     cualquiera de los dos cierra el otro, sin que haya que pensarlo. */
+  function setDrawer(cual) {
+    $("#side").classList.toggle("on", cual === "side");
+    $("#invite").classList.toggle("on", cual === "invite");
+    const abierto = cual !== null;
     $("#dock").classList.toggle("shift", abierto);
+    // La pestaña se pega al borde del cajón que haya, sea cual sea, para no
+    // quedarse enterrada debajo.
     $("#sidetab").classList.toggle("shift", abierto);
-    $("#sidetab").style.transform = abierto
-      ? "translateY(-50%)" : "translateY(-50%) rotate(180deg)";
-  };
+    $("#sidetab").style.transform =
+      cual === "side" ? "translateY(-50%)" : "translateY(-50%) rotate(180deg)";
+    // El carril tiene que decir dónde estás también cuando el cajón se cierra
+    // desde su propia aspa.
+    $$("[data-rail]").forEach((x) =>
+      x.classList.toggle("on", x.dataset.rail === (cual === "invite" ? "members" : "cases")));
+  }
+  $("#sidetab").onclick = () => setDrawer($("#side").classList.contains("on") ? null : "side");
+  $("#invClose").onclick = () => setDrawer(null);
 
   /* ---- miniaturas ---- */
   $$(".thumb").forEach((t) => (t.onclick = () => {
@@ -1396,7 +1654,8 @@
   }
   $$("[data-upload]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); openUpload(); }));
   $("#upClose").onclick = closeUpload;
-  $("#upBack").onclick = closeUpload;
+  // El mismo velo tapa el popup de análisis y los modales de crear.
+  $("#upBack").onclick = () => { closeUpload(); cerrarModal(); };
   $("#upGo").onclick = closeUpload;
   $("#upload").onclick = (e) => e.stopPropagation();
   $("#modelBtn").onclick = () => $("#modelList").classList.toggle("on");
@@ -1443,6 +1702,7 @@
     if (e.key !== "Escape") return;
     $("#lightbox").classList.remove("on");
     closeUpload();
+    cerrarModal();
   });
 
   /* ---- reordenar arrastrando ----
@@ -1624,9 +1884,8 @@
   /* ---- estado del análisis en las miniaturas ----
      El adorno lo pinta el guion y no el HTML para que una miniatura pueda
      cambiar de estado sin reescribirla entera. */
-  const CIRC = 2 * Math.PI * 15;
   function pintarEstado(t) {
-    t.querySelectorAll(".veil,.ring,.pbar,.qn,.bang").forEach((e) => e.remove());
+    t.querySelectorAll(".veil,.pbar,.qn,.bang,.live").forEach((e) => e.remove());
     const trabajando = t.classList.contains("work");
     const enCola = t.classList.contains("queued");
     const fallo = t.classList.contains("failed");
@@ -1644,17 +1903,6 @@
       return;
     }
 
-    const pct = Number(t.dataset.pct ?? 0);
-    const ring = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    ring.setAttribute("class", "ring");
-    ring.setAttribute("viewBox", "0 0 36 36");
-    ring.innerHTML =
-      `<circle class="bg" cx="18" cy="18" r="15"/>` +
-      `<circle class="fg" cx="18" cy="18" r="15"
-         stroke-dasharray="${enCola ? 22 : CIRC}"
-         stroke-dashoffset="${enCola ? 0 : CIRC * (1 - pct / 100)}"/>`;
-    t.appendChild(ring);
-
     if (enCola) {
       const n = document.createElement("span");
       n.className = "qn";
@@ -1664,10 +1912,15 @@
     }
     // La barra solo cuando hay un número real detrás. Una barra que avanza
     // inventada es peor que no ponerla.
+    const pct = Number(t.dataset.pct ?? 0);
     const bar = document.createElement("span");
     bar.className = "pbar";
     bar.innerHTML = `<i style="width:${pct}%"></i>`;
     t.appendChild(bar);
+
+    const live = document.createElement("span");
+    live.className = "live";
+    t.appendChild(live);
   }
   const repintar = () => $$("#strip .thumb").forEach(pintarEstado);
   repintar();
@@ -1695,6 +1948,79 @@
       }
     }, 420);
   };
+
+  /* ---- modales de crear ---- */
+  const EXISTEN = {
+    mkProject: ["costa norte", "frontera este", "archivo 2024", "puerto sur"],
+    mkCase: ["muelle 7", "faro", "cala nueva", "astillero"],
+  };
+  let modalActual = null;
+  function abrirModal(id) {
+    modalActual = id;
+    $("#upBack").classList.add("on");
+    $("#" + id).classList.add("on");
+    const inp = $("#" + id + "Name");
+    inp.value = "";
+    $("#" + id + "Warn").classList.remove("on");
+    $("#" + id + " [data-mkok]").disabled = true;
+    setTimeout(() => inp.focus(), 20);
+  }
+  function cerrarModal() {
+    if (!modalActual) return;
+    $("#" + modalActual).classList.remove("on");
+    $("#upBack").classList.remove("on");
+    modalActual = null;
+  }
+  $$(".card.new, .caserow.new").forEach((b) => (b.onclick = (e) => {
+    e.stopPropagation();
+    abrirModal(b.classList.contains("card") ? "mkProject" : "mkCase");
+  }));
+  $$("[data-mkcancel]").forEach((b) => (b.onclick = cerrarModal));
+  $$("[data-mkok]").forEach((b) => (b.onclick = cerrarModal));
+  ["mkProject", "mkCase"].forEach((id) => {
+    const inp = $("#" + id + "Name");
+    // El choque de nombres se avisa mientras se escribe, no al pulsar Crear:
+    // enterarte después de confirmar es enterarte tarde.
+    inp.addEventListener("input", () => {
+      const choca = EXISTEN[id].includes(inp.value.trim().toLowerCase());
+      $("#" + id + "Warn").classList.toggle("on", choca);
+      $("#" + id + " [data-mkok]").disabled = choca || !inp.value.trim();
+    });
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !$("#" + id + " [data-mkok]").disabled) cerrarModal();
+      if (e.key === "Escape") cerrarModal();
+    });
+    $("#" + id).onclick = (e) => e.stopPropagation();
+  });
+
+  /* ---- notificaciones ---- */
+  $("#nReadAll").onclick = (e) => {
+    e.stopPropagation();
+    $$("#nlist .nitem").forEach((n) => n.classList.remove("unread"));
+    $(".badge")?.remove();
+  };
+
+  /* ---- sugerencias al invitar ---- */
+  const GENTE = ["marta", "martin", "marcos", "luis", "lucia", "nerea", "pablo", "paula", "sara"];
+  const YA = ["inigo", "marta", "luis"];
+  const sugg = $("#sugg");
+  $("#invInput").addEventListener("input", (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    const hits = q ? GENTE.filter((u) => u.startsWith(q) && !YA.includes(u)).slice(0, 6) : [];
+    sugg.innerHTML = hits
+      .map((u) => `<button data-u="${u}"><span class="avatar" style="width:17px;height:17px;font-size:8.5px">${u[0].toUpperCase()}</span>${u}</button>`)
+      .join("");
+    sugg.classList.toggle("on", hits.length > 0);
+  });
+  // `mousedown` y no `click`: el blur del campo se dispara antes y la lista ya
+  // se habría cerrado cuando llegara el clic.
+  sugg.addEventListener("mousedown", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    $("#invInput").value = b.dataset.u;
+    sugg.classList.remove("on");
+  });
+  $("#invInput").addEventListener("blur", () => setTimeout(() => sugg.classList.remove("on"), 120));
 
   /* ---- marco de arrastre de ficheros ---- */
   $("#simDrop").onclick = () => {
