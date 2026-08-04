@@ -67,6 +67,62 @@ CREATE TABLE IF NOT EXISTS limits (
     value   TEXT NOT NULL,
     UNIQUE(user_id, key)
 );
+CREATE TABLE IF NOT EXISTS projects (
+    id         INTEGER PRIMARY KEY,
+    name       TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS project_members (
+    project_id INTEGER NOT NULL,
+    user_id    INTEGER NOT NULL,
+    role       TEXT NOT NULL CHECK (role IN ('owner','member')),
+    added_at   INTEGER NOT NULL,
+    PRIMARY KEY (project_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS cases (
+    id         INTEGER PRIMARY KEY,
+    project_id INTEGER NOT NULL,
+    name       TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS images (
+    id          INTEGER PRIMARY KEY,
+    case_id     INTEGER NOT NULL,
+    uploader_id INTEGER NOT NULL,
+    filename    TEXT NOT NULL,
+    bytes       INTEGER NOT NULL,
+    sha256      TEXT NOT NULL,
+    width       INTEGER,
+    height      INTEGER,
+    mime        TEXT NOT NULL,
+    exif_json   TEXT,
+    exif_lat    REAL,
+    exif_lng    REAL,
+    created_at  INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS analyses (
+    id                INTEGER PRIMARY KEY,
+    case_id           INTEGER NOT NULL,
+    requested_by      INTEGER NOT NULL,
+    model             TEXT NOT NULL,
+    state             TEXT NOT NULL CHECK (state IN ('pendiente','en_curso','hecho','error')),
+    error             TEXT,
+    result_lat        REAL,
+    result_lng        REAL,
+    result_radius_m   REAL,
+    result_confidence REAL,
+    created_at        INTEGER NOT NULL,
+    finished_at       INTEGER
+);
+CREATE TABLE IF NOT EXISTS analysis_images (
+    analysis_id INTEGER NOT NULL,
+    image_id    INTEGER NOT NULL,
+    PRIMARY KEY (analysis_id, image_id)
+);
+CREATE INDEX IF NOT EXISTS cases_by_project ON cases(project_id);
+CREATE INDEX IF NOT EXISTS images_by_case ON images(case_id);
+CREATE INDEX IF NOT EXISTS analyses_by_case ON analyses(case_id);
 CREATE UNIQUE INDEX IF NOT EXISTS limits_global ON limits(key) WHERE user_id IS NULL;
 ";
 

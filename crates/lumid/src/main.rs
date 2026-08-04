@@ -1,5 +1,6 @@
 mod limits;
 mod master;
+mod projects;
 mod routes;
 mod store;
 mod tasks;
