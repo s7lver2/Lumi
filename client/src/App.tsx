@@ -7,6 +7,7 @@ import { PairStep } from "./wizard/PairStep";
 import { AdminStep } from "./wizard/AdminStep";
 import { ProvisionStep } from "./wizard/ProvisionStep";
 import { TelemetryStrip } from "./ui/TelemetryStrip";
+import { Bell } from "./ui/Bell";
 import { StatusOverlay } from "./ui/StatusOverlay";
 import { EntryScreen } from "./entry/EntryScreen";
 import { AdminPanel } from "./admin/AdminPanel";
@@ -166,6 +167,14 @@ export default function App() {
             setNotifs(0);
             setMode(useServer.getState().isAdmin ? "admin" : "picker");
           } : undefined} />
+      )}
+      {/* Sin franja para un investigador normal (isAdmin es falso), pero la
+          campana no depende del hardware del servidor: vive aparte, flotante,
+          para que la aprobación siga llegando sin diálogo que interrumpa. */}
+      {mode !== "entry" && !isAdmin && (
+        <div className="absolute right-3 top-2.5 z-30">
+          <Bell count={notifs} onClick={() => { setNotifs(0); setMode("picker"); }} />
+        </div>
       )}
       {/* Para app/admin, la desconexión es un banner + bloqueo, no una
           pantalla completa: la sesión de un usuario normal no tiene un
