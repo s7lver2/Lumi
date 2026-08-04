@@ -188,10 +188,14 @@ export default function App() {
       <div className={`relative flex flex-1 overflow-hidden ${
         mode === "project" || mode === "case" ? "" : "items-center justify-center overflow-y-auto"
       } ${blockedByDisconnect ? "pointer-events-none opacity-50" : ""}`}>
-      {resuming ? null : status !== "ok" && !blockedByDisconnect ? (
+      {resuming ? null : status !== "ok" && !blockedByDisconnect && mode !== "entry" ? (
         // Sustituye al wizard en el mismo hueco: no es una capa flotante
         // encima ("popup"), es lo que se ve mientras dure el estado. La
         // franja de arriba es hermana de este bloque, por eso sigue visible.
+        // NUNCA en "entry": un `hello` que sobrevive de una reconexión a
+        // medias no significa que haya una sesión que proteger, y tapar el
+        // formulario de login con "reconectando" deja al usuario sin forma
+        // de entrar aunque el servidor esté perfectamente sano.
         <StatusOverlay
           status={status}
           queue={useServer.getState().sample?.queue_depth ?? 0}
