@@ -303,3 +303,20 @@ pub struct NameReq {
 pub struct MemberReq {
     pub username: String,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Case {
+    pub id: i64,
+    pub project_id: i64,
+    pub name: String,
+    pub images: i64,
+    pub analyses: i64,
+    /// Análisis con resultado. La vista de proyecto pinta un marcador por caso
+    /// resuelto, y necesita saber si hay alguno sin traerse la lista entera.
+    pub resolved: i64,
+    /// Del análisis resuelto más reciente, para el marcador. `None` mientras
+    /// no haya motor.
+    pub lat: Option<f64>,
+    pub lng: Option<f64>,
+    pub created_at: i64,
+}

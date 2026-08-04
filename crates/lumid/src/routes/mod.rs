@@ -1,6 +1,7 @@
 pub mod access;
 pub mod admin;
 pub mod auth;
+pub mod cases;
 pub mod claim;
 pub mod hello;
 pub mod projects;
