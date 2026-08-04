@@ -117,8 +117,12 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/map/config", get(routes::map::config))
         .route("/v1/map/style", get(routes::map::style))
         .route("/v1/map/tiles/:z/:x/:y", get(routes::map::tile))
-        .route("/v1/admin/map", axum::routing::patch(routes::map::patch_admin))
-        .with_state(app);
+        .route("/v1/admin/map", axum::routing::patch(routes::map::patch_admin));
+
+    #[cfg(debug_assertions)]
+    let router = router.route("/v1/analyses/:id/fake", axum::routing::patch(routes::analyses::fake));
+
+    let router = router.with_state(app);
 
     let port: u16 = std::env::var("LUMI_PORT")
         .ok()

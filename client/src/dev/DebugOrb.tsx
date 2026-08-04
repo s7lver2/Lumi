@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { api } from "../lib/api";
 import { getEnv, resetEnv, setEnv } from "../lib/session";
+import { useServer } from "../lib/store";
 
 /** Herramienta de desarrollo: simula "dispositivos" aislados sin borrar
  *  localStorage a mano. Cada entorno tiene su propia sesión, sus propios
@@ -25,6 +27,17 @@ export function DebugOrb() {
     } else if (name === "reset") {
       resetEnv();
       window.location.reload();
+    } else if (name === "fake" && arg) {
+      // Sin motor no hay nada que dibujar, y el mapa y la tarjeta de
+      // resultado no se pueden construir a ciegas. Solo en desarrollo: este
+      // archivo entero desaparece del bundle de producción.
+      const token = useServer.getState().token ?? undefined;
+      api
+        .patch(`/v1/analyses/${arg}/fake`, {}, token)
+        .then(() => setMsg(`análisis ${arg} relleno con coordenadas falsas`))
+        .catch((e) => setMsg(String(e)));
+    } else if (name === "fake") {
+      setMsg("uso: fake <id de análisis>");
     } else if (name) {
       setMsg(`comando desconocido: ${name}`);
     }
@@ -37,7 +50,7 @@ export function DebugOrb() {
         <div className="mb-2 w-56 rounded-lg border border-border bg-[#0d0f12] p-2.5 shadow-lg shadow-black/50">
           <input autoFocus value={cmd} onChange={(e) => setCmd(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && run()}
-            placeholder="env 2 · reset"
+            placeholder="env 2 · reset · fake 3"
             className="w-full rounded border border-border bg-transparent px-2 py-1 text-fg outline-none focus:border-white/40" />
           {msg && <p className="mt-1.5 text-subtle">{msg}</p>}
           <p className="mt-1.5 text-subtle">entorno actual: {getEnv()}</p>
