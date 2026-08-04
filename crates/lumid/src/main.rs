@@ -100,7 +100,11 @@ async fn main() -> anyhow::Result<()> {
             "/v1/cases/:id/images",
             get(routes::images::list).post(routes::images::upload),
         )
-        .route("/v1/images/:id", axum::routing::delete(routes::images::remove))
+        .route(
+            "/v1/images/:id",
+            get(routes::images::serve_full).delete(routes::images::remove),
+        )
+        .route("/v1/images/:id/thumb", get(routes::images::serve_thumb))
         .route("/v1/me/usage", get(routes::images::my_usage))
         .with_state(app);
 
