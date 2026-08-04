@@ -1,5 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export interface Image {
+  id: number; case_id: number; filename: string; bytes: number;
+  width: number | null; height: number | null; mime: string;
+  /** GPS DECLARADO por la cámara. Nunca se mezcla con el inferido. */
+  exif_lat: number | null; exif_lng: number | null;
+  exif: Record<string, string> | null;
+  created_at: number;
+}
+
 export interface Capability { id: string; label: string; state: "on" | "partial" | "off"; reason: string | null }
 export interface GpuInfo { index: number; name: string; vram_total_mb: number; pcie: string }
 export interface GpuSample { index: number; util_pct: number; vram_used_mb: number; vram_total_mb: number; temp_c: number | null }

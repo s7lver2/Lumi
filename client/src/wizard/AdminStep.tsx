@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { api, type LoginRes } from "../lib/api";
+import { setAuth } from "../lib/bridge";
 import { useServer } from "../lib/store";
 import { updateSession } from "../lib/session";
 
@@ -29,6 +30,7 @@ export function AdminStep({ bootstrapToken, onDone, onBusyChange }: {
       // responde 401.
       const res = await api.post<LoginRes>("/v1/auth/login", { username, password });
       setToken(res.token);
+      setAuth(res.token);
       // Sin esto el store no sabe quién es el owner: la app ya logueada
       // mostraba "sesión iniciada como ." con el usuario vacío.
       useServer.getState().setUser(res.username, res.is_admin);

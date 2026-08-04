@@ -14,6 +14,7 @@ import { ConnectionBanner } from "./ui/ConnectionBanner";
 import { DebugOrb } from "./dev/DebugOrb";
 import { useServer } from "./lib/store";
 import { api, type Hello, type Sample } from "./lib/api";
+import { setAuth } from "./lib/bridge";
 import { loadSession, updateSession } from "./lib/session";
 
 export default function App() {
@@ -73,6 +74,7 @@ export default function App() {
           try {
             const me = await api.get<{ username: string; is_admin: boolean }>("/v1/auth/me", session.token);
             useServer.getState().setToken(session.token);
+            setAuth(session.token);
             useServer.getState().setUser(me.username, me.is_admin);
             await invoke("start_telemetry", { token: session.token });
             // El aprovisionamiento sigue siendo cosa del owner: si el servidor
@@ -122,6 +124,7 @@ export default function App() {
         if (kicked && Date.now() - downSince.current > KICK_AFTER_MS) {
           updateSession({ token: undefined });
           useServer.getState().setToken(null);
+          setAuth(null);
           setMode("entry");
           setStatus("ok");
           fails.current = 0;

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api, type LoginRes } from "../lib/api";
+import { setAuth } from "../lib/bridge";
 import { deviceId, deviceName, updateSession, type Server } from "../lib/session";
 import { useServer } from "../lib/store";
 import { Icon } from "../ui/Icon";
@@ -29,6 +30,7 @@ export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMu
         device: { client_id: deviceId(), name: deviceName(), os: navigator.userAgent },
       });
       useServer.getState().setToken(res.token);
+      setAuth(res.token);
       useServer.getState().setUser(res.username, res.is_admin);
       useServer.getState().setAddr(server.addr);
       updateSession({ addr: server.addr, fingerprint: server.fingerprint, token: res.token, username: res.username });

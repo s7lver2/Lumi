@@ -49,6 +49,55 @@ impl rustls::client::danger::ServerCertVerifier for PinnedVerifier {
 struct Conn {
     base: Option<String>,
     client: Option<reqwest::Client>,
+    /// El token de sesión vive aquí y no en las URLs del esquema `lumi://`:
+    /// es un secreto, y las rutas acaban en logs y trazas de error.
+    token: Option<String>,
+}
+
+/// Lo llama el lado TS cada vez que cambia la sesión. Sin esto, el esquema
+/// `lumi://` no tendría con qué autenticarse contra el daemon.
+#[tauri::command]
+fn set_auth(token: Option<String>, state: tauri::State<'_, Shared>) {
+    state.lock().unwrap().token = token;
+}
+
+/// Sube por RUTA, no por bytes: el archivo lo lee Rust y va directo al daemon
+/// como multipart. Mandar 30 MB por el canal de IPC de Tauri costaría
+/// serializarlos a JSON por el camino.
+#[tauri::command]
+async fn upload_images(
+    case_id: i64, paths: Vec<String>, state: tauri::State<'_, Shared>,
+) -> Result<String, String> {
+    let (base, client, token) = {
+        let c = state.lock().unwrap();
+        (
+            c.base.clone().ok_or("sin servidor vinculado")?,
+            c.client.clone().ok_or("sin cliente")?,
+            c.token.clone().ok_or("sin sesión")?,
+        )
+    };
+    let mut form = reqwest::multipart::Form::new();
+    for p in &paths {
+        let bytes = std::fs::read(p).map_err(|e| format!("{p}: {e}"))?;
+        let name = std::path::Path::new(p)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "sin-nombre".into());
+        form = form.part(
+            "file",
+            reqwest::multipart::Part::bytes(bytes).file_name(name),
+        );
+    }
+    let res = client
+        .post(format!("{base}/v1/cases/{case_id}/images"))
+        .bearer_auth(token)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    let status = res.status();
+    let text = res.text().await.unwrap_or_default();
+    if status.is_success() { Ok(text) } else { Err(text) }
 }
 
 type Shared = Arc<Mutex<Conn>>;
@@ -220,8 +269,65 @@ async fn start_task_log(
 fn main() {
     rustls::crypto::ring::default_provider().install_default().ok();
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(Shared::default())
-        .invoke_handler(tauri::generate_handler![pair, pair_card, reconnect, request, start_telemetry, start_task_log])
+        // Bytes del daemon al webview sin que el webview vea el certificado.
+        // En Windows el webview lo pide como http://lumi.localhost/<ruta>; en
+        // el resto, como lumi://localhost/<ruta>. En los dos casos llega aquí.
+        .register_asynchronous_uri_scheme_protocol("lumi", |ctx, request, responder| {
+            use tauri::Manager;
+            let state = ctx.app_handle().state::<Shared>();
+            let (base, client, token) = {
+                let c = state.lock().unwrap();
+                (c.base.clone(), c.client.clone(), c.token.clone())
+            };
+            let path = request.uri().path().to_string();
+            tauri::async_runtime::spawn(async move {
+                let fallo = |code: u16, msg: &str| {
+                    http::Response::builder()
+                        .status(code)
+                        .header("content-type", "text/plain; charset=utf-8")
+                        .body(msg.as_bytes().to_vec())
+                        .unwrap()
+                };
+                let (Some(base), Some(client)) = (base, client) else {
+                    responder.respond(fallo(503, "sin servidor vinculado"));
+                    return;
+                };
+                let mut rb = client.get(format!("{base}{path}"));
+                if let Some(t) = token {
+                    rb = rb.bearer_auth(t);
+                }
+                match rb.send().await {
+                    Ok(res) => {
+                        let status = res.status().as_u16();
+                        let ctype = res
+                            .headers()
+                            .get("content-type")
+                            .and_then(|v| v.to_str().ok())
+                            .unwrap_or("application/octet-stream")
+                            .to_string();
+                        let body = res.bytes().await.unwrap_or_default().to_vec();
+                        responder.respond(
+                            http::Response::builder()
+                                .status(status)
+                                .header("content-type", ctype)
+                                // El webview de un esquema propio tiene otro
+                                // origen que la app: sin esto, MapLibre no
+                                // puede leer las teselas.
+                                .header("access-control-allow-origin", "*")
+                                .body(body)
+                                .unwrap(),
+                        );
+                    }
+                    Err(e) => responder.respond(fallo(502, &e.to_string())),
+                }
+            });
+        })
+        .invoke_handler(tauri::generate_handler![
+            pair, pair_card, reconnect, request, start_telemetry, start_task_log,
+            set_auth, upload_images
+        ])
         .run(tauri::generate_context!())
         .expect("error al arrancar Tauri");
 }
