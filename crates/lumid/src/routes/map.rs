@@ -8,14 +8,61 @@
 //! El estilo TAMBIÉN pasa por aquí: un estilo de Mapbox trae dentro las URLs
 //! de sus fuentes, y esas URLs llevan la clave. Servirlo crudo filtraría la
 //! clave igual que no hacer nada.
+//!
+//! El estilo ya NO es una URL que se pega a mano. Un enlace mal copiado de
+//! Mapbox Studio (la página de vista previa en vez del estilo, o el esquema
+//! `mapbox://` sin traducir) fue la causa de tres averías distintas del mapa
+//! antes de este cambio. El catálogo de abajo es cerrado: cada tema es una
+//! URL que ya se sabe que funciona, y elegir uno es un clic, no un pegado.
 
 use crate::routes::auth::{bearer, require_admin, require_session};
 use crate::App;
 use axum::extract::{Path, State};
 use axum::{http::HeaderMap, http::StatusCode, Json};
-use lumi_proto::api::{MapConfig, MapConfigReq};
+use lumi_proto::api::{MapConfig, MapConfigReq, MapTheme};
 
-const OSM_STYLE: &str = "https://tiles.openfreemap.org/styles/liberty";
+struct Theme {
+    id: &'static str,
+    label: &'static str,
+    provider: &'static str,
+    style: &'static str,
+    needs_key: bool,
+}
+
+const THEMES: &[Theme] = &[
+    Theme {
+        id: "osm-liberty", label: "OpenStreetMap · Liberty", provider: "osm",
+        style: "https://tiles.openfreemap.org/styles/liberty", needs_key: false,
+    },
+    Theme {
+        id: "osm-bright", label: "OpenStreetMap · Bright", provider: "osm",
+        style: "https://tiles.openfreemap.org/styles/bright", needs_key: false,
+    },
+    Theme {
+        id: "osm-positron", label: "OpenStreetMap · Positron", provider: "osm",
+        style: "https://tiles.openfreemap.org/styles/positron", needs_key: false,
+    },
+    Theme {
+        id: "mapbox-streets", label: "Mapbox · Calles", provider: "mapbox",
+        style: "mapbox://styles/mapbox/streets-v12", needs_key: true,
+    },
+    Theme {
+        id: "mapbox-dark", label: "Mapbox · Oscuro", provider: "mapbox",
+        style: "mapbox://styles/mapbox/dark-v11", needs_key: true,
+    },
+    Theme {
+        id: "mapbox-satellite", label: "Mapbox · Satélite", provider: "mapbox",
+        style: "mapbox://styles/mapbox/satellite-streets-v12", needs_key: true,
+    },
+];
+
+fn theme_by_id(id: &str) -> Option<&'static Theme> {
+    THEMES.iter().find(|t| t.id == id)
+}
+
+fn current_theme(app: &App) -> Option<&'static Theme> {
+    theme_by_id(&app.store.get_meta("map_theme")?)
+}
 
 type Fail = (StatusCode, String);
 
@@ -23,23 +70,12 @@ fn err(c: StatusCode, m: &str) -> Fail {
     (c, m.to_string())
 }
 
-fn provider(app: &App) -> String {
-    app.store.get_meta("map_provider").unwrap_or_else(|| "none".into())
-}
-
-fn style_url(app: &App) -> String {
-    app.store.get_meta("map_style").unwrap_or_else(|| match provider(app).as_str() {
-        "osm" => OSM_STYLE.to_string(),
-        _ => String::new(),
-    })
-}
-
 /// El botón "Copy Style URL" de Mapbox Studio da `mapbox://styles/usuario/id`,
 /// que es el formato que su documentación pide pegar en sus propios SDKs — no
 /// una dirección real, sino su esquema interno. `reqwest` no sabe resolverlo
-/// ("builder error for url") porque no es HTTP. Es exactamente lo que se
-/// espera que un administrador pegue aquí, así que se traduce en vez de
-/// exigirle que sepa la equivalencia en `https://api.mapbox.com/styles/v1/`.
+/// ("builder error for url") porque no es HTTP. Los temas de Mapbox del
+/// catálogo usan ese mismo formato, así que se traduce aquí en vez de guardar
+/// cada URL dos veces.
 fn resolve_mapbox(url: &str) -> String {
     match url.strip_prefix("mapbox://styles/") {
         Some(rest) => format!("https://api.mapbox.com/styles/v1/{rest}"),
@@ -58,21 +94,36 @@ fn outbound() -> Result<reqwest::Client, Fail> {
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))
 }
 
+/// El catálogo cerrado, para pintar la rejilla de temas. Estático y sin
+/// estado: no hace falta sesión para saber qué existe, pero se exige igual
+/// por la misma regla que el resto de rutas del daemon.
+pub async fn themes(headers: HeaderMap, State(app): State<App>) -> Result<Json<Vec<MapTheme>>, Fail> {
+    require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
+    Ok(Json(
+        THEMES.iter().map(|t| MapTheme { id: t.id.into(), label: t.label.into(), needs_key: t.needs_key }).collect(),
+    ))
+}
+
 /// Qué le contamos al cliente. La clave no está aquí ni por asomo.
 pub async fn config(State(app): State<App>, headers: HeaderMap) -> Result<Json<MapConfig>, Fail> {
     require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
-    let p = provider(&app);
+    let theme = current_theme(&app);
     let has_key = app.store.get_meta("map_key").is_some_and(|k| !k.is_empty());
-    let reason = match p.as_str() {
-        "none" | "" => Some(
-            "nadie ha configurado todavía el proveedor de mapas; pídeselo a tu administrador".into(),
+    let reason = match theme {
+        None => Some(
+            "nadie ha elegido todavía un tema de mapa; pídeselo a tu administrador".into(),
         ),
-        "mapbox" if !has_key => Some(
-            "el proveedor es Mapbox pero no hay clave guardada; pídeselo a tu administrador".into(),
+        Some(t) if t.needs_key && !has_key => Some(
+            "este tema es de Mapbox y no hay clave guardada; pídeselo a tu administrador".into(),
         ),
         _ => None,
     };
-    Ok(Json(MapConfig { provider: p, style_url: style_url(&app), has_key, reason }))
+    Ok(Json(MapConfig {
+        provider: theme.map(|t| t.provider.to_string()).unwrap_or_else(|| "none".into()),
+        theme: theme.map(|t| t.id.to_string()),
+        has_key,
+        reason,
+    }))
 }
 
 /// Reescribe cada fuente del estilo para que apunte a NUESTRA ruta de teselas.
@@ -128,16 +179,14 @@ fn rewrite(mut style: serde_json::Value) -> Result<(serde_json::Value, Option<St
 
 pub async fn style(State(app): State<App>, headers: HeaderMap) -> Result<Json<serde_json::Value>, Fail> {
     require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
-    let url = style_url(&app);
-    if url.is_empty() {
-        return Err(err(StatusCode::SERVICE_UNAVAILABLE, "no hay proveedor de mapas configurado"));
-    }
+    let theme = current_theme(&app)
+        .ok_or_else(|| err(StatusCode::SERVICE_UNAVAILABLE, "no hay tema de mapa elegido"))?;
     let key = app.store.get_meta("map_key").unwrap_or_default();
-    let full = if provider(&app) == "mapbox" {
-        let url = resolve_mapbox(&url);
+    let full = if theme.provider == "mapbox" {
+        let url = resolve_mapbox(theme.style);
         if key.is_empty() { url } else { format!("{url}?access_token={key}") }
     } else {
-        url
+        theme.style.to_string()
     };
     let raw: serde_json::Value = outbound()?
         .get(&full)
@@ -171,8 +220,12 @@ pub async fn tile(
     headers: HeaderMap,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), Fail> {
     require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
-    let p = provider(&app);
-    let cached = app.dir.join("tiles").join(&p).join(z.to_string()).join(x.to_string());
+    let theme = current_theme(&app)
+        .ok_or_else(|| err(StatusCode::SERVICE_UNAVAILABLE, "no hay tema de mapa elegido"))?;
+    // El caché es por proveedor, no por tema: los temas de Mapbox comparten
+    // tileset por defecto salvo que el estilo diga otra cosa (ver `style()`),
+    // y los de OSM comparten siempre la misma fuente vectorial "planet".
+    let cached = app.dir.join("tiles").join(theme.provider).join(z.to_string()).join(x.to_string());
     let file = cached.join(y.to_string());
     let ctype = |b: &[u8]| {
         // Vectoriales son protobuf comprimido; las rasterizadas, PNG.
@@ -190,10 +243,10 @@ pub async fn tile(
     }
 
     let key = app.store.get_meta("map_key").unwrap_or_default();
-    let upstream = match p.as_str() {
+    let upstream = match theme.provider {
         // El tileset real es el que `style()` dejó anotado al reescribir el
-        // estilo. Sin uno guardado (estilo aún no pedido, o de antes de este
-        // cambio) se cae al streets-v8 de siempre.
+        // estilo. Sin uno guardado (estilo aún no pedido) se cae al
+        // streets-v8 de siempre.
         "mapbox" => {
             let tileset = app
                 .store
@@ -202,7 +255,7 @@ pub async fn tile(
             format!("https://api.mapbox.com/v4/{tileset}/{z}/{x}/{y}.vector.pbf?access_token={key}")
         }
         "osm" => format!("https://tiles.openfreemap.org/data/planet/{z}/{x}/{y}.pbf"),
-        _ => return Err(err(StatusCode::SERVICE_UNAVAILABLE, "no hay proveedor de mapas configurado")),
+        _ => return Err(err(StatusCode::SERVICE_UNAVAILABLE, "no hay tema de mapa elegido")),
     };
     let res = outbound()?
         .get(&upstream)
@@ -242,24 +295,18 @@ pub async fn patch_admin(
 ) -> Result<Json<MapConfig>, Fail> {
     require_admin(&app, &bearer(&headers))
         .map_err(|c| (c, "hace falta ser administrador".to_string()))?;
-    if !["mapbox", "osm", "none"].contains(&req.provider.as_str()) {
-        return Err(err(StatusCode::BAD_REQUEST, "el proveedor tiene que ser mapbox, osm o none"));
-    }
+    let theme = theme_by_id(&req.theme)
+        .ok_or_else(|| err(StatusCode::BAD_REQUEST, "ese tema no existe en el catálogo"))?;
     let fail = |e: anyhow::Error| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string());
-    app.store.set_meta("map_provider", &req.provider).map_err(fail)?;
-    let style = req.style_url.unwrap_or_default();
-    let style = if style.trim().is_empty() && req.provider == "osm" { OSM_STYLE.into() } else { style };
-    // Se normaliza al guardar y no solo al leer: así lo que `/v1/map/config`
-    // le enseña a cualquier pantalla de administración ya es la URL real, no
-    // el `mapbox://` que se pegó.
-    let style = if req.provider == "mapbox" { resolve_mapbox(style.trim()) } else { style.trim().to_string() };
-    app.store.set_meta("map_style", &style).map_err(fail)?;
-    // `None` no toca la clave: así se puede cambiar de estilo sin volver a
+    app.store.set_meta("map_theme", theme.id).map_err(fail)?;
+    // `None` no toca la clave: así se puede cambiar de tema sin volver a
     // teclearla, que es justo lo que no se puede hacer si se leyera del campo
-    // enmascarado de la pantalla.
+    // enmascarado de la pantalla. Cambiar de tileset invalida el que estaba
+    // anotado; `style()` vuelve a anotarlo en cuanto el cliente lo pida.
     if let Some(k) = req.key {
         app.store.set_meta("map_key", k.trim()).map_err(fail)?;
     }
-    tracing::info!("proveedor de mapas: {}", req.provider);
+    let _ = app.store.conn().execute("DELETE FROM meta WHERE k = 'map_mapbox_tileset'", []);
+    tracing::info!("tema de mapa: {}", theme.id);
     config(State(app), headers).await
 }

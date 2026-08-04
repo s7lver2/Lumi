@@ -111,6 +111,14 @@ export function MapCanvas({
         center: [0, 20],
         zoom: 1.4,
         attributionControl: { compact: true },
+        // El estilo lo eligió el administrador de un catálogo cerrado de
+        // estilos oficiales de Mapbox/OpenFreeMap, y el daemon ya comprobó su
+        // forma en `rewrite()`. El validador de MapLibre es más estricto que
+        // el propio Mapbox con campos de sus estilos oficiales (rechazaba
+        // `dark-v11` por una propiedad que Mapbox sí reconoce); desactivarlo
+        // aquí es no exigirle a un estilo oficial que pase un examen que su
+        // propio autor no le puso.
+        validateStyle: false,
       });
       // Aparecer con un fundido en vez de un fogonazo de lienzo vacío: el
       // estilo tarda un instante en llegar y ese instante se veía en negro.

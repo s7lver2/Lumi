@@ -107,6 +107,7 @@ export interface ProjectMember {
 export interface Invite {
   project_id: number; project_name: string; invited_by: string; added_at: number;
 }
+export interface UserSummary { id: number; username: string }
 export interface ProjectImage extends Image {
   case_name: string;
 }
@@ -128,9 +129,10 @@ export interface Usage { used_bytes: number; limit_gb: number; overridden: boole
  *  sepa desde el primer render qué puede ofrecer habilitado. */
 export interface Me { username: string; is_admin: boolean; limits: Limits }
 export interface MapConfig {
-  provider: "mapbox" | "osm" | "none"; style_url: string;
+  provider: "mapbox" | "osm" | "none"; theme: string | null;
   has_key: boolean; reason: string | null;
 }
+export interface MapTheme { id: string; label: string; needs_key: boolean }
 
 const call = (method: string, path: string, body: unknown, token?: string, ticket?: string) =>
   invoke<string>("request", {

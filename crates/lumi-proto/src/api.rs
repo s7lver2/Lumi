@@ -307,6 +307,15 @@ pub struct MemberReq {
     pub username: String,
 }
 
+/// Lo que `GET /v1/users/search` sugiere mientras se escribe un nombre para
+/// invitar. Solo el id y el nombre: nada que un investigador no debiera ver
+/// de otra cuenta.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct UserSummary {
+    pub id: i64,
+    pub username: String,
+}
+
 /// Lo que `/v1/me/invites` contesta: una invitación por proyecto, pendiente
 /// de aceptar. Entrar a un proyecto sin haber aceptado no es un descuido que
 /// arreglar en silencio, es un permiso que alguien más no ha dado todavía.
@@ -407,7 +416,9 @@ pub struct AnalysisReq {
 pub struct MapConfig {
     /// `mapbox` | `osm` | `none`
     pub provider: String,
-    pub style_url: String,
+    /// El tema elegido del catálogo (`GET /v1/map/themes`), o `None` si nadie
+    /// ha elegido ninguno todavía.
+    pub theme: Option<String>,
     /// `true` si hay clave guardada. El valor no sale de aquí jamás.
     pub has_key: bool,
     /// Por qué el mapa no está disponible, si no lo está. Nada de lienzo en
@@ -415,10 +426,20 @@ pub struct MapConfig {
     pub reason: Option<String>,
 }
 
+/// Un tema del catálogo cerrado que ofrece `GET /v1/map/themes`. Ya no se
+/// pega una URL de estilo a mano: se elige de esta lista, así que un enlace
+/// mal copiado de Mapbox Studio deja de ser una forma de romper el mapa.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct MapTheme {
+    pub id: String,
+    pub label: String,
+    pub needs_key: bool,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct MapConfigReq {
-    pub provider: String,
-    pub style_url: Option<String>,
+    /// El `id` de uno de los temas de `GET /v1/map/themes`.
+    pub theme: String,
     /// `None` deja la clave como estaba; `Some("")` la borra.
     pub key: Option<String>,
 }

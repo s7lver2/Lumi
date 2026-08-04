@@ -127,10 +127,12 @@ async fn main() -> anyhow::Result<()> {
             "/v1/analyses/:id",
             get(routes::analyses::get_one).delete(routes::analyses::remove),
         )
+        .route("/v1/map/themes", get(routes::map::themes))
         .route("/v1/map/config", get(routes::map::config))
         .route("/v1/map/style", get(routes::map::style))
         .route("/v1/map/tiles/:z/:x/:y", get(routes::map::tile))
-        .route("/v1/admin/map", axum::routing::patch(routes::map::patch_admin));
+        .route("/v1/admin/map", axum::routing::patch(routes::map::patch_admin))
+        .route("/v1/users/search", get(routes::projects::search_users));
 
     #[cfg(debug_assertions)]
     let router = router.route("/v1/analyses/:id/fake", axum::routing::patch(routes::analyses::fake));

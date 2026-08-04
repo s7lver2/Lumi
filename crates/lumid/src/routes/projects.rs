@@ -8,9 +8,10 @@ use crate::projects::{access, Role};
 use crate::routes::access::now;
 use crate::routes::auth::{bearer, require_session};
 use crate::App;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::{http::HeaderMap, http::StatusCode, Json};
-use lumi_proto::api::{Invite, MemberReq, NameReq, Project, ProjectMember};
+use lumi_proto::api::{Invite, MemberReq, NameReq, Project, ProjectMember, UserSummary};
+use std::collections::HashMap;
 
 const MAX_NAME: usize = 80;
 
@@ -238,6 +239,31 @@ pub async fn add_member(
     )
     .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Sugerencias mientras se escribe a quién invitar. Cualquier sesión vale —no
+/// solo el dueño del proyecto— porque en el momento de pedir esto todavía no
+/// se sabe si el nombre pertenece a un proyecto que gestionas; es la misma
+/// búsqueda que usaría cualquiera para comprobar si existe una cuenta con ese
+/// nombre. Solo enseña id y username, nunca nada admin/bloqueado/etc.
+pub async fn search_users(
+    State(app): State<App>, headers: HeaderMap, Query(q): Query<HashMap<String, String>>,
+) -> Result<Json<Vec<UserSummary>>, Fail> {
+    require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
+    let needle = q.get("q").map(|s| s.trim()).unwrap_or("");
+    if needle.is_empty() {
+        return Ok(Json(vec![]));
+    }
+    let c = app.store.conn();
+    let mut stmt = c
+        .prepare("SELECT id, username FROM users WHERE username LIKE ?1 ORDER BY username LIMIT 8")
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    let rows = stmt
+        .query_map([format!("%{needle}%")], |r| Ok(UserSummary { id: r.get(0)?, username: r.get(1)? }))
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
+        .flatten()
+        .collect();
+    Ok(Json(rows))
 }
 
 /// Las invitaciones sin resolver de quien pregunta, en todos sus proyectos.
