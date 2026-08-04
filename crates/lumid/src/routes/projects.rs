@@ -40,15 +40,27 @@ pub async fn list(State(app): State<App>, headers: HeaderMap) -> Result<Json<Vec
     let (uid, _) = require_session(&app, &bearer(&headers))
         .map_err(|c| (c, "sesión inválida".to_string()))?;
     let c = app.store.conn();
+    // Antes esto era una subconsulta correlacionada por proyecto (tres,
+    // de hecho): para cada fila de `projects` volvía a recorrer `images`
+    // entera buscando las suyas por `case_id`, sin ningún índice que
+    // relacione imagen con proyecto directamente. Con unos pocos proyectos
+    // de prueba no se notaba; con las imágenes acumuladas de sesiones
+    // reales, la lista tardaba segundos en cargar. Los `GROUP BY` de abajo
+    // agregan cada tabla en una sola pasada, y el `LEFT JOIN` con `projects`
+    // es lo único que queda por proyecto.
     let mut q = c
         .prepare(
             "SELECT p.id, p.name, m.role, p.created_at, p.updated_at,
-                    (SELECT COUNT(*) FROM cases WHERE project_id = p.id),
-                    (SELECT COUNT(*) FROM images i JOIN cases k ON k.id = i.case_id
-                      WHERE k.project_id = p.id),
-                    (SELECT COALESCE(SUM(i.bytes), 0) FROM images i JOIN cases k ON k.id = i.case_id
-                      WHERE k.project_id = p.id)
-             FROM projects p JOIN project_members m ON m.project_id = p.id
+                    COALESCE(kc.n, 0), COALESCE(ic.n, 0), COALESCE(ic.bytes, 0)
+             FROM projects p
+             JOIN project_members m ON m.project_id = p.id
+             LEFT JOIN (SELECT project_id, COUNT(*) AS n FROM cases GROUP BY project_id) kc
+               ON kc.project_id = p.id
+             LEFT JOIN (
+               SELECT k.project_id AS project_id, COUNT(*) AS n, SUM(i.bytes) AS bytes
+               FROM images i JOIN cases k ON k.id = i.case_id
+               GROUP BY k.project_id
+             ) ic ON ic.project_id = p.id
              WHERE m.user_id = ?1
              ORDER BY p.updated_at DESC",
         )
