@@ -25,6 +25,7 @@ export default function App() {
   const [adminBusy, setAdminBusy] = useState(false);
   const [runtimeDone, setRuntimeDone] = useState(false);
   const hello = useServer((s) => s.hello);
+  const isAdmin = useServer((s) => s.isAdmin);
   const bootstrapToken = useServer((s) => s.bootstrapToken);
   const [status, setStatus] = useState<"ok" | "reboot" | "error" | "sealed" | "lost">("ok");
   const fails = useRef(0);
@@ -142,8 +143,10 @@ export default function App() {
       <PlanetBackground dead={status !== "ok"} />
       {/* Nunca en "entry": una reconexión a medio hacer deja `hello` con
           datos aunque no haya sesión válida, y la franja se veía encima del
-          login sin que hubiera nada real que mostrar todavía. */}
-      {mode !== "entry" && (
+          login sin que hubiera nada real que mostrar todavía. Y solo para
+          admin: CPU, GPU y cola son datos de hardware del servidor, no algo
+          que un investigador normal necesite ver en cada pantalla. */}
+      {mode !== "entry" && isAdmin && (
         <TelemetryStrip collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)}
           notifs={notifs}
           onNotifs={mode === "app" || mode === "admin" ? () => {
