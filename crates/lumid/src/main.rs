@@ -106,6 +106,14 @@ async fn main() -> anyhow::Result<()> {
         )
         .route("/v1/images/:id/thumb", get(routes::images::serve_thumb))
         .route("/v1/me/usage", get(routes::images::my_usage))
+        .route(
+            "/v1/cases/:id/analyses",
+            get(routes::analyses::list).post(routes::analyses::create),
+        )
+        .route(
+            "/v1/analyses/:id",
+            get(routes::analyses::get_one).delete(routes::analyses::remove),
+        )
         .with_state(app);
 
     let port: u16 = std::env::var("LUMI_PORT")

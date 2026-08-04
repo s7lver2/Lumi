@@ -347,3 +347,29 @@ pub struct Usage {
     /// pregunta por qué no le caben más imágenes.
     pub overridden: bool,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Analysis {
+    pub id: i64,
+    pub case_id: i64,
+    pub model: String,
+    /// `pendiente` | `en_curso` | `hecho` | `error`. Este subsistema solo
+    /// escribe `pendiente`: mover de ahí es trabajo de la cola (subsistema 4).
+    pub state: String,
+    pub error: Option<String>,
+    pub result_lat: Option<f64>,
+    pub result_lng: Option<f64>,
+    pub result_radius_m: Option<f64>,
+    pub result_confidence: Option<f64>,
+    /// Siempre una imagen hoy. La lista existe desde el primer día para que la
+    /// cola no haya que rehacerla cuando un análisis agrupe varias tomas.
+    pub image_ids: Vec<i64>,
+    pub created_at: i64,
+    pub finished_at: Option<i64>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AnalysisReq {
+    pub image_ids: Vec<i64>,
+    pub model: String,
+}
