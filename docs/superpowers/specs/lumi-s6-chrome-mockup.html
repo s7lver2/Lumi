@@ -270,7 +270,7 @@
   .stat .mono{font-family:ui-monospace,Menlo,monospace}
 
   /* ---------- casos: filas con portada, no tarjetas ---------- */
-  .caselist{margin-top:14px;display:flex;flex-direction:column;gap:6px;max-width:640px}
+  .caselist{margin-top:14px;display:flex;flex-direction:column;gap:6px;max-width:760px}
   .caserow{
     display:flex;align-items:center;gap:12px;width:100%;text-align:left;cursor:pointer;
     background:none;border:1px solid transparent;border-bottom-color:var(--border);
@@ -278,15 +278,56 @@
     transition:background .3s var(--expo),border-color .3s var(--expo),transform .3s var(--expo);
     animation:cardIn .38s var(--expo) both;
   }
-  .caserow:hover{background:rgba(255,255,255,.035);border-color:rgba(255,255,255,.13);transform:translateX(2px)}
+  /* El abanico se sale de la fila hacia arriba; sin esto lo taparía la de encima. */
+  .caserow{position:relative}
+  .caserow:hover{background:rgba(255,255,255,.035);border-color:rgba(255,255,255,.13);
+    transform:translateX(2px);z-index:2}
+  /* La pila se abre en abanico al pasar por encima: la carpeta enseña lo que
+     lleva dentro sin tener que entrar. */
   .cover{position:relative;width:52px;height:38px;flex:none}
   .cover i{
     position:absolute;inset:0;border-radius:6px;border:1px solid var(--border);
     background:linear-gradient(140deg,#2c323a,#171a1e);
+    transition:transform .42s var(--expo),opacity .42s var(--expo),box-shadow .42s var(--expo);
   }
   .cover i:nth-child(1){transform:translate(5px,-3px) rotate(4deg);background:linear-gradient(140deg,#242930,#15181c);opacity:.6}
   .cover i:nth-child(2){transform:translate(2px,-1px) rotate(-2deg);background:linear-gradient(140deg,#2a3038,#171a1e);opacity:.8}
   .cover i:nth-child(3){background:linear-gradient(140deg,#39414b,#1b1f24)}
+  .caserow:hover .cover i:nth-child(1){
+    transform:translate(17px,-11px) rotate(13deg);opacity:1;box-shadow:0 6px 14px -6px rgba(0,0,0,.8)}
+  .caserow:hover .cover i:nth-child(2){
+    transform:translate(8px,-6px) rotate(6deg);opacity:1;box-shadow:0 5px 12px -6px rgba(0,0,0,.75)}
+  .caserow:hover .cover i:nth-child(3){
+    transform:translate(-2px,2px) rotate(-4deg);box-shadow:0 5px 12px -6px rgba(0,0,0,.7)}
+  .caserow:hover .cover .n{transform:translateY(3px)}
+  .cover .n{transition:transform .42s var(--expo)}
+
+  /* El hueco de la derecha, aprovechado: dónde cayó el caso, no solo sus
+     cifras. La coordenada dice el número; esto lo hace mirable. */
+  .minimap{
+    position:relative;width:74px;height:40px;flex:none;border-radius:7px;overflow:hidden;
+    border:1px solid var(--border);
+    background:radial-gradient(120% 100% at 40% 30%,#1b2027 0%,#0e1013 75%);
+    transition:border-color .42s var(--expo)}
+  .caserow:hover .minimap{border-color:rgba(255,255,255,.18)}
+  .minimap::before{
+    content:"";position:absolute;inset:-30%;
+    background:
+      repeating-linear-gradient(0deg,rgba(255,255,255,.05) 0 1px,transparent 1px 13px),
+      repeating-linear-gradient(90deg,rgba(255,255,255,.05) 0 1px,transparent 1px 13px);
+    transform:rotate(-2deg)}
+  .minimap .land{
+    position:absolute;left:-14%;top:34%;width:76%;height:76%;
+    border-radius:48% 52% 40% 60%/56% 44% 58% 42%;
+    background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.06)}
+  .minimap .pin{
+    position:absolute;width:5px;height:5px;border-radius:50%;background:var(--fg);
+    transform:translate(-50%,-50%);box-shadow:0 0 0 0 rgba(242,243,245,.5);
+    animation:pinPulse 3s var(--expo) infinite}
+  @keyframes pinPulse{0%{box-shadow:0 0 0 0 rgba(242,243,245,.45)}
+    70%{box-shadow:0 0 0 7px rgba(242,243,245,0)}100%{box-shadow:0 0 0 0 rgba(242,243,245,0)}}
+  .minimap.empty{opacity:.35}
+  .minimap.empty .pin{display:none}
   .cover .n{
     position:absolute;right:-5px;bottom:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;
     background:var(--elevated);border:1px solid var(--border);color:var(--muted);
@@ -629,24 +670,28 @@
                 <span class="cname">Muelle 7</span>
                 <span class="prog"><span class="track"><i style="width:75%"></i></span><span class="lab">9/12</span></span>
                 <span class="coord">43.362, −8.411</span>
+                <span class="minimap"><span class="land"></span><span class="pin" style="left:52%;top:44%"></span></span>
               </button>
               <button class="caserow" data-go="case" style="animation-delay:40ms">
                 <span class="cover"><i></i><i></i><i></i><span class="n">31</span></span>
                 <span class="cname">Faro</span>
                 <span class="prog"><span class="track"><i style="width:90%"></i></span><span class="lab">28/31</span></span>
                 <span class="coord">43.386, −8.396</span>
+                <span class="minimap"><span class="land" style="left:8%;top:20%"></span><span class="pin" style="left:38%;top:34%"></span></span>
               </button>
               <button class="caserow" data-go="empty" style="animation-delay:80ms">
                 <span class="cover" style="opacity:.4"><i></i></span>
                 <span class="cname">Cala nueva</span>
                 <span class="prog"><span class="track"><i style="width:0"></i></span><span class="lab">0/0</span></span>
                 <span class="coord none">sin situar</span>
+                <span class="minimap empty"><span class="land"></span></span>
               </button>
               <button class="caserow" data-go="case" style="animation-delay:120ms">
                 <span class="cover"><i></i><i></i><i></i><span class="n">18</span></span>
                 <span class="cname">Astillero</span>
                 <span class="prog"><span class="track"><i style="width:61%"></i></span><span class="lab">11/18</span></span>
                 <span class="coord">43.341, −8.428</span>
+                <span class="minimap"><span class="land" style="left:-6%;top:46%"></span><span class="pin" style="left:64%;top:60%"></span></span>
               </button>
               <button class="caserow new" style="animation-delay:160ms">+</button>
             </div>
@@ -947,8 +992,10 @@
       <p>
         Un caso <i>es</i> sus fotos y su punto en el mapa; una rejilla de tarjetas de texto, igual que
         la de proyectos, no enseña ninguna de las dos. Cada fila lleva la pila de miniaturas con el
-        número encima, una barra de resueltas sobre el total y la coordenada. Un caso sin situar lo
-        dice en gris, y se distingue de un vistazo.
+        número encima, una barra de resueltas sobre el total y la coordenada. Al pasar por encima la
+        pila se abre en abanico: la carpeta enseña lo que lleva dentro sin tener que entrar. El hueco
+        de la derecha lo ocupa un mini-mapa con el punto del caso — la coordenada dice el número, el
+        mini-mapa lo hace mirable. Un caso sin situar apaga el mapa y lo dice en gris.
       </p>
     </div>
     <div class="note-card">
