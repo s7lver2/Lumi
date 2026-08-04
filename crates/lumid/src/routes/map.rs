@@ -76,11 +76,42 @@ fn err(c: StatusCode, m: &str) -> Fail {
 /// ("builder error for url") porque no es HTTP. Los temas de Mapbox del
 /// catálogo usan ese mismo formato, así que se traduce aquí en vez de guardar
 /// cada URL dos veces.
+///
+/// Dentro de un estilo aparecen otras dos variantes del mismo esquema, las de
+/// las tipografías y los iconos, y se traducen igual.
 fn resolve_mapbox(url: &str) -> String {
-    match url.strip_prefix("mapbox://styles/") {
-        Some(rest) => format!("https://api.mapbox.com/styles/v1/{rest}"),
-        None => url.to_string(),
+    if let Some(rest) = url.strip_prefix("mapbox://styles/") {
+        return format!("https://api.mapbox.com/styles/v1/{rest}");
     }
+    if let Some(rest) = url.strip_prefix("mapbox://fonts/") {
+        return format!("https://api.mapbox.com/fonts/v1/{rest}");
+    }
+    // `mapbox://sprites/usuario/estilo` es el estilo más `/sprite`; el cliente
+    // le pega después `.json`, `.png` o `@2x`.
+    if let Some(rest) = url.strip_prefix("mapbox://sprites/") {
+        return format!("https://api.mapbox.com/styles/v1/{rest}/sprite");
+    }
+    url.to_string()
+}
+
+/// Lo que `rewrite()` encontró dentro del estilo y `style()` tiene que
+/// recordar: sin esto, las rutas de teselas, tipografías e iconos no sabrían a
+/// qué dirección del proveedor van.
+#[derive(Default)]
+struct Upstreams {
+    tileset: Option<String>,
+    glyphs: Option<String>,
+    sprite: Option<String>,
+}
+
+/// Añade la clave a una URL del proveedor. Se hace aquí y no al guardar para
+/// que la clave no acabe escrita en `meta` dos veces ni en un log.
+fn with_key(url: &str, key: &str) -> String {
+    if key.is_empty() || !url.starts_with("https://api.mapbox.com") {
+        return url.to_string();
+    }
+    let sep = if url.contains('?') { '&' } else { '?' };
+    format!("{url}{sep}access_token={key}")
 }
 
 /// Cliente HTTP hacia el proveedor. Se construye por llamada: son peticiones
@@ -131,19 +162,19 @@ pub async fn config(State(app): State<App>, headers: HeaderMap) -> Result<Json<M
 /// Devuelve `Err` si el JSON no tiene la forma esperada. Es deliberado: fallar
 /// ruidosamente es la única alternativa aceptable a servir el estilo crudo.
 ///
-/// El segundo elemento del resultado es el tileset de Mapbox que haya
-/// encontrado (si alguno), para que `style()` lo recuerde y `tile()` sepa
-/// contra qué tileset pedir cada pieza — un estilo hecho en Mapbox Studio casi
-/// nunca trae `tiles` a secas, trae `"url": "mapbox://…"` señalando un
-/// TileJSON compuesto, y ESE identificador es justo lo que la API de teselas
-/// v4 de Mapbox acepta tal cual, sin tener que resolver el TileJSON aparte.
-fn rewrite(mut style: serde_json::Value) -> Result<(serde_json::Value, Option<String>), String> {
+/// El segundo elemento del resultado son las direcciones del proveedor que hay
+/// que recordar. La del tileset de Mapbox es para que `tile()` sepa contra qué
+/// tileset pedir cada pieza — un estilo hecho en Mapbox Studio casi nunca trae
+/// `tiles` a secas, trae `"url": "mapbox://…"` señalando un TileJSON
+/// compuesto, y ESE identificador es justo lo que la API de teselas v4 de
+/// Mapbox acepta tal cual, sin tener que resolver el TileJSON aparte.
+fn rewrite(mut style: serde_json::Value) -> Result<(serde_json::Value, Upstreams), String> {
     let sources = style
         .get_mut("sources")
         .and_then(|s| s.as_object_mut())
         .ok_or("el estilo no trae un objeto `sources`")?;
     let mut tocadas = 0;
-    let mut tileset = None;
+    let mut up = Upstreams::default();
     for (name, src) in sources.iter_mut() {
         let Some(obj) = src.as_object_mut() else { continue };
         if let Some(u) = obj.get("url").and_then(|v| v.as_str()).map(str::to_string) {
@@ -152,7 +183,7 @@ fn rewrite(mut style: serde_json::Value) -> Result<(serde_json::Value, Option<St
                     "la fuente `{name}` usa `url` pero no es un tileset de Mapbox ({u}); este proxy no sabe resolver TileJSON de otros proveedores"
                 ));
             };
-            tileset = Some(id.to_string());
+            up.tileset = Some(id.to_string());
             obj.remove("url");
             obj.insert("tiles".into(), serde_json::json!(["/v1/map/tiles/{z}/{x}/{y}"]));
             tocadas += 1;
@@ -168,13 +199,30 @@ fn rewrite(mut style: serde_json::Value) -> Result<(serde_json::Value, Option<St
     if tocadas == 0 {
         return Err("el estilo no tiene ninguna fuente de teselas que reescribir".into());
     }
-    // `sprite` y `glyphs` apuntan al proveedor y también llevarían la clave.
-    // Se quitan: MapLibre dibuja sin iconos ni etiquetas antes que filtrarla.
-    if let Some(o) = style.as_object_mut() {
-        o.remove("sprite");
-        o.remove("glyphs");
+    // `sprite` y `glyphs` apuntan al proveedor y también llevarían la clave,
+    // así que tampoco pueden servirse tal cual. Antes se quitaban, y MapLibre
+    // no dibuja un estilo sin tipografías: en cuanto una capa de símbolos pide
+    // texto, aborta con "glyphsUrl is not set" y no se pinta NADA, ni siquiera
+    // las capas que no llevan letras. Se reescriben igual que las teselas: el
+    // cliente pide nuestras rutas y el servidor pone la clave.
+    let o = style.as_object_mut().ok_or("el estilo no es un objeto")?;
+    up.glyphs = o.get("glyphs").and_then(|v| v.as_str()).map(resolve_mapbox);
+    up.sprite = o.get("sprite").and_then(|v| v.as_str()).map(resolve_mapbox);
+    match up.glyphs {
+        // El `{fontstack}` y el `{range}` los rellena MapLibre antes de pedir.
+        Some(_) => { o.insert("glyphs".into(), serde_json::json!("/v1/map/glyphs/{fontstack}/{range}")); }
+        // Sin tipografías no hay estilo que dibujar; mejor decirlo aquí que
+        // dejar que MapLibre lo descubra con el lienzo ya montado.
+        None => return Err("el estilo no declara `glyphs`".into()),
     }
-    Ok((style, tileset))
+    // Los iconos sí son prescindibles: sin ellos se pierden los pictogramas,
+    // no el mapa. `base` es solo una raíz a la que el cliente le pega `.json`,
+    // `.png` o `@2x`, que es como MapLibre construye estas peticiones.
+    match up.sprite {
+        Some(_) => { o.insert("sprite".into(), serde_json::json!("/v1/map/sprite/base")); }
+        None => { o.remove("sprite"); }
+    }
+    Ok((style, up))
 }
 
 pub async fn style(State(app): State<App>, headers: HeaderMap) -> Result<Json<serde_json::Value>, Fail> {
@@ -182,12 +230,7 @@ pub async fn style(State(app): State<App>, headers: HeaderMap) -> Result<Json<se
     let theme = current_theme(&app)
         .ok_or_else(|| err(StatusCode::SERVICE_UNAVAILABLE, "no hay tema de mapa elegido"))?;
     let key = app.store.get_meta("map_key").unwrap_or_default();
-    let full = if theme.provider == "mapbox" {
-        let url = resolve_mapbox(theme.style);
-        if key.is_empty() { url } else { format!("{url}?access_token={key}") }
-    } else {
-        theme.style.to_string()
-    };
+    let full = with_key(&resolve_mapbox(theme.style), &key);
     let raw: serde_json::Value = outbound()?
         .get(&full)
         .send()
@@ -196,7 +239,7 @@ pub async fn style(State(app): State<App>, headers: HeaderMap) -> Result<Json<se
         .json()
         .await
         .map_err(|e| err(StatusCode::BAD_GATEWAY, &format!("el estilo del proveedor no es JSON: {e}")))?;
-    let (fixed, tileset) = rewrite(raw).map_err(|e| {
+    let (fixed, up) = rewrite(raw).map_err(|e| {
         err(
             StatusCode::BAD_GATEWAY,
             &format!("no se pudo reescribir el estilo y servirlo crudo filtraría la clave: {e}"),
@@ -204,9 +247,17 @@ pub async fn style(State(app): State<App>, headers: HeaderMap) -> Result<Json<se
     })?;
     // Se recuerda para que `tile()` pida ESTE tileset y no el genérico por
     // defecto: un estilo compuesto (varios tilesets Mapbox separados por
-    // comas) es indistinguible del sencillo si no se guarda cuál era.
-    if let Some(t) = tileset {
+    // comas) es indistinguible del sencillo si no se guarda cuál era. Lo mismo
+    // vale para tipografías e iconos: sus rutas solo aparecen dentro del
+    // estilo, y quien las pide después es el cliente, no `style()`.
+    if let Some(t) = up.tileset {
         let _ = app.store.set_meta("map_mapbox_tileset", &t);
+    }
+    if let Some(g) = up.glyphs {
+        let _ = app.store.set_meta("map_glyphs", &g);
+    }
+    if let Some(s) = up.sprite {
+        let _ = app.store.set_meta("map_sprite", &s);
     }
     Ok(Json(fixed))
 }
@@ -286,6 +337,84 @@ pub async fn tile(
     ))
 }
 
+/// Descarga del proveedor y devuelve, con el tipo y el caché ya puestos. Las
+/// tipografías y los iconos son los mismos para todos y no cambian nunca; se
+/// dejan cachear en el webview un año, igual que las teselas.
+async fn passthrough(url: &str, ctype: &str) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), Fail> {
+    let res = outbound()?
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| err(StatusCode::BAD_GATEWAY, &format!("el proveedor no respondió: {e}")))?;
+    if !res.status().is_success() {
+        let code = res.status();
+        let cuerpo = res.text().await.unwrap_or_default();
+        return Err(err(StatusCode::BAD_GATEWAY, &format!("el proveedor devolvió {code}: {cuerpo}")));
+    }
+    let bytes = res.bytes().await.map_err(|e| err(StatusCode::BAD_GATEWAY, &e.to_string()))?.to_vec();
+    Ok((
+        [
+            (axum::http::header::CONTENT_TYPE, ctype.to_string()),
+            (axum::http::header::CACHE_CONTROL, "private, max-age=31536000".into()),
+        ],
+        bytes,
+    ))
+}
+
+/// Nada de lo que llegue por la URL puede escaparse del hueco que le toca
+/// dentro de la dirección del proveedor. Con `..` o una barra, un cliente
+/// pediría otra ruta de la API de Mapbox — con NUESTRA clave puesta.
+fn safe_segment(s: &str) -> Result<(), Fail> {
+    if s.is_empty() || s.contains('/') || s.contains('\\') || s.contains("..") || s.contains('?') {
+        return Err(err(StatusCode::BAD_REQUEST, "segmento no válido"));
+    }
+    Ok(())
+}
+
+/// Tipografías. La plantilla la dejó anotada `style()`; aquí solo se rellenan
+/// sus dos huecos y se pone la clave.
+pub async fn glyphs(
+    State(app): State<App>,
+    Path((fontstack, range)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), Fail> {
+    require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
+    safe_segment(&fontstack)?;
+    safe_segment(&range)?;
+    let tpl = app.store.get_meta("map_glyphs").ok_or_else(|| {
+        err(StatusCode::SERVICE_UNAVAILABLE, "todavía no se ha pedido el estilo, así que no se sabe de dónde salen las tipografías")
+    })?;
+    let key = app.store.get_meta("map_key").unwrap_or_default();
+    // Los nombres de fuente llevan espacios ("Noto Sans Regular") y el
+    // proveedor los quiere codificados; las comas que separan la pila, no.
+    let url = tpl
+        .replace("{fontstack}", &fontstack.replace(' ', "%20"))
+        .replace("{range}", &range);
+    passthrough(&with_key(&url, &key), "application/x-protobuf").await
+}
+
+/// Iconos. MapLibre pide `base.json`, `base.png` y sus variantes `@2x` a
+/// partir de la raíz que dejamos en el estilo, así que lo único variable es el
+/// sufijo — y se acepta solo de esa lista, no lo que llegue.
+pub async fn sprite(
+    State(app): State<App>,
+    Path(file): Path<String>,
+    headers: HeaderMap,
+) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), Fail> {
+    require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
+    let sufijo = file
+        .strip_prefix("base")
+        .filter(|s| matches!(*s, ".json" | ".png" | "@2x.json" | "@2x.png"))
+        .ok_or_else(|| err(StatusCode::BAD_REQUEST, "ese icono no existe"))?;
+    let base = app
+        .store
+        .get_meta("map_sprite")
+        .ok_or_else(|| err(StatusCode::SERVICE_UNAVAILABLE, "este tema no trae iconos"))?;
+    let key = app.store.get_meta("map_key").unwrap_or_default();
+    let ctype = if sufijo.ends_with(".png") { "image/png" } else { "application/json" };
+    passthrough(&with_key(&format!("{base}{sufijo}"), &key), ctype).await
+}
+
 /// Provisional en su interfaz, no en su ruta: el subsistema 3 rehace la
 /// pantalla y se queda esta API.
 pub async fn patch_admin(
@@ -306,7 +435,10 @@ pub async fn patch_admin(
     if let Some(k) = req.key {
         app.store.set_meta("map_key", k.trim()).map_err(fail)?;
     }
-    let _ = app.store.conn().execute("DELETE FROM meta WHERE k = 'map_mapbox_tileset'", []);
+    let _ = app.store.conn().execute(
+        "DELETE FROM meta WHERE k IN ('map_mapbox_tileset', 'map_glyphs', 'map_sprite')",
+        [],
+    );
     tracing::info!("tema de mapa: {}", theme.id);
     config(State(app), headers).await
 }
