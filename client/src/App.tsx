@@ -7,7 +7,6 @@ import { PairStep } from "./wizard/PairStep";
 import { AdminStep } from "./wizard/AdminStep";
 import { ProvisionStep } from "./wizard/ProvisionStep";
 import { TelemetryStrip } from "./ui/TelemetryStrip";
-import { Bell } from "./ui/Bell";
 import { StatusOverlay } from "./ui/StatusOverlay";
 import { EntryScreen } from "./entry/EntryScreen";
 import { AdminPanel } from "./admin/AdminPanel";
@@ -15,7 +14,7 @@ import { ConnectionBanner } from "./ui/ConnectionBanner";
 import { DebugOrb } from "./dev/DebugOrb";
 import { useServer } from "./lib/store";
 import { useWorkspace } from "./lib/workspace";
-import { api, type Hello, type Sample } from "./lib/api";
+import { api, type Hello, type Me, type Sample } from "./lib/api";
 import { setAuth } from "./lib/bridge";
 import { loadSession, updateSession } from "./lib/session";
 import { ProjectPicker } from "./work/ProjectPicker";
@@ -80,15 +79,20 @@ export default function App() {
         }
         if (session.token) {
           try {
-            const me = await api.get<{ username: string; is_admin: boolean }>("/v1/auth/me", session.token);
+            const me = await api.get<Me>("/v1/auth/me", session.token);
             useServer.getState().setToken(session.token);
             setAuth(session.token);
-            useServer.getState().setUser(me.username, me.is_admin);
+            useServer.getState().setUser(me.username, me.is_admin, me.limits);
             await invoke("start_telemetry", { token: session.token });
             // El aprovisionamiento sigue siendo cosa del owner: si el servidor
             // no está listo del todo, se vuelve al wizard donde se dejó.
+            //
+            // Fuera de ese caso, TODO el mundo aterriza en el selector de
+            // proyectos, también el administrador: administrar es una tarea
+            // más, no un modo de vida. Antes entraba directo al panel y la
+            // aplicación de verdad le quedaba escondida detrás de "Cerrar".
             if (me.is_admin && h.state !== "ready") { setStep(2); setMode("wizard"); }
-            else setMode(me.is_admin ? "admin" : "picker");
+            else setMode("picker");
             return;
           } catch {
             // 403 (cambio pendiente) o token caducado: la entrada lo resuelve.
@@ -149,6 +153,20 @@ export default function App() {
     await api.post("/v1/unseal", { passphrase });
   }
 
+  /** Salir a mano. Es el mismo desmontaje que hace la expulsión por
+   *  desconexión, y por eso vive en un solo sitio: dejar el token del puente
+   *  nativo puesto tras cerrar sesión sería dejar abierta la puerta de las
+   *  imágenes. */
+  function signOut() {
+    updateSession({ token: undefined });
+    useServer.getState().setToken(null);
+    useServer.getState().setUser("", false, null);
+    setAuth(null);
+    useWorkspace.getState().clear();
+    setMembers(false);
+    setMode("entry");
+  }
+
   const blockedByDisconnect = status !== "ok" &&
     (mode === "picker" || mode === "project" || mode === "case" || mode === "admin");
 
@@ -163,18 +181,12 @@ export default function App() {
       {mode !== "entry" && isAdmin && (
         <TelemetryStrip collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)}
           notifs={notifs}
-          onNotifs={mode === "picker" || mode === "project" || mode === "case" || mode === "admin" ? () => {
-            setNotifs(0);
-            setMode(useServer.getState().isAdmin ? "admin" : "picker");
-          } : undefined} />
-      )}
-      {/* Sin franja para un investigador normal (isAdmin es falso), pero la
-          campana no depende del hardware del servidor: vive aparte, flotante,
-          para que la aprobación siga llegando sin diálogo que interrumpa. */}
-      {mode !== "entry" && !isAdmin && (
-        <div className="absolute right-3 top-2.5 z-30">
-          <Bell count={notifs} onClick={() => { setNotifs(0); setMode("picker"); }} />
-        </div>
+          // La campana avisa de solicitudes de acceso pendientes, que solo un
+          // administrador puede resolver, y solo se resuelven en su panel. Un
+          // investigador normal no tiene ninguna notificación que recibir en
+          // este subsistema: la suya llevaba al selector de proyectos, que no
+          // es una notificación, es un sitio al azar.
+          onNotifs={mode !== "wizard" ? () => { setNotifs(0); setMode("admin"); } : undefined} />
       )}
       {/* Para app/admin, la desconexión es un banner + bloqueo, no una
           pantalla completa: la sesión de un usuario normal no tiene un
@@ -186,7 +198,10 @@ export default function App() {
       {/* El wizard se centra en el espacio que deja la franja, en vez de
           colgar de arriba dejando media pantalla vacía. */}
       <div className={`relative flex flex-1 overflow-hidden ${
-        mode === "project" || mode === "case" ? "" : "items-center justify-center overflow-y-auto"
+        // El selector de proyectos también ocupa la ventana entera desde el
+        // rediseño: centrarlo lo dejaba flotando con dos paneles a media asta.
+        mode === "project" || mode === "case" || mode === "picker"
+          ? "" : "items-center justify-center overflow-y-auto"
       } ${blockedByDisconnect ? "pointer-events-none opacity-50" : ""}`}>
       {resuming ? null : status !== "ok" && !blockedByDisconnect && mode !== "entry" ? (
         // Sustituye al wizard en el mismo hueco: no es una capa flotante
@@ -234,45 +249,40 @@ export default function App() {
           {step === 2 && <ProvisionStep onDone={() => setMode("picker")} onStatusChange={setRuntimeDone} />}
         </Wizard>
       ) : mode === "picker" ? (
-        <ProjectPicker onOpen={(p) => {
-          useWorkspace.getState().setProject(p);
-          setMode("project");
-        }} />
-      ) : mode === "project" || mode === "case" ? (
+        <ProjectPicker
+          onOpen={(p) => { useWorkspace.getState().setProject(p); setMode("project"); }}
+          onAdmin={() => setMode("admin")}
+          onSignOut={signOut} />
+      ) : (
         (() => {
           const { project, case_ } = useWorkspace.getState();
           if (!project) { setMode("picker"); return null; }
+          const toProjects = () => { useWorkspace.getState().clear(); setMode("picker"); };
           const rail = (
-            <Rail canManage={project.role === "owner"}
-              onProjects={() => { useWorkspace.getState().clear(); setMode("picker"); }}
-              onMembers={() => setMembers(true)} />
+            <Rail active={members ? "members" : "cases"}
+              canManage={project.role === "owner"} isAdmin={isAdmin}
+              onCases={() => {
+                setMembers(false);
+                if (mode === "case") { useWorkspace.getState().setCase(null); setMode("project"); }
+              }}
+              onMembers={() => setMembers(true)}
+              onAdmin={() => setMode("admin")}
+              onLeave={toProjects} />
           );
           return (
             <>
               {mode === "case" && case_ ? (
                 <CaseView project={project} case_={case_} rail={rail}
+                  onProjects={toProjects}
                   onBack={() => { useWorkspace.getState().setCase(null); setMode("project"); }} />
               ) : (
-                <ProjectView project={project} rail={rail}
+                <ProjectView project={project} rail={rail} onProjects={toProjects}
                   onOpenCase={(c) => { useWorkspace.getState().setCase(c); setMode("case"); }} />
               )}
               {members && <MembersDialog project={project} onClose={() => setMembers(false)} />}
             </>
           );
         })()
-      ) : (
-        <div className="text-xs text-muted">
-          <p>Sesión iniciada como {useServer.getState().username}.</p>
-          {/* Sin esto, un admin que pulsaba "Cerrar" en su propio panel se
-              quedaba aquí sin ninguna forma visible de volver: la única
-              salida era la campana de la franja, que no es obvia. */}
-          {useServer.getState().isAdmin && (
-            <button onClick={() => setMode("admin")}
-              className="mt-3 rounded-lg border border-white/15 px-4 py-2 text-xs text-fg active:translate-y-px">
-              Volver al panel de administración
-            </button>
-          )}
-        </div>
       )}
       </div>
       {import.meta.env.DEV && <DebugOrb />}

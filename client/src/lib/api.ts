@@ -117,6 +117,9 @@ export interface Analysis {
   image_ids: number[]; created_at: number; finished_at: number | null;
 }
 export interface Usage { used_bytes: number; limit_gb: number; overridden: boolean }
+/** Lo que `/v1/auth/me` contesta. Los límites vienen aquí para que la interfaz
+ *  sepa desde el primer render qué puede ofrecer habilitado. */
+export interface Me { username: string; is_admin: boolean; limits: Limits }
 export interface MapConfig {
   provider: "mapbox" | "osm" | "none"; style_url: string;
   has_key: boolean; reason: string | null;

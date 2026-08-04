@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, type LoginRes } from "../lib/api";
+import { api, type LoginRes, type Me } from "../lib/api";
 import { setAuth } from "../lib/bridge";
 import { deviceId, deviceName, updateSession, type Server } from "../lib/session";
 import { useServer } from "../lib/store";
@@ -34,7 +34,14 @@ export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMu
       useServer.getState().setUser(res.username, res.is_admin);
       useServer.getState().setAddr(server.addr);
       updateSession({ addr: server.addr, fingerprint: server.fingerprint, token: res.token, username: res.username });
-      if (res.must_change_password) onMustChange(); else onSignedIn();
+      if (res.must_change_password) { onMustChange(); return; }
+      // El login no trae los límites, y la primera pantalla ya los necesita
+      // para saber si ofrecer "nuevo proyecto". Con un cambio de contraseña
+      // pendiente esta ruta contesta 403 a propósito, así que solo se pide
+      // cuando la sesión está completa.
+      const me = await api.get<Me>("/v1/auth/me", res.token);
+      useServer.getState().setUser(me.username, me.is_admin, me.limits);
+      onSignedIn();
     } catch (e) {
       setError(String(e));
     } finally {

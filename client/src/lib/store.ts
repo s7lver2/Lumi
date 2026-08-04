@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Hello, Sample } from "./api";
+import type { Hello, Limits, Sample } from "./api";
 
 interface ServerState {
   key: string; hello: Hello | null; token: string | null; sample: Sample | null;
@@ -10,23 +10,26 @@ interface ServerState {
   addr: string;
   username: string;
   isAdmin: boolean;
+  /** Los límites efectivos de quien ha entrado. `null` hasta que `/v1/auth/me`
+   *  conteste: la interfaz distingue "todavía no lo sé" de "no puede". */
+  limits: Limits | null;
   setKey: (k: string) => void;
   setHello: (h: Hello | null) => void;
   setToken: (t: string | null) => void;
   setSample: (s: Sample | null) => void;
   setBootstrapToken: (t: string) => void;
   setAddr: (a: string) => void;
-  setUser: (username: string, isAdmin: boolean) => void;
+  setUser: (username: string, isAdmin: boolean, limits?: Limits | null) => void;
 }
 
 export const useServer = create<ServerState>((set) => ({
   key: "", hello: null, token: null, sample: null, bootstrapToken: "", addr: "",
-  username: "", isAdmin: false,
+  username: "", isAdmin: false, limits: null,
   setKey: (key) => set({ key }),
   setHello: (hello) => set({ hello }),
   setToken: (token) => set({ token }),
   setSample: (sample) => set({ sample }),
   setBootstrapToken: (bootstrapToken) => set({ bootstrapToken }),
   setAddr: (addr) => set({ addr }),
-  setUser: (username, isAdmin) => set({ username, isAdmin }),
+  setUser: (username, isAdmin, limits = null) => set({ username, isAdmin, limits }),
 }));

@@ -3,6 +3,8 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { api, type MapConfig } from "../lib/api";
 import { lumiUrl } from "../lib/bridge";
+import { useServer } from "../lib/store";
+import { Icon } from "../ui/Icon";
 
 export interface Marker {
   id: string;
@@ -57,11 +59,18 @@ export function MapCanvas({
   const map = useRef<maplibregl.Map | null>(null);
   const placed = useRef<maplibregl.Marker[]>([]);
   const [reason, setReason] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+  // `/v1/map/config` exige sesión como todas las rutas del daemon. Iba sin
+  // token, así que el mapa contestaba siempre "sesión inválida" y el lienzo
+  // no llegaba ni a construirse: no era un problema del proveedor, era esta
+  // llamada. Las teselas y el estilo sí iban firmados, porque van por el
+  // puente nativo `lumi://`, que lleva el token en su propio estado.
+  const token = useServer((s) => s.token) ?? undefined;
 
   useEffect(() => {
     let dead = false;
     (async () => {
-      const cfg = await api.get<MapConfig>("/v1/map/config").catch((e) => {
+      const cfg = await api.get<MapConfig>("/v1/map/config", token).catch((e) => {
         setReason(String(e));
         return null;
       });
@@ -82,6 +91,16 @@ export function MapCanvas({
         zoom: 1.4,
         attributionControl: { compact: true },
       });
+      // Aparecer con un fundido en vez de un fogonazo de lienzo vacío: el
+      // estilo tarda un instante en llegar y ese instante se veía en negro.
+      m.once("load", () => setReady(true));
+      // MapLibre avisa aquí de un estilo o unas teselas que no cargan. Sin
+      // esto el mapa se quedaba en negro sin decir nada, que es justo lo que
+      // este subsistema se prohíbe.
+      m.on("error", (e) => {
+        const msg = (e as { error?: { message?: string } }).error?.message;
+        if (msg) setReason(`el mapa no se pudo cargar: ${msg}`);
+      });
       map.current = m;
     })();
     return () => {
@@ -89,7 +108,7 @@ export function MapCanvas({
       map.current?.remove();
       map.current = null;
     };
-  }, []);
+  }, [token]);
 
   // Los círculos de confianza van como polígono geográfico y no como
   // `circle-radius` en píxeles: el radio está en metros y tiene que seguir
@@ -146,10 +165,26 @@ export function MapCanvas({
 
   if (reason) {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-surface px-10 text-center">
-        <p className="max-w-sm text-xs leading-relaxed text-muted">{reason}</p>
+      <div className="absolute inset-0 flex items-center justify-center px-10 text-center"
+        style={{ background: "radial-gradient(120% 90% at 50% 35%, #16191d 0%, #0e0f11 70%)" }}>
+        <div className="max-w-[300px]" style={{ animation: "jg-fade-rise 320ms cubic-bezier(.16,1,.3,1) both" }}>
+          <span className="mx-auto mb-3 grid h-10 w-10 place-items-center rounded-[11px] border border-white/15 text-subtle">
+            <Icon name="globe" size={17} />
+          </span>
+          <p className="text-[12.5px] text-fg">No hay mapa que dibujar</p>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-muted">{reason}</p>
+        </div>
       </div>
     );
   }
-  return <div ref={box} className="absolute inset-0" />;
+  return (
+    <>
+      <div ref={box} className="absolute inset-0 transition-opacity duration-700 ease-expo"
+        style={{ opacity: ready ? 1 : 0 }} />
+      {!ready && (
+        <div className="pointer-events-none absolute inset-0"
+          style={{ background: "radial-gradient(120% 90% at 50% 35%, #16191d 0%, #0e0f11 70%)" }} />
+      )}
+    </>
+  );
 }

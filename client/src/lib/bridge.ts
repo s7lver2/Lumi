@@ -23,12 +23,15 @@ export async function uploadPaths(caseId: number, paths: string[]): Promise<Imag
   return JSON.parse(raw) as Image[];
 }
 
-/** Selector de archivos del sistema. Devuelve rutas, nunca bytes. */
-export async function pickAndUpload(caseId: number): Promise<Image[]> {
+/** Selector de archivos del sistema. Devuelve rutas, nunca bytes, y no sube
+ *  nada: quien llama decide qué hacer con ellas. Antes esto subía por su
+ *  cuenta, y por eso no había hueco donde enseñar lo elegido ni elegir modelo
+ *  antes de lanzar. */
+export async function pickPaths(): Promise<string[]> {
   const sel = await open({
     multiple: true,
     filters: [{ name: "Imágenes", extensions: ["jpg", "jpeg", "png", "webp"] }],
   });
   if (!sel) return [];
-  return uploadPaths(caseId, Array.isArray(sel) ? sel : [sel]);
+  return Array.isArray(sel) ? sel : [sel];
 }

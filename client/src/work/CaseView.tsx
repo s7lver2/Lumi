@@ -1,47 +1,121 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { api, type Analysis, type Case, type Image, type Project } from "../lib/api";
-import { lumiUrl, pickAndUpload, uploadPaths } from "../lib/bridge";
+import { api, type Analysis, type Case, type Image, type Project, type Usage } from "../lib/api";
+import { pickPaths, uploadPaths } from "../lib/bridge";
 import { useServer } from "../lib/store";
+import { useDismissable } from "../lib/useDismissable";
+import { DropFrame, DropTarget } from "./DropTarget";
 import { Filmstrip } from "./Filmstrip";
 import { MapCanvas, type Marker } from "./MapCanvas";
 import { ResultCard } from "./ResultCard";
+import { ResultsSidebar } from "./ResultsSidebar";
 import { SummaryBar } from "./SummaryBar";
+import { TopBar } from "./TopBar";
+import { UploadPopup } from "./UploadPopup";
+
+const SIDEBAR = 250;
+const GB = 1024 * 1024 * 1024;
 
 export function CaseView({
-  project, case_, rail, onBack,
-}: { project: Project; case_: Case; rail: React.ReactNode; onBack: () => void }) {
+  project, case_, rail, onBack, onProjects,
+}: {
+  project: Project; case_: Case; rail: React.ReactNode;
+  onBack: () => void; onProjects: () => void;
+}) {
   const token = useServer((s) => s.token) ?? undefined;
-  const [images, setImages] = useState<Image[]>([]);
+  const models = useServer((s) => s.limits?.models) ?? [];
+  const [images, setImages] = useState<Image[] | null>(null);
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
+  const [usage, setUsage] = useState<Usage | null>(null);
   const [sel, setSel] = useState<number | null>(null);
+  const [selAnalysis, setSelAnalysis] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  /** Las imágenes que el popup tiene delante. `null` = popup cerrado. */
+  const [staged, setStaged] = useState<number[] | null>(null);
+  const popup = useDismissable(staged !== null, 180);
 
   async function load() {
     try {
-      const [im, an] = await Promise.all([
+      const [im, an, u] = await Promise.all([
         api.get<Image[]>(`/v1/cases/${case_.id}/images`, token),
         api.get<Analysis[]>(`/v1/cases/${case_.id}/analyses`, token),
+        api.get<Usage>("/v1/me/usage", token),
       ]);
       setImages(im);
       setAnalyses(an);
-      setSel((s) => s ?? im[0]?.id ?? null);
+      setUsage(u);
+      setSel((s) => (s !== null && im.some((x) => x.id === s) ? s : im[0]?.id ?? null));
     } catch (e) {
       setError(String(e));
     }
   }
   useEffect(() => { void load(); }, [case_.id]);
 
-  async function add(paths?: string[]) {
+  const list = images ?? [];
+
+  /** Sube y deja las nuevas delante del popup, en vez de mandarlas al fondo de
+   *  la tira sin decir nada. Si el popup ya estaba abierto, se acumulan. */
+  async function add(paths: string[]) {
+    if (paths.length === 0) return;
     setBusy(true);
     setError(null);
     try {
-      const nuevas = paths ? await uploadPaths(case_.id, paths) : await pickAndUpload(case_.id);
+      const nuevas = await uploadPaths(case_.id, paths);
       if (nuevas.length) {
-        setImages((v) => [...v, ...nuevas]);
-        setSel((s) => s ?? nuevas[0].id);
+        setImages((v) => [...(v ?? []), ...nuevas]);
+        setSel(nuevas[0].id);
+        setStaged((s) => [...(s ?? []), ...nuevas.map((n) => n.id)]);
       }
+      // La cuota consumida cambia con cada subida, y el destino de arrastre la
+      // enseña: releerla aquí evita que diga una cifra vieja.
+      api.get<Usage>("/v1/me/usage", token).then(setUsage).catch(() => {});
+    } catch (e) {
+      setError(String(e));
+      // Con el popup ya abierto el error se lee dentro; si no, hay que abrirlo
+      // para que no se pierda en un rincón.
+      if (staged === null) setStaged([]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function pick() {
+    try {
+      await add(await pickPaths());
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  // Soltar imágenes sobre la ventana, como en la v1. Tauri entrega rutas, no
+  // bytes, así que va por el mismo camino que el selector de archivos. Los
+  // eventos `enter`/`leave` son lo que da la señal visual: sin ellos, arrastrar
+  // sobre un caso con imágenes no parecía que fuera a servir de nada.
+  useEffect(() => {
+    const un = getCurrentWebview().onDragDropEvent((e) => {
+      if (e.payload.type === "over" || e.payload.type === "enter") setDragging(true);
+      else if (e.payload.type === "leave") setDragging(false);
+      else if (e.payload.type === "drop") {
+        setDragging(false);
+        void add(e.payload.paths);
+      }
+    });
+    return () => { void un.then((f) => f()); };
+  }, [case_.id, staged]);
+
+  async function discard(id: number) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.del(`/v1/images/${id}`, token);
+      setImages((v) => (v ?? []).filter((im) => im.id !== id));
+      setStaged((s) => {
+        const next = (s ?? []).filter((x) => x !== id);
+        return next.length ? next : null;
+      });
+      setSel((s) => (s === id ? null : s));
     } catch (e) {
       setError(String(e));
     } finally {
@@ -49,21 +123,43 @@ export function CaseView({
     }
   }
 
-  // Soltar imágenes sobre el mapa, como en la v1. Tauri entrega rutas, no
-  // bytes, así que va por el mismo camino que el selector de archivos.
-  useEffect(() => {
-    const un = getCurrentWebview().onDragDropEvent((e) => {
-      if (e.payload.type === "drop") void add(e.payload.paths);
-    });
-    return () => { void un.then((f) => f()); };
-  }, [case_.id]);
+  /** Un análisis por imagen: el motor todavía no sabe cruzar varias, y
+   *  prometerlo aquí sería mentir (ver FUTURO.md). */
+  async function analyze(model: string, ids: number[]) {
+    if (ids.length === 0) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const nuevos: Analysis[] = [];
+      for (const id of ids) {
+        nuevos.push(await api.post<Analysis>(
+          `/v1/cases/${case_.id}/analyses`, { image_ids: [id], model }, token,
+        ));
+      }
+      setAnalyses((v) => [...nuevos, ...v]);
+      setStaged(null);
+      setSel(ids[0]);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
-  const image = images.find((i) => i.id === sel) ?? null;
+  const image = list.find((i) => i.id === sel) ?? null;
   const mine = useMemo(
     () => (sel === null ? [] : analyses.filter((a) => a.image_ids.includes(sel))),
     [analyses, sel],
   );
-  const top = mine.find((a) => a.state === "hecho") ?? mine[0] ?? null;
+  // El primero hecho manda; si no hay ninguno, el más reciente, para que la
+  // tarjeta pueda decir "en cola" en vez de no decir nada.
+  const shown = useMemo(
+    () => mine.find((a) => a.id === selAnalysis) ?? mine.find((a) => a.state === "hecho") ?? mine[0] ?? null,
+    [mine, selAnalysis],
+  );
+  // La barra lateral solo existe cuando hay algo que enseñar, como en la v1.
+  // Sin resultados ni EXIF, el mapa se queda entero.
+  const hasResults = mine.length > 0 || (image?.exif_lat != null && image.exif_lng != null);
 
   const markers: Marker[] = useMemo(() => {
     const out: Marker[] = [];
@@ -71,7 +167,7 @@ export function CaseView({
       if (a.result_lat != null && a.result_lng != null) {
         out.push({
           id: `a${a.id}`, lat: a.result_lat, lng: a.result_lng, label: String(i + 1),
-          kind: i === 0 ? "top" : "alt", radiusM: a.result_radius_m ?? undefined,
+          kind: a.id === shown?.id ? "top" : "alt", radiusM: a.result_radius_m ?? undefined,
         });
       }
     });
@@ -80,110 +176,105 @@ export function CaseView({
       out.push({ id: "exif", lat: image.exif_lat, lng: image.exif_lng, label: "E", kind: "exif" });
     }
     return out;
-  }, [mine, image]);
+  }, [mine, image, shown]);
 
   const flyTo = useMemo(
     () =>
-      top?.result_lat != null && top.result_lng != null
-        ? { lat: top.result_lat, lng: top.result_lng, zoom: 13 }
+      shown?.result_lat != null && shown.result_lng != null
+        ? { lat: shown.result_lat, lng: shown.result_lng, zoom: 13 }
         : image?.exif_lat != null && image.exif_lng != null
           ? { lat: image.exif_lat, lng: image.exif_lng, zoom: 13 }
           : null,
-    [top, image],
+    [shown, image],
   );
 
-  async function analyze() {
-    if (sel === null) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const a = await api.post<Analysis>(
-        `/v1/cases/${case_.id}/analyses`, { image_ids: [sel], model: "mini" }, token,
-      );
-      setAnalyses((v) => [a, ...v]);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const free = usage ? usage.limit_gb * GB - usage.used_bytes : null;
+  // Depende de `images` y no de `list`, que es un array nuevo en cada render.
+  const stagedImages = useMemo(
+    () => (staged ?? [])
+      .map((id) => (images ?? []).find((im) => im.id === id))
+      .filter((x): x is Image => !!x),
+    [staged, images],
+  );
+  // El popup sobrevive a su propio cierre 180 ms para poder animarse, y en ese
+  // rato `staged` ya es null: hay que quedarse con la última lista no vacía.
+  const lastStaged = useRef<Image[]>([]);
+  if (stagedImages.length > 0) lastStaged.current = stagedImages;
 
   return (
-    <div className="relative h-full w-full">
-      <MapCanvas markers={markers} flyTo={flyTo} />
+    <div className="relative h-full w-full"
+      style={{ animation: "jg-page-fade-in 260ms cubic-bezier(.16,1,.3,1) both" }}>
+      <MapCanvas markers={markers} flyTo={flyTo} onMarker={(id) => {
+        if (id.startsWith("a")) setSelAnalysis(Number(id.slice(1)));
+      }} />
       {rail}
 
-      <div className="absolute left-[50px] top-[34px] z-30 flex items-center gap-1.5 text-[11px]">
-        <button onClick={onBack} className="text-subtle hover:text-fg">{project.name}</button>
-        <span className="text-[#3a3e44]">/</span>
-        <span className="text-fg">{case_.name}</span>
-      </div>
+      <TopBar
+        crumbs={[
+          { label: "Proyectos", onClick: onProjects },
+          { label: project.name, onClick: onBack },
+          { label: case_.name },
+        ]}
+        right={
+          <span className="font-mono text-[10px] text-subtle">
+            {list.length} {list.length === 1 ? "imagen" : "imágenes"} · {analyses.length}{" "}
+            {analyses.length === 1 ? "análisis" : "análisis"}
+          </span>
+        } />
 
-      <ResultCard analysis={top} image={image} />
-      <Filmstrip images={images} selected={sel} onSelect={setSel} onAdd={() => void add()} />
+      {dragging && <DropFrame />}
 
-      <aside className="absolute inset-y-0 right-0 z-20 w-[196px] overflow-y-auto border-l border-white/[.06] bg-[rgba(16,18,21,.9)] p-2.5 backdrop-blur-xl">
-        {image && (
-          <div className="mb-2.5 flex items-center gap-2">
-            <img src={lumiUrl(`/v1/images/${image.id}/thumb`)} alt=""
-              className="h-[30px] w-[38px] shrink-0 rounded object-cover" />
-            <span className="truncate font-mono text-[10px] text-muted">{image.filename}</span>
-          </div>
-        )}
-        <p className="mb-2 text-[8px] uppercase tracking-[.11em] text-subtle">
-          Caso · {images.length} imágenes, {analyses.length} análisis
-        </p>
+      {images !== null && list.length === 0 ? (
+        <DropTarget dragging={dragging} busy={busy} freeBytes={free} onPick={() => void pick()} />
+      ) : (
+        <>
+          <ResultCard analysis={shown} image={image} offset={hasResults ? SIDEBAR : 0} />
+          <Filmstrip images={list} selected={sel} shifted={hasResults}
+            onSelect={(id) => { setSel(id); setSelAnalysis(null); }}
+            onAdd={() => void pick()} />
+          {hasResults ? (
+            <ResultsSidebar image={image} analyses={mine} selected={shown?.id ?? null}
+              onSelect={setSelAnalysis} busy={busy}
+              onAnalyze={() => (sel !== null ? setStaged([sel]) : void pick())} />
+          ) : (
+            // Sin barra lateral no habría ninguna puerta para lanzar el
+            // análisis de una imagen que ya está en el caso: el «+» de la tira
+            // abre el selector de archivos, no el popup. Este botón es esa
+            // puerta, y vive junto a la miniatura que va a analizar.
+            sel !== null && (
+              <button onClick={() => setStaged([sel])} disabled={busy}
+                style={{ animation: "jg-fade-rise 240ms cubic-bezier(.16,1,.3,1) both" }}
+                className="jg-press absolute bottom-[58px] right-4 z-20 rounded-lg bg-accent
+                  px-4 py-2 text-[11.5px] font-medium text-black disabled:opacity-40">
+                {busy ? "Un momento…" : "Analizar esta imagen"}
+              </button>
+            )
+          )}
+          <SummaryBar analysis={shown} rightInset={hasResults ? SIDEBAR : 0} />
+        </>
+      )}
 
-        {mine.map((a, i) => (
-          <div key={a.id} className="mb-1.5 rounded-lg border border-white/[.07] p-2">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[9px] text-subtle">{i + 1}</span>
-              <span className="flex-1 truncate text-[11.5px] text-fg">{a.model}</span>
-              <span className="rounded border border-border px-1 text-[8.5px] text-subtle">
-                {a.state === "hecho" ? "sin verificar" : a.state}
-              </span>
-            </div>
-            {a.state === "hecho" ? (
-              <p className="mt-1 font-mono text-[10px] text-muted">
-                {a.result_lat!.toFixed(6)}, {a.result_lng!.toFixed(6)}
-              </p>
-            ) : (
-              <p className="mt-1 font-mono text-[10px] text-subtle">
-                {a.state === "error" ? a.error : "esperando al motor de inferencia"}
-              </p>
-            )}
-          </div>
-        ))}
+      {/* El error de fuera del popup necesita su propio sitio: si no, un fallo
+          al soltar imágenes en un caso lleno no se vería en ninguna parte. */}
+      {error !== null && staged === null && (
+        <div className="absolute bottom-3 left-1/2 z-30 flex max-w-[420px] -translate-x-1/2 items-start gap-2
+          rounded-lg border border-danger/40 bg-[rgba(24,18,18,.94)] px-3 py-2 backdrop-blur"
+          style={{ animation: "jg-toast-in 240ms cubic-bezier(.16,1,.3,1) both" }}>
+          <p className="text-[10.5px] leading-snug text-danger-fg">{error}</p>
+          <button onClick={() => setError(null)} className="jg-press shrink-0 text-subtle hover:text-fg">✕</button>
+        </div>
+      )}
 
-        {/* El EXIF declarado tiene tarjeta propia y borde ámbar: no es una
-            candidata, es lo que la cámara dice. */}
-        {image?.exif_lat != null && image.exif_lng != null && (
-          <div className="mb-1.5 rounded-lg border border-warning/30 p-2">
-            <p className="text-[11.5px] text-warning-fg">EXIF declarado</p>
-            <p className="mt-1 font-mono text-[10px] text-muted">
-              {image.exif_lat.toFixed(6)}, {image.exif_lng.toFixed(6)}
-            </p>
-          </div>
-        )}
-
-        {/* Los widgets auxiliares de la v1 siguen ahí, bloqueados y diciendo
-            el motivo real en vez de un candado: una función no disponible se
-            muestra deshabilitada, nunca se oculta. */}
-        {["Hora estimada", "Clima", "Objetos detectados"].map((t) => (
-          <div key={t} className="mb-1.5 rounded-lg border border-white/[.07] p-2 opacity-60">
-            <p className="text-[11.5px] text-subtle">{t}</p>
-            <p className="mt-1 font-mono text-[10px] text-subtle">modelo no instalado</p>
-          </div>
-        ))}
-
-        <button onClick={analyze} disabled={sel === null || busy}
-          className="mt-2 w-full rounded-lg bg-accent px-3 py-1.5 text-[11px] font-medium text-black transition-transform duration-300 ease-expo active:translate-y-px disabled:opacity-40">
-          {busy ? "Un momento" : "Analizar esta imagen"}
-        </button>
-        {error && <p className="mt-2 text-[10.5px] leading-snug text-danger-fg">{error}</p>}
-      </aside>
-
-      <SummaryBar analysis={top} />
+      {popup.rendered && (
+        <UploadPopup
+          images={stagedImages.length > 0 ? stagedImages : lastStaged.current}
+          caseName={case_.name} models={models} closing={popup.closing}
+          busy={busy} error={error}
+          onAddMore={() => void pick()}
+          onDiscard={(id) => void discard(id)}
+          onAnalyze={(m) => void analyze(m, staged ?? [])}
+          onClose={() => { setStaged(null); setError(null); }} />
+      )}
     </div>
   );
 }

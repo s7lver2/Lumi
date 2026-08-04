@@ -60,9 +60,30 @@ body { background: #0e0f11; color: #e8e8e6; overflow: hidden; }
   78%  { transform: rotate(224deg) translateY(-260px) translate(-96px, 150px); opacity: .5; }
   100% { transform: rotate(224deg) translateY(-260px) translate(-150px, 250px); opacity: 0; }
 }
+/* Entradas y salidas. La v1 las tenía en globals.css y son la mitad de por qué
+   se sentía acabada: nada aparece ni desaparece de golpe. Mismos nombres y
+   mismas curvas, para que un componente portado de la v1 siga cuadrando. */
+@keyframes jg-popup-scale-in  { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+@keyframes jg-popup-scale-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(.96); } }
+@keyframes jg-backdrop-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes jg-backdrop-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes jg-page-fade-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes jg-toast-in { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes jg-slide-left { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes jg-slide-right { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes lumi-shimmer { 0% { transform: translateX(-140%); } 100% { transform: translateX(360%); } }
 @keyframes jg-sweep { to { transform: rotate(360deg) } }
 @keyframes jg-core-pulse {
   0%, 100% { opacity: .55; transform: scale(1) }
   50%      { opacity: 1;   transform: scale(1.2) }
 }
 @media (prefers-reduced-motion: reduce) { .lumi-anim { animation: none !important; } }
+
+/* Un botón que no responde al dedo se siente muerto. Esto es el mismo gesto
+   que la v1 aplicaba a mano en cada botón, aquí una sola vez. */
+.jg-press { transition: transform .18s cubic-bezier(.16,1,.3,1), opacity .18s, border-color .3s cubic-bezier(.16,1,.3,1), background-color .3s cubic-bezier(.16,1,.3,1), color .3s cubic-bezier(.16,1,.3,1); }
+.jg-press:hover:not(:disabled) { transform: scale(1.025); }
+.jg-press:active:not(:disabled) { transform: scale(.955); }
+@media (prefers-reduced-motion: reduce) {
+  .jg-press:hover:not(:disabled), .jg-press:active:not(:disabled) { transform: none; }
+}

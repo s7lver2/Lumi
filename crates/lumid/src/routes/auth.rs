@@ -254,7 +254,17 @@ pub async fn me(
         .conn()
         .query_row("SELECT username FROM users WHERE id = ?1", [uid], |r| r.get(0))
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
-    Ok(Json(serde_json::json!({ "username": username, "is_admin": is_admin })))
+    // Los límites viajan aquí y no en una ruta aparte porque el cliente los
+    // necesita en el mismo momento que el nombre: qué modelos puede pedir y si
+    // puede crear proyectos decide qué se dibuja habilitado nada más entrar.
+    // Sin esto, la interfaz ofrecía crear un proyecto y el servidor contestaba
+    // 403 después: el motivo se sabía demasiado tarde.
+    let limits = crate::limits::effective(&app.store, uid);
+    Ok(Json(serde_json::json!({
+        "username": username,
+        "is_admin": is_admin,
+        "limits": limits,
+    })))
 }
 
 #[cfg(test)]
