@@ -40,6 +40,21 @@ const PATHS: Record<string, React.JSX.Element> = {
       <path d="M13.7 21a2 2 0 0 1-3.4 0" />
     </>
   ),
+  logo: <path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z" />,
+  layers: (
+    <>
+      <path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z" />
+      <path d="M3 12l9 4.5 9-4.5" />
+      <path d="M3 17l9 4.5 9-4.5" />
+    </>
+  ),
+  users: (
+    <>
+      <path d="M16 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20" />
+      <circle cx="9" cy="7" r="3.5" />
+      <path d="M22 20v-1.5a4 4 0 0 0-3-3.87M16 3.6a4 4 0 0 1 0 7.75" />
+    </>
+  ),
 };
 
 /** El candado es aparte: su arco se anima al abrirse. */
