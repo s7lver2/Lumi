@@ -192,6 +192,38 @@
   .thumb.on{border-color:var(--fg);box-shadow:0 0 0 1px var(--fg)}
   .thumb.add{display:grid;place-items:center;color:var(--subtle);background:none;border-style:dashed}
   .thumb.add:hover{color:var(--fg)}
+
+  /* Reordenar arrastrando. El orden de la tira es el orden del informe, así
+     que colocarlas a mano no es un capricho: es parte del relato del caso. */
+  .thumb[draggable="true"]{cursor:grab}
+  .thumb.dragging{opacity:.4;transform:scale(.9) rotate(-4deg);cursor:grabbing;
+    box-shadow:0 10px 22px -8px rgba(0,0,0,.8)}
+  .thumbs .slot{
+    width:0;height:38px;flex:none;border-radius:8px;background:rgba(255,255,255,.16);
+    transition:width .22s var(--expo)}
+  .thumbs .slot.on{width:3px}
+  .uprow{transition:opacity .25s var(--expo),transform .25s var(--expo)}
+  .uprow.dragging{opacity:.4;transform:scale(.985)}
+  .grip{
+    width:12px;flex:none;display:grid;grid-template-columns:3px 3px;gap:2px;justify-content:center;
+    cursor:grab;opacity:.35;transition:opacity .3s var(--expo)}
+  .uprow:hover .grip{opacity:.8}
+  .grip span{width:3px;height:3px;border-radius:50%;background:var(--muted)}
+
+  /* Arrastrar ficheros sobre la ventana: el marco de la v1, con más aire. */
+  .dropframe{
+    position:absolute;inset:8px;z-index:36;display:none;place-items:center;
+    border:1.5px dashed rgba(255,255,255,.34);border-radius:12px;
+    background:rgba(10,12,14,.42);backdrop-filter:blur(3px);
+    animation:frameIn .26s var(--expo) both;
+  }
+  .dropframe.on{display:grid}
+  @keyframes frameIn{from{opacity:0;transform:scale(1.015)}to{opacity:1;transform:none}}
+  .dropframe .txt{font-size:12.5px;color:var(--fg)}
+  .dropframe .halo2{
+    position:absolute;width:150px;height:150px;border-radius:50%;
+    border:1px solid rgba(255,255,255,.14);animation:breathe 2.2s var(--expo) infinite}
+  @keyframes breathe{0%,100%{transform:scale(.94);opacity:.5}50%{transform:scale(1.06);opacity:.9}}
   .summary{display:flex;flex-direction:column;gap:2px;min-width:0;margin-left:4px}
   .summary .l1{font-size:11.5px;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .summary .l2{font-size:10px;color:var(--subtle)}
@@ -235,6 +267,31 @@
   .k{font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:var(--subtle)}
   .v{font-size:11.5px;color:var(--fg)}
 
+  /* ---------- menú contextual ---------- */
+  .ctx{
+    position:absolute;z-index:80;min-width:186px;padding:5px;display:none;
+    border:1px solid rgba(255,255,255,.12);border-radius:11px;
+    background:rgba(20,22,26,.97);backdrop-filter:blur(18px);
+    box-shadow:0 22px 48px -14px rgba(0,0,0,.75);
+    animation:ctxIn .16s var(--expo) both;
+  }
+  .ctx.on{display:block}
+  @keyframes ctxIn{from{opacity:0;transform:scale(.96) translateY(-4px)}to{opacity:1;transform:none}}
+  .ctx .hd{font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:var(--subtle);
+    padding:4px 8px 6px}
+  .ctx button{
+    display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+    background:none;border:0;color:var(--muted);font:inherit;font-size:11.5px;
+    padding:6px 8px;border-radius:7px;cursor:pointer;
+    transition:background .2s var(--expo),color .2s var(--expo);
+  }
+  .ctx button:hover{background:rgba(255,255,255,.06);color:var(--fg)}
+  .ctx button.danger:hover{background:rgba(163,51,51,.18);color:var(--danger-fg)}
+  .ctx button .kb{margin-left:auto;font:10px ui-monospace,Menlo,monospace;color:#4a4d52}
+  .ctx .sep{height:1px;background:var(--border);margin:4px 6px}
+  .ctx button[disabled]{opacity:.35;cursor:default}
+  .ctx button[disabled]:hover{background:none;color:var(--muted)}
+
   /* ---------- popovers ---------- */
   .pop{
     position:absolute;z-index:60;border:1px solid rgba(255,255,255,.12);border-radius:12px;
@@ -261,7 +318,34 @@
   /* ---------- listas de proyecto/caso ---------- */
   .list{position:absolute;inset:0;overflow:auto;padding:22px 26px}
   .list h2{font-size:16px;font-weight:600;letter-spacing:-.01em}
+  .listhead{display:flex;align-items:center;gap:10px}
+  .views{display:flex;gap:2px;padding:2px;border:1px solid var(--border);border-radius:8px;
+    background:var(--surface);margin-left:auto}
+  .views button{
+    width:26px;height:22px;display:grid;place-items:center;border:0;border-radius:6px;
+    background:none;color:var(--subtle);cursor:pointer;
+    transition:background .3s var(--expo),color .3s var(--expo)}
+  .views button:hover{color:var(--fg)}
+  .views button[aria-pressed="true"]{background:rgba(255,255,255,.07);color:var(--fg)}
+
   .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:10px;margin-top:16px}
+
+  /* Vista lista: la misma tarjeta tumbada. Nada de un componente aparte. */
+  .cards.rows{display:flex;flex-direction:column;gap:6px;max-width:760px}
+  .cards.rows .card{display:flex;align-items:center;gap:14px;padding:10px 12px;border-radius:10px}
+  .cards.rows .card .name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cards.rows .card .stats{margin-top:0}
+  .cards.rows .card.new{min-height:0;padding:9px}
+
+  /* Vista compacta: una línea por proyecto, para quien tiene cuarenta. */
+  .cards.dense{display:flex;flex-direction:column;gap:0;max-width:660px}
+  .cards.dense .card{
+    display:flex;align-items:center;gap:14px;padding:6px 10px;border:0;
+    border-bottom:1px solid var(--border);border-radius:0;background:none}
+  .cards.dense .card:hover{transform:none;background:rgba(255,255,255,.035)}
+  .cards.dense .card .name{flex:1;min-width:0;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cards.dense .card .stats{margin-top:0;gap:14px;font-size:10px}
+  .cards.dense .card.new{justify-content:center;border-bottom:0;padding:8px}
 
   /* Cifras como iconos: cuatro palabras menos por tarjeta. */
   .stats{display:flex;gap:12px;margin-top:8px;color:var(--subtle);font-size:10.5px;align-items:center}
@@ -353,6 +437,10 @@
   .card .meta{font-size:10.5px;color:var(--subtle);margin-top:5px}
   .card.new{border-style:dashed;display:grid;place-items:center;min-height:82px;color:var(--subtle)}
   .card.new:hover{color:var(--fg)}
+  .card.dragging,.caserow.dragging{
+    opacity:.42;transform:scale(.97) rotate(-1deg);cursor:grabbing;
+    box-shadow:0 14px 30px -12px rgba(0,0,0,.85)}
+  .card[draggable="true"],.caserow[draggable="true"]{cursor:grab}
 
   /* ---------- comparador: tu foto contra la del índice ---------- */
   .cmp{
@@ -463,10 +551,27 @@
   /* ---------- estado vacío ---------- */
   .empty{position:absolute;inset:0;display:grid;place-items:center;padding:0 0 var(--dock)}
   .drop{
-    width:400px;border:1px dashed rgba(255,255,255,.16);border-radius:14px;padding:26px;text-align:center;
-    background:rgba(18,20,23,.55);transition:border-color .35s var(--expo),background .35s var(--expo);
+    position:relative;width:400px;border:1px dashed rgba(255,255,255,.16);border-radius:14px;
+    padding:26px;text-align:center;background:rgba(18,20,23,.55);
+    transition:border-color .35s var(--expo),background .35s var(--expo),transform .35s var(--expo);
   }
-  .drop:hover{border-color:rgba(255,255,255,.3);background:rgba(22,25,29,.7)}
+  .drop:hover{border-color:rgba(255,255,255,.3);background:rgba(22,25,29,.7);transform:translateY(-2px)}
+  /* El toque: la bandeja respira despacio en vez de quedarse muerta. */
+  .tray{width:46px;height:34px;margin:0 auto 12px;position:relative}
+  .tray i{
+    position:absolute;inset:0;border-radius:7px;border:1px solid rgba(255,255,255,.14);
+    background:linear-gradient(140deg,#2c323a,#171a1e);
+    animation:float 3.6s var(--expo) infinite}
+  .tray i:nth-child(1){animation-delay:0s;opacity:.45}
+  .tray i:nth-child(2){animation-delay:.28s;opacity:.7}
+  .tray i:nth-child(3){animation-delay:.56s}
+  @keyframes float{
+    0%,100%{transform:translateY(0) rotate(0)}
+    50%{transform:translateY(-5px) rotate(-3deg)}}
+  .drop:hover .tray i:nth-child(1){transform:translate(-13px,-8px) rotate(-11deg)}
+  .drop:hover .tray i:nth-child(2){transform:translate(0,-11px)}
+  .drop:hover .tray i:nth-child(3){transform:translate(13px,-8px) rotate(11deg)}
+  .drop:hover .tray i{animation:none;transition:transform .45s var(--expo)}
   .drop .big{font-size:13px}
   .drop .small{font-size:11px;color:var(--subtle);margin-top:5px}
   .tabs{display:flex;gap:4px;justify-content:center;margin-top:14px}
@@ -507,7 +612,8 @@
       <button id="roleAdmin" aria-pressed="true">Como administrador</button>
       <button id="roleUser" aria-pressed="false">Como investigador</button>
     </div>
-    <span class="hint">Esc cierra los popovers</span>
+    <button class="ghost" id="simDrop" style="padding:6px 11px">Simular arrastre de ficheros</button>
+    <span class="hint">arrastra para reordenar · botón derecho para el menú · Esc cierra</span>
   </div>
 
   <!-- iconos, una sola vez -->
@@ -616,8 +722,28 @@
         <!-- ---- Proyectos ---- -->
         <section class="screen on" data-s="picker">
           <div class="list">
-            <h2>Proyectos</h2>
-            <div class="cards">
+            <div class="listhead">
+              <h2>Proyectos</h2>
+              <div class="views" id="views">
+                <button data-view="grid" aria-pressed="true" title="Rejilla">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+                    <rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/>
+                    <rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/>
+                  </svg>
+                </button>
+                <button data-view="rows" aria-pressed="false" title="Lista">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+                    <rect x="2" y="3" width="12" height="4" rx="1"/><rect x="2" y="9" width="12" height="4" rx="1"/>
+                  </svg>
+                </button>
+                <button data-view="dense" aria-pressed="false" title="Compacta">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+                    <path d="M2 4h12M2 8h12M2 12h12"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="cards" id="cards">
               <div class="card" data-go="project" style="animation-delay:0ms">
                 <div class="name">Costa norte</div>
                 <div class="stats">
@@ -664,7 +790,7 @@
             <h2>Costa norte</h2>
             <!-- Un caso ES sus fotos y su punto en el mapa; una tarjeta de
                  texto como la de proyectos no enseña ninguna de las dos. -->
-            <div class="caselist">
+            <div class="caselist" id="caselist">
               <button class="caserow" data-go="case" style="animation-delay:0ms">
                 <span class="cover"><i></i><i></i><i></i><span class="n">12</span></span>
                 <span class="cname">Muelle 7</span>
@@ -701,8 +827,13 @@
         <!-- ---- Caso vacío ---- -->
         <section class="screen" data-s="empty">
           <div class="map"></div>
+          <div class="dropframe" data-frame>
+            <span class="halo2"></span>
+            <span class="txt">Suelta para añadirlas a «Cala nueva»</span>
+          </div>
           <div class="empty">
             <div class="drop">
+              <div class="tray"><i></i><i></i><i></i></div>
               <div class="big">Suelta imágenes aquí</div>
               <div class="tabs">
                 <button aria-pressed="true">Del disco</button>
@@ -725,6 +856,10 @@
 
         <!-- ---- Caso con resultados ---- -->
         <section class="screen" data-s="case">
+          <div class="dropframe" data-frame>
+            <span class="halo2"></span>
+            <span class="txt">Suelta para añadirlas a «Muelle 7»</span>
+          </div>
           <div class="map">
             <div class="landmass" style="left:12%;top:26%;width:34%;height:38%"></div>
             <div class="landmass" style="left:58%;top:48%;width:30%;height:34%"></div>
@@ -774,12 +909,12 @@
           </aside>
 
           <div class="dock shift" id="dock">
-            <div class="thumbs">
-              <div class="thumb on"></div>
-              <div class="thumb"></div>
-              <div class="thumb"></div>
-              <div class="thumb"></div>
-              <div class="thumb add">+</div>
+            <div class="thumbs" id="strip">
+              <div class="thumb on" title="Arrastra para reordenar"></div>
+              <div class="thumb" title="Arrastra para reordenar"></div>
+              <div class="thumb" title="Arrastra para reordenar"></div>
+              <div class="thumb" title="Arrastra para reordenar"></div>
+              <div class="thumb add" data-upload>+</div>
             </div>
             <div class="summary">
               <div class="l1">IMG_4417.jpg · 43.3621, −8.4115</div>
@@ -891,8 +1026,9 @@
         </div>
 
         <p class="upcount">2 imágenes seleccionadas</p>
-        <div class="uplist">
+        <div class="uplist" id="uplist">
           <div class="uprow">
+            <span class="grip" title="Arrastra para reordenar"><span></span><span></span><span></span><span></span><span></span><span></span></span>
             <span class="ph"></span>
             <span style="flex:1;min-width:0"><span class="fn">IMG_4417.jpg</span><div class="sz">2,4 MB · 4032×3024</div></span>
             <span class="gpschip">GPS en EXIF</span>
@@ -901,6 +1037,7 @@
             </button>
           </div>
           <div class="uprow">
+            <span class="grip" title="Arrastra para reordenar"><span></span><span></span><span></span><span></span><span></span><span></span></span>
             <span class="ph"></span>
             <span style="flex:1;min-width:0"><span class="fn">IMG_4418.jpg</span><div class="sz">2,1 MB · 4032×3024</div></span>
             <button class="iconbtn" style="width:20px" aria-label="Quitar">
@@ -937,6 +1074,8 @@
           </div>
         </div>
       </div>
+
+      <div class="ctx" id="ctx"></div>
 
       <div class="relaunch" id="relaunch"><button id="btnRelaunch">Volver a abrir</button></div>
     </div>
@@ -1018,6 +1157,53 @@
       </p>
     </div>
     <div class="note-card">
+      <span class="tag">orden</span>
+      <h3>Colocar las imágenes a mano</h3>
+      <p>
+        Las miniaturas de la tira se agarran y se sueltan donde quieras; la que arrastras se inclina
+        y se atenúa, y las demás abren hueco a su paso. El «+» se queda siempre al final. El mismo
+        gesto vale en la lista del popup, con un asa de puntos a la izquierda de cada fila. No es
+        un capricho: el orden de la tira es el orden del informe.
+      </p>
+      <p style="margin-top:8px">
+        El mismo arrastre está en proyectos y en casos. En rejilla se lee en dos ejes —se entra por
+        el lado izquierdo o derecho de la tarjeta más cercana—; en lista, en uno solo. «Nuevo» se
+        queda siempre al final, y soltar no abre lo que acabas de colocar.
+      </p>
+    </div>
+    <div class="note-card">
+      <span class="tag">vistas</span>
+      <h3>Proyectos, en tres formas</h3>
+      <p>
+        Rejilla para pocos proyectos con espacio, lista para verlos con sus cifras en línea, y
+        compacta para quien tiene cuarenta y solo quiere el nombre. Es la misma tarjeta en las tres:
+        cambian el flujo y el relleno, no el componente. El conmutador va a la derecha del título,
+        con iconos y sin etiquetas.
+      </p>
+    </div>
+    <div class="note-card">
+      <span class="tag">subida</span>
+      <h3>El método de siempre, con un toque</h3>
+      <p>
+        Nada cambia de cómo se suben: soltar sobre la ventana, el selector del sistema, o coger fotos
+        que ya están en el proyecto. Lo que se añade es la respuesta — la bandeja de la zona vacía
+        respira despacio y abre las tres fotos en abanico al acercarte, y al arrastrar ficheros sobre
+        la ventana aparece un marco a pantalla completa con el nombre del caso de destino.
+        Pruébalo con «Simular arrastre de ficheros».
+      </p>
+    </div>
+    <div class="note-card">
+      <span class="tag">menús</span>
+      <h3>Uno distinto por cada cosa</h3>
+      <p>
+        Con el botón derecho sobre un proyecto, un caso o una fila de resultado. Son tres menús
+        distintos porque lo que se puede hacer con cada uno no se parece: el proyecto invita y se
+        exporta entero, el caso se mueve y se centra en el mapa, el resultado se compara con el
+        índice, se copia y se marca como principal. Lo destructivo va al final, separado y en rojo
+        solo al pasar por encima. El menú se recoloca solo si el borde de la ventana lo cortaría.
+      </p>
+    </div>
+    <div class="note-card">
       <span class="tag">animación</span>
       <h3>Movimiento que informa, no que decora</h3>
       <ul class="tight">
@@ -1078,7 +1264,7 @@
   }
 
   $$("[data-screen]").forEach((b) => (b.onclick = () => show(b.dataset.screen)));
-  $$("[data-go]").forEach((c) => (c.onclick = () => show(c.dataset.go)));
+  $$("[data-go]").forEach((c) => (c.onclick = () => { if (!arrastrando) show(c.dataset.go); }));
   paintCrumbs();
 
   /* ---- carril ---- */
@@ -1216,6 +1402,190 @@
     $("#lightbox").classList.remove("on");
     closeUpload();
   });
+
+  /* ---- reordenar arrastrando ----
+     Un solo ayudante para la tira y para la lista del popup: el gesto es el
+     mismo y lo único que cambia es si los hermanos van en fila o en columna.
+     `fijo` es lo que nunca se mueve ni admite que le suelten encima (el «+»). */
+  let arrastrando = false;
+  function reorderable(cont, sel, { horizontal = false, grid = false, fijo = null } = {}) {
+    const items = () => [...cont.querySelectorAll(sel)].filter((e) => !fijo || !e.matches(fijo));
+    items().forEach((e) => (e.draggable = true));
+    let drag = null;
+    // Mutable, no capturado de una vez: cambiar de vista cambia cómo se lee el
+    // arrastre, y volver a registrar los oyentes los duplicaría.
+    let modoGrid = grid;
+
+    cont.addEventListener("dragstart", (e) => {
+      const it = e.target.closest(sel);
+      if (!it || (fijo && it.matches(fijo))) return;
+      drag = it;
+      arrastrando = true;
+      it.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      // Firefox no arranca el arrastre sin datos puestos.
+      e.dataTransfer.setData("text/plain", "");
+    });
+
+    cont.addEventListener("dragend", () => {
+      drag?.classList.remove("dragging");
+      drag = null;
+      // Soltar dispara un `click` en la tarjeta: sin esta tregua, recolocar un
+      // proyecto acabaría abriéndolo.
+      setTimeout(() => (arrastrando = false), 60);
+    });
+
+    cont.addEventListener("dragover", (e) => {
+      if (!drag) return;
+      e.preventDefault();
+      // El punto de inserción es el primer hermano cuyo centro queda por
+      // delante del cursor. Sin esto habría que soltar justo encima del hueco.
+      const otros = items().filter((x) => x !== drag);
+      // En rejilla no vale un solo eje: se busca la tarjeta más cercana al
+      // cursor y se entra por su lado izquierdo o derecho.
+      if (modoGrid) {
+        let mejor = null, dist = Infinity;
+        for (const x of otros) {
+          const r = x.getBoundingClientRect();
+          const d = Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2));
+          if (d < dist) { dist = d; mejor = x; }
+        }
+        if (!mejor) return;
+        const r = mejor.getBoundingClientRect();
+        cont.insertBefore(drag, e.clientX < r.left + r.width / 2 ? mejor : mejor.nextSibling);
+        return;
+      }
+      const antes = otros.find((x) => {
+        const r = x.getBoundingClientRect();
+        return horizontal ? e.clientX < r.left + r.width / 2 : e.clientY < r.top + r.height / 2;
+      });
+      if (antes) cont.insertBefore(drag, antes);
+      else if (fijo) cont.insertBefore(drag, cont.querySelector(fijo));
+      else cont.appendChild(drag);
+    });
+
+    cont.addEventListener("drop", (e) => e.preventDefault());
+    return { setGrid: (v) => (modoGrid = v) };
+  }
+  reorderable($("#strip"), ".thumb", { horizontal: true, fijo: ".add" });
+  reorderable($("#uplist"), ".uprow");
+  const cardsSort = reorderable($("#cards"), ".card", { grid: true, fijo: ".new" });
+  reorderable($("#caselist"), ".caserow", { fijo: ".new" });
+
+  /* ---- vistas de proyectos ---- */
+  $$("#views button").forEach((b) => (b.onclick = () => {
+    $$("#views button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    const c = $("#cards");
+    c.classList.remove("rows", "dense");
+    if (b.dataset.view !== "grid") c.classList.add(b.dataset.view);
+    // La rejilla se lee en dos ejes y la lista en uno solo.
+    cardsSort.setGrid(b.dataset.view === "grid");
+  }));
+
+  /* ---- menús contextuales ----
+     Uno por tipo de objeto, porque lo que se puede hacer con un proyecto, con
+     un caso y con un resultado no se parece en nada. Van con el botón derecho,
+     que es donde el sistema los pone; el izquierdo sigue abriendo. */
+  const MENUS = {
+    proyecto: (n) => ({
+      titulo: n,
+      items: [
+        { l: "Abrir", k: "↵" },
+        { l: "Renombrar", k: "F2" },
+        { l: "Invitar a alguien…" },
+        { sep: true },
+        { l: "Duplicar la estructura" },
+        { l: "Exportar el proyecto" },
+        { sep: true },
+        { l: "Eliminar proyecto", danger: true },
+      ],
+    }),
+    caso: (n) => ({
+      titulo: n,
+      items: [
+        { l: "Abrir", k: "↵" },
+        { l: "Renombrar", k: "F2" },
+        { l: "Centrar en el mapa" },
+        { sep: true },
+        { l: "Mover a otro proyecto…" },
+        { l: "Exportar informe" },
+        { sep: true },
+        { l: "Eliminar caso", danger: true },
+      ],
+    }),
+    resultado: (n) => ({
+      titulo: n,
+      items: [
+        { l: "Centrar en el mapa" },
+        { l: "Comparar con el índice" },
+        { l: "Copiar coordenadas", k: "⌘C" },
+        { sep: true },
+        { l: "Marcar como principal" },
+        { l: "Repetir con otro modelo…" },
+        { sep: true },
+        { l: "Descartar análisis", danger: true },
+      ],
+    }),
+  };
+
+  const ctx = $("#ctx");
+  function abrirMenu(tipo, nombre, x, y) {
+    const { titulo, items } = MENUS[tipo](nombre);
+    ctx.innerHTML = "";
+    const hd = document.createElement("div");
+    hd.className = "hd";
+    hd.textContent = titulo;
+    ctx.appendChild(hd);
+    for (const it of items) {
+      if (it.sep) {
+        const s = document.createElement("div");
+        s.className = "sep";
+        ctx.appendChild(s);
+        continue;
+      }
+      const b = document.createElement("button");
+      b.textContent = it.l;
+      if (it.danger) b.className = "danger";
+      if (it.k) {
+        const k = document.createElement("span");
+        k.className = "kb";
+        k.textContent = it.k;
+        b.appendChild(k);
+      }
+      b.onclick = () => cerrarMenu();
+      ctx.appendChild(b);
+    }
+    // Se coloca dentro de la ventana: pegado al borde derecho o inferior se
+    // abriría medio fuera y la mitad de las opciones quedaría sin ver.
+    ctx.classList.add("on");
+    const w = win.getBoundingClientRect();
+    const m = ctx.getBoundingClientRect();
+    ctx.style.left = Math.min(x - w.left, w.width - m.width - 8) + "px";
+    ctx.style.top = Math.min(y - w.top, w.height - m.height - 8) + "px";
+  }
+  function cerrarMenu() { ctx.classList.remove("on"); }
+
+  win.addEventListener("contextmenu", (e) => {
+    const proyecto = e.target.closest("#cards .card:not(.new)");
+    const caso = e.target.closest("#caselist .caserow:not(.new)");
+    const res = e.target.closest(".side .row");
+    if (!proyecto && !caso && !res) return;
+    e.preventDefault();
+    if (proyecto) abrirMenu("proyecto", proyecto.querySelector(".name").textContent, e.clientX, e.clientY);
+    else if (caso) abrirMenu("caso", caso.querySelector(".cname").textContent, e.clientX, e.clientY);
+    else abrirMenu("resultado", res.querySelector(".k").textContent, e.clientX, e.clientY);
+  });
+  document.addEventListener("click", cerrarMenu);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") cerrarMenu(); });
+  ctx.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  /* ---- marco de arrastre de ficheros ---- */
+  $("#simDrop").onclick = () => {
+    const f = document.querySelector(`.screen.on [data-frame]`);
+    if (!f) return;
+    f.classList.add("on");
+    setTimeout(() => f.classList.remove("on"), 1900);
+  };
 
   setRole(true);
   show("picker");
