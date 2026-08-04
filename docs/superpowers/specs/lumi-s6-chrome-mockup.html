@@ -261,8 +261,46 @@
   /* ---------- listas de proyecto/caso ---------- */
   .list{position:absolute;inset:0;overflow:auto;padding:22px 26px}
   .list h2{font-size:16px;font-weight:600;letter-spacing:-.01em}
-  .list .sub{color:var(--subtle);font-size:11.5px;margin-top:3px}
   .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:10px;margin-top:16px}
+
+  /* Cifras como iconos: cuatro palabras menos por tarjeta. */
+  .stats{display:flex;gap:12px;margin-top:8px;color:var(--subtle);font-size:10.5px;align-items:center}
+  .stat{display:flex;align-items:center;gap:4px}
+  .stat svg{opacity:.75}
+  .stat .mono{font-family:ui-monospace,Menlo,monospace}
+
+  /* ---------- casos: filas con portada, no tarjetas ---------- */
+  .caselist{margin-top:14px;display:flex;flex-direction:column;gap:6px;max-width:640px}
+  .caserow{
+    display:flex;align-items:center;gap:12px;width:100%;text-align:left;cursor:pointer;
+    background:none;border:1px solid transparent;border-bottom-color:var(--border);
+    border-radius:10px;padding:8px 10px;color:inherit;font:inherit;
+    transition:background .3s var(--expo),border-color .3s var(--expo),transform .3s var(--expo);
+    animation:cardIn .38s var(--expo) both;
+  }
+  .caserow:hover{background:rgba(255,255,255,.035);border-color:rgba(255,255,255,.13);transform:translateX(2px)}
+  .cover{position:relative;width:52px;height:38px;flex:none}
+  .cover i{
+    position:absolute;inset:0;border-radius:6px;border:1px solid var(--border);
+    background:linear-gradient(140deg,#2c323a,#171a1e);
+  }
+  .cover i:nth-child(1){transform:translate(5px,-3px) rotate(4deg);background:linear-gradient(140deg,#242930,#15181c);opacity:.6}
+  .cover i:nth-child(2){transform:translate(2px,-1px) rotate(-2deg);background:linear-gradient(140deg,#2a3038,#171a1e);opacity:.8}
+  .cover i:nth-child(3){background:linear-gradient(140deg,#39414b,#1b1f24)}
+  .cover .n{
+    position:absolute;right:-5px;bottom:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;
+    background:var(--elevated);border:1px solid var(--border);color:var(--muted);
+    font:600 9px/15px ui-monospace,Menlo,monospace;text-align:center;
+  }
+  .cname{font-size:12.5px;color:var(--fg);min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .prog{width:76px;flex:none}
+  .prog .track{height:3px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden}
+  .prog .track i{display:block;height:100%;background:var(--draw);border-radius:2px;animation:fill 1s var(--expo) both}
+  .prog .lab{font:10px/1.4 ui-monospace,Menlo,monospace;color:var(--subtle);margin-top:3px;text-align:right}
+  .coord{font:10.5px ui-monospace,Menlo,monospace;color:var(--subtle);flex:none;width:112px;text-align:right}
+  .coord.none{color:#4a4d52}
+  .caserow.new{border-style:dashed;border-color:var(--border);color:var(--subtle);justify-content:center;padding:11px}
+  .caserow.new:hover{color:var(--fg)}
   .card{
     border:1px solid var(--border);border-radius:12px;padding:13px;background:rgba(21,23,26,.6);
     cursor:pointer;transition:border-color .35s var(--expo),transform .35s var(--expo),background .35s var(--expo);
@@ -274,6 +312,112 @@
   .card .meta{font-size:10.5px;color:var(--subtle);margin-top:5px}
   .card.new{border-style:dashed;display:grid;place-items:center;min-height:82px;color:var(--subtle)}
   .card.new:hover{color:var(--fg)}
+
+  /* ---------- comparador: tu foto contra la del índice ---------- */
+  .cmp{
+    position:relative;width:100%;aspect-ratio:4/3;border-radius:10px;overflow:hidden;
+    border:1px solid var(--border);cursor:ew-resize;user-select:none;
+  }
+  .cmp .lay{position:absolute;inset:0}
+  /* Dos "fotos" simuladas: la tuya cálida, la del índice fría. */
+  .cmp .mine{background:
+      radial-gradient(70% 55% at 30% 78%, #6b5636 0%, transparent 60%),
+      linear-gradient(170deg,#5d6b7a 0%,#38424e 46%,#242a31 100%)}
+  .cmp .mine::after{content:"";position:absolute;left:12%;bottom:0;width:24%;height:46%;
+    background:#1b1f24;clip-path:polygon(0 100%,18% 24%,52% 6%,86% 30%,100% 100%)}
+  .cmp .idx{background:
+      radial-gradient(70% 55% at 32% 76%, #3f5a6b 0%, transparent 60%),
+      linear-gradient(170deg,#7e8ea0 0%,#3f4b58 48%,#20262c 100%);
+    clip-path:inset(0 0 0 50%)}
+  .cmp .idx::after{content:"";position:absolute;left:13%;bottom:0;width:23%;height:44%;
+    background:#181c21;clip-path:polygon(0 100%,20% 26%,54% 8%,88% 32%,100% 100%)}
+  .cmp .bar{position:absolute;top:0;bottom:0;left:50%;width:1px;background:rgba(255,255,255,.85)}
+  .cmp .bar::after{
+    content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:20px;height:20px;border-radius:50%;background:rgba(20,22,26,.92);
+    border:1px solid rgba(255,255,255,.6);
+  }
+  .cmp .tagL,.cmp .tagR{
+    position:absolute;bottom:6px;font-size:9px;letter-spacing:.09em;text-transform:uppercase;
+    padding:2px 6px;border-radius:5px;background:rgba(12,14,16,.72);color:var(--muted);
+  }
+  .cmp .tagL{left:6px}
+  .cmp .tagR{right:6px}
+  .cmp .score{
+    position:absolute;top:6px;right:6px;font:10px ui-monospace,Menlo,monospace;
+    padding:2px 6px;border-radius:5px;background:rgba(12,14,16,.72);color:var(--draw-fg);
+  }
+  .cmp .expand{
+    position:absolute;top:6px;left:6px;width:20px;height:20px;display:grid;place-items:center;
+    border-radius:6px;background:rgba(12,14,16,.72);border:0;color:var(--muted);cursor:pointer;
+    transition:color .3s var(--expo),background .3s var(--expo);
+  }
+  .cmp .expand:hover{color:var(--fg);background:rgba(12,14,16,.9)}
+
+  .lightbox{
+    position:absolute;inset:0;z-index:70;display:none;place-items:center;padding:38px;
+    background:rgba(6,7,8,.82);backdrop-filter:blur(6px);animation:popIn .24s var(--expo) both;
+  }
+  .lightbox.on{display:grid}
+  .lightbox .cmp{width:min(620px,100%);aspect-ratio:16/10}
+  .lightbox .close{position:absolute;top:12px;right:14px;background:none;border:0;color:var(--muted);
+    font-size:16px;cursor:pointer}
+  .lightbox .close:hover{color:var(--fg)}
+  .lbmode{display:flex;gap:2px;padding:3px;border:1px solid var(--border);border-radius:9px;
+    background:var(--surface);margin-top:10px;justify-self:center}
+  .lbmode button{background:none;border:0;color:var(--subtle);font:inherit;font-size:11px;
+    padding:5px 12px;border-radius:6px;cursor:pointer;transition:all .3s var(--expo)}
+  .lbmode button[aria-pressed="true"]{background:rgba(255,255,255,.07);color:var(--fg)}
+  .sbs{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:min(620px,100%)}
+  .sbs .cmp{aspect-ratio:4/3;cursor:default;width:auto}
+  .sbs .cmp .idx{clip-path:none}
+  .sbs .cmp .bar{display:none}
+
+  /* ---------- popup de subida: igual que el que ya existe ---------- */
+  .backdrop{position:absolute;inset:0;z-index:44;background:rgba(0,0,0,.5);display:none;
+    animation:popIn .18s var(--expo) both}
+  .backdrop.on{display:block}
+  .upload{
+    position:absolute;z-index:45;left:50%;top:50%;transform:translate(-50%,-50%);
+    width:470px;display:none;
+    border:1px solid rgba(255,255,255,.13);border-radius:12px;padding:17px;
+    background:rgba(16,19,25,.9);backdrop-filter:blur(20px);
+    box-shadow:0 24px 60px -18px rgba(0,0,0,.7);
+    animation:upIn .22s var(--expo) both;
+  }
+  .upload.on{display:block}
+  @keyframes upIn{from{opacity:0;transform:translate(-50%,-50%) scale(.96)}to{opacity:1;transform:translate(-50%,-50%)}}
+  .upload .head{display:flex;align-items:center;gap:10px}
+  .upload .glob{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;
+    background:rgba(255,255,255,.06);color:var(--fg);flex:none}
+  .upload .title{font-size:13px;font-weight:500}
+  .upload .subtitle{font-size:11px;color:var(--muted)}
+  .modelbtn{
+    display:flex;align-items:center;gap:10px;width:100%;margin-top:14px;padding:10px;
+    border:0;border-radius:9px;background:rgba(255,255,255,.04);color:inherit;font:inherit;
+    text-align:left;cursor:pointer;transition:transform .3s var(--expo)}
+  .modelbtn:active{transform:scale(.99)}
+  .modelbtn .ic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;
+    background:rgba(255,255,255,.06);color:var(--fg);flex:none}
+  .modelbtn .nm{font-size:11.5px;font-weight:500}
+  .modelbtn .no{font-size:9.5px;color:var(--muted)}
+  .modellist{margin-top:14px;padding:4px;border-radius:9px;background:rgba(255,255,255,.02);display:none}
+  .modellist.on{display:block}
+  .modellist button{display:flex;align-items:center;gap:10px;width:100%;padding:10px;border:0;
+    border-radius:9px;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;
+    transition:background .3s var(--expo)}
+  .modellist button:hover{background:rgba(255,255,255,.03)}
+  .modellist button[aria-pressed="true"]{background:rgba(255,255,255,.06)}
+  .upcount{margin-top:12px;font-size:12px}
+  .uplist{margin-top:8px;max-height:190px;overflow:auto;display:flex;flex-direction:column;gap:7px;padding-right:2px}
+  .uprow{display:flex;align-items:center;gap:12px;border-radius:9px;background:rgba(255,255,255,.045);padding:9px 11px}
+  .uprow .ph{width:50px;height:50px;border-radius:7px;flex:none;
+    background:linear-gradient(140deg,#39414b,#1b1f24);border:1px solid var(--border)}
+  .uprow .fn{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .uprow .sz{font:10px ui-monospace,Menlo,monospace;color:var(--muted);margin-top:3px}
+  .gpschip{font-size:8.5px;color:var(--warning-fg);border:1px solid rgba(239,159,39,.4);
+    border-radius:4px;padding:1px 5px;flex:none}
+  .upfoot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
 
   /* ---------- estado vacío ---------- */
   .empty{position:absolute;inset:0;display:grid;place-items:center;padding:0 0 var(--dock)}
@@ -306,9 +450,9 @@
 
   <h1>Lumi Station · marco de ventana propio y limpieza del cromo</h1>
   <p class="lead">
-    Interactivo: clica los botones de ventana, la píldora del servidor, la campana, el avatar,
-    la pestaña del panel lateral y las miniaturas. El objetivo es pasar de ocho piezas de cromo
-    alrededor del mapa a cuatro, sin perder ninguna función.
+    Interactivo: botones de ventana, píldora del servidor, campana, avatar, pestaña del panel,
+    comparador de cortina (arrástralo) y el popup de análisis. De ocho piezas de cromo alrededor
+    del mapa a cuatro, y con la mitad de texto.
   </p>
 
   <div class="controls">
@@ -324,6 +468,29 @@
     </div>
     <span class="hint">Esc cierra los popovers</span>
   </div>
+
+  <!-- iconos, una sola vez -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+    <symbol id="i-case" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+      <path d="M2 5.2h12v8H2z"/><path d="M2 5.2 3.4 3h4l1 2.2"/>
+    </symbol>
+    <symbol id="i-img" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+      <rect x="2" y="3.2" width="12" height="9.6" rx="1.4"/><circle cx="5.6" cy="6.4" r="1"/>
+      <path d="m2.6 11.4 3.2-3 3 2.6 2-1.8 2.6 2.4"/>
+    </symbol>
+    <symbol id="i-disk" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+      <ellipse cx="8" cy="4.2" rx="5.4" ry="2.1"/><path d="M2.6 4.2v7.6c0 1.2 2.4 2.1 5.4 2.1s5.4-.9 5.4-2.1V4.2"/>
+    </symbol>
+    <symbol id="i-pin" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+      <path d="M8 14s4.6-4.2 4.6-7.4A4.6 4.6 0 0 0 3.4 6.6C3.4 9.8 8 14 8 14Z"/><circle cx="8" cy="6.5" r="1.7"/>
+    </symbol>
+    <symbol id="i-people" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+      <circle cx="6" cy="6" r="2.4"/><path d="M2 13c0-2.2 1.8-3.6 4-3.6s4 1.4 4 3.6"/>
+    </symbol>
+    <symbol id="i-expand" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+      <path d="M6 2H2v4M10 14h4v-4M14 6V2h-4M2 10v4h4"/>
+    </symbol>
+  </defs></svg>
 
   <div class="stage">
     <div class="win" id="win">
@@ -408,26 +575,44 @@
         <!-- ---- Proyectos ---- -->
         <section class="screen on" data-s="picker">
           <div class="list">
-            <h2>Tus proyectos</h2>
-            <p class="sub">tres tuyos, uno donde te invitaron · una persona por proyecto a la vez</p>
+            <h2>Proyectos</h2>
             <div class="cards">
               <div class="card" data-go="project" style="animation-delay:0ms">
                 <div class="name">Costa norte</div>
-                <div class="meta">4 casos · 61 imágenes · 1,2 GB</div>
+                <div class="stats">
+                  <span class="stat"><svg width="12" height="12"><use href="#i-case"/></svg><span class="mono">4</span></span>
+                  <span class="stat"><svg width="12" height="12"><use href="#i-img"/></svg><span class="mono">61</span></span>
+                  <span class="stat"><svg width="12" height="12"><use href="#i-disk"/></svg><span class="mono">1,2 GB</span></span>
+                </div>
               </div>
               <div class="card" data-go="project" style="animation-delay:40ms">
                 <div class="name">Frontera este</div>
-                <div class="meta">2 casos · 18 imágenes · 340 MB</div>
+                <div class="stats">
+                  <span class="stat"><svg width="12" height="12"><use href="#i-case"/></svg><span class="mono">2</span></span>
+                  <span class="stat"><svg width="12" height="12"><use href="#i-img"/></svg><span class="mono">18</span></span>
+                  <span class="stat"><svg width="12" height="12"><use href="#i-disk"/></svg><span class="mono">340 MB</span></span>
+                </div>
               </div>
               <div class="card" data-go="project" style="animation-delay:80ms">
                 <div class="name">Archivo 2024</div>
-                <div class="meta">9 casos · 412 imágenes · 7,8 GB</div>
+                <div class="stats">
+                  <span class="stat"><svg width="12" height="12"><use href="#i-case"/></svg><span class="mono">9</span></span>
+                  <span class="stat"><svg width="12" height="12"><use href="#i-img"/></svg><span class="mono">412</span></span>
+                  <span class="stat"><svg width="12" height="12"><use href="#i-disk"/></svg><span class="mono">7,8 GB</span></span>
+                </div>
               </div>
               <div class="card" data-go="project" style="animation-delay:120ms">
-                <div class="name">Puerto sur <span style="color:var(--subtle);font-size:10px">· invitado</span></div>
-                <div class="meta">1 caso · 6 imágenes · abierto por marta</div>
+                <div class="name">Puerto sur</div>
+                <div class="stats">
+                  <span class="stat"><svg width="12" height="12"><use href="#i-case"/></svg><span class="mono">1</span></span>
+                  <span class="stat"><svg width="12" height="12"><use href="#i-img"/></svg><span class="mono">6</span></span>
+                  <!-- Invitado y ocupado: dos iconos en vez de dos frases. -->
+                  <span class="stat" title="Te invitaron · marta está dentro" style="margin-left:auto;color:var(--warning-fg)">
+                    <svg width="12" height="12"><use href="#i-people"/></svg><span class="mono">marta</span>
+                  </span>
+                </div>
               </div>
-              <div class="card new" style="animation-delay:160ms">+ Nuevo proyecto</div>
+              <div class="card new" style="animation-delay:160ms">+</div>
             </div>
           </div>
         </section>
@@ -436,21 +621,34 @@
         <section class="screen" data-s="project">
           <div class="list">
             <h2>Costa norte</h2>
-            <p class="sub">4 casos</p>
-            <div class="cards">
-              <div class="card" data-go="case" style="animation-delay:0ms">
-                <div class="name">Muelle 7</div><div class="meta">12 imágenes · 9 resueltas</div>
-              </div>
-              <div class="card" data-go="case" style="animation-delay:40ms">
-                <div class="name">Faro</div><div class="meta">31 imágenes · 28 resueltas</div>
-              </div>
-              <div class="card" data-go="empty" style="animation-delay:80ms">
-                <div class="name">Cala nueva</div><div class="meta">vacío</div>
-              </div>
-              <div class="card" data-go="case" style="animation-delay:120ms">
-                <div class="name">Astillero</div><div class="meta">18 imágenes · 11 resueltas</div>
-              </div>
-              <div class="card new" style="animation-delay:160ms">+ Nuevo caso</div>
+            <!-- Un caso ES sus fotos y su punto en el mapa; una tarjeta de
+                 texto como la de proyectos no enseña ninguna de las dos. -->
+            <div class="caselist">
+              <button class="caserow" data-go="case" style="animation-delay:0ms">
+                <span class="cover"><i></i><i></i><i></i><span class="n">12</span></span>
+                <span class="cname">Muelle 7</span>
+                <span class="prog"><span class="track"><i style="width:75%"></i></span><span class="lab">9/12</span></span>
+                <span class="coord">43.362, −8.411</span>
+              </button>
+              <button class="caserow" data-go="case" style="animation-delay:40ms">
+                <span class="cover"><i></i><i></i><i></i><span class="n">31</span></span>
+                <span class="cname">Faro</span>
+                <span class="prog"><span class="track"><i style="width:90%"></i></span><span class="lab">28/31</span></span>
+                <span class="coord">43.386, −8.396</span>
+              </button>
+              <button class="caserow" data-go="empty" style="animation-delay:80ms">
+                <span class="cover" style="opacity:.4"><i></i></span>
+                <span class="cname">Cala nueva</span>
+                <span class="prog"><span class="track"><i style="width:0"></i></span><span class="lab">0/0</span></span>
+                <span class="coord none">sin situar</span>
+              </button>
+              <button class="caserow" data-go="case" style="animation-delay:120ms">
+                <span class="cover"><i></i><i></i><i></i><span class="n">18</span></span>
+                <span class="cname">Astillero</span>
+                <span class="prog"><span class="track"><i style="width:61%"></i></span><span class="lab">11/18</span></span>
+                <span class="coord">43.341, −8.428</span>
+              </button>
+              <button class="caserow new" style="animation-delay:160ms">+</button>
             </div>
           </div>
         </section>
@@ -461,21 +659,22 @@
           <div class="empty">
             <div class="drop">
               <div class="big">Suelta imágenes aquí</div>
-              <div class="small">o elígelas del disco · quedan 8,4 GB de tu cuota</div>
               <div class="tabs">
                 <button aria-pressed="true">Del disco</button>
                 <button aria-pressed="false">Ya en el proyecto</button>
               </div>
+              <div class="small" style="margin-top:12px">
+                <span class="stat" style="justify-content:center">
+                  <svg width="12" height="12"><use href="#i-disk"/></svg><span class="mono">8,4 GB libres</span>
+                </span>
+              </div>
             </div>
           </div>
           <div class="dock">
-            <div class="thumbs"><div class="thumb add">+</div></div>
-            <div class="summary">
-              <div class="l1">Cala nueva</div>
-              <div class="l2">sin imágenes todavía</div>
-            </div>
+            <div class="thumbs"><div class="thumb add" data-upload>+</div></div>
+            <div class="summary"><div class="l1">Cala nueva</div></div>
             <span class="grow"></span>
-            <button class="primary">Añadir imágenes</button>
+            <button class="primary" data-upload>Añadir imágenes</button>
           </div>
         </section>
 
@@ -497,24 +696,33 @@
           </button>
 
           <aside class="side on" id="side">
-            <div>
-              <div class="k">Resultado</div>
-              <div class="v">Muelle 7 · 3 análisis</div>
+            <!-- Lo que convence de un resultado no es la cifra, es ver que la
+                 foto del índice y la tuya son el mismo sitio. Arrastra. -->
+            <div class="cmp" id="cmp">
+              <div class="lay mine"></div>
+              <div class="lay idx" id="cmpIdx"></div>
+              <div class="bar" id="cmpBar"></div>
+              <button class="expand" id="cmpExpand" aria-label="Ampliar">
+                <svg width="11" height="11"><use href="#i-expand"/></svg>
+              </button>
+              <span class="score">0,82</span>
+              <span class="tagL">tuya</span>
+              <span class="tagR">índice</span>
             </div>
+
             <div class="row on">
               <div class="k">1 · lumi-pro</div>
               <div class="v">43.3621, −8.4115</div>
-              <div class="k" style="margin-top:3px">confianza 0,82 · radio 620 m</div>
+              <div class="k" style="margin-top:3px">0,82 · 620 m</div>
             </div>
             <div class="row">
               <div class="k">2 · lumi-mini</div>
               <div class="v">43.3702, −8.3980</div>
-              <div class="k" style="margin-top:3px">confianza 0,44 · radio 3,1 km</div>
+              <div class="k" style="margin-top:3px">0,44 · 3,1 km</div>
             </div>
             <div class="row">
-              <div class="k">E · GPS de la cámara</div>
+              <div class="k">E · EXIF</div>
               <div class="v" style="color:var(--warning-fg)">43.3588, −8.4260</div>
-              <div class="k" style="margin-top:3px">declarado, no inferido</div>
             </div>
             <span class="grow"></span>
             <button class="ghost" style="width:100%">Exportar informe</button>
@@ -533,7 +741,7 @@
               <div class="l2">lumi-pro · confianza 0,82 · radio 620 m</div>
             </div>
             <span class="grow"></span>
-            <button class="primary">Analizar</button>
+            <button class="primary" data-upload>Analizar</button>
           </div>
         </section>
       </div>
@@ -583,6 +791,108 @@
         <button class="menuitem" style="color:var(--danger-fg)">Cerrar sesión</button>
       </div>
 
+      <!-- ====== popup de subida: el mismo que ya existe, sin tocar ====== -->
+      <div class="backdrop" id="upBack"></div>
+      <div class="upload" id="upload">
+        <div class="head">
+          <span class="glob">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+              <circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2.2 2 9.8 0 12M8 2C6 4.2 6 11.8 8 14"/>
+            </svg>
+          </span>
+          <div style="flex:1;min-width:0">
+            <div class="title">Analizar en «Muelle 7»</div>
+            <div class="subtitle">Un análisis por imagen · el original queda intacto</div>
+          </div>
+          <button class="iconbtn" id="upClose" aria-label="Cerrar">
+            <svg width="12" height="12" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.1">
+              <path d="M.8.8l8.4 8.4M9.2.8L.8 9.2"/>
+            </svg>
+          </button>
+        </div>
+
+        <button class="modelbtn" id="modelBtn">
+          <span class="ic">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+              <circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2.2 2 9.8 0 12M8 2C6 4.2 6 11.8 8 14"/>
+            </svg>
+          </span>
+          <span style="flex:1;min-width:0">
+            <span class="nm" id="modelName">lumi-mini</span>
+            <span class="no" id="modelNote">rápido · geolocalización aproximada, cobertura global</span>
+          </span>
+          <span style="font-size:10px;color:var(--muted)">Cambiar ›</span>
+        </button>
+
+        <div class="modellist" id="modelList">
+          <button aria-pressed="true" data-model="lumi-mini" data-note="rápido · geolocalización aproximada, cobertura global">
+            <span class="ic" style="width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:rgba(255,255,255,.06)">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M2 8h12"/></svg>
+            </span>
+            <span style="flex:1"><span class="nm">lumi-mini</span><span class="no">rápido · geolocalización aproximada, cobertura global</span></span>
+          </button>
+          <button aria-pressed="false" data-model="lumi-pro" data-note="modelo habilitado por el servidor">
+            <span class="ic" style="width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:rgba(255,255,255,.04)">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M2 8h12"/></svg>
+            </span>
+            <span style="flex:1"><span class="nm">lumi-pro</span><span class="no">modelo habilitado por el servidor</span></span>
+          </button>
+          <button aria-pressed="false" data-model="lumi-vision" data-note="modelo habilitado por el servidor">
+            <span class="ic" style="width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:rgba(255,255,255,.04)">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M2 8h12"/></svg>
+            </span>
+            <span style="flex:1"><span class="nm">lumi-vision</span><span class="no">modelo habilitado por el servidor</span></span>
+          </button>
+        </div>
+
+        <p class="upcount">2 imágenes seleccionadas</p>
+        <div class="uplist">
+          <div class="uprow">
+            <span class="ph"></span>
+            <span style="flex:1;min-width:0"><span class="fn">IMG_4417.jpg</span><div class="sz">2,4 MB · 4032×3024</div></span>
+            <span class="gpschip">GPS en EXIF</span>
+            <button class="iconbtn" style="width:20px" aria-label="Quitar">
+              <svg width="11" height="11" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.1"><path d="M.8.8l8.4 8.4M9.2.8L.8 9.2"/></svg>
+            </button>
+          </div>
+          <div class="uprow">
+            <span class="ph"></span>
+            <span style="flex:1;min-width:0"><span class="fn">IMG_4418.jpg</span><div class="sz">2,1 MB · 4032×3024</div></span>
+            <button class="iconbtn" style="width:20px" aria-label="Quitar">
+              <svg width="11" height="11" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.1"><path d="M.8.8l8.4 8.4M9.2.8L.8 9.2"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="upfoot">
+          <button class="ghost">Añadir más</button>
+          <button class="primary" id="upGo">Analizar 2</button>
+        </div>
+      </div>
+
+      <!-- ====== comparador a pantalla completa ====== -->
+      <div class="lightbox" id="lightbox">
+        <button class="close" id="lbClose" aria-label="Cerrar">✕</button>
+        <div style="display:grid;justify-items:center;gap:0">
+          <div id="lbWipe" class="cmp">
+            <div class="lay mine"></div>
+            <div class="lay idx" id="lbIdx"></div>
+            <div class="bar" id="lbBar"></div>
+            <span class="score">coincidencia 0,82</span>
+            <span class="tagL">tu imagen</span>
+            <span class="tagR">índice · 43.3621, −8.4115</span>
+          </div>
+          <div id="lbSbs" class="sbs" style="display:none">
+            <div class="cmp"><div class="lay mine"></div><span class="tagL">tu imagen</span></div>
+            <div class="cmp"><div class="lay idx"></div><span class="tagL">índice</span></div>
+          </div>
+          <div class="lbmode">
+            <button id="lbW" aria-pressed="true">Cortina</button>
+            <button id="lbS" aria-pressed="false">Lado a lado</button>
+          </div>
+        </div>
+      </div>
+
       <div class="relaunch" id="relaunch"><button id="btnRelaunch">Volver a abrir</button></div>
     </div>
   </div>
@@ -619,6 +929,45 @@
         van al ras de la esquina, 44×40, con el rojo solo en el hover de cerrar. En Tauri son
         <span class="mono">decorations: false</span> más <span class="mono">data-tauri-drag-region</span>
         y las llamadas de la ventana; el doble clic en la barra maximiza, como en el resto del sistema.
+      </p>
+    </div>
+    <div class="note-card">
+      <span class="tag">texto</span>
+      <h3>Menos frases, más iconos</h3>
+      <p>
+        Fuera los subtítulos que explicaban lo que ya se ve: «tres tuyos, uno donde te invitaron»,
+        «4 casos · 61 imágenes · 1,2 GB», «sin imágenes todavía». Las cifras van con su icono
+        —carpeta, foto, disco— y el resto desaparece. Las explicaciones se quedan solo donde hay una
+        decisión que tomar, como el popup de análisis.
+      </p>
+    </div>
+    <div class="note-card">
+      <span class="tag">casos</span>
+      <h3>Filas con portada, no tarjetas</h3>
+      <p>
+        Un caso <i>es</i> sus fotos y su punto en el mapa; una rejilla de tarjetas de texto, igual que
+        la de proyectos, no enseña ninguna de las dos. Cada fila lleva la pila de miniaturas con el
+        número encima, una barra de resueltas sobre el total y la coordenada. Un caso sin situar lo
+        dice en gris, y se distingue de un vistazo.
+      </p>
+    </div>
+    <div class="note-card">
+      <span class="tag">resultado</span>
+      <h3>Tu foto contra la del índice</h3>
+      <p>
+        Lo que convence de un resultado no es la cifra de confianza, es ver que las dos imágenes son
+        el mismo sitio. El panel abre con un comparador de cortina —arrástralo— y la lupa lo lleva a
+        pantalla completa, con modo cortina o lado a lado. La coincidencia va en la esquina, sin
+        una frase que la acompañe.
+      </p>
+    </div>
+    <div class="note-card">
+      <span class="tag">sin tocar</span>
+      <h3>El popup de subir y elegir modelo</h3>
+      <p>
+        Queda como está: la cabecera con el globo, el selector de modelo desplegable, la lista de
+        imágenes con miniatura, peso, aviso de GPS en EXIF y su aspa, y los dos botones abajo.
+        Funciona y no es lo que agobia. Ábrelo desde «Analizar» o desde el «+» de la tira.
       </p>
     </div>
     <div class="note-card">
@@ -759,6 +1108,67 @@
     $("#relaunch").classList.remove("on");
     win.classList.remove("closed");
   };
+
+  /* ---- popup de subida ---- */
+  function openUpload() {
+    $("#upBack").classList.add("on");
+    $("#upload").classList.add("on");
+  }
+  function closeUpload() {
+    $("#upBack").classList.remove("on");
+    $("#upload").classList.remove("on");
+    $("#modelList").classList.remove("on");
+  }
+  $$("[data-upload]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); openUpload(); }));
+  $("#upClose").onclick = closeUpload;
+  $("#upBack").onclick = closeUpload;
+  $("#upGo").onclick = closeUpload;
+  $("#upload").onclick = (e) => e.stopPropagation();
+  $("#modelBtn").onclick = () => $("#modelList").classList.toggle("on");
+  $$("#modelList button").forEach((b) => (b.onclick = () => {
+    $$("#modelList button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    $("#modelName").textContent = b.dataset.model;
+    $("#modelNote").textContent = b.dataset.note;
+    $("#modelList").classList.remove("on");
+  }));
+
+  /* ---- comparador: arrastrar la cortina ---- */
+  function wipe(box, idx, bar) {
+    const set = (clientX) => {
+      const r = box.getBoundingClientRect();
+      const p = Math.min(100, Math.max(0, ((clientX - r.left) / r.width) * 100));
+      idx.style.clipPath = `inset(0 0 0 ${p}%)`;
+      bar.style.left = p + "%";
+    };
+    let down = false;
+    box.addEventListener("pointerdown", (e) => {
+      if (e.target.closest("button")) return;
+      down = true; box.setPointerCapture(e.pointerId); set(e.clientX);
+    });
+    box.addEventListener("pointermove", (e) => { if (down) set(e.clientX); });
+    box.addEventListener("pointerup", () => (down = false));
+    box.addEventListener("pointercancel", () => (down = false));
+  }
+  wipe($("#cmp"), $("#cmpIdx"), $("#cmpBar"));
+  wipe($("#lbWipe"), $("#lbIdx"), $("#lbBar"));
+
+  $("#cmpExpand").onclick = (e) => { e.stopPropagation(); $("#lightbox").classList.add("on"); };
+  $("#lbClose").onclick = () => $("#lightbox").classList.remove("on");
+  $("#lightbox").onclick = (e) => { if (e.target.id === "lightbox") $("#lightbox").classList.remove("on"); };
+  $("#lbW").onclick = () => {
+    $("#lbWipe").style.display = ""; $("#lbSbs").style.display = "none";
+    $("#lbW").setAttribute("aria-pressed", "true"); $("#lbS").setAttribute("aria-pressed", "false");
+  };
+  $("#lbS").onclick = () => {
+    $("#lbWipe").style.display = "none"; $("#lbSbs").style.display = "";
+    $("#lbW").setAttribute("aria-pressed", "false"); $("#lbS").setAttribute("aria-pressed", "true");
+  };
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    $("#lightbox").classList.remove("on");
+    closeUpload();
+  });
 
   setRole(true);
   show("picker");
