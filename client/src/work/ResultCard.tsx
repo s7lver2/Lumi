@@ -1,6 +1,7 @@
 import type { Analysis, Image } from "../lib/api";
 import { FloatingCard } from "../ui/FloatingCard";
 import { Icon } from "../ui/Icon";
+import { RAIL_W } from "../ui/layout";
 
 /** Metros entre dos coordenadas. Haversine con el radio medio de la Tierra:
  *  la precisión de sobra para decir "el EXIF declara un GPS a 300 m de aquí". */
@@ -36,7 +37,11 @@ export function ResultCard({ analysis, image, offset = 0 }:
   { analysis: Analysis | null; image: Image | null; offset?: number }) {
   if (!analysis) return null;
 
-  const pos = { left: `calc(50% - ${offset / 2}px)` };
+  // El centro visual del lienzo de trabajo no es el centro de la ventana: el
+  // carril de 44px se lo lleva por delante. `offset` (la barra lateral de
+  // resultados, si está montada) empuja hacia la izquierda; el carril, hacia
+  // la derecha — de ahí el signo distinto de cada término.
+  const pos = { left: `calc(50% + ${RAIL_W / 2 - offset / 2}px)` };
 
   if (analysis.state !== "hecho") {
     const fallo = analysis.state === "error";

@@ -4,6 +4,7 @@ import { lumiUrl } from "../lib/bridge";
 import { Backdrop, FloatingCard, Pop } from "../ui/FloatingCard";
 import { Icon } from "../ui/Icon";
 import { ModelPicker } from "./ModelPicker";
+import { centerInWorkspace } from "../ui/layout";
 
 const kb = (b: number) => (b < 1024 * 1024 ? `${Math.round(b / 1024)} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`);
 
@@ -34,8 +35,8 @@ export function UploadPopup({
   return (
     <>
       <Backdrop closing={closing} onClick={busy ? undefined : onClose} />
-      <Pop closing={closing}
-        className="absolute left-1/2 top-1/2 z-[45] w-[470px] -translate-x-1/2 -translate-y-1/2">
+      <Pop closing={closing} style={centerInWorkspace}
+        className="absolute z-[45] w-[470px] -translate-x-1/2 -translate-y-1/2">
         <FloatingCard className="p-[17px]">
           <div className="flex items-center gap-2.5">
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/[.06] text-fg">

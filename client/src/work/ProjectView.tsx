@@ -187,7 +187,7 @@ export function ProjectView({
         </div>
       </div>
 
-      <PromptDialog open={creating} title="Nuevo caso"
+      <PromptDialog open={creating} chrome title="Nuevo caso"
         subtitle="Un caso agrupa las imágenes de una misma investigación dentro de este proyecto."
         placeholder="nombre del caso" confirmLabel="Crear" busy={busy} error={error}
         onConfirm={create} onClose={() => { setCreating(false); setError(null); }} />

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import maplibregl from "maplibre-gl";
+import maplibregl, { type StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { api, type MapConfig } from "../lib/api";
 import { lumiUrl } from "../lib/bridge";
@@ -80,11 +80,32 @@ export function MapCanvas({
       // se dice quién tiene que arreglarlo.
       if (cfg.reason) { setReason(cfg.reason); return; }
       setReason(null);
+
+      // El estilo se pide a mano ANTES de dárselo a MapLibre. Si se lo pasas
+      // como URL (`style: lumiUrl(...)`) y el daemon contesta un error, lo
+      // único que llega es un `AJAXError: Bad Gateway` sin cuerpo: MapLibre no
+      // expone el texto de la respuesta, solo el código. El daemon sí explica
+      // el motivo real en ese cuerpo (por ejemplo, que la URL configurada es
+      // la página de vista previa de Mapbox Studio y no el estilo en JSON), y
+      // ese motivo es justo el que hay que enseñar.
+      let style: StyleSpecification;
+      try {
+        const res = await fetch(lumiUrl("/v1/map/style"));
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          setReason(body || `el proveedor de mapas devolvió ${res.status}`);
+          return;
+        }
+        style = await res.json();
+      } catch (e) {
+        setReason(`no se pudo pedir el estilo del mapa: ${String(e)}`);
+        return;
+      }
+      if (dead || !box.current) return;
+
       const m = new maplibregl.Map({
         container: box.current,
-        // El estilo lo sirve el daemon con las fuentes ya reescritas hacia su
-        // proxy; aquí solo se le antepone el esquema que el webview entiende.
-        style: lumiUrl("/v1/map/style"),
+        style,
         transformRequest: (url) =>
           url.startsWith("/v1/") ? { url: lumiUrl(url) } : { url },
         center: [0, 20],

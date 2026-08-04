@@ -28,11 +28,11 @@ export function Backdrop({ closing, onClick }: { closing: boolean; onClick?: () 
 }
 
 /** Envoltorio con la escala de entrada/salida de la v1. */
-export function Pop({ closing, className = "", children }:
-  { closing: boolean; className?: string; children: React.ReactNode }) {
+export function Pop({ closing, className = "", style, children }:
+  { closing: boolean; className?: string; style?: React.CSSProperties; children: React.ReactNode }) {
   return (
     <div className={className}
-      style={{ animation: `${closing ? "jg-popup-scale-out" : "jg-popup-scale-in"} 180ms cubic-bezier(.2,.85,.35,1) both` }}>
+      style={{ ...style, animation: `${closing ? "jg-popup-scale-out" : "jg-popup-scale-in"} 180ms cubic-bezier(.2,.85,.35,1) both` }}>
       {children}
     </div>
   );

@@ -4,6 +4,7 @@ import { lumiUrl } from "../lib/bridge";
 import { useServer } from "../lib/store";
 import { FloatingCard } from "../ui/FloatingCard";
 import { Icon } from "../ui/Icon";
+import { centerInWorkspace } from "../ui/layout";
 
 const GB = 1024 * 1024 * 1024;
 const size = (b: number) =>
@@ -52,8 +53,8 @@ export function DropTarget({
   }
 
   return (
-    <div className="absolute left-1/2 top-1/2 z-20 w-[330px] -translate-x-1/2 -translate-y-1/2"
-      style={{ animation: "jg-popup-scale-in 240ms cubic-bezier(.2,.85,.35,1) both" }}>
+    <div className="absolute z-20 w-[330px] -translate-x-1/2 -translate-y-1/2"
+      style={{ ...centerInWorkspace, animation: "jg-popup-scale-in 240ms cubic-bezier(.2,.85,.35,1) both" }}>
       <FloatingCard className={`overflow-hidden transition-colors duration-300 ease-expo ${
         dragging ? "border-white/40" : ""
       }`}>

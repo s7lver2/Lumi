@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useDismissable } from "../lib/useDismissable";
 import { Backdrop, FloatingCard, Pop } from "./FloatingCard";
+import { centerInWorkspace } from "./layout";
 
 /** Un popup para un solo campo de texto: crear un proyecto, un caso. Antes
  *  era un input que aparecía dentro de la lista y se confirmaba al perder el
  *  foco, que es exactamente el gesto que un clic accidental dispara sin
  *  querer. Aquí hace falta pulsar el botón o Intro, a propósito. */
 export function PromptDialog({
-  open, title, subtitle, placeholder, confirmLabel = "Crear", busy, error, onConfirm, onClose,
+  open, title, subtitle, placeholder, confirmLabel = "Crear", busy, error, chrome = false, onConfirm, onClose,
 }: {
   open: boolean;
   title: string;
@@ -16,6 +17,10 @@ export function PromptDialog({
   confirmLabel?: string;
   busy: boolean;
   error: string | null;
+  /** `true` cuando se muestra dentro del espacio de trabajo (carril + barra
+   *  superior encima): centra respecto al mapa visible, no a la ventana
+   *  entera. El selector de proyectos no tiene ese cromo, así que no lo pide. */
+  chrome?: boolean;
   onConfirm: (value: string) => void;
   onClose: () => void;
 }) {
@@ -28,7 +33,8 @@ export function PromptDialog({
   return (
     <>
       <Backdrop closing={closing} onClick={busy ? undefined : onClose} />
-      <Pop closing={closing} className="absolute left-1/2 top-1/2 z-[45] w-[360px] -translate-x-1/2 -translate-y-1/2">
+      <Pop closing={closing} style={chrome ? centerInWorkspace : { left: "50%", top: "50%" }}
+        className="absolute z-[45] w-[360px] -translate-x-1/2 -translate-y-1/2">
         <FloatingCard className="p-5">
           <p className="text-[13px] text-fg">{title}</p>
           {subtitle && <p className="mt-1 text-[11px] leading-relaxed text-muted">{subtitle}</p>}

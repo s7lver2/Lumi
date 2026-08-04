@@ -23,7 +23,14 @@ export function CaseView({
   onBack: () => void; onProjects: () => void;
 }) {
   const token = useServer((s) => s.token) ?? undefined;
-  const models = useServer((s) => s.limits?.models) ?? [];
+  const isAdmin = useServer((s) => s.isAdmin);
+  const rawModels = useServer((s) => s.limits?.models) ?? [];
+  // El servidor ya deja pasar cualquier modelo a un administrador
+  // (`routes/analyses.rs` salta la comprobación si `is_admin`), igual que
+  // salta `can_create_projects`. Sin esto, un administrador cuya cuenta no
+  // tuviera ningún modelo en `limits.models` veía el selector vacío y el
+  // botón bloqueado por un límite que el propio servidor no le aplica.
+  const models = isAdmin && rawModels.length === 0 ? ["mini"] : rawModels;
   const [images, setImages] = useState<Image[] | null>(null);
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
