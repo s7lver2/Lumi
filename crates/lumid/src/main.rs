@@ -1,4 +1,5 @@
 mod limits;
+mod exif;
 mod master;
 mod projects;
 mod routes;
@@ -95,6 +96,12 @@ async fn main() -> anyhow::Result<()> {
             "/v1/cases/:id",
             axum::routing::patch(routes::cases::rename).delete(routes::cases::remove),
         )
+        .route(
+            "/v1/cases/:id/images",
+            get(routes::images::list).post(routes::images::upload),
+        )
+        .route("/v1/images/:id", axum::routing::delete(routes::images::remove))
+        .route("/v1/me/usage", get(routes::images::my_usage))
         .with_state(app);
 
     let port: u16 = std::env::var("LUMI_PORT")

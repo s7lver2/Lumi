@@ -320,3 +320,30 @@ pub struct Case {
     pub lng: Option<f64>,
     pub created_at: i64,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Image {
+    pub id: i64,
+    pub case_id: i64,
+    pub filename: String,
+    pub bytes: i64,
+    pub width: Option<i64>,
+    pub height: Option<i64>,
+    pub mime: String,
+    /// GPS DECLARADO por la cámara. Nunca se mezcla con el inferido.
+    pub exif_lat: Option<f64>,
+    pub exif_lng: Option<f64>,
+    pub exif: Option<serde_json::Value>,
+    pub created_at: i64,
+}
+
+/// Cuánto ocupa este usuario y cuánto le dejan.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Usage {
+    pub used_bytes: i64,
+    pub limit_gb: i64,
+    /// `true` si el tope viene de una anulación propia, `false` si se hereda
+    /// del global. Un límite sin origen visible es indepurable cuando alguien
+    /// pregunta por qué no le caben más imágenes.
+    pub overridden: bool,
+}

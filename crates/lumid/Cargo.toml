@@ -9,8 +9,11 @@ serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
-axum = "0.7"
+axum = { version = "0.7", features = ["multipart"] }
 axum-server = { version = "0.7", features = ["tls-rustls"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+kamadak-exif = "0.6"
+sha2.workspace = true
 tower-http = { version = "0.6", features = ["cors"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 nvml-wrapper = "0.10"
