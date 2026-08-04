@@ -95,6 +95,33 @@ export function isCard(s: string): boolean {
   return s.trim().startsWith("lumi1s_");
 }
 
+export interface Project {
+  id: number; name: string; role: "owner" | "member";
+  cases: number; images: number; bytes: number;
+  created_at: number; updated_at: number;
+}
+export interface ProjectMember {
+  user_id: number; username: string; role: "owner" | "member"; added_at: number;
+}
+export interface Case {
+  id: number; project_id: number; name: string;
+  images: number; analyses: number; resolved: number;
+  lat: number | null; lng: number | null; created_at: number;
+}
+export interface Analysis {
+  id: number; case_id: number; model: string;
+  state: "pendiente" | "en_curso" | "hecho" | "error";
+  error: string | null;
+  result_lat: number | null; result_lng: number | null;
+  result_radius_m: number | null; result_confidence: number | null;
+  image_ids: number[]; created_at: number; finished_at: number | null;
+}
+export interface Usage { used_bytes: number; limit_gb: number; overridden: boolean }
+export interface MapConfig {
+  provider: "mapbox" | "osm" | "none"; style_url: string;
+  has_key: boolean; reason: string | null;
+}
+
 const call = (method: string, path: string, body: unknown, token?: string, ticket?: string) =>
   invoke<string>("request", {
     method, path, body: body === undefined ? null : JSON.stringify(body), token, ticket,
