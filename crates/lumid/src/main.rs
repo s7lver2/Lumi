@@ -114,6 +114,10 @@ async fn main() -> anyhow::Result<()> {
             "/v1/analyses/:id",
             get(routes::analyses::get_one).delete(routes::analyses::remove),
         )
+        .route("/v1/map/config", get(routes::map::config))
+        .route("/v1/map/style", get(routes::map::style))
+        .route("/v1/map/tiles/:z/:x/:y", get(routes::map::tile))
+        .route("/v1/admin/map", axum::routing::patch(routes::map::patch_admin))
         .with_state(app);
 
     let port: u16 = std::env::var("LUMI_PORT")

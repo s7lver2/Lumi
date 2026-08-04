@@ -373,3 +373,24 @@ pub struct AnalysisReq {
     pub image_ids: Vec<i64>,
     pub model: String,
 }
+
+/// Lo que el cliente puede saber del mapa. **Nunca incluye la clave.**
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct MapConfig {
+    /// `mapbox` | `osm` | `none`
+    pub provider: String,
+    pub style_url: String,
+    /// `true` si hay clave guardada. El valor no sale de aquí jamás.
+    pub has_key: bool,
+    /// Por qué el mapa no está disponible, si no lo está. Nada de lienzo en
+    /// blanco ni de spinner eterno.
+    pub reason: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct MapConfigReq {
+    pub provider: String,
+    pub style_url: Option<String>,
+    /// `None` deja la clave como estaba; `Some("")` la borra.
+    pub key: Option<String>,
+}

@@ -6,6 +6,7 @@ pub mod cases;
 pub mod claim;
 pub mod hello;
 pub mod images;
+pub mod map;
 pub mod projects;
 pub mod tasks;
 pub mod telemetry;
