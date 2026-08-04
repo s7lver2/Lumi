@@ -3,5 +3,6 @@ pub mod admin;
 pub mod auth;
 pub mod claim;
 pub mod hello;
+pub mod projects;
 pub mod tasks;
 pub mod telemetry;

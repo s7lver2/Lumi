@@ -272,3 +272,34 @@ pub struct PatchUserReq {
 pub struct PatchLimitsReq {
     pub limits: std::collections::HashMap<String, serde_json::Value>,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Project {
+    pub id: i64,
+    pub name: String,
+    pub role: String,
+    pub cases: i64,
+    pub images: i64,
+    pub bytes: i64,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ProjectMember {
+    pub user_id: i64,
+    pub username: String,
+    pub role: String,
+    pub added_at: i64,
+}
+
+/// Crear y renombrar comparten cuerpo: solo llevan nombre.
+#[derive(Serialize, Deserialize)]
+pub struct NameReq {
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct MemberReq {
+    pub username: String,
+}

@@ -74,6 +74,19 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/users", get(routes::admin::list_users))
         .route("/v1/admin/users/:id", get(routes::admin::get_user).patch(routes::admin::patch_user))
         .route("/v1/admin/limits", get(routes::admin::get_limits).patch(routes::admin::patch_limits))
+        .route("/v1/projects", get(routes::projects::list).post(routes::projects::create))
+        .route(
+            "/v1/projects/:id",
+            axum::routing::patch(routes::projects::rename).delete(routes::projects::remove),
+        )
+        .route(
+            "/v1/projects/:id/members",
+            get(routes::projects::members).post(routes::projects::add_member),
+        )
+        .route(
+            "/v1/projects/:id/members/:user_id",
+            axum::routing::delete(routes::projects::remove_member),
+        )
         .with_state(app);
 
     let port: u16 = std::env::var("LUMI_PORT")
