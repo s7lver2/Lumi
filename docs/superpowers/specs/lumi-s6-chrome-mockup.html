@@ -193,6 +193,35 @@
   .thumb.add{display:grid;place-items:center;color:var(--subtle);background:none;border-style:dashed}
   .thumb.add:hover{color:var(--fg)}
 
+  /* Estado del análisis, encima de la propia foto. La miniatura ya está ahí:
+     no hace falta una lista aparte que diga qué se está procesando. */
+  .thumb .veil{
+    position:absolute;inset:0;border-radius:7px;backdrop-filter:blur(3.5px);
+    background:rgba(10,12,14,.42);animation:popIn .3s var(--expo) both}
+  .thumb .ring{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+  .thumb .ring .bg{fill:none;stroke:rgba(255,255,255,.16);stroke-width:2.4}
+  .thumb .ring .fg{fill:none;stroke:var(--fg);stroke-width:2.4;stroke-linecap:round;
+    transition:stroke-dashoffset .7s var(--expo)}
+  /* Sin porcentaje que enseñar, el arco gira: dice «trabajando» sin mentir
+     sobre cuánto falta. */
+  .thumb.queued .ring{animation:spin 1.15s linear infinite}
+  .thumb.queued .ring .fg{stroke:var(--muted)}
+  @keyframes spin{to{transform:rotate(270deg)}}
+  .thumb .pbar{position:absolute;left:4px;right:4px;bottom:4px;height:2px;border-radius:2px;
+    background:rgba(255,255,255,.16);overflow:hidden}
+  .thumb .pbar i{display:block;height:100%;background:var(--fg);border-radius:2px;
+    transition:width .7s var(--expo)}
+  .thumb .qn{position:absolute;inset:0;display:grid;place-items:center;
+    font:9px ui-monospace,Menlo,monospace;color:var(--muted)}
+  .thumb.failed{border-color:rgba(163,51,51,.7)}
+  .thumb.failed .veil{background:rgba(30,12,12,.5)}
+  .thumb .bang{position:absolute;inset:0;display:grid;place-items:center;
+    color:var(--danger-fg);font-size:13px;line-height:1}
+  /* Al terminar: un latido y la foto vuelve a verse nítida. */
+  @keyframes doneFlash{0%{box-shadow:0 0 0 0 rgba(242,243,245,.5)}
+    100%{box-shadow:0 0 0 9px rgba(242,243,245,0)}}
+  .thumb.justdone{animation:doneFlash .7s var(--expo) both}
+
   /* Reordenar arrastrando. El orden de la tira es el orden del informe, así
      que colocarlas a mano no es un capricho: es parte del relato del caso. */
   .thumb[draggable="true"]{cursor:grab}
@@ -613,6 +642,7 @@
       <button id="roleUser" aria-pressed="false">Como investigador</button>
     </div>
     <button class="ghost" id="simDrop" style="padding:6px 11px">Simular arrastre de ficheros</button>
+    <button class="ghost" id="simWork" style="padding:6px 11px">Avanzar el análisis</button>
     <span class="hint">arrastra para reordenar · botón derecho para el menú · Esc cierra</span>
   </div>
 
@@ -910,10 +940,10 @@
 
           <div class="dock shift" id="dock">
             <div class="thumbs" id="strip">
-              <div class="thumb on" title="Arrastra para reordenar"></div>
-              <div class="thumb" title="Arrastra para reordenar"></div>
-              <div class="thumb" title="Arrastra para reordenar"></div>
-              <div class="thumb" title="Arrastra para reordenar"></div>
+              <div class="thumb on" title="IMG_4417.jpg · resuelta"></div>
+              <div class="thumb work" data-pct="62" title="IMG_4418.jpg · analizando"></div>
+              <div class="thumb queued" data-qn="2ª" title="IMG_4419.jpg · en cola"></div>
+              <div class="thumb failed" title="IMG_4420.jpg · el análisis falló"></div>
               <div class="thumb add" data-upload>+</div>
             </div>
             <div class="summary">
@@ -1190,6 +1220,18 @@
         respira despacio y abre las tres fotos en abanico al acercarte, y al arrastrar ficheros sobre
         la ventana aparece un marco a pantalla completa con el nombre del caso de destino.
         Pruébalo con «Simular arrastre de ficheros».
+      </p>
+    </div>
+    <div class="note-card">
+      <span class="tag">progreso</span>
+      <h3>El estado, encima de la propia foto</h3>
+      <p>
+        La miniatura ya está en la tira: no hace falta una lista aparte que diga qué se está
+        procesando. Mientras se analiza, la foto se difumina y un anillo la rodea con lo que lleva
+        hecho, más una barra fina abajo. Lo que está en cola gira sin porcentaje y enseña su puesto
+        —una barra que avanza inventada es peor que no ponerla—. Lo que falló se queda difuminado
+        con el borde rojo y un «!». Al terminar, un latido y la foto vuelve a verse.
+        Pruébalo con «Avanzar el análisis».
       </p>
     </div>
     <div class="note-card">
@@ -1578,6 +1620,81 @@
   document.addEventListener("click", cerrarMenu);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") cerrarMenu(); });
   ctx.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  /* ---- estado del análisis en las miniaturas ----
+     El adorno lo pinta el guion y no el HTML para que una miniatura pueda
+     cambiar de estado sin reescribirla entera. */
+  const CIRC = 2 * Math.PI * 15;
+  function pintarEstado(t) {
+    t.querySelectorAll(".veil,.ring,.pbar,.qn,.bang").forEach((e) => e.remove());
+    const trabajando = t.classList.contains("work");
+    const enCola = t.classList.contains("queued");
+    const fallo = t.classList.contains("failed");
+    if (!trabajando && !enCola && !fallo) return;
+
+    const veil = document.createElement("span");
+    veil.className = "veil";
+    t.appendChild(veil);
+
+    if (fallo) {
+      const b = document.createElement("span");
+      b.className = "bang";
+      b.textContent = "!";
+      t.appendChild(b);
+      return;
+    }
+
+    const pct = Number(t.dataset.pct ?? 0);
+    const ring = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    ring.setAttribute("class", "ring");
+    ring.setAttribute("viewBox", "0 0 36 36");
+    ring.innerHTML =
+      `<circle class="bg" cx="18" cy="18" r="15"/>` +
+      `<circle class="fg" cx="18" cy="18" r="15"
+         stroke-dasharray="${enCola ? 22 : CIRC}"
+         stroke-dashoffset="${enCola ? 0 : CIRC * (1 - pct / 100)}"/>`;
+    t.appendChild(ring);
+
+    if (enCola) {
+      const n = document.createElement("span");
+      n.className = "qn";
+      n.textContent = t.dataset.qn ?? "";
+      t.appendChild(n);
+      return;
+    }
+    // La barra solo cuando hay un número real detrás. Una barra que avanza
+    // inventada es peor que no ponerla.
+    const bar = document.createElement("span");
+    bar.className = "pbar";
+    bar.innerHTML = `<i style="width:${pct}%"></i>`;
+    t.appendChild(bar);
+  }
+  const repintar = () => $$("#strip .thumb").forEach(pintarEstado);
+  repintar();
+
+  /* Demostración: el análisis avanza, termina y la cola corre un puesto. */
+  $("#simWork").onclick = () => {
+    const t = $("#strip .thumb.work");
+    if (!t) return;
+    const pct = Math.min(100, Number(t.dataset.pct ?? 0) + 19);
+    t.dataset.pct = String(pct);
+    pintarEstado(t);
+    if (pct < 100) return;
+    setTimeout(() => {
+      t.classList.remove("work");
+      delete t.dataset.pct;
+      pintarEstado(t);
+      t.classList.add("justdone");
+      setTimeout(() => t.classList.remove("justdone"), 700);
+      const sig = $("#strip .thumb.queued");
+      if (sig) {
+        sig.classList.remove("queued");
+        sig.classList.add("work");
+        sig.dataset.pct = "8";
+        pintarEstado(sig);
+      }
+    }, 420);
+  };
 
   /* ---- marco de arrastre de ficheros ---- */
   $("#simDrop").onclick = () => {
