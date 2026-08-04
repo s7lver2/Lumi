@@ -37,6 +37,12 @@ pub struct App {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // rustls 0.23 enlaza tanto `ring` como `aws-lc-rs` en cuanto dos
+    // dependencias del árbol (aquí, axum-server y reqwest) piden rustls sin
+    // desactivar sus features por defecto: con los dos presentes, rustls ya
+    // no puede elegir uno solo por su cuenta y el arranque del TLS entra en
+    // panic. Se fija aquí, una vez, antes de tocar nada de red.
+    rustls::crypto::ring::default_provider().install_default().ok();
     tracing_subscriber::fmt::init();
     let dir = PathBuf::from(std::env::var("LUMI_DATA").unwrap_or_else(|_| "/var/lib/lumi".into()));
     std::fs::create_dir_all(&dir)?;
