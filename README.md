@@ -198,6 +198,26 @@ sudo lumi admin unblock ana
 sudo lumi admin accept-requests off # cierra la aceptación de nuevas solicitudes
 ```
 
+### Proyectos, casos y mapa (subsistema 6, esqueleto)
+
+Al iniciar sesión se elige un **proyecto** antes de entrar, como en Burp. Dentro hay
+**casos**, y dentro de un caso sus imágenes y sus **análisis**. Nada de un proyecto se ve
+desde otro. Los proyectos se crean privados; el dueño puede invitar a otros investigadores.
+
+El **motor de inferencia no existe todavía** (subsistema 5): los análisis se crean en estado
+`pendiente` y ahí se quedan. Es a propósito — son el trabajo que la cola del subsistema 4
+encontrará esperando cuando arranque.
+
+El mapa lo sirve el propio daemon: un administrador configura el proveedor (Mapbox u
+OpenStreetMap) y su clave, y el servidor hace de proxy de teselas con caché en disco. La
+clave nunca baja al cliente, y el proveedor ve una IP en vez de una por investigador.
+
+El GPS que la cámara escribió en el EXIF se lee y se muestra **aparte** de lo inferido, en
+ámbar. El archivo original nunca se toca.
+
+Configurar el mapa: panel de administración, sección *Mapa*. La caché de teselas vive en
+`{DATA}/tiles` y se vacía borrando ese directorio.
+
 ## 4. Probar el modo sellado
 
 Con `lumid` parado:

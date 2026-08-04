@@ -13,18 +13,25 @@ import { AdminPanel } from "./admin/AdminPanel";
 import { ConnectionBanner } from "./ui/ConnectionBanner";
 import { DebugOrb } from "./dev/DebugOrb";
 import { useServer } from "./lib/store";
+import { useWorkspace } from "./lib/workspace";
 import { api, type Hello, type Sample } from "./lib/api";
 import { setAuth } from "./lib/bridge";
 import { loadSession, updateSession } from "./lib/session";
+import { ProjectPicker } from "./work/ProjectPicker";
+import { ProjectView } from "./work/ProjectView";
+import { CaseView } from "./work/CaseView";
+import { Rail } from "./work/Rail";
+import { MembersDialog } from "./work/MembersDialog";
 
 export default function App() {
   const [step, setStep] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
   const [resuming, setResuming] = useState(true);
-  const [mode, setMode] = useState<"entry" | "wizard" | "app" | "admin">("entry");
+  const [mode, setMode] = useState<"entry" | "wizard" | "picker" | "project" | "case" | "admin">("entry");
   const [notifs, setNotifs] = useState(0);
   const [adminBusy, setAdminBusy] = useState(false);
   const [runtimeDone, setRuntimeDone] = useState(false);
+  const [members, setMembers] = useState(false);
   const hello = useServer((s) => s.hello);
   const isAdmin = useServer((s) => s.isAdmin);
   const bootstrapToken = useServer((s) => s.bootstrapToken);
@@ -80,7 +87,7 @@ export default function App() {
             // El aprovisionamiento sigue siendo cosa del owner: si el servidor
             // no está listo del todo, se vuelve al wizard donde se dejó.
             if (me.is_admin && h.state !== "ready") { setStep(2); setMode("wizard"); }
-            else setMode(me.is_admin ? "admin" : "app");
+            else setMode(me.is_admin ? "admin" : "picker");
             return;
           } catch {
             // 403 (cambio pendiente) o token caducado: la entrada lo resuelve.
@@ -120,11 +127,13 @@ export default function App() {
         // Solo afecta a una sesión de usuario ya dentro (app/admin): durante
         // el wizard del owner, `StatusOverlay` ya cubre esto con reintento
         // manual, y no tiene sentido "desloguear" a quien está instalando.
-        const kicked = modeRef.current === "app" || modeRef.current === "admin";
+        const kicked = modeRef.current === "picker" || modeRef.current === "project" ||
+          modeRef.current === "case" || modeRef.current === "admin";
         if (kicked && Date.now() - downSince.current > KICK_AFTER_MS) {
           updateSession({ token: undefined });
           useServer.getState().setToken(null);
           setAuth(null);
+          useWorkspace.getState().clear();
           setMode("entry");
           setStatus("ok");
           fails.current = 0;
@@ -139,7 +148,8 @@ export default function App() {
     await api.post("/v1/unseal", { passphrase });
   }
 
-  const blockedByDisconnect = status !== "ok" && (mode === "app" || mode === "admin");
+  const blockedByDisconnect = status !== "ok" &&
+    (mode === "picker" || mode === "project" || mode === "case" || mode === "admin");
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
@@ -152,9 +162,9 @@ export default function App() {
       {mode !== "entry" && isAdmin && (
         <TelemetryStrip collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)}
           notifs={notifs}
-          onNotifs={mode === "app" || mode === "admin" ? () => {
+          onNotifs={mode === "picker" || mode === "project" || mode === "case" || mode === "admin" ? () => {
             setNotifs(0);
-            setMode(useServer.getState().isAdmin ? "admin" : "app");
+            setMode(useServer.getState().isAdmin ? "admin" : "picker");
           } : undefined} />
       )}
       {/* Para app/admin, la desconexión es un banner + bloqueo, no una
@@ -166,7 +176,9 @@ export default function App() {
       {blockedByDisconnect && <ConnectionBanner />}
       {/* El wizard se centra en el espacio que deja la franja, en vez de
           colgar de arriba dejando media pantalla vacía. */}
-      <div className={`relative flex flex-1 items-center justify-center overflow-y-auto ${blockedByDisconnect ? "pointer-events-none opacity-50" : ""}`}>
+      <div className={`relative flex flex-1 overflow-hidden ${
+        mode === "project" || mode === "case" ? "" : "items-center justify-center overflow-y-auto"
+      } ${blockedByDisconnect ? "pointer-events-none opacity-50" : ""}`}>
       {resuming ? null : status !== "ok" && !blockedByDisconnect ? (
         // Sustituye al wizard en el mismo hueco: no es una capa flotante
         // encima ("popup"), es lo que se ve mientras dure el estado. La
@@ -179,10 +191,10 @@ export default function App() {
         />
       ) : mode === "entry" ? (
         <EntryScreen
-          onSignedIn={() => setMode(useServer.getState().isAdmin ? "admin" : "app")}
+          onSignedIn={() => setMode(useServer.getState().isAdmin ? "admin" : "picker")}
           onOwnerKey={(key) => { useServer.getState().setKey(key); setStep(0); setMode("wizard"); }} />
       ) : mode === "admin" ? (
-        <AdminPanel token={useServer.getState().token!} onClose={() => setMode("app")} />
+        <AdminPanel token={useServer.getState().token!} onClose={() => setMode("picker")} />
       ) : mode === "wizard" ? (
         <Wizard step={step} title="Lumi Station" subtitle="vincular servidor"
           // Del paso 3 (runtime) no se puede volver al 2 (admin): la cuenta ya
@@ -195,7 +207,7 @@ export default function App() {
             // (runtime) es el último construido, así que terminar de instalar
             // lleva directo a la app en vez de a un paso vacío. El owner es
             // admin, así que va al panel — igual que al reabrir la app.
-            if (step === 2) { setMode(useServer.getState().isAdmin ? "admin" : "app"); return; }
+            if (step === 2) { setMode(useServer.getState().isAdmin ? "admin" : "picker"); return; }
             setStep((s) => s + 1);
           }}
           nextDisabled={
@@ -206,11 +218,38 @@ export default function App() {
           nextBusy={step === 1 && adminBusy}>
           {step === 0 && <PairStep onDone={() => setStep(1)} />}
           {step === 1 && <AdminStep bootstrapToken={bootstrapToken} onDone={() => setStep(2)} onBusyChange={setAdminBusy} />}
-          {step === 2 && <ProvisionStep onDone={() => setMode("app")} onStatusChange={setRuntimeDone} />}
+          {step === 2 && <ProvisionStep onDone={() => setMode("picker")} onStatusChange={setRuntimeDone} />}
         </Wizard>
+      ) : mode === "picker" ? (
+        <ProjectPicker onOpen={(p) => {
+          useWorkspace.getState().setProject(p);
+          setMode("project");
+        }} />
+      ) : mode === "project" || mode === "case" ? (
+        (() => {
+          const { project, case_ } = useWorkspace.getState();
+          if (!project) { setMode("picker"); return null; }
+          const rail = (
+            <Rail canManage={project.role === "owner"}
+              onProjects={() => { useWorkspace.getState().clear(); setMode("picker"); }}
+              onMembers={() => setMembers(true)} />
+          );
+          return (
+            <>
+              {mode === "case" && case_ ? (
+                <CaseView project={project} case_={case_} rail={rail}
+                  onBack={() => { useWorkspace.getState().setCase(null); setMode("project"); }} />
+              ) : (
+                <ProjectView project={project} rail={rail}
+                  onOpenCase={(c) => { useWorkspace.getState().setCase(c); setMode("case"); }} />
+              )}
+              {members && <MembersDialog project={project} onClose={() => setMembers(false)} />}
+            </>
+          );
+        })()
       ) : (
         <div className="text-xs text-muted">
-          <p>Sesión iniciada como {useServer.getState().username}. Los proyectos llegan en el subsistema 6.</p>
+          <p>Sesión iniciada como {useServer.getState().username}.</p>
           {/* Sin esto, un admin que pulsaba "Cerrar" en su propio panel se
               quedaba aquí sin ninguna forma visible de volver: la única
               salida era la campana de la franja, que no es obvia. */}

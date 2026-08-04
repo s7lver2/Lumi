@@ -132,7 +132,7 @@ spec → plan → implementación, y cada una debe producir software que funcion
 | **3** | **Panel de administración** | Hardware, monitorización, notificaciones, mantenimiento, gestión de modelos | Pendiente |
 | **4** | **Cola y planificador** | Cientos de usuarios, pausa por desconexión, prioridades, multi-GPU y GPU+CPU | Pendiente |
 | **5** | **Motor de inferencia** | Lumi Mini / Pro / Vision, ensemble de verificadores geométricos | Pendiente |
-| **6** | **Cliente y proyectos** | Workspaces tipo Burp/Caido, imágenes, historial, mapa | Pendiente |
+| **6** | **Cliente y proyectos** | Workspaces tipo Burp/Caido, imágenes, historial, mapa | Esqueleto terminado |
 
 **Orden acordado:** `1 → 2 → 6 (esqueleto) → 4 → 5 → 3`. El razonamiento: el handshake, la
 autenticación y el esqueleto del cliente son el andamio sin el cual nada más se puede
@@ -355,6 +355,15 @@ alguien lo busca.
 En WSL, elegir una ruta bajo `/mnt/...` para el runtime falla al crear el venv: DrvFs no
 soporta los enlaces simbólicos que necesita `python3 -m venv`. No es un fallo del código;
 hay que usar el filesystem nativo de Linux.
+
+### Subsistema 6: esqueleto terminado, motor y cola pendientes
+
+Proyectos, casos, imágenes y mapa funcionan de punta a punta con la única pieza que
+todavía no existe fuera de escena: los análisis nacen y se quedan en `pendiente` porque no
+hay cola (subsistema 4) ni motor de inferencia (subsistema 5) que los resuelva. Tampoco hay
+geocodificación inversa (el campo "Identificado" de la barra inferior queda vacío a
+propósito) ni traspaso de propiedad de un proyecto. El caché de teselas del mapa no tiene
+tope de tamaño. El detalle de cada uno de estos aparcamientos vive en `FUTURO.md`.
 
 ---
 
