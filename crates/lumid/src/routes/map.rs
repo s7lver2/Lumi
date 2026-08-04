@@ -34,6 +34,19 @@ fn style_url(app: &App) -> String {
     })
 }
 
+/// El botón "Copy Style URL" de Mapbox Studio da `mapbox://styles/usuario/id`,
+/// que es el formato que su documentación pide pegar en sus propios SDKs — no
+/// una dirección real, sino su esquema interno. `reqwest` no sabe resolverlo
+/// ("builder error for url") porque no es HTTP. Es exactamente lo que se
+/// espera que un administrador pegue aquí, así que se traduce en vez de
+/// exigirle que sepa la equivalencia en `https://api.mapbox.com/styles/v1/`.
+fn resolve_mapbox(url: &str) -> String {
+    match url.strip_prefix("mapbox://styles/") {
+        Some(rest) => format!("https://api.mapbox.com/styles/v1/{rest}"),
+        None => url.to_string(),
+    }
+}
+
 /// Cliente HTTP hacia el proveedor. Se construye por llamada: son peticiones
 /// esporádicas y un cliente en el estado sería una pieza más que mantener.
 /// ponytail: el techo es un mapa muy usado; ahí conviene un cliente compartido
@@ -107,8 +120,9 @@ pub async fn style(State(app): State<App>, headers: HeaderMap) -> Result<Json<se
         return Err(err(StatusCode::SERVICE_UNAVAILABLE, "no hay proveedor de mapas configurado"));
     }
     let key = app.store.get_meta("map_key").unwrap_or_default();
-    let full = if provider(&app) == "mapbox" && !key.is_empty() {
-        format!("{url}?access_token={key}")
+    let full = if provider(&app) == "mapbox" {
+        let url = resolve_mapbox(&url);
+        if key.is_empty() { url } else { format!("{url}?access_token={key}") }
     } else {
         url
     };
@@ -209,7 +223,11 @@ pub async fn patch_admin(
     app.store.set_meta("map_provider", &req.provider).map_err(fail)?;
     let style = req.style_url.unwrap_or_default();
     let style = if style.trim().is_empty() && req.provider == "osm" { OSM_STYLE.into() } else { style };
-    app.store.set_meta("map_style", style.trim()).map_err(fail)?;
+    // Se normaliza al guardar y no solo al leer: así lo que `/v1/map/config`
+    // le enseña a cualquier pantalla de administración ya es la URL real, no
+    // el `mapbox://` que se pegó.
+    let style = if req.provider == "mapbox" { resolve_mapbox(style.trim()) } else { style.trim().to_string() };
+    app.store.set_meta("map_style", &style).map_err(fail)?;
     // `None` no toca la clave: así se puede cambiar de estilo sin volver a
     // teclearla, que es justo lo que no se puede hacer si se leyera del campo
     // enmascarado de la pantalla.
