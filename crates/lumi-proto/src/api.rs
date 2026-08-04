@@ -290,6 +290,9 @@ pub struct ProjectMember {
     pub user_id: i64,
     pub username: String,
     pub role: String,
+    /// `pending` hasta que la invitada la acepta desde `/v1/me/invites`.
+    /// El dueño nace `accepted`: invitarse a sí mismo no tendría sentido.
+    pub status: String,
     pub added_at: i64,
 }
 
@@ -302,6 +305,31 @@ pub struct NameReq {
 #[derive(Serialize, Deserialize)]
 pub struct MemberReq {
     pub username: String,
+}
+
+/// Lo que `/v1/me/invites` contesta: una invitación por proyecto, pendiente
+/// de aceptar. Entrar a un proyecto sin haber aceptado no es un descuido que
+/// arreglar en silencio, es un permiso que alguien más no ha dado todavía.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Invite {
+    pub project_id: i64,
+    pub project_name: String,
+    pub invited_by: String,
+    pub added_at: i64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ReuseReq {
+    pub image_id: i64,
+}
+
+/// Una imagen de OTRO caso del mismo proyecto, para el mosaico de "ya subidas
+/// al proyecto" del destino de arrastre.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ProjectImage {
+    #[serde(flatten)]
+    pub image: Image,
+    pub case_name: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

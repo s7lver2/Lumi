@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type Project, type ProjectMember, type Usage } from "../lib/api";
 import { useServer } from "../lib/store";
+import { Avatar } from "../ui/Avatar";
 import { Icon } from "../ui/Icon";
+import { PromptDialog } from "../ui/PromptDialog";
+import { InvitesPopover } from "./InvitesPopover";
 
 const GB = 1024 * 1024 * 1024;
 
@@ -41,10 +44,12 @@ export function ProjectPicker({
   const [members, setMembers] = useState<ProjectMember[] | null>(null);
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<number | null>(null);
-  const [draft, setDraft] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [entering, setEntering] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   // Una sola vez al montar. Con un `ref` de callback esto se repetiría en cada
   // render y le robaría el foco al campo de filtro en cuanto tecleases.
@@ -77,6 +82,7 @@ export function ProjectPicker({
     if (sel === null) { setMembers(null); return; }
     let dead = false;
     setMembers(null);
+    setOpenError(null);
     api.get<ProjectMember[]>(`/v1/projects/${sel}/members`, token)
       .then((m) => { if (!dead) setMembers(m); })
       .catch(() => { if (!dead) setMembers([]); });
@@ -92,16 +98,34 @@ export function ProjectPicker({
   const current = list?.find((p) => p.id === sel) ?? null;
 
   async function create(name: string) {
-    if (!name.trim()) { setDraft(null); return; }
     setBusy(true); setError(null);
     try {
       const p = await api.post<Project>("/v1/projects", { name }, token);
-      setDraft(null);
-      onOpen(p);
+      setCreating(false);
+      // Un proyecto recién creado es tuyo y de nadie más todavía: no puede
+      // estar ya bloqueado, pero pasa por el mismo camino que abrir cualquier
+      // otro para no tener dos formas distintas de entrar.
+      void open(p);
     } catch (e) {
       setError(String(e));
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** Un proyecto solo admite una persona dentro a la vez. Se comprueba justo
+   *  antes de entrar y no al listar: la lista tarda en quedarse vieja, y decir
+   *  "en uso" un minuto después de que se liberó sería mentir. */
+  async function open(p: Project) {
+    setOpenError(null);
+    setEntering(true);
+    try {
+      await api.post(`/v1/projects/${p.id}/enter`, {}, token);
+      onOpen(p);
+    } catch (e) {
+      setOpenError(String(e));
+    } finally {
+      setEntering(false);
     }
   }
 
@@ -136,14 +160,14 @@ export function ProjectPicker({
   // Flechas para recorrer y Enter para abrir: quien elige proyecto veinte veces
   // al día no quiere soltar el teclado.
   function onKey(e: React.KeyboardEvent) {
-    if (draft !== null || renaming) return;
+    if (creating || renaming) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       const i = shown.findIndex((p) => p.id === sel);
       const next = e.key === "ArrowDown" ? i + 1 : i - 1;
       if (next >= 0 && next < shown.length) setSel(shown[next].id);
     } else if (e.key === "Enter" && current) {
-      onOpen(current);
+      void open(current);
     }
   }
 
@@ -162,8 +186,10 @@ export function ProjectPicker({
         <div className="flex items-center gap-3.5">
           {addr && <span className="font-mono text-[10px] text-subtle">{addr}</span>}
           <span className="h-3.5 w-px bg-border" />
+          <Avatar name={username} />
           <span className="text-[11px] text-muted">{username}</span>
           {isAdmin && <span className="rounded border border-white/25 px-1.5 py-px text-[8.5px] text-fg">admin</span>}
+          <InvitesPopover onAccepted={() => void load()} />
         </div>
       </header>
 
@@ -191,7 +217,7 @@ export function ProjectPicker({
               </p>
             )}
             {shown.map((p, i) => (
-              <button key={p.id} onClick={() => setSel(p.id)} onDoubleClick={() => onOpen(p)}
+              <button key={p.id} onClick={() => setSel(p.id)} onDoubleClick={() => void open(p)}
                 style={{ animation: `jg-fade-rise 220ms ${Math.min(i, 8) * 26}ms cubic-bezier(.16,1,.3,1) both` }}
                 className={`relative block w-full rounded-[9px] border p-[10px_11px] text-left transition-colors duration-300 ease-expo ${
                   sel === p.id
@@ -216,31 +242,12 @@ export function ProjectPicker({
           </div>
 
           <div className="border-t border-border p-[9px]">
-            {draft !== null ? (
-              <div className="rounded-[9px] border border-dashed border-white/25 p-[9px]">
-                {/* Intro confirma; Escape y perder el foco cancelan. Crear al
-                    perder el foco parecía cómodo hasta que un clic en
-                    cualquier sitio te dejaba un proyecto sin nombre — y si la
-                    creación fallaba, el blur posterior lo intentaba otra vez y
-                    salían dos. */}
-                <input autoFocus value={draft} disabled={busy}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onBlur={() => setDraft(null)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void create(draft);
-                    if (e.key === "Escape") setDraft(null);
-                  }}
-                  placeholder="nombre del proyecto"
-                  className="w-full bg-transparent text-center text-[11.5px] text-fg outline-none placeholder:text-subtle" />
-              </div>
-            ) : (
-              <button onClick={() => canCreate && setDraft("")} disabled={!canCreate}
-                title={canCreate ? undefined : "tu cuenta no puede crear proyectos; habla con el administrador"}
-                className="jg-press block w-full rounded-[9px] border border-dashed border-border p-[9px]
-                  text-center text-[11px] text-subtle hover:border-white/20 hover:text-fg disabled:opacity-40">
-                + Nuevo proyecto
-              </button>
-            )}
+            <button onClick={() => canCreate && setCreating(true)} disabled={!canCreate}
+              title={canCreate ? undefined : "tu cuenta no puede crear proyectos; habla con el administrador"}
+              className="jg-press block w-full rounded-[9px] border border-dashed border-border p-[9px]
+                text-center text-[11px] text-subtle hover:border-white/20 hover:text-fg disabled:opacity-40">
+              + Nuevo proyecto
+            </button>
           </div>
         </div>
 
@@ -293,12 +300,10 @@ export function ProjectPicker({
                   {members === null ? (
                     <span className="text-[11px] text-subtle">cargando</span>
                   ) : (
-                    members.map((m) => (
+                    members.filter((m) => m.status === "accepted").map((m) => (
                       <span key={m.user_id}
                         className="flex items-center gap-[7px] rounded-full border border-border py-1 pl-[5px] pr-[11px]">
-                        <span className="grid h-[19px] w-[19px] place-items-center rounded-full bg-elevated text-[9px] text-fg">
-                          {m.username.slice(0, 1).toUpperCase()}
-                        </span>
+                        <Avatar name={m.username} />
                         <span className="text-[11px]">{m.username}</span>
                         {m.role === "owner" && <Chip strong>dueño</Chip>}
                       </span>
@@ -312,10 +317,10 @@ export function ProjectPicker({
                 )}
               </div>
 
-              {error && (
+              {(error || openError) && (
                 <div className="mt-4 flex items-start gap-2.5">
                   <Icon name="alert" className="mt-0.5 text-danger-fg" />
-                  <span className="text-[11px] leading-snug text-muted">{error}</span>
+                  <span className="text-[11px] leading-snug text-muted">{error || openError}</span>
                 </div>
               )}
 
@@ -334,9 +339,9 @@ export function ProjectPicker({
                       <DeleteButton name={current.name} busy={busy} onConfirm={() => void remove()} />
                     </>
                   )}
-                  <button onClick={() => onOpen(current)} disabled={busy}
+                  <button onClick={() => void open(current)} disabled={busy || entering}
                     className="jg-press rounded-lg bg-accent px-5 py-2 text-[11.5px] font-medium text-black disabled:opacity-40">
-                    Abrir proyecto
+                    {entering ? "Entrando…" : "Abrir proyecto"}
                   </button>
                 </div>
               </div>
@@ -373,6 +378,11 @@ export function ProjectPicker({
           </button>
         </div>
       </footer>
+
+      <PromptDialog open={creating} title="Nuevo proyecto"
+        subtitle="Cada proyecto tiene sus casos y sus imágenes, separados del resto."
+        placeholder="nombre del proyecto" confirmLabel="Crear" busy={busy} error={error}
+        onConfirm={create} onClose={() => { setCreating(false); setError(null); }} />
     </div>
   );
 }

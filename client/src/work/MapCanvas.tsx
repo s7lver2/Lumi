@@ -164,15 +164,19 @@ export function MapCanvas({
   }, [flyTo]);
 
   if (reason) {
+    // Una franja bajo la barra superior, no un cartel centrado: centrado
+    // competía por el mismo hueco que el destino de arrastre y la tarjeta de
+    // resultado, que también se centran — las dos cosas a la vez se
+    // solapaban en cualquier caso vacío sin proveedor de mapas configurado.
     return (
-      <div className="absolute inset-0 flex items-center justify-center px-10 text-center"
-        style={{ background: "radial-gradient(120% 90% at 50% 35%, #16191d 0%, #0e0f11 70%)" }}>
-        <div className="max-w-[300px]" style={{ animation: "jg-fade-rise 320ms cubic-bezier(.16,1,.3,1) both" }}>
-          <span className="mx-auto mb-3 grid h-10 w-10 place-items-center rounded-[11px] border border-white/15 text-subtle">
-            <Icon name="globe" size={17} />
-          </span>
-          <p className="text-[12.5px] text-fg">No hay mapa que dibujar</p>
-          <p className="mt-1.5 text-[11px] leading-relaxed text-muted">{reason}</p>
+      <div className="absolute inset-0" style={{ background: "radial-gradient(120% 90% at 50% 35%, #16191d 0%, #0e0f11 70%)" }}>
+        <div className="absolute left-11 right-0 top-[38px] z-10 flex items-start gap-2.5
+          border-b border-border bg-[rgba(20,22,26,.72)] px-4 py-2.5 backdrop-blur"
+          style={{ animation: "jg-fade-rise 260ms cubic-bezier(.16,1,.3,1) both" }}>
+          <Icon name="globe" size={13} className="mt-px shrink-0 text-subtle" />
+          <p className="text-[11px] leading-relaxed text-muted">
+            <span className="text-fg">No hay mapa que dibujar. </span>{reason}
+          </p>
         </div>
       </div>
     );

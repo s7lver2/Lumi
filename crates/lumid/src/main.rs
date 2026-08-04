@@ -94,6 +94,12 @@ async fn main() -> anyhow::Result<()> {
             "/v1/projects/:id/members/:user_id",
             axum::routing::delete(routes::projects::remove_member),
         )
+        .route("/v1/me/invites", get(routes::projects::my_invites))
+        .route("/v1/invites/:id/accept", post(routes::projects::accept_invite))
+        .route("/v1/invites/:id/decline", post(routes::projects::decline_invite))
+        .route("/v1/projects/:id/enter", post(routes::projects::enter))
+        .route("/v1/projects/:id/leave", post(routes::projects::leave))
+        .route("/v1/projects/:id/images", get(routes::images::project_gallery))
         .route(
             "/v1/projects/:id/cases",
             get(routes::cases::list).post(routes::cases::create),
@@ -111,6 +117,7 @@ async fn main() -> anyhow::Result<()> {
             get(routes::images::serve_full).delete(routes::images::remove),
         )
         .route("/v1/images/:id/thumb", get(routes::images::serve_thumb))
+        .route("/v1/cases/:id/images/reuse", post(routes::images::reuse))
         .route("/v1/me/usage", get(routes::images::my_usage))
         .route(
             "/v1/cases/:id/analyses",

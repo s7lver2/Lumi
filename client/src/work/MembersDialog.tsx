@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type Project, type ProjectMember } from "../lib/api";
 import { useServer } from "../lib/store";
+import { Avatar } from "../ui/Avatar";
 
 export function MembersDialog({ project, onClose }: { project: Project; onClose: () => void }) {
   const token = useServer((s) => s.token) ?? undefined;
@@ -46,14 +47,17 @@ export function MembersDialog({ project, onClose }: { project: Project; onClose:
         className="w-[360px] rounded-card border border-white/[.13] bg-[rgba(16,19,25,.9)] p-5 shadow-lg shadow-black/40 backdrop-blur-xl">
         <p className="text-[13px] text-fg">Quién entra en {project.name}</p>
         <p className="mb-3.5 text-[11px] text-muted">
-          un invitado puede trabajar dentro; renombrar, borrar e invitar son solo del dueño
+          una invitación no entra hasta que se acepta; renombrar, borrar e invitar son solo del dueño
         </p>
 
         {rows.map((m) => (
           <div key={m.user_id} className="mb-1.5 flex items-center gap-2 rounded-lg border border-border p-2">
-            <span className="flex-1 truncate text-[11.5px] text-fg">{m.username}</span>
+            <Avatar name={m.username} />
+            <span className={`flex-1 truncate text-[11.5px] ${m.status === "pending" ? "text-muted" : "text-fg"}`}>
+              {m.username}
+            </span>
             <span className="text-[8.5px] uppercase tracking-[.11em] text-subtle">
-              {m.role === "owner" ? "dueño" : "invitado"}
+              {m.role === "owner" ? "dueño" : m.status === "pending" ? "invitación enviada" : "invitado"}
             </span>
             {m.role !== "owner" && (
               <button onClick={() => void drop(m.user_id)}

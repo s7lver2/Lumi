@@ -9,7 +9,7 @@ use crate::routes::projects::{err, Fail};
 use crate::App;
 use axum::extract::{Multipart, Path, State};
 use axum::{http::HeaderMap, http::StatusCode, Json};
-use lumi_proto::api::{Image, Usage};
+use lumi_proto::api::{Image, ProjectImage, ReuseReq, Usage};
 use sha2::{Digest, Sha256};
 
 /// Lado mayor de la miniatura. 320 px basta para la tira a densidad doble.
@@ -64,6 +64,115 @@ pub async fn list(
         .flatten()
         .collect();
     Ok(Json(rows))
+}
+
+/// Las imágenes de los OTROS casos del proyecto, para el mosaico de "ya
+/// subidas al proyecto" del destino de arrastre. Cualquier miembro puede
+/// verlas: el aislamiento que importa es entre proyectos, no entre los casos
+/// de uno mismo.
+pub async fn project_gallery(
+    State(app): State<App>,
+    Path(pid): Path<i64>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<ProjectImage>>, Fail> {
+    let (uid, _) = require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
+    crate::projects::access(&app.store, uid, pid)
+        .ok_or_else(|| err(StatusCode::NOT_FOUND, "no existe ese proyecto"))?;
+    let c = app.store.conn();
+    let mut q = c
+        .prepare(
+            "SELECT i.id, i.case_id, i.filename, i.bytes, i.width, i.height, i.mime,
+                    i.exif_lat, i.exif_lng, i.exif_json, i.created_at, k.name
+             FROM images i JOIN cases k ON k.id = i.case_id
+             WHERE k.project_id = ?1
+             ORDER BY i.created_at DESC",
+        )
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    let rows = q
+        .query_map([pid], |r| {
+            Ok(ProjectImage { image: row_to_image(r)?, case_name: r.get(11)? })
+        })
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
+        .flatten()
+        .collect();
+    Ok(Json(rows))
+}
+
+/// Copia una imagen de otro caso del MISMO proyecto a este. Es una copia y no
+/// un traslado: el caso de origen no pierde nada, que es justo la razón de
+/// que un investigador quiera reutilizarla sin desmontar su otro caso.
+pub async fn reuse(
+    State(app): State<App>,
+    Path(case_id): Path<i64>,
+    headers: HeaderMap,
+    Json(req): Json<ReuseReq>,
+) -> Result<Json<Image>, Fail> {
+    let (uid, pid, _) = guard_case(&app, &headers, case_id)?;
+    let is_admin = require_session(&app, &bearer(&headers)).map(|(_, a)| a).unwrap_or(false);
+
+    let (src_case, src_pid, filename, bytes, sha256, width, height, mime, exif_json, exif_lat, exif_lng): (
+        i64, i64, String, i64, String, Option<i64>, Option<i64>, String, Option<String>, Option<f64>, Option<f64>,
+    ) = app
+        .store
+        .conn()
+        .query_row(
+            "SELECT i.case_id, k.project_id, i.filename, i.bytes, i.sha256, i.width, i.height, i.mime,
+                    i.exif_json, i.exif_lat, i.exif_lng
+             FROM images i JOIN cases k ON k.id = i.case_id WHERE i.id = ?1",
+            [req.image_id],
+            |r| {
+                Ok((
+                    r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?,
+                    r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?,
+                ))
+            },
+        )
+        .map_err(|_| err(StatusCode::NOT_FOUND, "no existe esa imagen"))?;
+    if src_pid != pid {
+        return Err(err(StatusCode::FORBIDDEN, "esa imagen es de otro proyecto"));
+    }
+    if src_case == case_id {
+        return Err(err(StatusCode::BAD_REQUEST, "esa imagen ya está en este caso"));
+    }
+    if !is_admin {
+        let u = usage(&app, uid);
+        let cap = u.limit_gb * 1024 * 1024 * 1024;
+        if u.used_bytes + bytes > cap {
+            return Err(err(StatusCode::INSUFFICIENT_STORAGE, "no cabe en tu cuota"));
+        }
+    }
+
+    let id = {
+        let c = app.store.conn();
+        c.execute(
+            "INSERT INTO images (case_id, uploader_id, filename, bytes, sha256, width, height, mime,
+                                  exif_json, exif_lat, exif_lng, created_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+            rusqlite::params![
+                case_id, uid, filename, bytes, sha256, width, height, mime, exif_json, exif_lat, exif_lng, now()
+            ],
+        )
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+        c.last_insert_rowid()
+    };
+
+    // Mismo proyecto, así que el directorio es el mismo: solo hace falta un
+    // segundo archivo con el nuevo id al lado del original.
+    let dir = dir_for(&app, pid);
+    std::fs::copy(dir.join(req.image_id.to_string()), dir.join(id.to_string()))
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    let _ = std::fs::copy(dir.join(format!("{}.thumb", req.image_id)), dir.join(format!("{id}.thumb")));
+
+    let img = app
+        .store
+        .conn()
+        .query_row(&format!("SELECT {COLS} FROM images WHERE id = ?1"), [id], row_to_image)
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    let _ = app.store.conn().execute(
+        "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
+        rusqlite::params![now(), pid],
+    );
+    Ok(Json(img))
 }
 
 pub async fn upload(

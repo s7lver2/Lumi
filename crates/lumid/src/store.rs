@@ -120,6 +120,15 @@ CREATE TABLE IF NOT EXISTS analysis_images (
     image_id    INTEGER NOT NULL,
     PRIMARY KEY (analysis_id, image_id)
 );
+-- Quién tiene un proyecto abierto ahora mismo. Solo una fila por proyecto: es
+-- justo lo que impide que dos personas trabajen en el mismo a la vez.
+-- `enter`/`leave` en routes/projects.rs son los únicos que la tocan.
+CREATE TABLE IF NOT EXISTS project_locks (
+    project_id INTEGER PRIMARY KEY,
+    user_id    INTEGER NOT NULL,
+    token      TEXT NOT NULL,
+    since      INTEGER NOT NULL
+);
 CREATE INDEX IF NOT EXISTS cases_by_project ON cases(project_id);
 CREATE INDEX IF NOT EXISTS images_by_case ON images(case_id);
 CREATE INDEX IF NOT EXISTS analyses_by_case ON analyses(case_id);
@@ -195,6 +204,12 @@ fn migrate(c: &Connection) {
         ("sessions", "created_at", "INTEGER NOT NULL DEFAULT 0"),
         ("sessions", "last_seen", "INTEGER NOT NULL DEFAULT 0"),
         ("sessions", "public_id", "TEXT"),
+        // Todo lo anterior a la invitación con aceptación ya estaba dentro:
+        // migra a 'accepted' o el dueño (y cada invitado ya admitido) se
+        // quedaría fuera de su propio proyecto en cuanto `access()` empiece
+        // a exigir el estado.
+        ("project_members", "status", "TEXT NOT NULL DEFAULT 'accepted'"),
+        ("project_members", "invited_by", "INTEGER"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }

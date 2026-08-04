@@ -27,18 +27,52 @@ export function TelemetryStrip({ collapsed, onToggle, notifs = 0, onNotifs }: {
 }) {
   const { hello, sample, addr } = useServer();
   if (!hello) return null;
+
+  // Colapsada es una barra distinta, no la misma con texto escondido: una
+  // simplificación de verdad en vez de huecos vacíos donde antes había una
+  // etiqueta. Un punto de estado, direcciones y cifras sueltas, sin nombres.
+  if (collapsed) {
+    return (
+      <div className="relative z-20 flex h-7 w-full items-center gap-4 border-b border-border
+        bg-surface/95 px-3 transition-[height] duration-500 ease-expo">
+        <span className={`h-[6px] w-[6px] shrink-0 rounded-full ${hello.locked ? "bg-warning" : "bg-draw"}`} />
+        <span className="truncate font-mono text-[10px] text-subtle">{addr || "servidor"}</span>
+        <span className="flex-1" />
+        <div className="flex items-center gap-3 font-mono text-[10px] text-muted">
+          {hello.gpus.length > 0 ? (
+            hello.gpus.map((g) => {
+              const s = sample?.gpus.find((x) => x.index === g.index);
+              return <span key={g.index}>gpu{g.index} {s ? `${s.util_pct}%` : "—"}</span>;
+            })
+          ) : (
+            <span>cpu {sample ? `${sample.cpu_pct.toFixed(0)}%` : "—"}</span>
+          )}
+          <span>cola {sample ? sample.queue_depth : "—"}</span>
+        </div>
+        {onNotifs && (
+          <div className="flex shrink-0 items-center">
+            <Bell count={notifs} onClick={onNotifs} />
+          </div>
+        )}
+        <button onClick={onToggle} aria-label="Expandir"
+          className="flex shrink-0 items-center px-1.5 text-subtle transition-colors hover:text-fg">
+          <Icon name="chevron" size={11} />
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className={`relative z-20 flex w-full items-stretch border-b border-border bg-surface/95 transition-[height] duration-500 ease-expo ${collapsed ? "h-7" : "h-[70px]"}`}>
+    <div className="relative z-20 flex h-[70px] w-full items-stretch border-b border-border
+      bg-surface/95 transition-[height] duration-500 ease-expo">
       <Cell label="Servidor" className="flex-none basis-[210px]">
         <div className="flex items-center gap-[7px] whitespace-nowrap font-mono text-xs text-fg">
           {hello.locked && <LockIcon size={12} className="text-warning" />}
           <span>{addr || "servidor"}</span>
         </div>
-        {!collapsed && (
-          <div className={`whitespace-nowrap font-mono text-[10px] ${hello.locked ? "text-warning-fg" : "text-draw-fg"}`}>
-            ● {hello.locked ? "sellado" : `verificado · ${hello.mode === "native" ? "nativo" : "docker"}`}
-          </div>
-        )}
+        <div className={`whitespace-nowrap font-mono text-[10px] ${hello.locked ? "text-warning-fg" : "text-draw-fg"}`}>
+          ● {hello.locked ? "sellado" : `verificado · ${hello.mode === "native" ? "nativo" : "docker"}`}
+        </div>
       </Cell>
 
       {hello.gpus.map((g) => {
@@ -50,7 +84,7 @@ export function TelemetryStrip({ collapsed, onToggle, notifs = 0, onNotifs }: {
               {s ? `${s.util_pct}%` : "—"}
               <span className="text-muted">{s ? ` · ${(s.vram_used_mb / 1024).toFixed(1)}/${Math.round(s.vram_total_mb / 1024)}` : ""}</span>
             </div>
-            {!collapsed && <Bar pct={pct} />}
+            <Bar pct={pct} />
           </Cell>
         );
       })}
@@ -63,34 +97,33 @@ export function TelemetryStrip({ collapsed, onToggle, notifs = 0, onNotifs }: {
               {sample ? ` · ${(sample.ram_used_mb / 1024).toFixed(1)} GB` : ""}
             </span>
           </div>
-          {!collapsed && <Bar pct={sample?.cpu_pct ?? 0} />}
+          <Bar pct={sample?.cpu_pct ?? 0} />
         </Cell>
       )}
 
       <Cell label="Cola" className="flex-none basis-[132px]">
         <div className="font-mono text-sm text-fg">{sample ? sample.queue_depth : "—"}</div>
-        {!collapsed && (
-          <div className={`whitespace-nowrap font-mono text-[10px] ${sample?.queue_paused ? "text-warning-fg" : "text-subtle"}`}>
-            {sample?.queue_paused ? "en pausa" : "sin provisionar"}
-          </div>
-        )}
+        <div className={`whitespace-nowrap font-mono text-[10px] ${sample?.queue_paused ? "text-warning-fg" : "text-subtle"}`}>
+          {sample?.queue_paused ? "en pausa" : "sin provisionar"}
+        </div>
       </Cell>
 
       {/* Empuja el botón de colapsar al borde derecho: sin esto las celdas de
           ancho fijo se amontonan a la izquierda y dejan la barra a medias. */}
       <div className="flex-1 border-r border-border" />
 
-      {/* La campana vive en la franja y no en cada pantalla: es lo que
-          permite que la aprobación se encienda sin diálogo que interrumpa. */}
+      {/* `flex items-center` es lo que faltaba: el padre usa `items-stretch`
+          para que cada celda ocupe toda la altura, y sin centrar el contenido
+          de esta la campana se quedaba pegada arriba en vez de en medio. */}
       {onNotifs && (
-        <div className="flex-none border-r border-border px-2">
+        <div className="flex flex-none items-center border-r border-border px-2">
           <Bell count={notifs} onClick={onNotifs} />
         </div>
       )}
 
-      <button onClick={onToggle} aria-label={collapsed ? "Expandir" : "Colapsar"}
-        className="flex-none px-3 text-subtle transition-colors hover:text-fg">
-        <Icon name="chevron" size={11} className={collapsed ? "" : "rotate-180"} />
+      <button onClick={onToggle} aria-label="Colapsar"
+        className="flex flex-none items-center px-3 text-subtle transition-colors hover:text-fg">
+        <Icon name="chevron" size={11} className="rotate-180" />
       </button>
     </div>
   );

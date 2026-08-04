@@ -153,11 +153,24 @@ export default function App() {
     await api.post("/v1/unseal", { passphrase });
   }
 
+  /** Solo una persona a la vez dentro de un proyecto: salir de verdad tiene
+   *  que soltar el candado, no solo cambiar de pantalla. Best effort — si la
+   *  llamada falla (red caída, app cerrándose), el candado caduca solo al
+   *  cabo de las horas que marca `STALE_AFTER` en el servidor. */
+  function leaveProject() {
+    const { project } = useWorkspace.getState();
+    const token = useServer.getState().token;
+    if (project && token) {
+      void api.post(`/v1/projects/${project.id}/leave`, {}, token).catch(() => {});
+    }
+  }
+
   /** Salir a mano. Es el mismo desmontaje que hace la expulsión por
    *  desconexión, y por eso vive en un solo sitio: dejar el token del puente
    *  nativo puesto tras cerrar sesión sería dejar abierta la puerta de las
    *  imágenes. */
   function signOut() {
+    leaveProject();
     updateSession({ token: undefined });
     useServer.getState().setToken(null);
     useServer.getState().setUser("", false, null);
@@ -257,7 +270,7 @@ export default function App() {
         (() => {
           const { project, case_ } = useWorkspace.getState();
           if (!project) { setMode("picker"); return null; }
-          const toProjects = () => { useWorkspace.getState().clear(); setMode("picker"); };
+          const toProjects = () => { leaveProject(); useWorkspace.getState().clear(); setMode("picker"); };
           const rail = (
             <Rail active={members ? "members" : "cases"}
               canManage={project.role === "owner"} isAdmin={isAdmin}
@@ -266,7 +279,10 @@ export default function App() {
                 if (mode === "case") { useWorkspace.getState().setCase(null); setMode("project"); }
               }}
               onMembers={() => setMembers(true)}
-              onAdmin={() => setMode("admin")}
+              // El panel de administración es una parada aparte: mientras se
+              // está ahí no se está trabajando en el proyecto, así que se
+              // suelta el candado para no bloquearlo a los demás por nada.
+              onAdmin={() => { leaveProject(); setMode("admin"); }}
               onLeave={toProjects} />
           );
           return (

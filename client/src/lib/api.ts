@@ -101,7 +101,14 @@ export interface Project {
   created_at: number; updated_at: number;
 }
 export interface ProjectMember {
-  user_id: number; username: string; role: "owner" | "member"; added_at: number;
+  user_id: number; username: string; role: "owner" | "member";
+  status: "pending" | "accepted"; added_at: number;
+}
+export interface Invite {
+  project_id: number; project_name: string; invited_by: string; added_at: number;
+}
+export interface ProjectImage extends Image {
+  case_name: string;
 }
 export interface Case {
   id: number; project_id: number; name: string;

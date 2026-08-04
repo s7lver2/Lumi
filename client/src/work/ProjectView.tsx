@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type Case, type Project, type Usage } from "../lib/api";
 import { useServer } from "../lib/store";
 import { Icon } from "../ui/Icon";
+import { PromptDialog } from "../ui/PromptDialog";
 import { MapCanvas, type Marker } from "./MapCanvas";
 import { TopBar } from "./TopBar";
 
@@ -20,7 +21,8 @@ export function ProjectView({
   const token = useServer((s) => s.token) ?? undefined;
   const [cases, setCases] = useState<Case[] | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
-  const [draft, setDraft] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
@@ -38,13 +40,15 @@ export function ProjectView({
   useEffect(() => { void load(); }, [project.id]);
 
   async function create(name: string) {
-    if (!name.trim()) { setDraft(null); return; }
+    setBusy(true); setError(null);
     try {
       const c = await api.post<Case>(`/v1/projects/${project.id}/cases`, { name }, token);
-      setDraft(null);
+      setCreating(false);
       onOpenCase(c);
     } catch (e) {
       setError(String(e));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -104,7 +108,7 @@ export function ProjectView({
         style={{ animation: "jg-slide-left 300ms cubic-bezier(.16,1,.3,1) both" }}>
         <div className="mb-2.5 flex items-center justify-between">
           <span className="text-[8px] uppercase tracking-[.11em] text-subtle">Casos del proyecto</span>
-          <button onClick={() => setDraft("")} title="Nuevo caso"
+          <button onClick={() => setCreating(true)} title="Nuevo caso"
             className="jg-press grid h-[18px] w-[18px] place-items-center rounded text-subtle hover:text-fg">
             <Icon name="plus" size={11} />
           </button>
@@ -112,7 +116,7 @@ export function ProjectView({
 
         <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
           {cases === null && <p className="py-4 text-center text-[11px] text-subtle">cargando</p>}
-          {cases !== null && list.length === 0 && draft === null && (
+          {cases !== null && list.length === 0 && (
             <p className="px-1 py-4 text-[11px] leading-relaxed text-subtle">
               Todavía no hay ningún caso. Un caso agrupa las imágenes de una misma
               investigación dentro de este proyecto.
@@ -149,32 +153,15 @@ export function ProjectView({
               </button>
             );
           })}
-
-          {draft !== null && (
-            <div className="rounded-[9px] border border-dashed border-white/25 p-2">
-              {/* Intro confirma; Escape y perder el foco cancelan, igual que
-                  en el selector de proyectos. */}
-              <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)}
-                onBlur={() => setDraft(null)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void create(draft);
-                  if (e.key === "Escape") setDraft(null);
-                }}
-                placeholder="nombre del caso"
-                className="w-full bg-transparent text-[11.5px] text-fg outline-none placeholder:text-subtle" />
-            </div>
-          )}
         </div>
 
-        {draft === null && (
-          <button onClick={() => setDraft("")}
-            className="jg-press mt-1.5 block w-full rounded-[9px] border border-dashed border-border p-2
-              text-center text-[11px] text-subtle hover:border-white/20 hover:text-fg">
-            + nuevo caso
-          </button>
-        )}
+        <button onClick={() => setCreating(true)}
+          className="jg-press mt-1.5 block w-full rounded-[9px] border border-dashed border-border p-2
+            text-center text-[11px] text-subtle hover:border-white/20 hover:text-fg">
+          + nuevo caso
+        </button>
 
-        {error && <p className="mt-2.5 text-[11px] leading-snug text-danger-fg">{error}</p>}
+        {error && !creating && <p className="mt-2.5 text-[11px] leading-snug text-danger-fg">{error}</p>}
 
         <div className="mt-3.5">
           <p className="text-[8px] uppercase tracking-[.11em] text-subtle">
@@ -199,6 +186,11 @@ export function ProjectView({
           {pending > 0 && <Field k="Pendientes" v={`${pending} · sin motor`} dim />}
         </div>
       </div>
+
+      <PromptDialog open={creating} title="Nuevo caso"
+        subtitle="Un caso agrupa las imágenes de una misma investigación dentro de este proyecto."
+        placeholder="nombre del caso" confirmLabel="Crear" busy={busy} error={error}
+        onConfirm={create} onClose={() => { setCreating(false); setError(null); }} />
     </div>
   );
 }

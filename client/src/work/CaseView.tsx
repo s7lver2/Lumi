@@ -89,6 +89,31 @@ export function CaseView({
     }
   }
 
+  /** Copiar imágenes de otro caso del mismo proyecto. Es una copia, no un
+   *  traslado: el caso de origen se queda igual. Cada id va en su propia
+   *  llamada porque el servidor no tiene un "reuse en lote" — no hace falta
+   *  cuando son unas pocas imágenes desde un mosaico. */
+  async function reuse(imageIds: number[]) {
+    if (imageIds.length === 0) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const copiadas: Image[] = [];
+      for (const id of imageIds) {
+        copiadas.push(await api.post<Image>(`/v1/cases/${case_.id}/images/reuse`, { image_id: id }, token));
+      }
+      setImages((v) => [...(v ?? []), ...copiadas]);
+      setSel(copiadas[0].id);
+      setStaged((s) => [...(s ?? []), ...copiadas.map((n) => n.id)]);
+      api.get<Usage>("/v1/me/usage", token).then(setUsage).catch(() => {});
+    } catch (e) {
+      setError(String(e));
+      if (staged === null) setStaged([]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Soltar imágenes sobre la ventana, como en la v1. Tauri entrega rutas, no
   // bytes, así que va por el mismo camino que el selector de archivos. Los
   // eventos `enter`/`leave` son lo que da la señal visual: sin ellos, arrastrar
@@ -225,7 +250,9 @@ export function CaseView({
       {dragging && <DropFrame />}
 
       {images !== null && list.length === 0 ? (
-        <DropTarget dragging={dragging} busy={busy} freeBytes={free} onPick={() => void pick()} />
+        <DropTarget dragging={dragging} busy={busy} freeBytes={free}
+          projectId={project.id} caseId={case_.id}
+          onPick={() => void pick()} onReuse={(ids) => void reuse(ids)} />
       ) : (
         <>
           <ResultCard analysis={shown} image={image} offset={hasResults ? SIDEBAR : 0} />

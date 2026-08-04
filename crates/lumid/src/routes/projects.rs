@@ -10,7 +10,7 @@ use crate::routes::auth::{bearer, require_session};
 use crate::App;
 use axum::extract::{Path, State};
 use axum::{http::HeaderMap, http::StatusCode, Json};
-use lumi_proto::api::{MemberReq, NameReq, Project, ProjectMember};
+use lumi_proto::api::{Invite, MemberReq, NameReq, Project, ProjectMember};
 
 const MAX_NAME: usize = 80;
 
@@ -61,7 +61,9 @@ pub async fn list(State(app): State<App>, headers: HeaderMap) -> Result<Json<Vec
                FROM images i JOIN cases k ON k.id = i.case_id
                GROUP BY k.project_id
              ) ic ON ic.project_id = p.id
-             WHERE m.user_id = ?1
+             -- Una invitación pendiente no es un proyecto tuyo todavía: vive
+             -- en `/v1/me/invites` hasta que la aceptas.
+             WHERE m.user_id = ?1 AND m.status = 'accepted'
              ORDER BY p.updated_at DESC",
         )
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
@@ -111,7 +113,8 @@ pub async fn create(
     .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
     let id = c.last_insert_rowid();
     c.execute(
-        "INSERT INTO project_members (project_id, user_id, role, added_at) VALUES (?1, ?2, 'owner', ?3)",
+        "INSERT INTO project_members (project_id, user_id, role, status, added_at)
+         VALUES (?1, ?2, 'owner', 'accepted', ?3)",
         rusqlite::params![id, uid, t],
     )
     .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
@@ -166,6 +169,7 @@ pub async fn remove(
             "DELETE FROM images   WHERE case_id IN (SELECT id FROM cases WHERE project_id = ?1)",
             "DELETE FROM cases    WHERE project_id = ?1",
             "DELETE FROM project_members WHERE project_id = ?1",
+            "DELETE FROM project_locks WHERE project_id = ?1",
             "DELETE FROM projects WHERE id = ?1",
         ];
         for s in sql {
@@ -187,7 +191,7 @@ pub async fn members(
     let c = app.store.conn();
     let mut q = c
         .prepare(
-            "SELECT m.user_id, u.username, m.role, m.added_at
+            "SELECT m.user_id, u.username, m.role, m.status, m.added_at
              FROM project_members m JOIN users u ON u.id = m.user_id
              WHERE m.project_id = ?1 ORDER BY (m.role = 'owner') DESC, u.username",
         )
@@ -198,7 +202,8 @@ pub async fn members(
                 user_id: r.get(0)?,
                 username: r.get(1)?,
                 role: r.get(2)?,
-                added_at: r.get(3)?,
+                status: r.get(3)?,
+                added_at: r.get(4)?,
             })
         })
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
@@ -207,13 +212,16 @@ pub async fn members(
     Ok(Json(rows))
 }
 
+/// Invitar no mete a nadie dentro todavía: deja la fila en `pending` y es
+/// cosa de la invitada aceptarla desde `/v1/me/invites`. `access()` no la
+/// cuenta hasta entonces.
 pub async fn add_member(
     State(app): State<App>,
     Path(id): Path<i64>,
     headers: HeaderMap,
     Json(req): Json<MemberReq>,
 ) -> Result<StatusCode, Fail> {
-    guard(&app, &headers, id, true)?;
+    let (inviter, _) = guard(&app, &headers, id, true)?;
     let c = app.store.conn();
     let uid: i64 = c
         .query_row(
@@ -223,11 +231,136 @@ pub async fn add_member(
         )
         .map_err(|_| err(StatusCode::NOT_FOUND, "no hay ningún usuario con ese nombre"))?;
     c.execute(
-        "INSERT INTO project_members (project_id, user_id, role, added_at) VALUES (?1, ?2, 'member', ?3)
+        "INSERT INTO project_members (project_id, user_id, role, status, invited_by, added_at)
+         VALUES (?1, ?2, 'member', 'pending', ?3, ?4)
          ON CONFLICT(project_id, user_id) DO NOTHING",
-        rusqlite::params![id, uid, now()],
+        rusqlite::params![id, uid, inviter, now()],
     )
     .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Las invitaciones sin resolver de quien pregunta, en todos sus proyectos.
+pub async fn my_invites(State(app): State<App>, headers: HeaderMap) -> Result<Json<Vec<Invite>>, Fail> {
+    let (uid, _) = require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
+    let c = app.store.conn();
+    let mut q = c
+        .prepare(
+            "SELECT m.project_id, p.name, COALESCE(u.username, '?'), m.added_at
+             FROM project_members m
+             JOIN projects p ON p.id = m.project_id
+             LEFT JOIN users u ON u.id = m.invited_by
+             WHERE m.user_id = ?1 AND m.status = 'pending'
+             ORDER BY m.added_at DESC",
+        )
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    let rows = q
+        .query_map([uid], |r| {
+            Ok(Invite {
+                project_id: r.get(0)?,
+                project_name: r.get(1)?,
+                invited_by: r.get(2)?,
+                added_at: r.get(3)?,
+            })
+        })
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
+        .flatten()
+        .collect();
+    Ok(Json(rows))
+}
+
+fn resolve_invite(app: &App, headers: &HeaderMap, project_id: i64, accept: bool) -> Result<StatusCode, Fail> {
+    let (uid, _) = require_session(app, &bearer(headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
+    let sql = if accept {
+        "UPDATE project_members SET status = 'accepted' WHERE project_id = ?1 AND user_id = ?2 AND status = 'pending'"
+    } else {
+        "DELETE FROM project_members WHERE project_id = ?1 AND user_id = ?2 AND status = 'pending'"
+    };
+    let n = app
+        .store
+        .conn()
+        .execute(sql, rusqlite::params![project_id, uid])
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    if n == 0 {
+        return Err(err(StatusCode::NOT_FOUND, "no tienes ninguna invitación pendiente a ese proyecto"));
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn accept_invite(
+    State(app): State<App>, Path(id): Path<i64>, headers: HeaderMap,
+) -> Result<StatusCode, Fail> {
+    resolve_invite(&app, &headers, id, true)
+}
+
+pub async fn decline_invite(
+    State(app): State<App>, Path(id): Path<i64>, headers: HeaderMap,
+) -> Result<StatusCode, Fail> {
+    resolve_invite(&app, &headers, id, false)
+}
+
+/// Un proyecto, una persona a la vez. Es una cerradura de andar por casa: una
+/// fila en `project_locks`, sin colas ni avisos en tiempo real. `enter` la
+/// toma o la roba si está muerta; `leave` la suelta. Nada la libera si la app
+/// se cierra mal salvo el tiempo (`STALE_AFTER`) o que la sesión de quien la
+/// tenía caduque: por ahora es suficiente y no hace falta un latido.
+const STALE_AFTER: i64 = 12 * 60 * 60;
+
+pub async fn enter(State(app): State<App>, Path(id): Path<i64>, headers: HeaderMap) -> Result<StatusCode, Fail> {
+    let (uid, _) = guard(&app, &headers, id, false)?;
+    let token = bearer(&headers);
+    let c = app.store.conn();
+    let held: Option<(i64, String, i64)> = c
+        .query_row(
+            "SELECT user_id, token, since FROM project_locks WHERE project_id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .ok();
+    if let Some((holder, holder_token, since)) = held {
+        if holder != uid {
+            let session_valid = c
+                .query_row(
+                    "SELECT 1 FROM sessions WHERE token = ?1 AND expires_at > ?2",
+                    rusqlite::params![holder_token, now()],
+                    |_| Ok(()),
+                )
+                .is_ok();
+            if session_valid && now() - since < STALE_AFTER {
+                let username: String = c
+                    .query_row("SELECT username FROM users WHERE id = ?1", [holder], |r| r.get(0))
+                    .unwrap_or_else(|_| "otra persona".into());
+                return Err(err(
+                    StatusCode::CONFLICT,
+                    &format!(
+                        "{username} está trabajando en este proyecto ahora mismo; solo puede haber una persona dentro a la vez"
+                    ),
+                ));
+            }
+            // La sesión de quien la tenía ya no existe o lleva media jornada
+            // colgada: se toma como abandonada y se roba sin preguntar.
+        }
+    }
+    c.execute(
+        "INSERT INTO project_locks (project_id, user_id, token, since) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(project_id) DO UPDATE SET user_id = ?2, token = ?3, since = ?4",
+        rusqlite::params![id, uid, token, now()],
+    )
+    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Solo quita el candado si es el tuyo: si ya te lo robaron por caducado no
+/// hay nada que soltar, y si es de otra persona no es asunto tuyo tocarlo.
+pub async fn leave(State(app): State<App>, Path(id): Path<i64>, headers: HeaderMap) -> Result<StatusCode, Fail> {
+    let (uid, _) = require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
+    app.store
+        .conn()
+        .execute(
+            "DELETE FROM project_locks WHERE project_id = ?1 AND user_id = ?2",
+            rusqlite::params![id, uid],
+        )
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
     Ok(StatusCode::NO_CONTENT)
 }
 

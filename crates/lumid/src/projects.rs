@@ -22,11 +22,16 @@ impl Role {
 }
 
 /// El papel del usuario en el proyecto, o `None` si no tiene ninguno.
+///
+/// Una invitación `pending` NO da acceso: es una invitación, no una entrada
+/// por la puerta de atrás. Se vuelve `Some` en cuanto la acepta desde
+/// `/v1/me/invites`.
 pub fn access(s: &Store, user_id: i64, project_id: i64) -> Option<Role> {
     let role: String = s
         .conn()
         .query_row(
-            "SELECT role FROM project_members WHERE project_id = ?1 AND user_id = ?2",
+            "SELECT role FROM project_members
+             WHERE project_id = ?1 AND user_id = ?2 AND status = 'accepted'",
             rusqlite::params![project_id, user_id],
             |r| r.get(0),
         )
