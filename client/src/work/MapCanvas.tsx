@@ -5,6 +5,7 @@ import { api, type MapConfig } from "../lib/api";
 import { lumiUrl } from "../lib/bridge";
 import { useServer } from "../lib/store";
 import { Icon } from "../ui/Icon";
+import { addBuildings } from "./buildings";
 
 export interface Marker {
   id: string;
@@ -68,6 +69,10 @@ export function MapCanvas({
    *  que sí ha cargado se sigue viendo. */
   const [warn, setWarn] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  /** Globo o plano. Es una preferencia de quien mira, no del proyecto: se
+   *  recuerda en este equipo. El globo es la verdad geográfica; el plano es
+   *  más cómodo para comparar dos puntos lejanos de un vistazo. */
+  const [globe, setGlobe] = useState(() => localStorage.getItem("lumi.mapa.plano") !== "1");
   // `/v1/map/config` exige sesión como todas las rutas del daemon. Iba sin
   // token, así que el mapa contestaba siempre "sesión inválida" y el lienzo
   // no llegaba ni a construirse: no era un problema del proveedor, era esta
@@ -112,6 +117,13 @@ export function MapCanvas({
       }
       if (dead || !box.current) return;
 
+      // El planeta es una esfera, y a zoom de mundo entero verlo estirado en un
+      // rectángulo es una mentira cartográfica que además reparte fatal los
+      // resultados: Groenlandia del tamaño de Sudamérica. MapLibre 5 dibuja el
+      // globo de verdad y se deshace solo en plano al acercarte. La proyección
+      // es parte del estilo, no una opción del mapa, así que se inyecta aquí.
+      style.projection = { type: globe ? "globe" : "mercator" };
+
       const m = new maplibregl.Map({
         container: box.current,
         style,
@@ -119,6 +131,7 @@ export function MapCanvas({
           url.startsWith("/v1/") ? { url: lumiUrl(url) } : { url },
         center: [0, 20],
         zoom: 1.4,
+        maxPitch: 70,
         attributionControl: { compact: true },
         // El estilo lo eligió el administrador de un catálogo cerrado de
         // estilos oficiales de Mapbox/OpenFreeMap, y el daemon ya comprobó su
@@ -134,6 +147,8 @@ export function MapCanvas({
       m.once("load", () => {
         clearTimeout(vigia);
         setReady(true);
+        // Los edificios salen del mismo tileset que ya se está descargando.
+        addBuildings(m, cfg.provider);
         // Un lienzo de 0×0 carga «bien»: dispara `load`, no lanza ningún error
         // y no dibuja nada. Es el único caso de mapa negro que no se delata
         // solo, así que se mide y se dice.
@@ -264,15 +279,29 @@ export function MapCanvas({
     });
   }, [markers, onMarker]);
 
+  // Cambiar de proyección sin rehacer el mapa: reconstruirlo tiraría el estilo,
+  // las teselas ya descargadas y la posición de la cámara.
+  useEffect(() => {
+    map.current?.setProjection({ type: globe ? "globe" : "mercator" });
+    localStorage.setItem("lumi.mapa.plano", globe ? "0" : "1");
+  }, [globe]);
+
   // Volar a un punto concreto. `curve` y `speed` son lo que convierte un salto
   // en un vuelo: la cámara se aleja, cruza y vuelve a bajar, que es como se
   // entiende cuánto te has movido. Con los valores por defecto el mapa
   // «teletransporta» y pierdes el sentido de la distancia.
+  //
+  // Nada de `essential: true`: esa bandera se salta el «reducir movimiento»
+  // del sistema, y quien lo ha activado lo ha activado por algo.
   useEffect(() => {
     if (flyTo && map.current) {
       map.current.flyTo({
         center: [flyTo.lng, flyTo.lat], zoom: flyTo.zoom,
-        duration: 1600, curve: 1.5, speed: 0.9, essential: true,
+        // Inclinarse solo al llegar cerca: a zoom de mundo entero una cámara
+        // tumbada enseña medio cielo vacío en vez del planeta centrado. Y de
+        // cerca es justo donde hay edificios que ver de canto.
+        pitch: flyTo.zoom >= 14 ? 55 : 0,
+        duration: 1600, curve: 1.5, speed: 0.9,
       });
     }
   }, [flyTo]);
@@ -339,6 +368,17 @@ export function MapCanvas({
         <div ref={box} className="h-full w-full transition-opacity duration-700 ease-expo"
           style={{ opacity: ready ? 1 : 0 }} />
       </div>
+
+      {/* Encima del dock y a la derecha del carril, donde no tapa resultados. */}
+      {ready && (
+        <button onClick={() => setGlobe((g) => !g)}
+          title={globe ? "Ver plano" : "Ver globo"} aria-label={globe ? "Ver plano" : "Ver globo"}
+          className="jg-press absolute bottom-[68px] left-[56px] z-20 grid h-[30px] w-[30px]
+            place-items-center rounded-lg border border-white/10 bg-[rgba(16,18,21,.78)]
+            text-subtle backdrop-blur-md hover:text-fg">
+          <Icon name={globe ? "globe" : "boxes"} size={14} />
+        </button>
+      )}
       {warn && (
         <div className="absolute left-11 right-0 top-0 z-10 flex items-start gap-2.5 border-b
           border-warning/30 bg-[rgba(24,20,14,.82)] px-4 py-2 backdrop-blur"
