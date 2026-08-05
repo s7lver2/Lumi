@@ -77,6 +77,7 @@ export function MapCanvas({
 
   useEffect(() => {
     let dead = false;
+    let ro: ResizeObserver | undefined;
     (async () => {
       const cfg = await api.get<MapConfig>("/v1/map/config", token).catch((e) => {
         setReason(String(e));
@@ -130,7 +131,30 @@ export function MapCanvas({
       });
       // Aparecer con un fundido en vez de un fogonazo de lienzo vacío: el
       // estilo tarda un instante en llegar y ese instante se veía en negro.
-      m.once("load", () => { clearTimeout(vigia); setReady(true); });
+      m.once("load", () => {
+        clearTimeout(vigia);
+        setReady(true);
+        // Un lienzo de 0×0 carga «bien»: dispara `load`, no lanza ningún error
+        // y no dibuja nada. Es el único caso de mapa negro que no se delata
+        // solo, así que se mide y se dice.
+        const w = box.current?.clientWidth ?? 0;
+        const h = box.current?.clientHeight ?? 0;
+        if (w < 2 || h < 2) {
+          setWarn((v) => v ?? `el lienzo del mapa mide ${w}×${h} px: cargó pero no tiene dónde dibujarse`);
+        }
+        m.resize();
+
+        // Y el último caso mudo: estilo cargado, lienzo con tamaño, y aun así
+        // ni una tesela. MapLibre no avisa de eso — para él el mapa «está» —,
+        // así que se le pregunta a los cuatro segundos.
+        setTimeout(() => {
+          if (dead || m.areTilesLoaded()) return;
+          const fuentes = Object.keys(m.getStyle()?.sources ?? {})
+            .map((s) => `${s}:${m.isSourceLoaded(s) ? "ok" : "sin teselas"}`)
+            .join(", ");
+          setWarn((v) => v ?? `el estilo cargó pero no llegó ninguna tesela (${fuentes})`);
+        }, 4000);
+      });
 
       // Un mapa que no acaba de cargar Y no se queja es el peor caso posible:
       // un rectángulo negro sin nada que depurar. Si en ocho segundos no ha
@@ -158,10 +182,17 @@ export function MapCanvas({
         setWarn((v) => v ?? msg);
         console.error("[mapa]", e);
       });
+      // MapLibre mide su contenedor UNA vez, al construirse. Aquí eso no basta:
+      // el cajón lateral entra y sale, y la ventana se redimensiona con
+      // nuestros propios tiradores — sin esto el lienzo se queda con la medida
+      // que tenía en el primer render.
+      ro = new ResizeObserver(() => m.resize());
+      ro.observe(box.current);
       map.current = m;
     })();
     return () => {
       dead = true;
+      ro?.disconnect();
       map.current?.remove();
       map.current = null;
     };
