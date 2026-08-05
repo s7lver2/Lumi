@@ -97,7 +97,10 @@ export function ProjectView({
   );
 
   return (
-    <div className="relative h-full w-full"
+    // Anclado a los cuatro bordes, no `h-full`: ver el comentario gemelo en
+    // CaseView — la altura no la resolvía la cadena flex y el mapa se quedaba
+    // con un lienzo de alto cero.
+    <div className="absolute inset-0 overflow-hidden"
       style={{ animation: "jg-page-fade-in 260ms cubic-bezier(.16,1,.3,1) both" }}>
       <MapCanvas markers={markers} onMarker={(id) => {
         const c = list.find((x) => String(x.id) === id);

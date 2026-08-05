@@ -254,7 +254,12 @@ export function CaseView({
   const vacio = images !== null && list.length === 0;
 
   return (
-    <div className="relative h-full w-full"
+    // `absolute inset-0` y no `relative h-full w-full`: con `h-full` la altura
+    // dependía de que la cadena flex de arriba la resolviera, y no lo hacía —
+    // el lienzo del mapa acababa midiendo 1067×0 y MapLibre cargaba «bien» sin
+    // tener dónde dibujar. Anclado a los cuatro bordes del contenedor no hay
+    // cadena que resolver.
+    <div className="absolute inset-0 overflow-hidden"
       style={{ animation: "jg-page-fade-in 260ms cubic-bezier(.16,1,.3,1) both" }}>
       <MapCanvas markers={markers} flyTo={flyTo} onMarker={(id) => {
         if (id.startsWith("a")) setSelAnalysis(Number(id.slice(1)));
