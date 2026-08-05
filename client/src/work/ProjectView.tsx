@@ -25,6 +25,9 @@ export function ProjectView({
   const [error, setError] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [renaming, setRenaming] = useState<Case | null>(null);
+  /** El caso que el ratón está rozando. El mapa vuela hasta él sin abrirlo:
+   *  recorrer la lista es recorrer el mapa. */
+  const [peek, setPeek] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
 
   async function load() {
     try {
@@ -102,14 +105,17 @@ export function ProjectView({
     // con un lienzo de alto cero.
     <div className="absolute inset-0 overflow-hidden"
       style={{ animation: "jg-page-fade-in 260ms cubic-bezier(.16,1,.3,1) both" }}>
-      <MapCanvas markers={markers} onMarker={(id) => {
+      <MapCanvas markers={markers} flyTo={peek} onMarker={(id) => {
         const c = list.find((x) => String(x.id) === id);
         if (c) onOpenCase(c);
       }} />
       {rail}
 
       <div className="absolute inset-y-0 left-11 right-0 overflow-y-auto px-[26px] py-[22px]">
-        <h2 className="text-[16px] font-semibold tracking-[-.01em]">{project.name}</h2>
+        {/* El título también vive sobre el mapa: sin una sombra detrás se pierde
+            en cuanto le toca caer sobre un país claro. */}
+        <h2 className="text-[16px] font-semibold tracking-[-.01em]"
+          style={{ textShadow: "0 1px 12px rgba(6,8,10,.9)" }}>{project.name}</h2>
 
         <div className="mt-3.5 flex max-w-[760px] flex-col gap-1.5">
           {cases === null && <p className="py-6 text-center text-[11px] text-subtle">cargando</p>}
@@ -119,6 +125,7 @@ export function ProjectView({
               style={{ animation: `jg-fade-rise 380ms ${Math.min(i, 8) * 40}ms cubic-bezier(.16,1,.3,1) both` }}>
               <CaseRow case_={c} covers={covers.get(c.id) ?? []}
                 drag={orden.drag(c.id)}
+                onPeek={() => c.lat !== null && setPeek({ lat: c.lat, lng: c.lng!, zoom: 9 })}
                 onOpen={() => { if (!orden.dragging) onOpenCase(c); }}
                 onMenu={(e) => menuAt(e, c.name, [
                   { label: "Abrir", hint: "↵", onClick: () => onOpenCase(c) },
@@ -133,8 +140,9 @@ export function ProjectView({
           ))}
 
           <button onClick={() => setCreating(true)} title="Nuevo caso"
-            className="jg-press rounded-[10px] border border-dashed border-border p-[11px] text-center
-              text-[13px] leading-none text-subtle hover:border-white/20 hover:text-fg">
+            className="jg-press rounded-[10px] border border-dashed border-white/[.14]
+              bg-[rgba(16,18,21,.55)] p-[11px] text-center text-[13px] leading-none text-subtle
+              backdrop-blur-md hover:border-white/25 hover:text-fg">
             +
           </button>
         </div>

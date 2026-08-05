@@ -34,23 +34,28 @@ function MiniMap({ lat, lng }: { lat: number | null; lng: number | null }) {
  *  la de proyectos, no enseña ninguna de las dos. Al pasar por encima la pila
  *  se abre en abanico: la carpeta enseña lo que lleva dentro sin tener que
  *  entrar. */
-export function CaseRow({ case_, covers, drag, onOpen, onMenu }: {
+export function CaseRow({ case_, covers, drag, onOpen, onMenu, onPeek }: {
   case_: Case;
   /** Hasta tres ids de imagen para la portada. Vacío = caso sin fotos. */
   covers: number[];
   drag: Record<string, unknown>;
   onOpen: () => void;
   onMenu: (e: React.MouseEvent) => void;
+  /** Pasar por encima asoma el caso en el mapa de detrás, sin abrirlo. */
+  onPeek?: () => void;
 }) {
   const pct = case_.analyses === 0 ? 0 : (case_.resolved / case_.analyses) * 100;
   const capas = covers.slice(0, 3);
 
   return (
-    <button {...drag} onClick={onOpen} onContextMenu={onMenu}
+    <button {...drag} onClick={onOpen} onContextMenu={onMenu} onMouseEnter={onPeek}
+      // Cristal, no transparente: en la lista de casos el fondo es el mapa, y
+      // sin superficie propia las piezas de la fila —portada, barra, coordenada,
+      // mini-mapa— se leen como widgets sueltos flotando sobre países.
       className="group relative flex w-full cursor-grab items-center gap-3 rounded-[10px] border
-        border-transparent border-b-border p-[8px_10px] text-left
+        border-white/[.07] bg-[rgba(16,18,21,.72)] p-[8px_10px] text-left backdrop-blur-md
         transition-[background-color,border-color,transform] duration-300 ease-expo
-        hover:z-[2] hover:translate-x-0.5 hover:border-white/[.13] hover:bg-white/[.035]
+        hover:z-[2] hover:translate-x-0.5 hover:border-white/[.18] hover:bg-[rgba(22,25,29,.85)]
         active:cursor-grabbing data-[dragging]:scale-[.97] data-[dragging]:opacity-40">
 
       <span className="relative h-[38px] w-[52px] shrink-0">

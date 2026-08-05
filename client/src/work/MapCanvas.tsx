@@ -250,16 +250,52 @@ export function MapCanvas({
       const marker = new maplibregl.Marker({ element: el(mk) })
         .setLngLat([mk.lng, mk.lat])
         .addTo(m);
-      if (onMarker) marker.getElement().addEventListener("click", () => onMarker(mk.id));
+      marker.getElement().addEventListener("click", () => {
+        // Acercarse al punto que acabas de pulsar, siempre: aunque quien
+        // escucha no haga nada con el clic, el mapa tiene que responder.
+        m.easeTo({
+          center: [mk.lng, mk.lat],
+          zoom: Math.max(m.getZoom(), 13),
+          duration: 900, easing: (t) => 1 - Math.pow(1 - t, 3),
+        });
+        onMarker?.(mk.id);
+      });
       return marker;
     });
   }, [markers, onMarker]);
 
+  // Volar a un punto concreto. `curve` y `speed` son lo que convierte un salto
+  // en un vuelo: la cámara se aleja, cruza y vuelve a bajar, que es como se
+  // entiende cuánto te has movido. Con los valores por defecto el mapa
+  // «teletransporta» y pierdes el sentido de la distancia.
   useEffect(() => {
     if (flyTo && map.current) {
-      map.current.flyTo({ center: [flyTo.lng, flyTo.lat], zoom: flyTo.zoom, duration: 1400 });
+      map.current.flyTo({
+        center: [flyTo.lng, flyTo.lat], zoom: flyTo.zoom,
+        duration: 1600, curve: 1.5, speed: 0.9, essential: true,
+      });
     }
   }, [flyTo]);
+
+  /** Encuadra todo lo que hay que ver. Un mapa que arranca en el mundo entero
+   *  y deja los resultados como dos motas obliga a buscarlos a mano. */
+  useEffect(() => {
+    const m = map.current;
+    if (!m || flyTo || markers.length === 0) return;
+    const ir = () => {
+      if (markers.length === 1) {
+        m.flyTo({ center: [markers[0].lng, markers[0].lat], zoom: 11, duration: 1600, curve: 1.5, essential: true });
+        return;
+      }
+      const b = new maplibregl.LngLatBounds();
+      markers.forEach((mk) => b.extend([mk.lng, mk.lat]));
+      // Hueco para el carril, el dock y el cajón: encuadrar contra el lienzo
+      // entero mete los puntos justo debajo de lo que flota encima.
+      m.fitBounds(b, { padding: { top: 60, bottom: 90, left: 80, right: 60 }, maxZoom: 12, duration: 1600 });
+    };
+    if (m.isStyleLoaded()) ir();
+    else m.once("load", ir);
+  }, [markers, flyTo]);
 
   if (reason) {
     // Una franja bajo la barra superior, no un cartel centrado: centrado
