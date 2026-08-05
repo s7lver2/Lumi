@@ -130,15 +130,33 @@ export function MapCanvas({
       });
       // Aparecer con un fundido en vez de un fogonazo de lienzo vacío: el
       // estilo tarda un instante en llegar y ese instante se veía en negro.
-      m.once("load", () => setReady(true));
+      m.once("load", () => { clearTimeout(vigia); setReady(true); });
+
+      // Un mapa que no acaba de cargar Y no se queja es el peor caso posible:
+      // un rectángulo negro sin nada que depurar. Si en ocho segundos no ha
+      // disparado `load`, se dice — con las capas y fuentes que sí llegaron,
+      // que es lo que distingue «el estilo no llegó» de «el estilo está pero
+      // sus teselas no».
+      const vigia = setTimeout(() => {
+        if (dead) return;
+        const s = m.getStyle();
+        setWarn((v) => v ?? `el estilo se cargó (${
+          Object.keys(s?.sources ?? {}).length} fuentes, ${s?.layers?.length ?? 0} capas) pero ` +
+          "el mapa no terminó de dibujarse en 8 s");
+      }, 8000);
+
       // MapLibre avisa aquí de un estilo o unas teselas que no cargan. Sin
       // esto el mapa se quedaba en negro sin decir nada, que es justo lo que
-      // este subsistema se prohíbe.
+      // este subsistema se prohíbe. Sin `message` se enseña el objeto crudo:
+      // un error sin texto seguía siendo un rectángulo negro y mudo.
       m.on("error", (e) => {
-        const msg = (e as { error?: { message?: string } }).error?.message;
+        const err = (e as { error?: unknown }).error;
+        const msg = (err as { message?: string } | undefined)?.message
+          ?? (err === undefined ? "MapLibre lanzó un error sin detalle" : String(err));
         // Solo el primero: una tesela rota se repite en cada nivel de zoom y
         // la franja acabaría parpadeando con el mismo texto.
-        if (msg) setWarn((v) => v ?? msg);
+        setWarn((v) => v ?? msg);
+        console.error("[mapa]", e);
       });
       map.current = m;
     })();
