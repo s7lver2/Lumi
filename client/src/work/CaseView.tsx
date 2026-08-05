@@ -5,35 +5,35 @@ import { pickPaths, uploadPaths } from "../lib/bridge";
 import { KNOWN_MODELS } from "../lib/models";
 import { useServer } from "../lib/store";
 import { useDismissable } from "../lib/useDismissable";
+import { ContextMenu, type MenuState } from "../ui/ContextMenu";
+import { Dock, type ImgState } from "./Dock";
+import { DrawerTab, DRAWER_W, type DrawerId } from "./Drawer";
 import { DropFrame, DropTarget } from "./DropTarget";
-import { Filmstrip } from "./Filmstrip";
 import { MapCanvas, type Marker } from "./MapCanvas";
-import { ResultCard } from "./ResultCard";
-import { ResultsSidebar } from "./ResultsSidebar";
-import { SummaryBar } from "./SummaryBar";
-import { TopBar } from "./TopBar";
+import { ResultsDrawer } from "./ResultsDrawer";
 import { UploadPopup } from "./UploadPopup";
 
-const SIDEBAR = 250;
 const GB = 1024 * 1024 * 1024;
 
 export function CaseView({
-  project, case_, rail, onBack, onProjects,
+  project, case_, rail, drawer, drawerId, setDrawer,
 }: {
-  project: Project; case_: Case; rail: React.ReactNode;
-  onBack: () => void; onProjects: () => void;
+  project: Project;
+  case_: Case;
+  rail: React.ReactNode;
+  /** El cajón de invitar lo monta App: vale igual aquí y en la lista de casos. */
+  drawer: React.ReactNode;
+  drawerId: DrawerId;
+  setDrawer: (d: DrawerId) => void;
 }) {
   const token = useServer((s) => s.token) ?? undefined;
   const isAdmin = useServer((s) => s.isAdmin);
   const rawModels = useServer((s) => s.limits?.models) ?? [];
-  // El servidor ya deja pasar cualquier modelo a un administrador
-  // (`routes/analyses.rs` salta la comprobación si `is_admin`), igual que
-  // salta `can_create_projects`. La cuenta del owner nace con los límites por
-  // defecto (`["mini"]`) porque nunca pasa por "aprobar una solicitud" — ahí
-  // es donde se conceden `pro` y `vision` a cualquier otra cuenta. La unión
-  // con lo que ya tenga (en vez de sustituirlo) es para no perder nada si
-  // algún día su cuenta lleva algo que el catálogo conocido no incluye.
+  // El servidor deja pasar cualquier modelo a un administrador; la cuenta del
+  // owner nace con `["mini"]` porque nunca pasa por «aprobar una solicitud»,
+  // que es donde se conceden los demás.
   const models = isAdmin ? Array.from(new Set([...rawModels, ...KNOWN_MODELS])) : rawModels;
+
   const [images, setImages] = useState<Image[] | null>(null);
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
@@ -42,6 +42,8 @@ export function CaseView({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [menu, setMenu] = useState<MenuState | null>(null);
+  const [fly, setFly] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
   /** Las imágenes que el popup tiene delante. `null` = popup cerrado. */
   const [staged, setStaged] = useState<number[] | null>(null);
   const popup = useDismissable(staged !== null, 180);
@@ -65,12 +67,9 @@ export function CaseView({
 
   const list = images ?? [];
 
-  /** Sube y deja las nuevas delante del popup, en vez de mandarlas al fondo de
-   *  la tira sin decir nada. Si el popup ya estaba abierto, se acumulan. */
   async function add(paths: string[]) {
     if (paths.length === 0) return;
-    setBusy(true);
-    setError(null);
+    setBusy(true); setError(null);
     try {
       const nuevas = await uploadPaths(case_.id, paths);
       if (nuevas.length) {
@@ -78,13 +77,9 @@ export function CaseView({
         setSel(nuevas[0].id);
         setStaged((s) => [...(s ?? []), ...nuevas.map((n) => n.id)]);
       }
-      // La cuota consumida cambia con cada subida, y el destino de arrastre la
-      // enseña: releerla aquí evita que diga una cifra vieja.
       api.get<Usage>("/v1/me/usage", token).then(setUsage).catch(() => {});
     } catch (e) {
       setError(String(e));
-      // Con el popup ya abierto el error se lee dentro; si no, hay que abrirlo
-      // para que no se pierda en un rincón.
       if (staged === null) setStaged([]);
     } finally {
       setBusy(false);
@@ -99,14 +94,10 @@ export function CaseView({
     }
   }
 
-  /** Copiar imágenes de otro caso del mismo proyecto. Es una copia, no un
-   *  traslado: el caso de origen se queda igual. Cada id va en su propia
-   *  llamada porque el servidor no tiene un "reuse en lote" — no hace falta
-   *  cuando son unas pocas imágenes desde un mosaico. */
+  /** Copiar imágenes de otro caso del mismo proyecto. Es copia, no traslado. */
   async function reuse(imageIds: number[]) {
     if (imageIds.length === 0) return;
-    setBusy(true);
-    setError(null);
+    setBusy(true); setError(null);
     try {
       const copiadas: Image[] = [];
       for (const id of imageIds) {
@@ -125,9 +116,7 @@ export function CaseView({
   }
 
   // Soltar imágenes sobre la ventana, como en la v1. Tauri entrega rutas, no
-  // bytes, así que va por el mismo camino que el selector de archivos. Los
-  // eventos `enter`/`leave` son lo que da la señal visual: sin ellos, arrastrar
-  // sobre un caso con imágenes no parecía que fuera a servir de nada.
+  // bytes, así que va por el mismo camino que el selector de archivos.
   useEffect(() => {
     const un = getCurrentWebview().onDragDropEvent((e) => {
       if (e.payload.type === "over" || e.payload.type === "enter") setDragging(true);
@@ -141,8 +130,7 @@ export function CaseView({
   }, [case_.id, staged]);
 
   async function discard(id: number) {
-    setBusy(true);
-    setError(null);
+    setBusy(true); setError(null);
     try {
       await api.del(`/v1/images/${id}`, token);
       setImages((v) => (v ?? []).filter((im) => im.id !== id));
@@ -158,12 +146,10 @@ export function CaseView({
     }
   }
 
-  /** Un análisis por imagen: el motor todavía no sabe cruzar varias, y
-   *  prometerlo aquí sería mentir (ver FUTURO.md). */
+  /** Un análisis por imagen: el motor todavía no sabe cruzar varias. */
   async function analyze(model: string, ids: number[]) {
     if (ids.length === 0) return;
-    setBusy(true);
-    setError(null);
+    setBusy(true); setError(null);
     try {
       const nuevos: Analysis[] = [];
       for (const id of ids) {
@@ -186,15 +172,44 @@ export function CaseView({
     () => (sel === null ? [] : analyses.filter((a) => a.image_ids.includes(sel))),
     [analyses, sel],
   );
-  // El primero hecho manda; si no hay ninguno, el más reciente, para que la
-  // tarjeta pueda decir "en cola" en vez de no decir nada.
   const shown = useMemo(
     () => mine.find((a) => a.id === selAnalysis) ?? mine.find((a) => a.state === "hecho") ?? mine[0] ?? null,
     [mine, selAnalysis],
   );
-  // La barra lateral solo existe cuando hay algo que enseñar, como en la v1.
-  // Sin resultados ni EXIF, el mapa se queda entero.
   const hasResults = mine.length > 0 || (image?.exif_lat != null && image.exif_lng != null);
+
+  // El cajón de resultados se abre solo la primera vez que hay algo que
+  // enseñar; a partir de ahí manda quien lo abrió o lo cerró.
+  const abiertoYa = useRef(false);
+  useEffect(() => {
+    if (hasResults && !abiertoYa.current && drawerId === null) {
+      abiertoYa.current = true;
+      setDrawer("results");
+    }
+  }, [hasResults, drawerId]);
+
+  /** En qué anda cada imagen: el más avanzado de sus análisis manda. */
+  const estados = useMemo(() => {
+    const m = new Map<number, ImgState>();
+    const rango: Record<string, number> = { error: 0, pendiente: 1, en_curso: 2, hecho: 3 };
+    for (const a of analyses) {
+      for (const id of a.image_ids) {
+        const antes = m.get(id);
+        if (!antes || rango[a.state] > rango[antes]) m.set(id, a.state as ImgState);
+      }
+    }
+    return m;
+  }, [analyses]);
+
+  /** Puesto en la cola, contando solo lo que está esperando. */
+  const cola = useMemo(() => {
+    const espera = analyses
+      .filter((a) => a.state === "pendiente")
+      .sort((a, b) => a.created_at - b.created_at);
+    const m = new Map<number, number>();
+    espera.forEach((a, i) => a.image_ids.forEach((id) => { if (!m.has(id)) m.set(id, i + 1); }));
+    return m;
+  }, [analyses]);
 
   const markers: Marker[] = useMemo(() => {
     const out: Marker[] = [];
@@ -206,7 +221,6 @@ export function CaseView({
         });
       }
     });
-    // El GPS declarado, aparte y en ámbar. Nunca mezclado con lo inferido.
     if (image?.exif_lat != null && image.exif_lng != null) {
       out.push({ id: "exif", lat: image.exif_lat, lng: image.exif_lng, label: "E", kind: "exif" });
     }
@@ -215,26 +229,29 @@ export function CaseView({
 
   const flyTo = useMemo(
     () =>
-      shown?.result_lat != null && shown.result_lng != null
+      fly ??
+      (shown?.result_lat != null && shown.result_lng != null
         ? { lat: shown.result_lat, lng: shown.result_lng, zoom: 13 }
         : image?.exif_lat != null && image.exif_lng != null
           ? { lat: image.exif_lat, lng: image.exif_lng, zoom: 13 }
-          : null,
-    [shown, image],
+          : null),
+    [shown, image, fly],
   );
 
   const free = usage ? usage.limit_gb * GB - usage.used_bytes : null;
-  // Depende de `images` y no de `list`, que es un array nuevo en cada render.
   const stagedImages = useMemo(
     () => (staged ?? [])
       .map((id) => (images ?? []).find((im) => im.id === id))
       .filter((x): x is Image => !!x),
     [staged, images],
   );
-  // El popup sobrevive a su propio cierre 180 ms para poder animarse, y en ese
-  // rato `staged` ya es null: hay que quedarse con la última lista no vacía.
+  // El popup sobrevive a su cierre 180 ms para animarse, y en ese rato `staged`
+  // ya es null: hay que quedarse con la última lista no vacía.
   const lastStaged = useRef<Image[]>([]);
   if (stagedImages.length > 0) lastStaged.current = stagedImages;
+
+  const inset = drawerId === null ? 0 : DRAWER_W;
+  const vacio = images !== null && list.length === 0;
 
   return (
     <div className="relative h-full w-full"
@@ -244,63 +261,47 @@ export function CaseView({
       }} />
       {rail}
 
-      <TopBar
-        crumbs={[
-          { label: "Proyectos", onClick: onProjects },
-          { label: project.name, onClick: onBack },
-          { label: case_.name },
-        ]}
-        right={
-          <span className="font-mono text-[10px] text-subtle">
-            {list.length} {list.length === 1 ? "imagen" : "imágenes"} · {analyses.length}{" "}
-            {analyses.length === 1 ? "análisis" : "análisis"}
-          </span>
-        } />
-
       {dragging && <DropFrame />}
 
-      {images !== null && list.length === 0 ? (
+      {vacio ? (
         <DropTarget dragging={dragging} busy={busy} freeBytes={free}
           projectId={project.id} caseId={case_.id}
           onPick={() => void pick()} onReuse={(ids) => void reuse(ids)} />
       ) : (
         <>
-          <ResultCard analysis={shown} image={image} offset={hasResults ? SIDEBAR : 0} />
-          <Filmstrip images={list} selected={sel} shifted={hasResults}
-            onSelect={(id) => { setSel(id); setSelAnalysis(null); }}
-            onAdd={() => void pick()} />
-          {hasResults ? (
-            <ResultsSidebar image={image} analyses={mine} selected={shown?.id ?? null}
-              onSelect={setSelAnalysis} busy={busy}
-              onAnalyze={() => (sel !== null ? setStaged([sel]) : void pick())} />
-          ) : (
-            // Sin barra lateral no habría ninguna puerta para lanzar el
-            // análisis de una imagen que ya está en el caso: el «+» de la tira
-            // abre el selector de archivos, no el popup. Este botón es esa
-            // puerta, y vive junto a la miniatura que va a analizar.
-            sel !== null && (
-              <button onClick={() => setStaged([sel])} disabled={busy}
-                style={{ animation: "jg-fade-rise 240ms cubic-bezier(.16,1,.3,1) both" }}
-                className="jg-press absolute bottom-[58px] right-4 z-20 rounded-lg bg-accent
-                  px-4 py-2 text-[11.5px] font-medium text-black disabled:opacity-40">
-                {busy ? "Un momento…" : "Analizar esta imagen"}
-              </button>
-            )
-          )}
-          <SummaryBar analysis={shown} rightInset={hasResults ? SIDEBAR : 0} />
+          <DrawerTab shifted={drawerId !== null} open={drawerId === "results"}
+            onClick={() => setDrawer(drawerId === "results" ? null : "results")} />
+          <ResultsDrawer open={drawerId === "results"} image={image} analyses={mine}
+            selected={shown?.id ?? null} busy={busy}
+            onSelect={setSelAnalysis}
+            onAnalyze={() => (sel !== null ? setStaged([sel]) : void pick())}
+            onCenter={(lat, lng) => setFly({ lat, lng, zoom: 14 })}
+            onMenu={setMenu} />
         </>
       )}
 
-      {/* El error de fuera del popup necesita su propio sitio: si no, un fallo
-          al soltar imágenes en un caso lleno no se vería en ninguna parte. */}
+      {drawer}
+
+      <Dock images={list} selected={sel}
+        stateOf={(id) => estados.get(id) ?? null}
+        queueOf={(id) => cola.get(id) ?? null}
+        summary={{ analysis: shown, image, caseName: case_.name }}
+        primaryLabel={list.length === 0 ? "Añadir imágenes" : "Analizar"}
+        busy={busy} rightInset={inset}
+        onSelect={(id) => { setSel(id); setSelAnalysis(null); setFly(null); }}
+        onAdd={() => void pick()}
+        onPrimary={() => (list.length === 0 || sel === null ? void pick() : setStaged([sel]))} />
+
       {error !== null && staged === null && (
-        <div className="absolute bottom-3 left-1/2 z-30 flex max-w-[420px] -translate-x-1/2 items-start gap-2
-          rounded-lg border border-danger/40 bg-[rgba(24,18,18,.94)] px-3 py-2 backdrop-blur"
+        <div className="absolute bottom-[66px] left-1/2 z-30 flex max-w-[420px] -translate-x-1/2 items-start
+          gap-2 rounded-lg border border-danger/40 bg-[rgba(24,18,18,.94)] px-3 py-2 backdrop-blur"
           style={{ animation: "jg-toast-in 240ms cubic-bezier(.16,1,.3,1) both" }}>
           <p className="text-[10.5px] leading-snug text-danger-fg">{error}</p>
           <button onClick={() => setError(null)} className="jg-press shrink-0 text-subtle hover:text-fg">✕</button>
         </div>
       )}
+
+      <ContextMenu state={menu} onClose={() => setMenu(null)} />
 
       {popup.rendered && (
         <UploadPopup

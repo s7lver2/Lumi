@@ -1,98 +1,176 @@
 import { useEffect, useState } from "react";
-import { api, type AdminRequest } from "../lib/api";
+import { api, type AdminRequest, type Invite } from "../lib/api";
 import { useServer } from "../lib/store";
-import { Bell } from "./Bell";
+import { Avatar } from "./Avatar";
 import { Icon } from "./Icon";
+import { usePopover } from "./TitleBar";
 
 function ago(ts: number): string {
   const s = Math.max(0, Math.floor(Date.now() / 1000) - ts);
-  if (s < 3600) return `hace ${Math.max(1, Math.floor(s / 60))} min`;
-  if (s < 86400) return `hace ${Math.floor(s / 3600)} h`;
-  return `hace ${Math.floor(s / 86400)} d`;
+  if (s < 60) return "ahora";
+  if (s < 3600) return `${Math.floor(s / 60)} min`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h`;
+  return `${Math.floor(s / 86400)} d`;
 }
 
-/** La campana es del administrador y para lo que le compete a él resolver, no
- *  un atajo ciego a su panel. Antes pulsarla saltaba directa a
- *  "administración" sin decir a qué: ahora enseña la lista de verdad, con una
- *  aprobación rápida para el caso simple y el panel completo a mano para
- *  cuando hay que elegir qué modelos conceder. */
+/** Lo que la bandeja sabe enseñar. `kind` decide el icono y qué botones salen:
+ *  una invitación se acepta, una solicitud se aprueba. */
+interface Item {
+  kind: "invite" | "access";
+  id: number;
+  who: string;
+  text: string;
+  at: number;
+}
+
+/** La campana no es un atajo al panel de administración: es la bandeja de todo
+ *  lo que te espera. Para cualquiera, las invitaciones a proyectos; para el
+ *  administrador, además, las solicitudes de cuenta.
+ *
+ *  Filas, no tarjetas: cuatro tarjetas con borde propio en 300 px de ancho son
+ *  cuatro cajas compitiendo. Lo no leído se marca con un punto en el margen y
+ *  no con un fondo de color — cuatro fondos distintos harían un semáforo. */
 export function NotificationsPopover({ onOpenAdmin }: { onOpenAdmin: () => void }) {
   const token = useServer((s) => s.token) ?? undefined;
-  const [rows, setRows] = useState<AdminRequest[] | null>(null);
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState<number | null>(null);
+  const isAdmin = useServer((s) => s.isAdmin);
+  const [items, setItems] = useState<Item[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [leido, setLeido] = useState<Set<string>>(new Set());
+  const [open, setOpen, box] = usePopover();
 
   async function load() {
+    const out: Item[] = [];
+    // Cada fuente en su propio try: que el administrador no pueda leer una lista
+    // no es motivo para dejarle sin la otra.
     try {
-      const all = await api.get<AdminRequest[]>("/v1/admin/access-requests", token);
-      setRows(all.filter((r) => r.status === "pending"));
-    } catch {
-      setRows([]);
+      const invites = await api.get<Invite[]>("/v1/me/invites", token);
+      invites.forEach((i) => out.push({
+        kind: "invite", id: i.project_id, who: i.invited_by,
+        text: `te invitó a «${i.project_name}»`, at: i.added_at,
+      }));
+    } catch { /* sin invitaciones legibles */ }
+    if (isAdmin) {
+      try {
+        const reqs = await api.get<AdminRequest[]>("/v1/admin/access-requests", token);
+        reqs.filter((r) => r.status === "pending").forEach((r) => out.push({
+          kind: "access", id: r.id, who: r.display_name,
+          text: "pide una cuenta", at: r.created_at,
+        }));
+      } catch { /* idem */ }
     }
+    out.sort((a, b) => b.at - a.at);
+    setItems(out);
   }
+
   useEffect(() => {
     void load();
     const t = setInterval(load, 60_000);
     return () => clearInterval(t);
-  }, []);
+  }, [isAdmin, token]);
 
-  async function resolve(id: number, approve: boolean) {
-    setBusy(id);
+  const key = (i: Item) => `${i.kind}:${i.id}`;
+
+  async function resolver(i: Item, si: boolean) {
+    setBusy(key(i));
     try {
-      await api.post(`/v1/admin/access-requests/${id}/resolve`,
-        { approve, granted_models: approve ? ["mini"] : undefined }, token);
+      if (i.kind === "invite") {
+        await api.post(`/v1/invites/${i.id}/${si ? "accept" : "decline"}`, {}, token);
+      } else {
+        await api.post(`/v1/admin/access-requests/${i.id}/resolve`,
+          { approve: si, granted_models: si ? ["mini"] : undefined }, token);
+      }
       await load();
     } finally {
       setBusy(null);
     }
   }
 
-  const count = rows?.length ?? 0;
+  const pendientes = (items ?? []).filter((i) => !leido.has(key(i))).length;
 
   return (
-    <div className="relative">
-      <Bell count={count} onClick={() => setOpen((o) => !o)} />
+    <div ref={box} className="relative">
+      <button onClick={() => setOpen(!open)} aria-label="Notificaciones"
+        className="relative grid h-[26px] w-[26px] place-items-center rounded-[7px] text-subtle
+          transition-colors duration-300 ease-expo hover:bg-white/[.05] hover:text-fg">
+        <Icon name="bell" size={14} />
+        {pendientes > 0 && (
+          <span className="absolute right-[3px] top-[3px] h-[6px] w-[6px] rounded-full bg-draw-fg"
+            style={{ animation: "jg-core-pulse 1.8s ease-in-out infinite" }} />
+        )}
+      </button>
+
       {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-[30px] z-50 w-[300px] rounded-[10px] border border-white/10
-            bg-[rgba(24,26,30,.96)] p-2 shadow-lg shadow-black/50 backdrop-blur-xl"
-            style={{ animation: "jg-popup-scale-in 180ms cubic-bezier(.2,.85,.35,1) both" }}>
-            <p className="px-1.5 py-1 text-[8px] uppercase tracking-[.11em] text-subtle">Notificaciones</p>
-            {rows === null ? (
-              <p className="px-1.5 py-3 text-center text-[11px] text-subtle">cargando</p>
-            ) : rows.length === 0 ? (
-              <p className="px-1.5 py-3 text-center text-[11px] text-subtle">nada pendiente</p>
-            ) : (
-              rows.map((r) => (
-                <div key={r.id} className="rounded-lg p-2 hover:bg-white/[.03]">
-                  <div className="flex items-start gap-2">
-                    <Icon name="user" size={12} className="mt-0.5 shrink-0 text-subtle" />
-                    <div className="min-w-0">
-                      <p className="truncate text-[11.5px] text-fg">{r.display_name}</p>
-                      <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-muted">{r.message}</p>
-                      <p className="mt-0.5 text-[9.5px] text-subtle">quiere entrar · {ago(r.created_at)}</p>
+        <div className="absolute right-0 top-[30px] z-[70] w-[308px] overflow-hidden rounded-[11px]
+          border border-white/[.12] bg-[rgba(20,22,26,.97)] shadow-lg shadow-black/50 backdrop-blur-xl"
+          style={{ animation: "jg-popup-scale-in 180ms cubic-bezier(.2,.85,.35,1) both" }}>
+
+          <div className="flex items-center gap-2 border-b border-border px-[11px] py-2.5">
+            <span className="flex-1 text-[11.5px] text-fg">Notificaciones</span>
+            {pendientes > 0 && (
+              <button onClick={() => setLeido(new Set((items ?? []).map(key)))}
+                className="text-[10.5px] text-subtle transition-colors hover:text-fg">
+                Marcar todas
+              </button>
+            )}
+          </div>
+
+          <div className="max-h-[290px] overflow-y-auto p-1">
+            {items === null && <p className="py-5 text-center text-[11px] text-subtle">cargando</p>}
+            {items !== null && items.length === 0 && (
+              <p className="py-5 text-center text-[11px] text-subtle">nada que atender</p>
+            )}
+
+            {(items ?? []).map((i) => {
+              const k = key(i);
+              return (
+                <div key={k}
+                  className="relative flex gap-[9px] rounded-[9px] py-2 pl-3 pr-[9px]
+                    transition-colors duration-300 hover:bg-white/[.04]">
+                  {!leido.has(k) && (
+                    <span className="absolute left-1 top-[15px] h-[4px] w-[4px] rounded-full bg-draw" />
+                  )}
+                  {i.kind === "invite" ? (
+                    <Avatar name={i.who} size={22} />
+                  ) : (
+                    <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full
+                      bg-warning/[.12] text-warning-fg">
+                      <Icon name="shield" size={12} />
+                    </span>
+                  )}
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11.5px] leading-snug text-muted">
+                      <b className="font-medium text-fg">{i.who}</b> {i.text}
+                    </p>
+                    <div className="mt-[7px] flex gap-1.5">
+                      <button disabled={busy === k} onClick={() => void resolver(i, true)}
+                        className="jg-press rounded-md bg-accent px-2.5 py-1 text-[10.5px] font-medium
+                          text-black disabled:opacity-40">
+                        {i.kind === "invite" ? "Aceptar" : "Aprobar"}
+                      </button>
+                      <button disabled={busy === k} onClick={() => void resolver(i, false)}
+                        className="jg-press rounded-md border border-white/15 px-2.5 py-[3px]
+                          text-[10.5px] text-fg disabled:opacity-40">
+                        Rechazar
+                      </button>
                     </div>
                   </div>
-                  <div className="mt-1.5 flex gap-1.5">
-                    <button onClick={() => void resolve(r.id, true)} disabled={busy === r.id}
-                      className="jg-press flex-1 rounded-md bg-accent py-1 text-[10.5px] font-medium text-black disabled:opacity-40">
-                      Aprobar (mini)
-                    </button>
-                    <button onClick={() => void resolve(r.id, false)} disabled={busy === r.id}
-                      className="jg-press flex-1 rounded-md border border-white/15 py-1 text-[10.5px] text-fg disabled:opacity-40">
-                      Rechazar
-                    </button>
-                  </div>
+
+                  <span className="shrink-0 pt-0.5 font-mono text-[9.5px] text-[#4a4d52]">{ago(i.at)}</span>
                 </div>
-              ))
-            )}
-            <button onClick={() => { setOpen(false); onOpenAdmin(); }}
-              className="jg-press mt-1 block w-full rounded-lg p-1.5 text-center text-[10.5px] text-subtle hover:text-fg">
-              Ver todo en Administración
-            </button>
+              );
+            })}
           </div>
-        </>
+
+          {isAdmin && (
+            <div className="border-t border-border p-2 text-center">
+              <button onClick={() => { setOpen(false); onOpenAdmin(); }}
+                className="text-[10.5px] text-subtle transition-colors hover:text-fg">
+                Ver todo en Administración
+              </button>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type Project, type ProjectMember, type Usage } from "../lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { api, type Project, type Usage } from "../lib/api";
+import { useReorder } from "../lib/useReorder";
 import { useServer } from "../lib/store";
-import { Avatar } from "../ui/Avatar";
+import { ContextMenu, menuAt, type MenuState } from "../ui/ContextMenu";
 import { Icon } from "../ui/Icon";
 import { PromptDialog } from "../ui/PromptDialog";
-import { InvitesPopover } from "./InvitesPopover";
 
 const GB = 1024 * 1024 * 1024;
 
@@ -14,51 +14,33 @@ function size(bytes: number): string {
   return `${(bytes / GB).toFixed(1)} GB`;
 }
 
-function ago(ts: number): string {
-  const s = Math.max(0, Math.floor(Date.now() / 1000) - ts);
-  if (s < 60) return "ahora mismo";
-  if (s < 3600) return `hace ${Math.floor(s / 60)} min`;
-  if (s < 86400) return `hace ${Math.floor(s / 3600)} h`;
-  return `hace ${Math.floor(s / 86400)} d`;
-}
+type Vista = "grid" | "rows" | "dense";
 
-const FECHA = new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", year: "numeric" });
-const fecha = (ts: number) => FECHA.format(new Date(ts * 1000));
-
-/** Se elige el proyecto ANTES de entrar, como en Burp: a pantalla completa y a
- *  dos paneles. La lista de la izquierda es para recorrer; el panel de la
- *  derecha es para decidir, y por eso enseña las cifras y los miembros del
- *  proyecto marcado sin tener que abrirlo. */
-export function ProjectPicker({
-  onOpen, onAdmin, onSignOut,
-}: { onOpen: (p: Project) => void; onAdmin: () => void; onSignOut: () => void }) {
+/** Los proyectos, sin una sola frase que explique lo que ya se ve.
+ *
+ *  Las cifras van con su icono —carpeta, foto, disco— en vez de «4 casos · 61
+ *  imágenes · 1,2 GB», y las tres vistas son la misma tarjeta con distinto
+ *  flujo: rejilla para pocos, lista para verlos con sus cifras en línea, y
+ *  compacta para quien tiene cuarenta y solo quiere el nombre. */
+export function ProjectPicker({ onOpen }: { onOpen: (p: Project) => void }) {
   const token = useServer((s) => s.token) ?? undefined;
-  const username = useServer((s) => s.username);
   const isAdmin = useServer((s) => s.isAdmin);
   const limits = useServer((s) => s.limits);
-  const addr = useServer((s) => s.addr);
-  const version = useServer((s) => s.hello?.version ?? "");
 
   const [list, setList] = useState<Project[] | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
-  const [members, setMembers] = useState<ProjectMember[] | null>(null);
   const [q, setQ] = useState("");
-  const [sel, setSel] = useState<number | null>(null);
+  const [vista, setVista] = useState<Vista>(
+    () => (localStorage.getItem("lumi.vista.proyectos") as Vista) ?? "grid",
+  );
   const [creating, setCreating] = useState(false);
-  const [renaming, setRenaming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [openError, setOpenError] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<Project | null>(null);
   const [busy, setBusy] = useState(false);
-  const [entering, setEntering] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
-  // Una sola vez al montar. Con un `ref` de callback esto se repetiría en cada
-  // render y le robaría el foco al campo de filtro en cuanto tecleases.
-  useEffect(() => { root.current?.focus(); }, []);
+  const [error, setError] = useState<string | null>(null);
+  const [menu, setMenu] = useState<MenuState | null>(null);
 
-  // Un admin salta los límites en el servidor (`routes/projects.rs`), así que
-  // aquí tiene que saltárselos también: ofrecerle el botón deshabilitado sería
-  // mentirle. `null` es "todavía no lo sé", y ahí se ofrece: el servidor tiene
-  // la última palabra y contesta con el motivo escrito.
+  // Un admin salta los límites en el servidor, así que aquí también: ofrecerle
+  // el botón apagado sería mentirle. `null` es «todavía no lo sé».
   const canCreate = isAdmin || limits === null || limits.can_create_projects;
 
   async function load() {
@@ -69,42 +51,46 @@ export function ProjectPicker({
       ]);
       setList(p);
       setUsage(u);
-      setSel((s) => (s !== null && p.some((x) => x.id === s) ? s : p[0]?.id ?? null));
     } catch (e) {
       setError(String(e));
     }
   }
   useEffect(() => { void load(); }, []);
 
-  // Los miembros son una llamada por proyecto, así que se piden solo del que
-  // está marcado y no de los de la lista entera.
-  useEffect(() => {
-    if (sel === null) { setMembers(null); return; }
-    let dead = false;
-    setMembers(null);
-    setOpenError(null);
-    api.get<ProjectMember[]>(`/v1/projects/${sel}/members`, token)
-      .then((m) => { if (!dead) setMembers(m); })
-      .catch(() => { if (!dead) setMembers([]); });
-    return () => { dead = true; };
-  }, [sel, token]);
-
-  const shown = useMemo(() => {
+  const filtrados = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const all = list ?? [];
     return needle ? all.filter((p) => p.name.toLowerCase().includes(needle)) : all;
   }, [list, q]);
 
-  const current = list?.find((p) => p.id === sel) ?? null;
+  const orden = useReorder("proyectos", filtrados, vista === "grid" ? "x" : "y");
+
+  function cambiarVista(v: Vista) {
+    setVista(v);
+    localStorage.setItem("lumi.vista.proyectos", v);
+  }
+
+  /** Un proyecto solo admite una persona dentro a la vez. Se comprueba justo
+   *  antes de entrar y no al listar: la lista se queda vieja enseguida, y decir
+   *  «en uso» un minuto después de que se liberó sería mentir. */
+  async function open(p: Project) {
+    setError(null);
+    setBusy(true);
+    try {
+      await api.post(`/v1/projects/${p.id}/enter`, {}, token);
+      onOpen(p);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function create(name: string) {
     setBusy(true); setError(null);
     try {
       const p = await api.post<Project>("/v1/projects", { name }, token);
       setCreating(false);
-      // Un proyecto recién creado es tuyo y de nadie más todavía: no puede
-      // estar ya bloqueado, pero pasa por el mismo camino que abrir cualquier
-      // otro para no tener dos formas distintas de entrar.
       void open(p);
     } catch (e) {
       setError(String(e));
@@ -113,28 +99,11 @@ export function ProjectPicker({
     }
   }
 
-  /** Un proyecto solo admite una persona dentro a la vez. Se comprueba justo
-   *  antes de entrar y no al listar: la lista tarda en quedarse vieja, y decir
-   *  "en uso" un minuto después de que se liberó sería mentir. */
-  async function open(p: Project) {
-    setOpenError(null);
-    setEntering(true);
-    try {
-      await api.post(`/v1/projects/${p.id}/enter`, {}, token);
-      onOpen(p);
-    } catch (e) {
-      setOpenError(String(e));
-    } finally {
-      setEntering(false);
-    }
-  }
-
-  async function rename(name: string) {
-    if (!current || !name.trim() || name === current.name) { setRenaming(false); return; }
+  async function rename(p: Project, name: string) {
     setBusy(true); setError(null);
     try {
-      await api.patch(`/v1/projects/${current.id}`, { name }, token);
-      setRenaming(false);
+      await api.patch(`/v1/projects/${p.id}`, { name }, token);
+      setRenaming(null);
       await load();
     } catch (e) {
       setError(String(e));
@@ -143,287 +112,192 @@ export function ProjectPicker({
     }
   }
 
-  async function remove() {
-    if (!current) return;
-    setBusy(true); setError(null);
+  async function remove(p: Project) {
+    setError(null);
     try {
-      await api.del(`/v1/projects/${current.id}`, token);
-      setSel(null);
+      await api.del(`/v1/projects/${p.id}`, token);
       await load();
     } catch (e) {
       setError(String(e));
-    } finally {
-      setBusy(false);
     }
   }
 
-  // Flechas para recorrer y Enter para abrir: quien elige proyecto veinte veces
-  // al día no quiere soltar el teclado.
-  function onKey(e: React.KeyboardEvent) {
-    if (creating || renaming) return;
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      const i = shown.findIndex((p) => p.id === sel);
-      const next = e.key === "ArrowDown" ? i + 1 : i - 1;
-      if (next >= 0 && next < shown.length) setSel(shown[next].id);
-    } else if (e.key === "Enter" && current) {
-      void open(current);
-    }
-  }
+  const cont = vista === "grid"
+    ? "grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(232px,1fr))]"
+    : vista === "rows"
+      ? "flex max-w-[760px] flex-col gap-1.5"
+      : "flex max-w-[660px] flex-col";
 
   return (
-    <div ref={root} className="flex h-full w-full flex-col bg-bg outline-none"
-      style={{ animation: "jg-page-fade-in 260ms cubic-bezier(.16,1,.3,1) both" }}
-      tabIndex={-1} onKeyDown={onKey}>
+    <div className="flex h-full w-full flex-col bg-bg"
+      style={{ animation: "jg-page-fade-in 260ms cubic-bezier(.16,1,.3,1) both" }}>
 
-      {/* cabecera */}
-      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-border bg-surface px-[18px]">
-        <div className="flex items-center gap-2.5">
-          <span className="text-fg"><Icon name="logo" size={17} /></span>
-          <span className="text-[13px]">Lumi Station</span>
-          {version && <span className="font-mono text-[9.5px] text-subtle">v{version}</span>}
-        </div>
-        <div className="flex items-center gap-3.5">
-          {addr && <span className="font-mono text-[10px] text-subtle">{addr}</span>}
-          <span className="h-3.5 w-px bg-border" />
-          <Avatar name={username} />
-          <span className="text-[11px] text-muted">{username}</span>
-          {isAdmin && <span className="rounded border border-white/25 px-1.5 py-px text-[8.5px] text-fg">admin</span>}
-          <InvitesPopover onAccepted={() => void load()} />
-        </div>
-      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto px-[26px] py-[22px]"
+        style={{ background: "radial-gradient(90% 70% at 60% 0%, #16191d 0%, #0e0f11 70%)" }}>
+        <div className="flex items-center gap-3">
+          <h2 className="text-[16px] font-semibold tracking-[-.01em]">Proyectos</h2>
 
-      <div className="flex min-h-0 flex-1">
-        {/* ── lista ── */}
-        <div className="flex w-[352px] shrink-0 flex-col border-r border-border">
-          <div className="p-[13px] pb-2.5">
-            <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-2.5 py-[7px]
-              focus-within:border-white/25 transition-colors duration-300 ease-expo">
-              <Icon name="search" size={12} className="text-subtle" />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrar proyectos"
-                className="w-full bg-transparent text-[11.5px] text-fg outline-none placeholder:text-subtle" />
-            </div>
+          <div className="ml-auto flex items-center gap-2 rounded-lg border border-border bg-surface
+            px-2.5 py-[5px] transition-colors duration-300 ease-expo focus-within:border-white/25">
+            <Icon name="search" size={12} className="text-subtle" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrar"
+              className="w-[130px] bg-transparent text-[11.5px] text-fg outline-none placeholder:text-subtle" />
           </div>
-          <p className="px-[15px] pb-[7px] text-[8px] uppercase tracking-[.11em] text-subtle">
-            {list === null
-              ? "cargando"
-              : `${shown.length} ${shown.length === 1 ? "proyecto" : "proyectos"} · ordenados por actividad`}
-          </p>
 
-          <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-[9px]">
-            {list !== null && shown.length === 0 && q.trim() !== "" && (
-              <p className="px-2 py-6 text-center text-[11px] text-subtle">
-                ningún proyecto se llama así
-              </p>
-            )}
-            {shown.map((p, i) => (
-              <button key={p.id} onClick={() => setSel(p.id)} onDoubleClick={() => void open(p)}
-                style={{ animation: `jg-fade-rise 220ms ${Math.min(i, 8) * 26}ms cubic-bezier(.16,1,.3,1) both` }}
-                className={`relative block w-full rounded-[9px] border p-[10px_11px] text-left transition-colors duration-300 ease-expo ${
-                  sel === p.id
-                    ? "border-white/[.22] bg-white/[.045]"
-                    : "border-border hover:border-white/15 hover:bg-white/[.02]"
-                }`}>
-                {sel === p.id && (
-                  <span className="absolute inset-y-[11px] left-0 w-0.5 rounded-r bg-fg" />
-                )}
-                <div className="flex items-baseline justify-between gap-2.5">
-                  <span className="truncate text-[12.5px] text-fg">{p.name}</span>
-                  <span className="shrink-0 font-mono text-[9.5px] text-subtle">{ago(p.updated_at)}</span>
-                </div>
-                <div className="mt-1 font-mono text-[10px] text-muted">
-                  {p.cases} {p.cases === 1 ? "caso" : "casos"} · {p.images} imágenes · {size(p.bytes)}
-                </div>
-                <div className="mt-[7px] flex gap-1.5">
-                  <Chip strong={p.role === "owner"}>{p.role === "owner" ? "dueño" : "invitado"}</Chip>
-                </div>
+          <div className="flex gap-0.5 rounded-lg border border-border bg-surface p-0.5">
+            {([["grid", "Rejilla"], ["rows", "Lista"], ["dense", "Compacta"]] as const).map(([v, t]) => (
+              <button key={v} onClick={() => cambiarVista(v)} title={t} aria-pressed={vista === v}
+                className={`grid h-[22px] w-[26px] place-items-center rounded-md transition-colors
+                  duration-300 ease-expo ${
+                    vista === v ? "bg-white/[.07] text-fg" : "text-subtle hover:text-fg"}`}>
+                <ViewIcon v={v} />
               </button>
             ))}
           </div>
-
-          <div className="border-t border-border p-[9px]">
-            <button onClick={() => canCreate && setCreating(true)} disabled={!canCreate}
-              title={canCreate ? undefined : "tu cuenta no puede crear proyectos; habla con el administrador"}
-              className="jg-press block w-full rounded-[9px] border border-dashed border-border p-[9px]
-                text-center text-[11px] text-subtle hover:border-white/20 hover:text-fg disabled:opacity-40">
-              + Nuevo proyecto
-            </button>
-          </div>
         </div>
 
-        {/* ── detalle ── */}
-        <div className="flex min-w-0 flex-1 flex-col px-[30px] py-[26px]"
-          style={{ background: "radial-gradient(90% 70% at 70% 0%, #16191d 0%, #0e0f11 70%)" }}>
-          {current === null ? (
-            <div className="flex flex-1 items-center justify-center">
-              <p className="max-w-[280px] text-center text-[11.5px] leading-relaxed text-subtle">
-                {list === null
-                  ? "cargando tus proyectos"
-                  : "todavía no hay ningún proyecto. Crea el primero abajo a la izquierda: cada uno tiene sus casos y sus imágenes, separados del resto."}
-              </p>
-            </div>
-          ) : (
-            <div key={current.id} className="flex min-h-0 flex-1 flex-col"
-              style={{ animation: "jg-slide-right 240ms cubic-bezier(.16,1,.3,1) both" }}>
-              <p className="text-[8px] uppercase tracking-[.11em] text-subtle">Proyecto seleccionado</p>
+        <div className={`mt-4 ${cont}`}>
+          {list === null && <p className="py-8 text-center text-[11px] text-subtle">cargando</p>}
+          {list !== null && filtrados.length === 0 && q.trim() !== "" && (
+            <p className="py-8 text-center text-[11px] text-subtle">ninguno se llama así</p>
+          )}
 
-              {renaming ? (
-                <input autoFocus defaultValue={current.name} disabled={busy}
-                  onBlur={() => setRenaming(false)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void rename((e.target as HTMLInputElement).value);
-                    if (e.key === "Escape") setRenaming(false);
-                  }}
-                  className="mt-2 w-full border-b border-white/25 bg-transparent text-[23px] font-medium
-                    tracking-[-.015em] text-fg outline-none" />
-              ) : (
-                <h2 className="mt-2 truncate text-[23px] font-medium tracking-[-.015em]">{current.name}</h2>
-              )}
+          {orden.items.map((p, i) => (
+            <Card key={p.id} project={p} vista={vista} delay={Math.min(i, 8) * 40}
+              drag={orden.drag(p.id)}
+              onOpen={() => { if (!orden.dragging && !busy) void open(p); }}
+              onMenu={(e) => menuAt(e, p.name, [
+                { label: "Abrir", hint: "↵", onClick: () => void open(p) },
+                {
+                  label: "Renombrar", hint: "F2", disabled: p.role !== "owner",
+                  onClick: () => setRenaming(p),
+                },
+                null,
+                {
+                  label: "Eliminar proyecto", danger: true, disabled: p.role !== "owner",
+                  onClick: () => void remove(p),
+                },
+              ], setMenu)} />
+          ))}
 
-              <div className="mt-2.5 flex gap-1.5">
-                <Chip strong={current.role === "owner"}>
-                  {current.role === "owner" ? "eres el dueño" : "estás invitado"}
-                </Chip>
-                <Chip>creado el {fecha(current.created_at)}</Chip>
-              </div>
-
-              <div className="mt-[26px] grid grid-cols-4 gap-px overflow-hidden rounded-[10px] border border-border bg-border">
-                <Stat k="Casos" v={String(current.cases)} />
-                <Stat k="Imágenes" v={String(current.images)} />
-                <Stat k="Última actividad" v={ago(current.updated_at)} small />
-                <Stat k="En disco" v={size(current.bytes)} />
-              </div>
-
-              <div className="mt-6 min-h-0">
-                <p className="text-[8px] uppercase tracking-[.11em] text-subtle">Miembros</p>
-                <div className="mt-2.5 flex flex-wrap gap-[7px]">
-                  {members === null ? (
-                    <span className="text-[11px] text-subtle">cargando</span>
-                  ) : (
-                    members.filter((m) => m.status === "accepted").map((m) => (
-                      <span key={m.user_id}
-                        className="flex items-center gap-[7px] rounded-full border border-border py-1 pl-[5px] pr-[11px]">
-                        <Avatar name={m.username} />
-                        <span className="text-[11px]">{m.username}</span>
-                        {m.role === "owner" && <Chip strong>dueño</Chip>}
-                      </span>
-                    ))
-                  )}
-                </div>
-                {current.role === "owner" && (
-                  <p className="mt-2.5 text-[10.5px] text-subtle">
-                    Se invita desde dentro del proyecto, en el carril de la izquierda.
-                  </p>
-                )}
-              </div>
-
-              {(error || openError) && (
-                <div className="mt-4 flex items-start gap-2.5">
-                  <Icon name="alert" className="mt-0.5 text-danger-fg" />
-                  <span className="text-[11px] leading-snug text-muted">{error || openError}</span>
-                </div>
-              )}
-
-              <div className="flex-1" />
-              <div className="flex items-center justify-between gap-4">
-                <span className="font-mono text-[10px] text-subtle">
-                  Doble clic o Intro para abrir
-                </span>
-                <div className="flex gap-2">
-                  {current.role === "owner" && (
-                    <>
-                      <button onClick={() => setRenaming(true)} disabled={busy}
-                        className="jg-press rounded-lg border border-white/15 px-4 py-2 text-[11.5px] text-fg disabled:opacity-40">
-                        Renombrar
-                      </button>
-                      <DeleteButton name={current.name} busy={busy} onConfirm={() => void remove()} />
-                    </>
-                  )}
-                  <button onClick={() => void open(current)} disabled={busy || entering}
-                    className="jg-press rounded-lg bg-accent px-5 py-2 text-[11.5px] font-medium text-black disabled:opacity-40">
-                    {entering ? "Entrando…" : "Abrir proyecto"}
-                  </button>
-                </div>
-              </div>
-            </div>
+          {list !== null && (
+            <button onClick={() => canCreate && setCreating(true)} disabled={!canCreate}
+              title={canCreate ? "Nuevo proyecto" : "tu cuenta no puede crear proyectos"}
+              className={`jg-press rounded-card border border-dashed border-border text-[13px] leading-none
+                text-subtle hover:border-white/20 hover:text-fg disabled:opacity-40 ${
+                  vista === "grid" ? "grid min-h-[82px] place-items-center" : "p-2.5 text-center"}`}>
+              +
+            </button>
           )}
         </div>
+
+        {error && <p className="mt-3 text-[11px] text-danger-fg">{error}</p>}
       </div>
 
-      {/* barra de estado */}
-      <footer className="flex h-[34px] shrink-0 items-center justify-between border-t border-border bg-surface px-[15px]">
-        <div className="flex items-center gap-2.5">
-          <span className="text-[8px] uppercase tracking-[.11em] text-subtle">Almacenamiento</span>
-          <span className="h-[3px] w-[120px] overflow-hidden rounded bg-elevated">
-            <span className="block h-full rounded bg-fg transition-[width] duration-700 ease-expo"
-              style={{ width: usage ? `${Math.min(100, (usage.used_bytes / (usage.limit_gb * GB)) * 100)}%` : "0%" }} />
-          </span>
-          {/* El origen del límite se dice siempre: uno sin origen visible es
-              indepurable cuando alguien pregunta por qué no le caben más. */}
-          <span className="font-mono text-[10px] text-subtle">
-            {usage
-              ? `${size(usage.used_bytes)} de ${usage.limit_gb} GB · ${usage.overridden ? "límite propio" : "heredado del global"}`
-              : ""}
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          {isAdmin && (
-            <button onClick={onAdmin}
-              className="jg-press flex items-center gap-1.5 text-[10.5px] text-subtle hover:text-fg">
-              <Icon name="shield" size={11} /> Administración
-            </button>
-          )}
-          <button onClick={onSignOut} className="jg-press text-[10.5px] text-subtle hover:text-fg">
-            Cerrar sesión
-          </button>
-        </div>
+      <footer className="flex h-[30px] shrink-0 items-center gap-2.5 border-t border-border bg-surface px-4">
+        <span className="h-[3px] w-[110px] overflow-hidden rounded bg-elevated">
+          <span className="block h-full rounded bg-fg transition-[width] duration-700 ease-expo"
+            style={{ width: usage ? `${Math.min(100, (usage.used_bytes / (usage.limit_gb * GB)) * 100)}%` : "0%" }} />
+        </span>
+        {/* El origen del límite se dice siempre: uno sin origen visible es
+            indepurable cuando alguien pregunta por qué no le caben más. */}
+        <span className="font-mono text-[10px] text-subtle">
+          {usage
+            ? `${size(usage.used_bytes)} de ${usage.limit_gb} GB · ${
+                usage.overridden ? "límite propio" : "heredado del global"}`
+            : ""}
+        </span>
       </footer>
 
+      <ContextMenu state={menu} onClose={() => setMenu(null)} />
+
       <PromptDialog open={creating} title="Nuevo proyecto"
-        subtitle="Cada proyecto tiene sus casos y sus imágenes, separados del resto."
-        placeholder="nombre del proyecto" confirmLabel="Crear" busy={busy} error={error}
+        subtitle="agrupa casos y a quien trabaja en ellos" placeholder="Costa norte"
+        taken={(list ?? []).map((p) => p.name)} busy={busy} error={error}
         onConfirm={create} onClose={() => { setCreating(false); setError(null); }} />
+
+      <PromptDialog open={renaming !== null} title="Renombrar proyecto"
+        placeholder={renaming?.name ?? ""} confirmLabel="Guardar"
+        taken={(list ?? []).filter((p) => p.id !== renaming?.id).map((p) => p.name)}
+        busy={busy} error={error}
+        onConfirm={(n) => renaming && void rename(renaming, n)}
+        onClose={() => { setRenaming(null); setError(null); }} />
     </div>
   );
 }
 
-function Chip({ children, strong }: { children: React.ReactNode; strong?: boolean }) {
+function ViewIcon({ v }: { v: Vista }) {
   return (
-    <span className={`rounded border px-1.5 py-px text-[8.5px] tracking-[.04em] ${
-      strong ? "border-white/[.28] text-fg" : "border-border text-subtle"
-    }`}>{children}</span>
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+      {v === "grid" ? (
+        <>
+          <rect x="2" y="2" width="5" height="5" rx="1" /><rect x="9" y="2" width="5" height="5" rx="1" />
+          <rect x="2" y="9" width="5" height="5" rx="1" /><rect x="9" y="9" width="5" height="5" rx="1" />
+        </>
+      ) : v === "rows" ? (
+        <><rect x="2" y="3" width="12" height="4" rx="1" /><rect x="2" y="9" width="12" height="4" rx="1" /></>
+      ) : (
+        <path d="M2 4h12M2 8h12M2 12h12" />
+      )}
+    </svg>
   );
 }
 
-function Stat({ k, v, small }: { k: string; v: string; small?: boolean }) {
-  return (
-    <div className="bg-surface px-[15px] py-[13px]">
-      <div className="text-[8px] uppercase tracking-[.11em] text-subtle">{k}</div>
-      <div className={`mt-1 ${small ? "text-[13px]" : "text-[20px]"}`}>{v}</div>
+function Card({ project, vista, delay, drag, onOpen, onMenu }: {
+  project: Project;
+  vista: Vista;
+  delay: number;
+  drag: Record<string, unknown>;
+  onOpen: () => void;
+  onMenu: (e: React.MouseEvent) => void;
+}) {
+  const stats = (
+    <div className={`flex items-center gap-3 text-[10.5px] text-subtle ${vista === "grid" ? "mt-2" : ""} ${
+      vista === "dense" ? "gap-3.5 text-[10px]" : ""}`}>
+      <Stat icon="folder" v={String(project.cases)} />
+      <Stat icon="image" v={String(project.images)} />
+      <Stat icon="cloud" v={size(project.bytes)} />
+      {project.role !== "owner" && (
+        <span className="ml-auto text-warning-fg" title="te invitaron a este proyecto">
+          <Icon name="users" size={12} />
+        </span>
+      )}
     </div>
   );
-}
 
-/** Borrar un proyecto se lleva sus casos, sus imágenes y sus análisis, y no hay
- *  papelera. El botón pide el segundo clic en sí mismo en vez de abrir un
- *  diálogo: el aviso está donde está el peligro. */
-function DeleteButton({ name, busy, onConfirm }:
-  { name: string; busy: boolean; onConfirm: () => void }) {
-  const [armed, setArmed] = useState(false);
-  useEffect(() => {
-    if (!armed) return;
-    const t = setTimeout(() => setArmed(false), 4000);
-    return () => clearTimeout(t);
-  }, [armed]);
+  const base = "jg-press group cursor-grab text-left transition-[border-color,background-color,transform] " +
+    "duration-300 ease-expo active:cursor-grabbing data-[dragging]:scale-[.97] data-[dragging]:opacity-40";
+
+  if (vista === "dense") {
+    return (
+      <button {...drag} onClick={onOpen} onContextMenu={onMenu}
+        style={{ animation: `jg-fade-rise 380ms ${delay}ms cubic-bezier(.16,1,.3,1) both` }}
+        className={`${base} flex items-center gap-3.5 border-b border-border px-2.5 py-1.5 hover:bg-white/[.035]`}>
+        <span className="min-w-0 flex-1 truncate text-[12px] text-fg">{project.name}</span>
+        {stats}
+      </button>
+    );
+  }
+
   return (
-    <button disabled={busy}
-      onClick={() => (armed ? onConfirm() : setArmed(true))}
-      onBlur={() => setArmed(false)}
-      title={armed ? undefined : `Borrar «${name}» y todo lo que contiene`}
-      className={`jg-press rounded-lg border px-4 py-2 text-[11.5px] disabled:opacity-40 ${
-        armed ? "border-danger/60 text-danger-fg" : "border-white/15 text-subtle hover:text-fg"
-      }`}>
-      {armed ? "¿Seguro? Se borra todo" : "Borrar"}
+    <button {...drag} onClick={onOpen} onContextMenu={onMenu}
+      style={{ animation: `jg-fade-rise 380ms ${delay}ms cubic-bezier(.16,1,.3,1) both` }}
+      className={`${base} rounded-card border border-border bg-[rgba(21,23,26,.6)]
+        hover:border-white/20 hover:bg-[rgba(26,28,32,.75)] ${
+          vista === "grid" ? "block p-3.5" : "flex items-center gap-3.5 p-[10px_12px]"}`}>
+      <span className={`block truncate text-[12.5px] text-fg ${vista === "rows" ? "min-w-0 flex-1" : ""}`}>
+        {project.name}
+      </span>
+      {stats}
     </button>
+  );
+}
+
+function Stat({ icon, v }: { icon: "folder" | "image" | "cloud"; v: string }) {
+  return (
+    <span className="flex items-center gap-1">
+      <Icon name={icon} size={12} className="opacity-75" />
+      <span className="font-mono">{v}</span>
+    </span>
   );
 }

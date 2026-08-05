@@ -6,7 +6,8 @@ import { Wizard } from "./wizard/Wizard";
 import { PairStep } from "./wizard/PairStep";
 import { AdminStep } from "./wizard/AdminStep";
 import { ProvisionStep } from "./wizard/ProvisionStep";
-import { TelemetryStrip } from "./ui/TelemetryStrip";
+import { TitleBar } from "./ui/TitleBar";
+import { ResizeHandles } from "./ui/WindowFrame";
 import { StatusOverlay } from "./ui/StatusOverlay";
 import { EntryScreen } from "./entry/EntryScreen";
 import { AdminPanel } from "./admin/AdminPanel";
@@ -21,16 +22,18 @@ import { ProjectPicker } from "./work/ProjectPicker";
 import { ProjectView } from "./work/ProjectView";
 import { CaseView } from "./work/CaseView";
 import { Rail } from "./work/Rail";
-import { MembersDialog } from "./work/MembersDialog";
+import { InviteDrawer } from "./work/InviteDrawer";
+import type { DrawerId } from "./work/Drawer";
 
 export default function App() {
   const [step, setStep] = useState(0);
-  const [collapsed, setCollapsed] = useState(false);
   const [resuming, setResuming] = useState(true);
   const [mode, setMode] = useState<"entry" | "wizard" | "picker" | "project" | "case" | "admin">("entry");
   const [adminBusy, setAdminBusy] = useState(false);
   const [runtimeDone, setRuntimeDone] = useState(false);
-  const [members, setMembers] = useState(false);
+  /** Resultados e invitar piden el mismo carril de la derecha, así que el
+   *  estado es uno solo: abrir cualquiera de los dos recoge el otro. */
+  const [drawer, setDrawer] = useState<DrawerId>(null);
   const hello = useServer((s) => s.hello);
   const isAdmin = useServer((s) => s.isAdmin);
   const bootstrapToken = useServer((s) => s.bootstrapToken);
@@ -175,25 +178,49 @@ export default function App() {
     useServer.getState().setUser("", false, null);
     setAuth(null);
     useWorkspace.getState().clear();
-    setMembers(false);
+    setDrawer(null);
     setMode("entry");
+  }
+
+  /** Volver al selector: soltar el candado y olvidar el proyecto. */
+  function toProjects() {
+    leaveProject();
+    useWorkspace.getState().clear();
+    setDrawer(null);
+    setMode("picker");
   }
 
   const blockedByDisconnect = status !== "ok" &&
     (mode === "picker" || mode === "project" || mode === "case" || mode === "admin");
 
+  const { project: proyectoActual, case_: casoActual } = useWorkspace();
+  /** Las migas de la barra de título salen del modo, no de cada pantalla: la
+   *  barra es una sola para toda la aplicación y tiene que saber dónde estás
+   *  sin que cada vista se lo cuente. */
+  const crumbs =
+    mode === "entry" || mode === "wizard"
+      ? [{ label: "Lumi Station" }]
+      : mode === "admin"
+        ? [{ label: "Proyectos", onClick: () => setMode("picker") }, { label: "Administración" }]
+        : mode === "picker" || !proyectoActual
+          ? [{ label: "Proyectos" }]
+          : mode === "case" && casoActual
+            ? [
+                { label: "Proyectos", onClick: () => toProjects() },
+                { label: proyectoActual.name, onClick: () => { useWorkspace.getState().setCase(null); setMode("project"); } },
+                { label: casoActual.name },
+              ]
+            : [{ label: "Proyectos", onClick: () => toProjects() }, { label: proyectoActual.name }];
+
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       <PlanetBackground dead={status !== "ok"} />
-      {/* Nunca en "entry": una reconexión a medio hacer deja `hello` con
-          datos aunque no haya sesión válida, y la franja se veía encima del
-          login sin que hubiera nada real que mostrar todavía. Y solo para
-          admin: CPU, GPU y cola son datos de hardware del servidor, no algo
-          que un investigador normal necesite ver en cada pantalla. */}
-      {mode !== "entry" && isAdmin && (
-        <TelemetryStrip collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)}
-          onOpenAdmin={() => setMode("admin")} />
-      )}
+      {/* Una sola franja arriba para todo: migas, estado del servidor,
+          notificaciones, cuenta y los botones de la ventana. La telemetría ya
+          no es una franja permanente de 70 px — vive en su píldora. */}
+      <TitleBar crumbs={crumbs} onOpenAdmin={() => { leaveProject(); setMode("admin"); }}
+        onSignOut={signOut} />
+      <ResizeHandles />
       {/* Para app/admin, la desconexión es un banner + bloqueo, no una
           pantalla completa: la sesión de un usuario normal no tiene un
           formulario de desbloqueo que mostrar, solo hay que impedir que
@@ -256,40 +283,37 @@ export default function App() {
         </Wizard>
       ) : mode === "picker" ? (
         <ProjectPicker
-          onOpen={(p) => { useWorkspace.getState().setProject(p); setMode("project"); }}
-          onAdmin={() => setMode("admin")}
-          onSignOut={signOut} />
+          onOpen={(p) => { useWorkspace.getState().setProject(p); setMode("project"); }} />
       ) : (
         (() => {
           const { project, case_ } = useWorkspace.getState();
           if (!project) { setMode("picker"); return null; }
-          const toProjects = () => { leaveProject(); useWorkspace.getState().clear(); setMode("picker"); };
           const rail = (
-            <Rail active={members ? "members" : "cases"}
+            <Rail active={drawer === "invite" ? "members" : "cases"}
               canManage={project.role === "owner"} isAdmin={isAdmin}
               onCases={() => {
-                setMembers(false);
+                setDrawer(null);
                 if (mode === "case") { useWorkspace.getState().setCase(null); setMode("project"); }
               }}
-              onMembers={() => setMembers(true)}
+              onMembers={() => setDrawer(drawer === "invite" ? null : "invite")}
               // El panel de administración es una parada aparte: mientras se
               // está ahí no se está trabajando en el proyecto, así que se
               // suelta el candado para no bloquearlo a los demás por nada.
               onAdmin={() => { leaveProject(); setMode("admin"); }}
               onLeave={toProjects} />
           );
-          return (
-            <>
-              {mode === "case" && case_ ? (
-                <CaseView project={project} case_={case_} rail={rail}
-                  onProjects={toProjects}
-                  onBack={() => { useWorkspace.getState().setCase(null); setMode("project"); }} />
-              ) : (
-                <ProjectView project={project} rail={rail} onProjects={toProjects}
-                  onOpenCase={(c) => { useWorkspace.getState().setCase(c); setMode("case"); }} />
-              )}
-              {members && <MembersDialog project={project} onClose={() => setMembers(false)} />}
-            </>
+          // Los dos cajones comparten hueco, así que comparten estado: abrir
+          // uno recoge el otro sin que ninguna pantalla tenga que enterarse.
+          const cajon = (
+            <InviteDrawer project={project} open={drawer === "invite"}
+              onClose={() => setDrawer(null)} />
+          );
+          return mode === "case" && case_ ? (
+            <CaseView project={project} case_={case_} rail={rail} drawer={cajon}
+              drawerId={drawer} setDrawer={setDrawer} />
+          ) : (
+            <ProjectView project={project} rail={rail} drawer={cajon}
+              onOpenCase={(c) => { useWorkspace.getState().setCase(c); setMode("case"); }} />
           );
         })()
       )}

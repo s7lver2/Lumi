@@ -77,6 +77,16 @@ body { background: #0e0f11; color: #e8e8e6; overflow: hidden; }
   0%, 100% { opacity: .55; transform: scale(1) }
   50%      { opacity: 1;   transform: scale(1.2) }
 }
+/* Una miniatura que se está analizando: el punto que late dice «trabajando»
+   sin fingir un porcentaje, y el barrido, «esperando turno». */
+@keyframes jg-live { 0%, 100% { opacity: .28; transform: scale(.85) } 50% { opacity: 1; transform: scale(1) } }
+@keyframes jg-sweep-x { from { transform: translateX(-100%) } to { transform: translateX(100%) } }
+/* La bandeja de la zona vacía respira; al acercarte se abre en abanico. */
+@keyframes jg-float { 0%, 100% { transform: translateY(0) rotate(0) } 50% { transform: translateY(-5px) rotate(-3deg) } }
+@keyframes jg-done-flash {
+  from { box-shadow: 0 0 0 0 rgba(242,243,245,.5) }
+  to   { box-shadow: 0 0 0 9px rgba(242,243,245,0) }
+}
 @media (prefers-reduced-motion: reduce) { .lumi-anim { animation: none !important; } }
 
 /* Un botón que no responde al dedo se siente muerto. Esto es el mismo gesto

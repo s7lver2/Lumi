@@ -5,8 +5,8 @@ export type RailItem = "cases" | "members" | "admin";
 /** 44 px, iconos sin etiqueta, translúcido sobre el mapa. Es el carril de la
  *  v1: la navegación no ocupa sitio porque el mapa es el trabajo.
  *
- *  Lo que le faltaba era decir DÓNDE estás. Sin estado activo, tres iconos
- *  idénticos no son navegación, son tres botones sueltos. */
+ *  Ya no lleva el logotipo: eso vive ahora en la barra de título, que cruza
+ *  toda la ventana por encima de este carril. */
 export function Rail({
   active, canManage, isAdmin, onCases, onMembers, onAdmin, onLeave,
 }: {
@@ -20,17 +20,12 @@ export function Rail({
 }) {
   return (
     <nav className="absolute inset-y-0 left-0 z-30 flex w-11 flex-col items-center gap-[3px]
-      border-r border-border bg-[rgba(13,15,17,.9)] py-2.5 backdrop-blur">
-      <span className="mb-1.5 grid h-[30px] w-[30px] place-items-center text-fg">
-        <Icon name="logo" size={15} />
-      </span>
+      border-r border-border bg-[rgba(13,15,17,.9)] py-2 backdrop-blur">
       <RailBtn icon="layers" title="Casos del proyecto" on={active === "cases"} onClick={onCases} />
       {canManage && (
-        <RailBtn icon="users" title="Miembros del proyecto" on={active === "members"} onClick={onMembers} />
+        <RailBtn icon="users" title="Quién entra en el proyecto" on={active === "members"} onClick={onMembers} />
       )}
-      {/* Un administrador es además un investigador. Antes su única puerta al
-          panel era aterrizar en él al entrar, y desde dentro de un caso no
-          había forma de volver. */}
+      {/* Un administrador es además un investigador. */}
       {isAdmin && (
         <RailBtn icon="shield" title="Administración" on={active === "admin"} onClick={onAdmin} />
       )}
