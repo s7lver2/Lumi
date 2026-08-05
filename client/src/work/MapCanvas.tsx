@@ -140,7 +140,17 @@ export function MapCanvas({
         const w = box.current?.clientWidth ?? 0;
         const h = box.current?.clientHeight ?? 0;
         if (w < 2 || h < 2) {
-          setWarn((v) => v ?? `el lienzo del mapa mide ${w}×${h} px: cargó pero no tiene dónde dibujarse`);
+          // Con la medida del lienzo a secas no se sabe QUIÉN se quedó sin
+          // alto, y el candidato equivocado cuesta una vuelta entera. Se sube
+          // por los antepasados diciendo cuánto mide cada uno: el primero de
+          // la lista con alto es el que hay que arreglar.
+          const cadena: string[] = [];
+          let n: HTMLElement | null = box.current;
+          for (let i = 0; i < 6 && n; i++, n = n.parentElement) {
+            const cls = (n.className || "").toString().split(/\s+/).slice(0, 3).join(".");
+            cadena.push(`${n.tagName.toLowerCase()}${n.id ? `#${n.id}` : ""}${cls ? `.${cls}` : ""} ${n.clientWidth}×${n.clientHeight}`);
+          }
+          setWarn((v) => v ?? `el lienzo del mapa mide ${w}×${h} px y no tiene dónde dibujarse · ${cadena.join(" ← ")}`);
         }
         m.resize();
 
