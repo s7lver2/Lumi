@@ -53,7 +53,9 @@ export function Dock({
 
   return (
     <div style={{ right: rightInset }}
-      className="absolute bottom-0 left-0 z-20 flex h-[56px] items-center gap-2.5 border-t border-border
+      // `left-11` y no `left-0`: el carril flota por encima del dock, y con el
+      // dock empezando en el borde la primera miniatura se quedaba debajo.
+      className="absolute bottom-0 left-11 z-20 flex h-[56px] items-center gap-2.5 border-t border-border
         bg-[rgba(13,15,17,.84)] px-2.5 backdrop-blur-md transition-[right] duration-[420ms] ease-expo">
       <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
         {orden.items.map((im) => (

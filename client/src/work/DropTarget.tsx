@@ -59,27 +59,35 @@ export function DropTarget({
         dragging ? "border-white/40" : ""
       }`}>
         {tab === "images" && (
-          <div className="p-[26px_24px] text-center">
-            <div className={`mx-auto mb-3.5 grid h-[42px] w-[42px] place-items-center rounded-[11px]
-              border transition-colors duration-300 ease-expo ${
-                dragging ? "border-white/45 text-fg" : "border-white/20 text-muted"
-              }`}>
-              <Icon name="image" size={18} />
-            </div>
+          <div className="p-[24px] text-center">
+            {/* La bandeja respira despacio y se abre en abanico al acercarte:
+                el mismo gesto que la pila de las filas de casos. Explicar por
+                escrito que se puede arrastrar sobraba — la bandeja ya lo dice. */}
+            <span className="group relative mx-auto mb-3.5 block h-[34px] w-[46px]">
+              {[0, 1, 2].map((i) => (
+                <span key={i}
+                  className={`absolute inset-0 rounded-[7px] border bg-[linear-gradient(140deg,#2c323a,#171a1e)]
+                    transition-transform duration-[450ms] ease-expo ${
+                      dragging ? "border-white/40" : "border-white/[.14]"} ${
+                      i === 0 ? "opacity-45" : i === 1 ? "opacity-70" : ""}`}
+                  style={{
+                    animation: dragging ? undefined : `jg-float 3.6s cubic-bezier(.16,1,.3,1) ${i * 0.28}s infinite`,
+                    transform: dragging
+                      ? ["translate(-13px,-8px) rotate(-11deg)", "translate(0,-11px)", "translate(13px,-8px) rotate(11deg)"][i]
+                      : undefined,
+                  }} />
+              ))}
+            </span>
             <p className="text-[13px] font-medium text-fg">
-              {dragging ? "Suelta aquí" : "Suelta fotos para empezar el caso"}
-            </p>
-            <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
-              Arrástralas desde tu equipo a cualquier punto de la ventana.<br />
-              El archivo original no se toca nunca.
+              {dragging ? "Suelta aquí" : "Suelta imágenes aquí"}
             </p>
             <button onClick={onPick} disabled={busy}
-              className="jg-press mt-4 rounded-lg bg-accent px-4 py-2 text-[11.5px] font-medium text-black disabled:opacity-50">
-              {busy ? "Subiendo…" : "Seleccionar archivos…"}
+              className="jg-press mt-3.5 rounded-lg bg-accent px-4 py-2 text-[11.5px] font-medium text-black disabled:opacity-50">
+              {busy ? "Subiendo…" : "Del disco…"}
             </button>
-            <p className="mt-3 font-mono text-[9.5px] text-subtle">
-              JPG · PNG · WEBP
-              {freeBytes !== null && ` · quedan ${size(Math.max(0, freeBytes))} de tu cuota`}
+            <p className="mt-3 flex items-center justify-center gap-1 font-mono text-[9.5px] text-subtle">
+              <Icon name="cloud" size={11} />
+              {freeBytes !== null ? `${size(Math.max(0, freeBytes))} libres` : "JPG · PNG · WEBP"}
             </p>
           </div>
         )}

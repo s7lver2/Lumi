@@ -199,7 +199,9 @@ export function MapCanvas({
     // solapaban en cualquier caso vacío sin proveedor de mapas configurado.
     return (
       <div className="absolute inset-0" style={{ background: "radial-gradient(120% 90% at 50% 35%, #16191d 0%, #0e0f11 70%)" }}>
-        <div className="absolute left-11 right-0 top-[38px] z-10 flex items-start gap-2.5
+        {/* `top-0` y no `top-[38px]`: la barra de título ya no está dentro de
+            este lienzo, vive fuera y por encima de todo. */}
+        <div className="absolute left-11 right-0 top-0 z-10 flex items-start gap-2.5
           border-b border-border bg-[rgba(20,22,26,.72)] px-4 py-2.5 backdrop-blur"
           style={{ animation: "jg-fade-rise 260ms cubic-bezier(.16,1,.3,1) both" }}>
           <Icon name="globe" size={13} className="mt-px shrink-0 text-subtle" />
@@ -212,12 +214,14 @@ export function MapCanvas({
   }
   return (
     <>
+      {/* El fondo va SIEMPRE debajo, no solo mientras carga. El lienzo de
+          MapLibre es transparente hasta que dibuja algo, y con un estilo que
+          carga a medias se quedaba así: por el hueco se veía el planeta de la
+          pantalla de entrada, que no pinta nada aquí. */}
+      <div className="pointer-events-none absolute inset-0"
+        style={{ background: "radial-gradient(120% 90% at 50% 35%, #16191d 0%, #0e0f11 70%)" }} />
       <div ref={box} className="absolute inset-0 transition-opacity duration-700 ease-expo"
         style={{ opacity: ready ? 1 : 0 }} />
-      {!ready && (
-        <div className="pointer-events-none absolute inset-0"
-          style={{ background: "radial-gradient(120% 90% at 50% 35%, #16191d 0%, #0e0f11 70%)" }} />
-      )}
     </>
   );
 }
