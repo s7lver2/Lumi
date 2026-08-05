@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { addrFromKey, api } from "../lib/api";
 import { useServer } from "../lib/store";
-import { updateSession } from "../lib/session";
+import { addServer, updateSession } from "../lib/session";
 import { Icon } from "../ui/Icon";
 
 export function PairStep({ onDone }: { onDone: () => void }) {
@@ -20,6 +20,12 @@ export function PairStep({ onDone }: { onDone: () => void }) {
       // app se cierra aquí, reabrirla puede reconectar sin la clave
       // original (que a partir del canje de abajo queda gastada).
       updateSession({ addr, fingerprint: h.fingerprint });
+      // Y también a la lista de servidores recordados, que es de donde come la
+      // pantalla de entrada. Sin esto, quien instalaba el servidor terminaba el
+      // asistente y al cerrar sesión se encontraba un login sin ningún servidor
+      // al que volver: solo lo guardaba «Añadir servidor», que es el camino del
+      // invitado con su tarjeta, no el del owner con su clave.
+      addServer({ addr, fingerprint: h.fingerprint, label: addr });
       // El secreto es el último campo de la clave: lumi1_<addr>_<huella>_<secreto>.
       const secret = key.trim().split("_").pop() ?? "";
       if (h.state === "unclaimed") {

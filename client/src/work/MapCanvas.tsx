@@ -58,7 +58,15 @@ export function MapCanvas({
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const placed = useRef<maplibregl.Marker[]>([]);
+  /** `reason` es un fallo del que no se vuelve: no hay proveedor, o el estilo
+   *  no llegó, y por tanto no hay lienzo que montar. */
   const [reason, setReason] = useState<string | null>(null);
+  /** `warn` es un fallo de EN MARCHA: una tesela, una tipografía o un icono
+   *  que no cargan con el mapa ya montado. Antes esto también borraba el mapa
+   *  entero, así que un fallo de tipografías dejaba la pantalla en negro
+   *  cuando las teselas estaban perfectamente. Ahora se avisa por encima y lo
+   *  que sí ha cargado se sigue viendo. */
+  const [warn, setWarn] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   // `/v1/map/config` exige sesión como todas las rutas del daemon. Iba sin
   // token, así que el mapa contestaba siempre "sesión inválida" y el lienzo
@@ -128,7 +136,9 @@ export function MapCanvas({
       // este subsistema se prohíbe.
       m.on("error", (e) => {
         const msg = (e as { error?: { message?: string } }).error?.message;
-        if (msg) setReason(`el mapa no se pudo cargar: ${msg}`);
+        // Solo el primero: una tesela rota se repite en cada nivel de zoom y
+        // la franja acabaría parpadeando con el mismo texto.
+        if (msg) setWarn((v) => v ?? msg);
       });
       map.current = m;
     })();
@@ -222,6 +232,19 @@ export function MapCanvas({
         style={{ background: "radial-gradient(120% 90% at 50% 35%, #16191d 0%, #0e0f11 70%)" }} />
       <div ref={box} className="absolute inset-0 transition-opacity duration-700 ease-expo"
         style={{ opacity: ready ? 1 : 0 }} />
+      {warn && (
+        <div className="absolute left-11 right-0 top-0 z-10 flex items-start gap-2.5 border-b
+          border-warning/30 bg-[rgba(24,20,14,.82)] px-4 py-2 backdrop-blur"
+          style={{ animation: "jg-fade-rise 260ms cubic-bezier(.16,1,.3,1) both" }}>
+          <Icon name="alert" size={12} className="mt-px shrink-0 text-warning-fg" />
+          <p className="flex-1 text-[10.5px] leading-relaxed text-muted">
+            <span className="text-warning-fg">El mapa carga a medias. </span>{warn}
+          </p>
+          <button onClick={() => setWarn(null)} className="jg-press shrink-0 text-subtle hover:text-fg">
+            <Icon name="x" size={11} />
+          </button>
+        </div>
+      )}
     </>
   );
 }
