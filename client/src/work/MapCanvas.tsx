@@ -289,8 +289,20 @@ export function MapCanvas({
           pantalla de entrada, que no pinta nada aquí. */}
       <div className="pointer-events-none absolute inset-0"
         style={{ background: "radial-gradient(120% 90% at 50% 35%, #16191d 0%, #0e0f11 70%)" }} />
-      <div ref={box} className="absolute inset-0 transition-opacity duration-700 ease-expo"
-        style={{ opacity: ready ? 1 : 0 }} />
+      {/* Dos divs y no uno, y esto es la causa del mapa negro que costó cinco
+          vueltas: MapLibre le pone la clase `maplibregl-map` a SU contenedor, y
+          su hoja de estilos declara ahí `position: relative`. Es la misma
+          especificidad que la `absolute` de Tailwind, así que gana la que el
+          empaquetador emita después — y cuando gana MapLibre, el contenedor
+          deja de estar anclado a los cuatro bordes y pasa a medir lo que midan
+          sus hijos, que son todos absolutos: cero de alto. El lienzo cargaba
+          «bien», sin un solo error, y no dibujaba nada.
+          Con el ancla fuera y el contenedor a `h-full w-full` dentro, da igual
+          quién gane esa carrera: el 100 % del padre es el 100 % del padre. */}
+      <div className="absolute inset-0">
+        <div ref={box} className="h-full w-full transition-opacity duration-700 ease-expo"
+          style={{ opacity: ready ? 1 : 0 }} />
+      </div>
       {warn && (
         <div className="absolute left-11 right-0 top-0 z-10 flex items-start gap-2.5 border-b
           border-warning/30 bg-[rgba(24,20,14,.82)] px-4 py-2 backdrop-blur"
