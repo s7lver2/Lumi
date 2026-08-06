@@ -131,4 +131,36 @@ mod tests {
         assert!(s.contains(r#""tipo":"lote""#), "{s}");
         assert_eq!(serde_json::from_str::<Lote>(&s).unwrap(), lote);
     }
+
+    /// La reanudación no es una función: es la consecuencia de que el estado
+    /// por imagen viva en SQLite. Aquí se prueba la regla que la hace posible
+    /// sin montar una base de datos: un lote que se corta a la mitad deja las
+    /// hechas hechas, y lo que queda por hacer es exactamente el complemento.
+    #[test]
+    fn un_lote_a_medias_reanuda_sin_repetir_lo_hecho() {
+        let todas: Vec<String> = (0..10).map(|i| format!("/img/{i}.jpg")).collect();
+
+        // Primera pasada: el trabajador contesta por 4 y luego el proceso muere.
+        let primera = MsgEmbed::Vectores {
+            id: 1,
+            dims: 64,
+            cuenta: 4,
+            fichero: "/tmp/a.f32".into(),
+            imagenes: todas[..4].to_vec(),
+        };
+        assert!(primera.validar().is_ok());
+        let MsgEmbed::Vectores { imagenes: hechas, .. } = &primera else { unreachable!() };
+
+        // Y una saltada, que TAMBIÉN cuenta como resuelta: no se reintenta.
+        let saltada = "/img/4.jpg".to_string();
+
+        let quedan: Vec<String> = todas
+            .iter()
+            .filter(|r| !hechas.contains(r) && **r != saltada)
+            .cloned()
+            .collect();
+        assert_eq!(quedan.len(), 5, "10 menos 4 hechas menos 1 saltada");
+        assert_eq!(quedan[0], "/img/5.jpg", "reanuda justo después, sin repetir");
+        assert!(!quedan.contains(&saltada), "una saltada no vuelve a la cola");
+    }
 }

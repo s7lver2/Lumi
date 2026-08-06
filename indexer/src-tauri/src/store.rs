@@ -275,4 +275,72 @@ impl Almacen {
         )?;
         Ok(n)
     }
+
+    /// Imágenes de este índice que siguen sin vector de este modelo. Es lo que
+    /// reconstruye la cola cuando Redis se ha vaciado: la verdad está aquí, no
+    /// en la lista de Redis.
+    pub fn pendientes_de(
+        &self,
+        indice_id: i64,
+        modelo: &str,
+        limite: u32,
+    ) -> Result<Vec<(i64, String)>> {
+        let c = self.0.lock().unwrap();
+        let mut q = c.prepare(
+            "SELECT i.id, i.ruta FROM imagenes i JOIN vectores v ON v.imagen_id = i.id
+              WHERE i.indice_id = ?1 AND v.modelo = ?2 AND v.estado = 'pendiente'
+                AND i.saltada_motivo IS NULL
+              ORDER BY i.id LIMIT ?3",
+        )?;
+        let filas = q
+            .query_map(params![indice_id, modelo, limite], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(filas)
+    }
+
+    pub fn marcar_vector(&self, imagen_id: i64, modelo: &str, estado: &str) -> Result<()> {
+        let c = self.0.lock().unwrap();
+        c.execute(
+            "UPDATE vectores SET estado = ?3 WHERE imagen_id = ?1 AND modelo = ?2",
+            params![imagen_id, modelo, estado],
+        )?;
+        Ok(())
+    }
+
+    pub fn estado_lote(&self, lote_id: i64, estado: &str, error: Option<&str>) -> Result<()> {
+        let c = self.0.lock().unwrap();
+        c.execute(
+            "UPDATE lotes SET estado = ?2, error = ?3 WHERE id = ?1",
+            params![lote_id, estado, error],
+        )?;
+        Ok(())
+    }
+
+    /// Devuelve el número de reintentos DESPUÉS de sumar uno. Es el contador
+    /// que impide el bucle infinito cuando el proceso se muere una y otra vez.
+    pub fn sumar_reintento(&self, lote_id: i64) -> Result<u32> {
+        let c = self.0.lock().unwrap();
+        c.execute("UPDATE lotes SET reintentos = reintentos + 1 WHERE id = ?1", params![lote_id])?;
+        let n: u32 =
+            c.query_row("SELECT reintentos FROM lotes WHERE id = ?1", params![lote_id], |r| r.get(0))?;
+        Ok(n)
+    }
+
+    pub fn lotes_sin_terminar(&self) -> Result<Vec<(i64, i64)>> {
+        let c = self.0.lock().unwrap();
+        let mut q = c.prepare(
+            "SELECT id, indice_id FROM lotes WHERE estado IN ('pendiente','en_curso') ORDER BY id",
+        )?;
+        let filas = q
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(filas)
+    }
+
+    pub fn quadkey_de_imagen(&self, imagen_id: i64) -> Result<String> {
+        let c = self.0.lock().unwrap();
+        Ok(c.query_row("SELECT quadkey FROM imagenes WHERE id = ?1", params![imagen_id], |r| {
+            r.get(0)
+        })?)
+    }
 }

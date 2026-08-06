@@ -7,21 +7,24 @@
 mod crypto;
 mod models;
 mod qdrant;
+mod queue;
 mod runtime;
 mod services;
 mod store;
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crypto::Maestra;
 use store::Almacen;
 
 pub struct Estado {
     pub dir: PathBuf,
-    pub almacen: Almacen,
+    pub almacen: Arc<Almacen>,
     pub maestra: Maestra,
     pub servicios: services::Servicios,
     pub modelos: Vec<models::Modelo>,
+    pub cola: Arc<queue::Cola>,
 }
 
 /// Dónde vive todo. `LUMI_INDEXER_DATA` existe para poder correr una instancia
@@ -77,19 +80,39 @@ async fn runtime_instalar(estado: tauri::State<'_, Estado>) -> Result<(), String
     runtime::instalar(&estado.dir, estado.servicios.log.clone()).await.map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn cola_progreso(estado: tauri::State<'_, Estado>) -> queue::Progreso {
+    estado.cola.progreso()
+}
+
+#[tauri::command]
+fn cola_pausar(estado: tauri::State<'_, Estado>, pausada: bool) {
+    estado.cola.pausar(pausada);
+}
+
 pub fn run() {
     let dir = directorio();
-    let almacen = Almacen::abrir(&dir).expect("no se pudo abrir el almacén");
+    let almacen = Arc::new(Almacen::abrir(&dir).expect("no se pudo abrir el almacén"));
     let maestra = Maestra::abrir_o_crear(&dir).expect("no se pudo abrir la clave maestra");
     let servicios = services::Servicios::nuevo(dir.clone());
     let modelos = models::cargar_registro(
         &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../modelos"),
     );
+    let cola = queue::Cola::nueva(dir.clone(), almacen.clone(), servicios.log.clone());
+    // ponytail: la tarea 12 no dice cómo se elige el modelo cuando hay varios
+    // registrados a la vez (eso es orquestación de territorio/ingesta, fuera
+    // de esta tarea). El techo es un solo bucle de cola, contra el primer
+    // modelo del registro; la salida, si hiciera falta, es un bucle por
+    // modelo — pero eso exige separar el estado "hecho" de un lote por
+    // modelo, que hoy es una sola columna compartida en `lotes`.
+    if let Some(m) = modelos.first() {
+        cola.clone().arrancar_bucle(m.id.clone(), m.dims, m.version.clone());
+    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
-        .manage(Estado { dir, almacen, maestra, servicios, modelos })
+        .manage(Estado { dir, almacen, maestra, servicios, modelos, cola })
         .invoke_handler(tauri::generate_handler![
             saludo,
             servicios_arrancar,
@@ -97,7 +120,9 @@ pub fn run() {
             servicios_log,
             modelos_lista,
             runtime_listo,
-            runtime_instalar
+            runtime_instalar,
+            cola_progreso,
+            cola_pausar
         ])
         .run(tauri::generate_context!())
         .expect("no se pudo arrancar el Lumi Indexer");
