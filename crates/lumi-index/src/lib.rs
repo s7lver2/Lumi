@@ -6,6 +6,7 @@
 //! paquetes y deben depender de este crate en vez de copiar el formato.
 
 pub mod coverage;
+pub mod embed;
 pub mod legacy;
 pub mod manifest;
 pub mod tiles;
