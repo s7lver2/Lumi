@@ -113,6 +113,77 @@ fn ingesta_carpeta(
     .map_err(|e| e.to_string())
 }
 
+#[derive(serde::Serialize)]
+struct DetalleIndice {
+    imagenes: lumi_index::manifest::PorcentajesImagenes,
+    trabajo: Vec<(String, u32, f64)>,
+}
+
+#[tauri::command]
+fn indice_detalle(estado: tauri::State<'_, Estado>, id: i64) -> Result<DetalleIndice, String> {
+    let filas = estado.almacen.filas_procedencia(id).map_err(|e| e.to_string())?;
+    let teselas = estado.almacen.teselas_trabajo(id).map_err(|e| e.to_string())?;
+    Ok(DetalleIndice {
+        imagenes: lumi_index::manifest::porcentajes(&filas),
+        trabajo: lumi_index::manifest::porcentajes_trabajo(&teselas),
+    })
+}
+
+#[derive(serde::Serialize)]
+struct LoteResumen {
+    id: i64,
+    clase: String,
+    origen: String,
+    estado: String,
+}
+
+#[tauri::command]
+fn indice_lotes(estado: tauri::State<'_, Estado>, id: i64) -> Result<Vec<LoteResumen>, String> {
+    Ok(estado
+        .almacen
+        .listar_lotes(id)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(id, clase, origen, estado)| LoteResumen { id, clase, origen, estado })
+        .collect())
+}
+
+#[derive(serde::Serialize)]
+struct ResumenIndice {
+    id: i64,
+    nombre: String,
+    slug: String,
+    estado: String,
+    imagenes: u32,
+    teselas: u32,
+    imagenes_pct: lumi_index::manifest::PorcentajesImagenes,
+}
+
+/// Por índice, el mismo cálculo que `indice_detalle` pero solo de imágenes:
+/// es lo que pinta la barra de procedencia en la propia fila, sin tener que
+/// abrir el detalle para verla.
+#[tauri::command]
+fn indices_lista(estado: tauri::State<'_, Estado>) -> Result<Vec<ResumenIndice>, String> {
+    let indices = estado.almacen.listar_indices().map_err(|e| e.to_string())?;
+
+    indices
+        .into_iter()
+        .map(|(id, nombre, slug, estado_str)| {
+            let filas = estado.almacen.filas_procedencia(id).map_err(|e| e.to_string())?;
+            let pct = lumi_index::manifest::porcentajes(&filas);
+            Ok(ResumenIndice {
+                id,
+                nombre,
+                slug,
+                estado: estado_str,
+                imagenes: pct.imagenes_total,
+                teselas: pct.teselas_total,
+                imagenes_pct: pct,
+            })
+        })
+        .collect()
+}
+
 #[tauri::command]
 fn ingesta_legacy(
     estado: tauri::State<'_, Estado>,
@@ -171,7 +242,10 @@ pub fn run() {
             cola_progreso,
             cola_pausar,
             ingesta_carpeta,
-            ingesta_legacy
+            ingesta_legacy,
+            indices_lista,
+            indice_detalle,
+            indice_lotes
         ])
         .run(tauri::generate_context!())
         .expect("no se pudo arrancar el Lumi Indexer");

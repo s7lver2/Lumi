@@ -5,6 +5,23 @@ export interface EstadoServicio { nombre: string; vivo: boolean; detalle: string
 export interface Modelo { id: string; nombre: string; base: string; version: string; dims: number; pesos_url: string }
 export interface Resumen { lote_id: number; aceptadas: number; saltadas: number; con_vector: number; motivos: string[] }
 
+export type Tipo = "calle" | "cenital" | "suelta";
+export interface PctTipo { tipo: Tipo; imagenes: number; imagenes_pct: number; teselas: number; territorio_pct: number }
+export interface PctFuente { fuente: string; imagenes: number; imagenes_pct: number }
+export interface PorcentajesImagenes {
+  por_tipo: PctTipo[];
+  por_fuente: PctFuente[];
+  imagenes_total: number;
+  teselas_total: number;
+  territorio_suma: number;
+}
+export interface ResumenIndice {
+  id: number; nombre: string; slug: string; estado: string;
+  imagenes: number; teselas: number; imagenes_pct: PorcentajesImagenes;
+}
+export interface DetalleIndice { imagenes: PorcentajesImagenes; trabajo: [string, number, number][] }
+export interface LoteResumen { id: number; clase: string; origen: string; estado: string }
+
 export const api = {
   saludo: () => invoke<Saludo>("saludo"),
   serviciosArrancar: () => invoke<void>("servicios_arrancar"),
@@ -17,4 +34,7 @@ export const api = {
     invoke<Resumen>("ingesta_carpeta", { indiceId, ruta, tipo, fuente, licencia }),
   ingestaLegacy: (indiceId: number, ruta: string, tipo: string, fuente: string, declarada: boolean) =>
     invoke<Resumen>("ingesta_legacy", { indiceId, ruta, tipo, fuente, declarada }),
+  indicesLista: () => invoke<ResumenIndice[]>("indices_lista"),
+  indiceDetalle: (id: number) => invoke<DetalleIndice>("indice_detalle", { id }),
+  indiceLotes: (id: number) => invoke<LoteResumen[]>("indice_lotes", { id }),
 };

@@ -337,6 +337,31 @@ impl Almacen {
         Ok(filas)
     }
 
+    /// `(id, clase, origen, estado)` de los lotes de un índice, más nuevo
+    /// primero. Es lo que enseña el detalle junto a las dos tablas de
+    /// procedencia: de dónde vino cada tanda de material.
+    pub fn listar_lotes(&self, indice_id: i64) -> Result<Vec<(i64, String, String, String)>> {
+        let c = self.0.lock().unwrap();
+        let mut q = c.prepare(
+            "SELECT id, clase, origen, estado FROM lotes WHERE indice_id = ?1 ORDER BY creado_en DESC",
+        )?;
+        let filas = q
+            .query_map(params![indice_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(filas)
+    }
+
+    /// `(id, nombre, slug, estado)` de todos los índices, más nuevo primero. Es
+    /// lo que alimenta la lista del catálogo.
+    pub fn listar_indices(&self) -> Result<Vec<(i64, String, String, String)>> {
+        let c = self.0.lock().unwrap();
+        let mut q = c.prepare("SELECT id, nombre, slug, estado FROM indices ORDER BY creado_en DESC")?;
+        let filas = q
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(filas)
+    }
+
     pub fn quadkey_de_imagen(&self, imagen_id: i64) -> Result<String> {
         let c = self.0.lock().unwrap();
         Ok(c.query_row("SELECT quadkey FROM imagenes WHERE id = ?1", params![imagen_id], |r| {
