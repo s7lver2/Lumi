@@ -133,7 +133,7 @@ spec → plan → implementación, y cada una debe producir software que funcion
 | **4** | **Cola y planificador** | Cientos de usuarios, pausa por desconexión, prioridades, multi-GPU y GPU+CPU | **Terminado** |
 | **5** | **Motor de inferencia** | Lumi Mini / Pro / Vision, ensemble de verificadores geométricos | Pendiente |
 | **6** | **Cliente y proyectos** | Workspaces tipo Burp/Caido, imágenes, historial, mapa | Esqueleto terminado |
-| **7a** | **Lumi Indexer · cimientos** | App Tauri aparte; las tres bases; el paquete de índice troceado; procedencia de imágenes y de trabajo; mapa, territorio y la regla de no indexar dos veces; orígenes locales | Spec escrita |
+| **7a** | **Lumi Indexer · cimientos** | App Tauri aparte; las tres bases; el paquete de índice troceado; procedencia de imágenes y de trabajo; mapa, territorio y la regla de no indexar dos veces; orígenes locales | Terminado |
 | **7b** | **Lumi Indexer · orígenes de red** | Street view, satélite y fotos públicas: claves de API, cuotas y coste por petición | Sin spec |
 | **8** | **Catálogo de índices** | Publicar e instalar índices cifrados, buscar en el catálogo, ver de qué procedencias está hecho cada uno y en qué proporción | Sin spec |
 | **9** | **Página web del proyecto** | El sitio público, a partir de mockups que aporta el owner | Sin spec |

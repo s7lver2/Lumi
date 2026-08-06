@@ -386,4 +386,57 @@ impl Almacen {
             r.get(0)
         })?)
     }
+
+    /// `(id, ruta, quadkey)` de las imágenes de un índice, EN EL ORDEN de
+    /// `indice.db` (por id). Ese orden es el contrato del fragmento: la fila N
+    /// de un `.b1`/`.i8` tiene que ser la imagen N de esta misma lista.
+    pub fn imagenes_de_indice(&self, indice_id: i64) -> Result<Vec<(i64, String, String)>> {
+        let c = self.0.lock().unwrap();
+        let mut q = c.prepare(
+            "SELECT id, ruta, quadkey FROM imagenes
+              WHERE indice_id = ?1 AND saltada_motivo IS NULL
+              ORDER BY id",
+        )?;
+        let filas = q
+            .query_map(params![indice_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(filas)
+    }
+
+    /// Cuántas imágenes (sin contar las saltadas) tiene el índice en total. Es
+    /// el "filas esperadas" contra el que se cuadra cada modelo al sellar.
+    pub fn total_imagenes(&self, indice_id: i64) -> Result<u32> {
+        let c = self.0.lock().unwrap();
+        let n: u32 = c.query_row(
+            "SELECT COUNT(*) FROM imagenes WHERE indice_id = ?1 AND saltada_motivo IS NULL",
+            params![indice_id],
+            |r| r.get(0),
+        )?;
+        Ok(n)
+    }
+
+    /// Cuántos vectores 'hecho' tiene el índice para un modelo. Es el
+    /// "vectores encontrados" del informe de sellado.
+    pub fn vectores_hechos(&self, indice_id: i64, modelo: &str) -> Result<u32> {
+        let c = self.0.lock().unwrap();
+        let n: u32 = c.query_row(
+            "SELECT COUNT(*) FROM imagenes i JOIN vectores v ON v.imagen_id = i.id
+              WHERE i.indice_id = ?1 AND v.modelo = ?2 AND v.estado = 'hecho'
+                AND i.saltada_motivo IS NULL",
+            params![indice_id, modelo],
+            |r| r.get(0),
+        )?;
+        Ok(n)
+    }
+
+    /// Sellar es irreversible: pasa el índice a `sellado`, con su ruta y
+    /// cuándo. No hay camino de vuelta a `abierto`.
+    pub fn sellar_indice(&self, indice_id: i64, ruta: &str) -> Result<()> {
+        let c = self.0.lock().unwrap();
+        c.execute(
+            "UPDATE indices SET estado = 'sellado', ruta = ?2, sellado_en = ?3 WHERE id = ?1",
+            params![indice_id, ruta, Self::ahora()],
+        )?;
+        Ok(())
+    }
 }

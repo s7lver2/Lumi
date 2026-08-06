@@ -36,6 +36,8 @@ export interface Clasificacion {
   autores: [string, number][];
 }
 
+export interface Informe { filas: number; por_modelo: [string, number, number][]; cuadra: boolean }
+
 export const api = {
   saludo: () => invoke<Saludo>("saludo"),
   serviciosArrancar: () => invoke<void>("servicios_arrancar"),
@@ -54,4 +56,6 @@ export const api = {
   territorioClasificar: (poligono: Punto[]) => invoke<Clasificacion>("territorio_clasificar", { poligono }),
   mapboxClaveGuardar: (clave: string) => invoke<void>("mapbox_clave_guardar", { clave }),
   mapboxClave: () => invoke<string | null>("mapbox_clave_leer"),
+  paqueteSellar: (indiceId: number, destino: string) => invoke<Informe>("paquete_sellar", { indiceId, destino }),
+  paqueteAbrir: (ruta: string) => invoke<void>("paquete_abrir", { ruta }),
 };

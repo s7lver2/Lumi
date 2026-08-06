@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 
 import { api, type DetalleIndice, type LoteResumen } from "../lib/api";
+import { SealDialog } from "../seal/SealDialog";
 import { Icon } from "../ui/Icon";
 import { ProvenanceTable } from "./ProvenanceTable";
 
 export function IndexDetail({ id, onVolver }: { id: number; onVolver: () => void }) {
   const [detalle, setDetalle] = useState<DetalleIndice | null>(null);
   const [lotes, setLotes] = useState<LoteResumen[]>([]);
+  const [sellando, setSellando] = useState(false);
 
   useEffect(() => {
     void api.indiceDetalle(id).then(setDetalle);
@@ -17,9 +19,21 @@ export function IndexDetail({ id, onVolver }: { id: number; onVolver: () => void
 
   return (
     <div className="mx-auto flex h-full max-w-[980px] flex-col gap-5 overflow-y-auto p-8">
-      <button onClick={onVolver} className="flex w-fit items-center gap-1.5 text-[11px] text-subtle hover:text-fg">
-        <Icon name="back" size={11} /> Índices
-      </button>
+      <div className="flex items-center justify-between">
+        <button onClick={onVolver} className="flex w-fit items-center gap-1.5 text-[11px] text-subtle hover:text-fg">
+          <Icon name="back" size={11} /> Índices
+        </button>
+        <button onClick={() => setSellando(true)}
+          className="jg-press rounded-lg border border-border px-3 py-1.5 text-[11px] text-fg">
+          Sellar
+        </button>
+      </div>
+
+      {sellando && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40">
+          <SealDialog indiceId={id} nombre={String(id)} onSellado={() => setSellando(false)} />
+        </div>
+      )}
 
       <div className="grid grid-cols-[1fr_260px] gap-6">
         <ProvenanceTable p={detalle.imagenes} trabajo={detalle.trabajo} />

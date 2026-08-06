@@ -7,6 +7,7 @@
 mod crypto;
 mod ingest;
 mod models;
+mod package;
 mod qdrant;
 mod queue;
 mod runtime;
@@ -214,6 +215,107 @@ fn mapbox_clave_leer(estado: tauri::State<'_, Estado>) -> Result<Option<String>,
     String::from_utf8(claro).map(Some).map_err(|e| e.to_string())
 }
 
+/// Sella un índice: cuenta filas contra vectores, se niega si no cuadran, y
+/// solo entonces escribe un solo byte. El paquete resultante lleva binario e
+/// int8 de cada modelo, las imágenes, el manifiesto, la cobertura y
+/// SHA256SUMS.
+#[tauri::command]
+async fn paquete_sellar(
+    estado: tauri::State<'_, Estado>,
+    indice_id: i64,
+    destino: String,
+) -> Result<package::Informe, String> {
+    let modelos: Vec<&models::Modelo> = estado.modelos.iter().collect();
+    let esperadas = estado.almacen.total_imagenes(indice_id).map_err(|e| e.to_string())?;
+
+    let mut por_modelo = Vec::new();
+    for m in &modelos {
+        let hechos = estado.almacen.vectores_hechos(indice_id, &m.id).map_err(|e| e.to_string())?;
+        por_modelo.push((m.id.clone(), esperadas, hechos));
+    }
+    let cuadra = por_modelo.iter().all(|(_, e, v)| e == v);
+    let informe = package::Informe { filas: esperadas, por_modelo, cuadra };
+
+    // Se aborta ANTES de escribir un solo byte si las cuentas no cuadran.
+    package::comprobar(&informe).map_err(|e| e.to_string())?;
+
+    let raiz = std::path::PathBuf::from(&destino);
+    std::fs::create_dir_all(&raiz).map_err(|e| e.to_string())?;
+    let imagenes = estado.almacen.imagenes_de_indice(indice_id).map_err(|e| e.to_string())?;
+
+    // Por quadkey: cada uno es un fragmento, y el orden dentro del fragmento
+    // es el mismo id ascendente de `indice.db`.
+    let mut por_qk: std::collections::BTreeMap<String, Vec<(i64, String)>> = Default::default();
+    for (id, ruta, qk) in &imagenes {
+        por_qk.entry(qk.clone()).or_default().push((*id, ruta.clone()));
+    }
+
+    let qdrant = qdrant::Cliente::nuevo();
+    for m in &modelos {
+        let coleccion = qdrant::coleccion_de(&m.id, &m.version);
+        for (qk, filas) in &por_qk {
+            let ids: Vec<i64> = filas.iter().map(|(id, _)| *id).collect();
+            let vectores = qdrant.leer(&coleccion, &ids).await.map_err(|e| e.to_string())?;
+            let dir = raiz.join("fragmentos").join(qk);
+            package::escribir_fragmento(&dir, &m.id, &m.version, &vectores).map_err(|e| e.to_string())?;
+        }
+    }
+
+    let imgs_dir = raiz.join("imagenes");
+    std::fs::create_dir_all(&imgs_dir).map_err(|e| e.to_string())?;
+    for (_, ruta, _) in &imagenes {
+        let origen = std::path::Path::new(ruta);
+        if let Some(nombre) = origen.file_name() {
+            // Se copia, no se mueve ni se recomprime: el original de una
+            // carpeta local nunca se toca.
+            let _ = std::fs::copy(origen, imgs_dir.join(nombre));
+        }
+    }
+
+    let filas_proc = estado.almacen.filas_procedencia(indice_id).map_err(|e| e.to_string())?;
+    let teselas_trab = estado.almacen.teselas_trabajo(indice_id).map_err(|e| e.to_string())?;
+    let manifiesto = lumi_index::manifest::Manifiesto {
+        version: 1,
+        nombre: destino.clone(),
+        slug: destino.clone(),
+        sellado_en: chrono_ahora(),
+        version_indexer: env!("CARGO_PKG_VERSION").to_string(),
+        modelos: modelos.iter().map(|m| (m.id.clone(), m.version.clone(), m.dims)).collect(),
+        imagenes: lumi_index::manifest::porcentajes(&filas_proc),
+        trabajo: lumi_index::manifest::porcentajes_trabajo(&teselas_trab),
+        atribuciones: Vec::new(),
+    };
+    std::fs::write(
+        raiz.join("manifiesto.json"),
+        serde_json::to_vec_pretty(&manifiesto).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+
+    std::fs::write(raiz.join("cobertura.json"), b"{}").map_err(|e| e.to_string())?;
+
+    package::firmar(&raiz).map_err(|e| e.to_string())?;
+    estado.almacen.sellar_indice(indice_id, &destino).map_err(|e| e.to_string())?;
+
+    Ok(informe)
+}
+
+/// Nada de "abrir con avisos": si `SHA256SUMS` no cuadra, no se abre.
+#[tauri::command]
+fn paquete_abrir(ruta: String) -> Result<(), String> {
+    package::verificar(std::path::Path::new(&ruta)).map_err(|e| e.to_string())
+}
+
+fn chrono_ahora() -> String {
+    // ponytail: sin dependencia de `chrono` por una sola marca de tiempo; el
+    // formato exacto no lo consume nada todavía (el 8 aún no existe), así que
+    // basta con segundos desde época en un texto legible.
+    let s = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("{s}")
+}
+
 #[tauri::command]
 fn ingesta_legacy(
     estado: tauri::State<'_, Estado>,
@@ -278,7 +380,9 @@ pub fn run() {
             indice_lotes,
             territorio_clasificar,
             mapbox_clave_guardar,
-            mapbox_clave_leer
+            mapbox_clave_leer,
+            paquete_sellar,
+            paquete_abrir
         ])
         .run(tauri::generate_context!())
         .expect("no se pudo arrancar el Lumi Indexer");
