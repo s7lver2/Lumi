@@ -8,3 +8,4 @@
 pub mod coverage;
 pub mod manifest;
 pub mod tiles;
+pub mod vectors;
