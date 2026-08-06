@@ -130,7 +130,7 @@ spec → plan → implementación, y cada una debe producir software que funcion
 | **1** | **Instalador CLI y vinculación** | Bootstrap del owner, clave de un solo uso, primer contacto cliente↔servidor, cuenta de administrador | **Terminado y aprobado** |
 | **2** | **Auth, usuarios y permisos** | Solicitudes de acceso, creación de cuentas, roles, límites por usuario, dispositivos de confianza | **Terminado** |
 | **3** | **Panel de administración** | Hardware, monitorización, notificaciones, mantenimiento, gestión de modelos | Pendiente |
-| **4** | **Cola y planificador** | Cientos de usuarios, pausa por desconexión, prioridades, multi-GPU y GPU+CPU | Pendiente |
+| **4** | **Cola y planificador** | Cientos de usuarios, pausa por desconexión, prioridades, multi-GPU y GPU+CPU | **Terminado** |
 | **5** | **Motor de inferencia** | Lumi Mini / Pro / Vision, ensemble de verificadores geométricos | Pendiente |
 | **6** | **Cliente y proyectos** | Workspaces tipo Burp/Caido, imágenes, historial, mapa | Esqueleto terminado |
 
@@ -369,19 +369,21 @@ tope de tamaño. El detalle de cada uno de estos aparcamientos vive en `FUTURO.m
 
 ## 10. Deuda y decisiones pendientes
 
-**Base de datos.** Hoy es SQLite (`rusqlite` con `bundled`), una sola conexión bajo mutex.
-Se coló como detalle de implementación sin discutirse. Encaja para el plano de control
-actual (usuarios, sesiones, claves, estado de tareas: decenas de operaciones por minuto),
-pero **hay que revisarlo al llegar al subsistema 4**: si la cola necesita cientos de
-escritores concurrentes, el mutex es el cuello de botella. Salidas: Postgres, o mantener
-SQLite para el plano de control y sacar la cola a otro sitio.
+**Base de datos. Revisado en el subsistema 4: SQLite se queda.** Un análisis son unas tres
+escrituras (a `en_curso`, el resultado, el cierre); con ocho GPUs y trabajos de treinta
+segundos eso es menos de una escritura por segundo y el mutex ni se entera. La condición bajo
+la que esto se sostiene está escrita en el código y hay que respetarla: **el progreso de un
+trabajo no se persiste nunca**, se retransmite por el SSE y se olvida. El día que alguien lo
+guarde, esta decisión deja de valer.
 
 **Rotación de certificado.** Anclar la huella significa que renovar el certificado invalida
 las claves emitidas y obliga a re-vincular. Aceptable con validez de 10 años; hay que
 documentarlo en `lumi key reissue`.
 
-**Frontera Rust↔Python.** Hay que definirla antes del subsistema 5. El runner de tareas ya
-la roza al lanzar el instalador de Python.
+**Frontera Rust↔Python: definida en el subsistema 4.** JSON por líneas sobre las tuberías
+estándar de un proceso hijo; los tipos viven en `lumi-proto::worker` y el trabajador de
+referencia, en `workers/lumi_worker.py`. El subsistema 5 sustituye `_cargar` y `_resolver` de
+ese archivo sin tocar el daemon.
 
 **`limits::effective` es la frontera con los subsistemas 4 y 6.** Aquí (subsistema 2) los
 límites por usuario se definen, se almacenan en dos niveles (global/anulación) y se exponen.
@@ -389,9 +391,10 @@ Este subsistema **no los aplica**: la cola (4) y los proyectos (6) deben llamar 
 `limits::effective`, nunca leer la tabla `limits` por su cuenta, o la precedencia de dos
 niveles se duplica y se desincroniza.
 
-**Bloquear a un usuario no detiene sus trabajos ya encolados.** `PATCH /v1/admin/users/:id`
-con `blocked: true` cierra sesiones y corta el acceso al momento, pero qué hacer con el
-trabajo que ese usuario ya tenía en la cola es una decisión del subsistema 4, no de este.
+**Bloquear a un usuario no detiene sus trabajos ya encolados, y ahora se sabe qué hace.** El
+planificador nunca elige un trabajo de alguien bloqueado, así que lo pendiente se queda
+quieto; lo que ya estuviera corriendo termina. No se borra nada: bloquear puede ser temporal
+y destruir su cola sería irreversible.
 
 `POST /v1/access-requests` es la primera ruta escribible sin credenciales de todo el
 proyecto. El interruptor `accept_requests` (meta del store, `lumi admin accept-requests

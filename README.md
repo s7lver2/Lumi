@@ -218,6 +218,28 @@ El GPS que la cámara escribió en el EXIF se lee y se muestra **aparte** de lo 
 Configurar el mapa: panel de administración, sección *Mapa*. La caché de teselas vive en
 `{DATA}/tiles` y se vacía borrando ese directorio.
 
+### Cola y planificador (subsistema 4)
+
+Los análisis ya no se quedan en `pendiente`. Un trabajador por dispositivo —una GPU, o la CPU
+si no hay ninguna— arranca con el daemon y se mantiene vivo entre trabajos con los pesos
+cargados. La cola los reparte con esta política, en este orden: primero descarta lo que no
+puede correr (dueño bloqueado, dueño desconectado sin `background_jobs`, dueño en su
+`max_concurrent`), y luego ordena lo que queda por conectado antes que segundo plano,
+`queue_priority` y llegada.
+
+**Lo que ya corre nunca se cancela.** `DELETE /v1/analyses/:id` cancela lo pendiente y
+devuelve 409 sobre lo que está en una GPU; lo mismo `DELETE /v1/images/:id` con una imagen que
+se está analizando.
+
+| Ruta | Quién | Qué |
+|---|---|---|
+| `GET /v1/queue/events` | cualquier sesión | SSE con los cambios de sus análisis. Mientras está abierto, cuenta como conectado |
+| `GET /v1/queue` | administrador | Pendientes, en curso y estado de cada trabajador |
+
+**El motor todavía no existe** (subsistema 5): `workers/lumi_worker.py` devuelve una
+coordenada fija. Es el trabajador de referencia y también la documentación ejecutable del
+contrato — quien escriba otro, lo lee.
+
 ## 4. Probar el modo sellado
 
 Con `lumid` parado:

@@ -40,10 +40,14 @@ servidor. Hay que revisarlo el día que se use fuera de ese supuesto.
 
 ### Análisis multi-imagen en la interfaz
 
-El esquema ya lo soporta: `analysis_images` es una tabla intermedia desde el primer día,
-aunque hoy siempre tenga una fila. Falta la interfaz —seleccionar varias tomas de la misma
-escena y lanzarlas como una unidad— y, sobre todo, decidir qué hace la cola cuando una
-unidad compuesta falla a medias. Eso último es del subsistema 4, no de la interfaz.
+El esquema y el protocolo ya lo soportan: `analysis_images` es una tabla intermedia desde el
+primer día y el campo `imagenes` del contrato con el trabajador es una lista. Falta la
+interfaz — seleccionar varias tomas de la misma escena y lanzarlas como una unidad.
+
+La duda que quedaba aquí, qué hace la cola cuando una unidad compuesta falla a medias, la
+resolvió el subsistema 4: **no falla a medias**. El análisis es la unidad de trabajo, sus
+imágenes van juntas al mismo trabajador en la misma línea y vuelve un resultado o un fallo.
+Cuando la interfaz lo ofrezca, la cola no cambia.
 
 ### Alternativas cuando el motor duda de verdad
 
@@ -110,3 +114,32 @@ el owner use la escotilla por CLI. Si alguna vez hay correo, esto se replantea.
 
 LDAP o SSO. Fuera de alcance desde el subsistema 2. Solo tiene sentido si Lumi se despliega
 dentro de una organización que ya tiene identidad centralizada.
+
+### Trabajadores en otra máquina
+
+Hoy los trabajadores son procesos hijo del daemon y mueren con él, que es lo que evita
+puertos abiertos y procesos huérfanos con la VRAM ocupada. El día que haya varias máquinas de
+inferencia, esto se convierte en un servicio con autenticación entre daemon y trabajador, o en
+un broker de verdad. No antes: sería infraestructura que instalar, vigilar y explicar en el
+asistente para un servidor que es una sola máquina.
+
+### Cifrado de imágenes en reposo
+
+La maquinaria existe desde el subsistema 1 (`crypto::seal`/`open`, clave por proyecto) pero
+`images.rs` no la usa: las imágenes están en claro en `{DATA}/projects/<proyecto>/<imagen>`. El
+día que se cifren hay que revisar la regla del subsistema 4 de mandar **rutas y no bytes** a
+los trabajadores, porque un trabajador no tendrá la clave.
+
+### Reparto justo por turnos en la cola
+
+El planificador ordena por prioridad y llegada, y confía en `max_concurrent` como antídoto
+contra la inanición: quien tiene prioridad alta ocupa su cupo y ni un sitio más. Si con
+cientos de usuarios reales eso resulta insuficiente, la salida es un reparto por turnos entre
+usuarios, y cabe entero dentro de `queue/plan.rs` sin tocar el contrato ni la cola.
+
+### Cambio de modelo en bucle con una sola GPU
+
+Con un único dispositivo y dos personas alternando modelos, cargar pesos puede dominar el
+tiempo total. Con varias GPUs no pasa, porque preferir al que ya tiene el modelo cargado las
+especializa solas. La salida, si duele, es agrupar los candidatos por modelo antes de
+repartir: un cambio dentro de `plan.rs`.
