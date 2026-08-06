@@ -38,6 +38,10 @@ export function AdminStep({ bootstrapToken, onDone, onBusyChange }: {
       // sesión es lo único que hace falta a partir de ahora para retomar.
       updateSession({ token: res.token, bootstrapToken: undefined, username: res.username });
       await invoke("start_telemetry", { token: res.token });
+      // Abrir el flujo de la cola es también anunciarse como presente:
+      // mientras esté abierto, el trabajo pendiente de esta persona
+      // cuenta como el de alguien que está mirando.
+      await invoke("start_queue_events", { token: res.token });
       onDone();
     } catch (e) {
       setError(String(e));

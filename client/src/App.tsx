@@ -86,6 +86,10 @@ export default function App() {
             setAuth(session.token);
             useServer.getState().setUser(me.username, me.is_admin, me.limits);
             await invoke("start_telemetry", { token: session.token });
+            // Abrir el flujo de la cola es también anunciarse como presente:
+            // mientras esté abierto, el trabajo pendiente de esta persona
+            // cuenta como el de alguien que está mirando.
+            await invoke("start_queue_events", { token: session.token });
             // El aprovisionamiento sigue siendo cosa del owner: si el servidor
             // no está listo del todo, se vuelve al wizard donde se dejó.
             //

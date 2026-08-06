@@ -33,6 +33,8 @@ export interface Limits {
   max_storage_gb: number;
   queue_priority: number;
   can_create_projects: boolean;
+  /** Si su trabajo pendiente sigue avanzando cuando se desconecta. */
+  background_jobs: boolean;
 }
 export interface AccessStatus { status: "pending" | "approved" | "rejected"; display_name: string; reason: string | null }
 export interface AdminRequest {
@@ -140,6 +142,12 @@ export interface MapConfig {
   style: string | null;
 }
 export interface MapTheme { id: string; label: string; needs_key: boolean }
+
+/** Lo que llega por el evento `queue-change`. El progreso no está guardado en
+ *  ninguna parte: se emite y se olvida, así que si te lo pierdes, se perdió. */
+export type Cambio =
+  | { tipo: "estado"; analysis_id: number; case_id: number; estado: Analysis["state"] }
+  | { tipo: "progreso"; analysis_id: number; fase: string; pct: number };
 
 const call = (method: string, path: string, body: unknown, token?: string, ticket?: string) =>
   invoke<string>("request", {

@@ -146,9 +146,6 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/map", axum::routing::patch(routes::map::patch_admin))
         .route("/v1/users/search", get(routes::projects::search_users));
 
-    #[cfg(debug_assertions)]
-    let router = router.route("/v1/analyses/:id/fake", axum::routing::patch(routes::analyses::fake));
-
     let router = router.with_state(app);
 
     let port: u16 = std::env::var("LUMI_PORT")

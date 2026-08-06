@@ -179,35 +179,6 @@ pub async fn create(
     }))
 }
 
-/// SOLO PARA DESARROLLO. Rellena un análisis con un resultado inventado para
-/// poder construir el mapa y la tarjeta contra algo real mientras no exista
-/// el motor. Compilado fuera en release: `debug_assertions` es false ahí.
-#[cfg(debug_assertions)]
-pub async fn fake(
-    State(app): State<App>,
-    Path(id): Path<i64>,
-    headers: HeaderMap,
-) -> Result<StatusCode, Fail> {
-    let case_id: i64 = app
-        .store
-        .conn()
-        .query_row("SELECT case_id FROM analyses WHERE id = ?1", [id], |r| r.get(0))
-        .map_err(|_| err(StatusCode::NOT_FOUND, "no existe ese análisis"))?;
-    guard_case(&app, &headers, case_id)?;
-    // Fijos y no aleatorios: así dos ejecuciones del mismo comando dan lo
-    // mismo y una captura de pantalla sigue valiendo mañana.
-    app.store
-        .conn()
-        .execute(
-            "UPDATE analyses SET state = 'hecho', result_lat = 43.3612, result_lng = -8.4104,
-                                 result_radius_m = 1400, result_confidence = 0.72,
-                                 finished_at = ?1 WHERE id = ?2",
-            rusqlite::params![now(), id],
-        )
-        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
 pub async fn remove(
     State(app): State<App>,
     Path(id): Path<i64>,

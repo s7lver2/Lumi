@@ -266,6 +266,54 @@ async fn start_task_log(
     Ok(())
 }
 
+/// El SSE de la cola, reemitido como evento de Tauri.
+///
+/// El webview no puede usar `EventSource`: no sabe poner la cabecera de
+/// autorización, y el esquema `lumi://` devuelve respuestas completas, no
+/// flujos. Se hace igual que la telemetría, con el mismo bucle de reconexión.
+///
+/// Y hay una razón de más para reconectar: mientras esta conexión está abierta,
+/// el daemon cuenta a esta persona como presente. Un hueco aquí es un hueco en
+/// su presencia, y con el segundo plano apagado eso le pausa su propio trabajo.
+#[tauri::command]
+async fn start_queue_events(
+    token: String, app: tauri::AppHandle, state: tauri::State<'_, Shared>,
+) -> Result<(), String> {
+    use futures_util::StreamExt;
+    use tauri::Emitter;
+    let (base, client) = {
+        let c = state.lock().unwrap();
+        (c.base.clone().ok_or("sin servidor")?, c.client.clone().ok_or("sin cliente")?)
+    };
+    tokio::spawn(async move {
+        loop {
+            let res = client.get(format!("{base}/v1/queue/events")).bearer_auth(&token).send().await;
+            let Ok(res) = res else {
+                let _ = app.emit("queue-down", ());
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                continue;
+            };
+            let mut stream = res.bytes_stream();
+            let mut buf = String::new();
+            while let Some(Ok(chunk)) = stream.next().await {
+                buf.push_str(&String::from_utf8_lossy(&chunk));
+                while let Some(i) = buf.find("\n\n") {
+                    let frame = buf[..i].to_string();
+                    buf.drain(..i + 2);
+                    if let Some(d) = frame.strip_prefix("data: ") {
+                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(d) {
+                            let _ = app.emit("queue-change", v);
+                        }
+                    }
+                }
+            }
+            let _ = app.emit("queue-down", ());
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
+    });
+    Ok(())
+}
+
 fn main() {
     rustls::crypto::ring::default_provider().install_default().ok();
     tauri::Builder::default()
@@ -326,7 +374,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             pair, pair_card, reconnect, request, start_telemetry, start_task_log,
-            set_auth, upload_images
+            start_queue_events, set_auth, upload_images
         ])
         .run(tauri::generate_context!())
         .expect("error al arrancar Tauri");

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { api, type Analysis, type Case, type Image, type Project, type Usage } from "../lib/api";
+import { listen } from "@tauri-apps/api/event";
+import { api, type Analysis, type Cambio, type Case, type Image, type Project, type Usage } from "../lib/api";
 import { pickPaths, uploadPaths } from "../lib/bridge";
 import { KNOWN_MODELS } from "../lib/models";
 import { useServer } from "../lib/store";
@@ -64,6 +65,21 @@ export function CaseView({
     }
   }
   useEffect(() => { void load(); }, [case_.id]);
+
+  // Antes esto solo se leía al montar: un análisis lanzado se quedaba
+  // «pendiente» en pantalla para siempre aunque el servidor ya lo hubiera
+  // resuelto. Ahora el servidor avisa.
+  useEffect(() => {
+    const un = listen<Cambio>("queue-change", (e) => {
+      const c = e.payload;
+      if (c.tipo !== "estado" || c.case_id !== case_.id) return;
+      // Se recarga en vez de parchear la fila: el cambio de estado trae
+      // coordenadas, radio y confianza, y reconstruirlos aquí sería duplicar
+      // lo que la ruta ya sabe montar.
+      void load();
+    });
+    return () => { void un.then((f) => f()); };
+  }, [case_.id]);
 
   const list = images ?? [];
 
