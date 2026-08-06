@@ -20,11 +20,14 @@ export const TITLEBAR_H = 38;
  *
  *  Es además la barra de la ventana: sin decoración del sistema, esta franja
  *  es la zona de arrastre y la que lleva minimizar, maximizar y cerrar. */
-export function TitleBar({ crumbs, onOpenAdmin, onProfile, onSignOut }: {
+export function TitleBar({ crumbs, onOpenAdmin, onProfile, onSignOut, onProjectAccepted }: {
   crumbs: Crumb[];
   onOpenAdmin: () => void;
   onProfile?: () => void;
   onSignOut: () => void;
+  /** Aceptar una invitación aquí no toca el selector de proyectos: son
+   *  componentes hermanos y el selector solo carga una vez al montarse. */
+  onProjectAccepted?: () => void;
 }) {
   const isAdmin = useServer((s) => s.isAdmin);
   const username = useServer((s) => s.username);
@@ -59,7 +62,7 @@ export function TitleBar({ crumbs, onOpenAdmin, onProfile, onSignOut }: {
       {signedIn && (
         <>
           {isAdmin && <ServerPill />}
-          <NotificationsPopover onOpenAdmin={onOpenAdmin} />
+          <NotificationsPopover onOpenAdmin={onOpenAdmin} onProjectAccepted={onProjectAccepted} />
           <UserMenu name={username} isAdmin={isAdmin}
             onOpenAdmin={onOpenAdmin} onProfile={onProfile} onSignOut={onSignOut} />
           <span className="h-[18px] w-px bg-border" />

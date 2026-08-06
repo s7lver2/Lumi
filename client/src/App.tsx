@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { PlanetBackground } from "./ui/PlanetBackground";
 import { Wizard } from "./wizard/Wizard";
@@ -16,7 +15,7 @@ import { DebugOrb } from "./dev/DebugOrb";
 import { useServer } from "./lib/store";
 import { useWorkspace } from "./lib/workspace";
 import { api, type Hello, type Me, type Sample } from "./lib/api";
-import { setAuth } from "./lib/bridge";
+import { announcePresence, setAuth } from "./lib/bridge";
 import { loadSession, updateSession } from "./lib/session";
 import { ProjectPicker } from "./work/ProjectPicker";
 import { ProjectView } from "./work/ProjectView";
@@ -34,6 +33,11 @@ export default function App() {
   /** Resultados e invitar piden el mismo carril de la derecha, así que el
    *  estado es uno solo: abrir cualquiera de los dos recoge el otro. */
   const [drawer, setDrawer] = useState<DrawerId>(null);
+  /** Sube cada vez que se acepta una invitación desde la campana. El selector
+   *  de proyectos lo mira para saber cuándo recargar su lista sin tener que
+   *  desmontarse: la campana y el selector son hermanos y no se enteran solos
+   *  de los cambios del otro. */
+  const [projectsTick, setProjectsTick] = useState(0);
   const hello = useServer((s) => s.hello);
   const isAdmin = useServer((s) => s.isAdmin);
   const bootstrapToken = useServer((s) => s.bootstrapToken);
@@ -85,11 +89,7 @@ export default function App() {
             useServer.getState().setToken(session.token);
             setAuth(session.token);
             useServer.getState().setUser(me.username, me.is_admin, me.limits);
-            await invoke("start_telemetry", { token: session.token });
-            // Abrir el flujo de la cola es también anunciarse como presente:
-            // mientras esté abierto, el trabajo pendiente de esta persona
-            // cuenta como el de alguien que está mirando.
-            await invoke("start_queue_events", { token: session.token });
+            await announcePresence(session.token);
             // El aprovisionamiento sigue siendo cosa del owner: si el servidor
             // no está listo del todo, se vuelve al wizard donde se dejó.
             //
@@ -223,7 +223,7 @@ export default function App() {
           notificaciones, cuenta y los botones de la ventana. La telemetría ya
           no es una franja permanente de 70 px — vive en su píldora. */}
       <TitleBar crumbs={crumbs} onOpenAdmin={() => { leaveProject(); setMode("admin"); }}
-        onSignOut={signOut} />
+        onSignOut={signOut} onProjectAccepted={() => setProjectsTick((t) => t + 1)} />
       <ResizeHandles />
       {/* Para app/admin, la desconexión es un banner + bloqueo, no una
           pantalla completa: la sesión de un usuario normal no tiene un
@@ -286,7 +286,7 @@ export default function App() {
           {step === 2 && <ProvisionStep onDone={() => setMode("picker")} onStatusChange={setRuntimeDone} />}
         </Wizard>
       ) : mode === "picker" ? (
-        <ProjectPicker
+        <ProjectPicker refresh={projectsTick}
           onOpen={(p) => { useWorkspace.getState().setProject(p); setMode("project"); }} />
       ) : (
         (() => {

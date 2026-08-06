@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useServer } from "../lib/store";
 import { Icon } from "../ui/Icon";
 import { MapRow } from "./MapRow";
+import { QueueRow } from "./QueueRow";
 import { RequestsView } from "./RequestsView";
 import { UsersView } from "./UsersView";
 
@@ -56,6 +57,10 @@ export function AdminPanel({ token, onClose }: { token: string; onClose: () => v
       </div>
 
       <div className="mt-5" style={{ animation: "jg-fade-rise .85s .14s both" }}>
+        <QueueRow token={token} />
+      </div>
+
+      <div className="mt-5" style={{ animation: "jg-fade-rise .9s .18s both" }}>
         <MapRow token={token} />
       </div>
     </div>

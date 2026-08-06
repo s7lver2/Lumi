@@ -17,6 +17,20 @@ export const lumiUrl = (path: string) => `${LUMI_BASE}${path}`;
  *  puede ir en la URL. Se llama en cada cambio de sesión. */
 export const setAuth = (token: string | null) => invoke("set_auth", { token });
 
+/** Arranca la telemetría y el SSE de la cola. Antes solo se llamaba al
+ *  RETOMAR una sesión guardada (reabrir la app); entrar por primera vez
+ *  —login normal, o tras un cambio de contraseña forzado— dejaba al usuario
+ *  sin resultados de sus análisis hasta la próxima vez que cerrara y
+ *  reabriera la app, porque ese es el único otro camino que lo llama. Un solo
+ *  sitio para los dos arranques, llamado desde todo camino que abre sesión. */
+export async function announcePresence(token: string): Promise<void> {
+  await invoke("start_telemetry", { token });
+  // Abrir este flujo es también anunciarse como presente: mientras esté
+  // abierto, el trabajo pendiente de esta persona cuenta como el de alguien
+  // que está mirando.
+  await invoke("start_queue_events", { token });
+}
+
 export async function uploadPaths(caseId: number, paths: string[]): Promise<Image[]> {
   if (paths.length === 0) return [];
   const raw = await invoke<string>("upload_images", { caseId, paths });

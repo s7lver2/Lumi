@@ -142,6 +142,16 @@ export interface MapConfig {
   style: string | null;
 }
 export interface MapTheme { id: string; label: string; needs_key: boolean }
+export interface WorkerView {
+  dispositivo: string;
+  /** El modelo cargado ahora mismo. `null` mientras arranca o entre cambios. */
+  modelo: string | null;
+  /** El análisis que tiene en la mano, si tiene alguno. */
+  trabajo: number | null;
+  /** Si ya dijo `listo`. Uno que no lo ha dicho está cargando, no colgado. */
+  listo: boolean;
+}
+export interface QueueView { pendientes: number; en_curso: number; trabajadores: WorkerView[] }
 
 /** Lo que llega por el evento `queue-change`. El progreso no está guardado en
  *  ninguna parte: se emite y se olvida, así que si te lo pierdes, se perdió. */

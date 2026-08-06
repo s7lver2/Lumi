@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { api } from "../lib/api";
+import { api, type Me } from "../lib/api";
+import { announcePresence } from "../lib/bridge";
 import { updateSession } from "../lib/session";
 import { useServer } from "../lib/store";
 import { Icon } from "../ui/Icon";
@@ -25,6 +26,13 @@ export function ChangePasswordForm({ onDone, onCancel }: { onDone: () => void; o
     setBusy(true); setError(null);
     try {
       await api.post("/v1/auth/change-password", { current, new: next }, token!);
+      // Antes de aquí la sesión iba con un token "solo cambiar contraseña":
+      // `/v1/auth/me` contestaba 403 y ni se intentaba pedir, así que
+      // `limits` se quedaba en `null` y la telemetría y la cola nunca
+      // arrancaban para quien entraba por este camino.
+      const me = await api.get<Me>("/v1/auth/me", token!);
+      useServer.getState().setUser(me.username, me.is_admin, me.limits);
+      await announcePresence(token!);
       onDone();
     } catch (e) {
       setError(String(e));

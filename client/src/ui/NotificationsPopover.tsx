@@ -30,7 +30,12 @@ interface Item {
  *  Filas, no tarjetas: cuatro tarjetas con borde propio en 300 px de ancho son
  *  cuatro cajas compitiendo. Lo no leído se marca con un punto en el margen y
  *  no con un fondo de color — cuatro fondos distintos harían un semáforo. */
-export function NotificationsPopover({ onOpenAdmin }: { onOpenAdmin: () => void }) {
+export function NotificationsPopover({ onOpenAdmin, onProjectAccepted }: {
+  onOpenAdmin: () => void;
+  /** Aceptar una invitación cambia la lista de proyectos de otro componente,
+   *  que no se entera por su cuenta. */
+  onProjectAccepted?: () => void;
+}) {
   const token = useServer((s) => s.token) ?? undefined;
   const isAdmin = useServer((s) => s.isAdmin);
   const [items, setItems] = useState<Item[] | null>(null);
@@ -75,6 +80,11 @@ export function NotificationsPopover({ onOpenAdmin }: { onOpenAdmin: () => void 
     try {
       if (i.kind === "invite") {
         await api.post(`/v1/invites/${i.id}/${si ? "accept" : "decline"}`, {}, token);
+        // El selector de proyectos ya está montado desde antes de que esto
+        // pase y solo carga su lista una vez: sin avisarle, el proyecto
+        // nuevo no aparecía hasta salir a un proyecto y volver, que es lo
+        // único que lo remonta.
+        if (si) onProjectAccepted?.();
       } else {
         await api.post(`/v1/admin/access-requests/${i.id}/resolve`,
           { approve: si, granted_models: si ? ["mini"] : undefined }, token);

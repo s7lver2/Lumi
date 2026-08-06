@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api, type LoginRes, type Me } from "../lib/api";
-import { setAuth } from "../lib/bridge";
+import { announcePresence, setAuth } from "../lib/bridge";
 import { deviceId, deviceName, updateSession, type Server } from "../lib/session";
 import { useServer } from "../lib/store";
 import { Icon } from "../ui/Icon";
@@ -41,6 +41,10 @@ export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMu
       // cuando la sesión está completa.
       const me = await api.get<Me>("/v1/auth/me", res.token);
       useServer.getState().setUser(me.username, me.is_admin, me.limits);
+      // Sin esto, quien entra por aquí (todo usuario normal, siempre) se
+      // quedaba sin resultados de sus análisis hasta la próxima vez que
+      // cerrara y reabriera la app — el único otro camino que lo arrancaba.
+      await announcePresence(res.token);
       onSignedIn();
     } catch (e) {
       setError(String(e));

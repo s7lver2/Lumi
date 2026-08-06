@@ -22,7 +22,13 @@ type Vista = "grid" | "rows" | "dense";
  *  imágenes · 1,2 GB», y las tres vistas son la misma tarjeta con distinto
  *  flujo: rejilla para pocos, lista para verlos con sus cifras en línea, y
  *  compacta para quien tiene cuarenta y solo quiere el nombre. */
-export function ProjectPicker({ onOpen }: { onOpen: (p: Project) => void }) {
+export function ProjectPicker({ onOpen, refresh }: {
+  onOpen: (p: Project) => void;
+  /** Sube al aceptar una invitación desde la campana. El componente no se
+   *  desmonta al quedarse en el selector, así que sin esto la única forma de
+   *  ver el proyecto nuevo era entrar a otro y volver. */
+  refresh?: number;
+}) {
   const token = useServer((s) => s.token) ?? undefined;
   const isAdmin = useServer((s) => s.isAdmin);
   const limits = useServer((s) => s.limits);
@@ -55,7 +61,7 @@ export function ProjectPicker({ onOpen }: { onOpen: (p: Project) => void }) {
       setError(String(e));
     }
   }
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, [refresh]);
 
   const filtrados = useMemo(() => {
     const needle = q.trim().toLowerCase();

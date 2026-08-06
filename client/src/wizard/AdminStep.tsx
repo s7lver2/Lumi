@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { api, type LoginRes } from "../lib/api";
-import { setAuth } from "../lib/bridge";
+import { announcePresence, setAuth } from "../lib/bridge";
 import { useServer } from "../lib/store";
 import { updateSession } from "../lib/session";
 
@@ -37,11 +36,7 @@ export function AdminStep({ bootstrapToken, onDone, onBusyChange }: {
       // bootstrapToken ya está gastado (/v1/admin lo consume); el token de
       // sesión es lo único que hace falta a partir de ahora para retomar.
       updateSession({ token: res.token, bootstrapToken: undefined, username: res.username });
-      await invoke("start_telemetry", { token: res.token });
-      // Abrir el flujo de la cola es también anunciarse como presente:
-      // mientras esté abierto, el trabajo pendiente de esta persona
-      // cuenta como el de alguien que está mirando.
-      await invoke("start_queue_events", { token: res.token });
+      await announcePresence(res.token);
       onDone();
     } catch (e) {
       setError(String(e));
