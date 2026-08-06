@@ -66,6 +66,14 @@ export async function createMap(
   const style: StyleSpecification = await res.json();
   // La proyección es parte del estilo en MapLibre 5, no una opción del mapa.
   (style as StyleSpecification & { projection?: unknown }).projection = { type: projection };
+  // Los glyphs y las teselas se resuelven por sustitución de texto plana y
+  // toleran una ruta relativa, pero el sprite necesita construir cuatro
+  // variantes (.json/.png, @2x de cada una) a partir de una URL ya analizada
+  // con protocolo — sin uno, MapLibre lo rechaza con "must be absolute" antes
+  // de que `transformRequest` llegue a intervenir.
+  if (style.sprite && typeof style.sprite === "string" && style.sprite.startsWith("/")) {
+    style.sprite = lumiUrl(style.sprite);
+  }
 
   const m = new maplibregl.Map({
     container,

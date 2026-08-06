@@ -35,6 +35,11 @@ function ring(lat: number, lng: number, radiusM: number): [number, number][] {
   });
 }
 
+/** Ease-out cúbico: arranca rápido y frena suave, en vez de la desaceleración
+ *  lineal por defecto que se notaba como un frenazo al llegar. La misma curva
+ *  en los tres vuelos de cámara para que todos se sientan igual de fluidos. */
+const EASE_OUT_CUBIC = (t: number) => 1 - Math.pow(1 - t, 3);
+
 function el(m: Marker): HTMLElement {
   const c = COLOR[m.kind];
   const d = document.createElement("div");
@@ -240,7 +245,7 @@ export function MapCanvas({
         m.easeTo({
           center: [mk.lng, mk.lat],
           zoom: Math.max(m.getZoom(), 13),
-          duration: 900, easing: (t) => 1 - Math.pow(1 - t, 3),
+          duration: 900, easing: EASE_OUT_CUBIC,
         });
         onMarker?.(mk.id);
       });
@@ -275,10 +280,15 @@ export function MapCanvas({
         // tumbada enseña medio cielo vacío en vez del planeta centrado. Y de
         // cerca es justo donde hay edificios que ver de canto.
         pitch: flyTo.zoom >= 14 ? 55 : 0,
-        duration: 1600, curve: 1.5, speed: 0.9,
+        duration: 1600, curve: 1.5, speed: 0.9, easing: EASE_OUT_CUBIC,
       });
     }
-  }, [flyTo]);
+    // `ready` entra en las dependencias porque el caso y el mapa cargan en
+    // paralelo: si los datos del caso llegaban antes que el lienzo, este
+    // efecto se disparaba con `map.current` todavía a `null`, no volvía a
+    // dispararse solo (`flyTo` no cambia otra vez), y el vuelo se perdía —
+    // el mapa aparecía ya puesto en el punto, sin ningún tramo que animar.
+  }, [flyTo, ready]);
 
   /** Encuadra todo lo que hay que ver. Un mapa que arranca en el mundo entero
    *  y deja los resultados como dos motas obliga a buscarlos a mano. */
@@ -287,18 +297,24 @@ export function MapCanvas({
     if (!m || flyTo || markers.length === 0) return;
     const ir = () => {
       if (markers.length === 1) {
-        m.flyTo({ center: [markers[0].lng, markers[0].lat], zoom: 11, duration: 1600, curve: 1.5, essential: true });
+        m.flyTo({ center: [markers[0].lng, markers[0].lat], zoom: 11, duration: 1600, curve: 1.5, easing: EASE_OUT_CUBIC });
         return;
       }
       const b = new gl.current!.LngLatBounds();
       markers.forEach((mk) => b.extend([mk.lng, mk.lat]));
       // Hueco para el carril, el dock y el cajón: encuadrar contra el lienzo
       // entero mete los puntos justo debajo de lo que flota encima.
-      m.fitBounds(b, { padding: { top: 60, bottom: 90, left: 80, right: 60 }, maxZoom: 12, duration: 1600 });
+      m.fitBounds(b, {
+        padding: { top: 60, bottom: 90, left: 80, right: 60 }, maxZoom: 12,
+        duration: 1600, easing: EASE_OUT_CUBIC,
+      });
     };
     if (m.isStyleLoaded()) ir();
     else m.once("load", ir);
-  }, [markers, flyTo]);
+    // Misma razón que en el efecto de `flyTo`: sin `ready`, si los marcadores
+    // ya estaban listos antes que el lienzo, este efecto corría una vez con
+    // el mapa a medio construir y no volvía a intentarlo.
+  }, [markers, flyTo, ready]);
 
   if (reason) {
     // Una franja bajo la barra superior, no un cartel centrado: centrado

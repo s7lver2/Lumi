@@ -1,14 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type Case, type Project, type ProjectImage } from "../lib/api";
 import { useReorder } from "../lib/useReorder";
 import { useServer } from "../lib/store";
 import { ContextMenu, menuAt, type MenuState } from "../ui/ContextMenu";
 import { PromptDialog } from "../ui/PromptDialog";
 import { CaseRow } from "./CaseRow";
-import { MapCanvas, type Marker } from "./MapCanvas";
 
-/** Los casos del proyecto, sobre el mapa donde caen. La lista es el trabajo; el
- *  mapa de fondo dice de un vistazo dónde está repartida la investigación. */
+/** Los casos del proyecto. El mapa de verdad vive dentro de cada caso, con sus
+ *  resultados; aquí solo hay una lista que abrir, sin nada más que cargar. */
 export function ProjectView({
   project, onOpenCase, rail, drawer,
 }: {
@@ -25,9 +24,6 @@ export function ProjectView({
   const [error, setError] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [renaming, setRenaming] = useState<Case | null>(null);
-  /** El caso que el ratón está rozando. El mapa vuela hasta él sin abrirlo:
-   *  recorrer la lista es recorrer el mapa. */
-  const [peek, setPeek] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
 
   async function load() {
     try {
@@ -89,26 +85,13 @@ export function ProjectView({
     }
   }
 
-  const markers: Marker[] = useMemo(
-    () => (cases ?? [])
-      .filter((c) => c.lat !== null && c.lng !== null)
-      .map((c, i) => ({
-        id: String(c.id), lat: c.lat!, lng: c.lng!, label: String(i + 1),
-        kind: i === 0 ? ("top" as const) : ("alt" as const),
-      })),
-    [cases],
-  );
-
   return (
     // Anclado a los cuatro bordes, no `h-full`: ver el comentario gemelo en
-    // CaseView — la altura no la resolvía la cadena flex y el mapa se quedaba
-    // con un lienzo de alto cero.
+    // CaseView — la altura no la resolvía la cadena flex.
     <div className="absolute inset-0 overflow-hidden"
       style={{ animation: "jg-page-fade-in 260ms cubic-bezier(.16,1,.3,1) both" }}>
-      <MapCanvas markers={markers} flyTo={peek} onMarker={(id) => {
-        const c = list.find((x) => String(x.id) === id);
-        if (c) onOpenCase(c);
-      }} />
+      <div className="pointer-events-none absolute inset-0"
+        style={{ background: "radial-gradient(120% 90% at 50% 35%, #16191d 0%, #0e0f11 70%)" }} />
       {rail}
 
       <div className="absolute inset-y-0 left-11 right-0 overflow-y-auto px-[26px] py-[22px]">
@@ -125,14 +108,10 @@ export function ProjectView({
               style={{ animation: `jg-fade-rise 380ms ${Math.min(i, 8) * 40}ms cubic-bezier(.16,1,.3,1) both` }}>
               <CaseRow case_={c} covers={covers.get(c.id) ?? []}
                 drag={orden.drag(c.id)}
-                onPeek={() => c.lat !== null && setPeek({ lat: c.lat, lng: c.lng!, zoom: 9 })}
                 onOpen={() => { if (!orden.dragging) onOpenCase(c); }}
                 onMenu={(e) => menuAt(e, c.name, [
                   { label: "Abrir", hint: "↵", onClick: () => onOpenCase(c) },
                   { label: "Renombrar", hint: "F2", onClick: () => setRenaming(c) },
-                  // Centrar en el mapa es abrir el caso: ahí es donde el mapa
-                  // vuela a su punto. Prometer otra cosa sería inventar.
-                  { label: "Abrir en el mapa", disabled: c.lat === null, onClick: () => onOpenCase(c) },
                   null,
                   { label: "Eliminar caso", danger: true, onClick: () => void remove(c) },
                 ], setMenu)} />

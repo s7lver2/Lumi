@@ -34,24 +34,19 @@ function MiniMap({ lat, lng }: { lat: number | null; lng: number | null }) {
  *  la de proyectos, no enseña ninguna de las dos. Al pasar por encima la pila
  *  se abre en abanico: la carpeta enseña lo que lleva dentro sin tener que
  *  entrar. */
-export function CaseRow({ case_, covers, drag, onOpen, onMenu, onPeek }: {
+export function CaseRow({ case_, covers, drag, onOpen, onMenu }: {
   case_: Case;
   /** Hasta tres ids de imagen para la portada. Vacío = caso sin fotos. */
   covers: number[];
   drag: Record<string, unknown>;
   onOpen: () => void;
   onMenu: (e: React.MouseEvent) => void;
-  /** Pasar por encima asoma el caso en el mapa de detrás, sin abrirlo. */
-  onPeek?: () => void;
 }) {
   const pct = case_.analyses === 0 ? 0 : (case_.resolved / case_.analyses) * 100;
   const capas = covers.slice(0, 3);
 
   return (
-    <button {...drag} onClick={onOpen} onContextMenu={onMenu} onMouseEnter={onPeek}
-      // Cristal, no transparente: en la lista de casos el fondo es el mapa, y
-      // sin superficie propia las piezas de la fila —portada, barra, coordenada,
-      // mini-mapa— se leen como widgets sueltos flotando sobre países.
+    <button {...drag} onClick={onOpen} onContextMenu={onMenu}
       className="group relative flex w-full cursor-grab items-center gap-3 rounded-[10px] border
         border-white/[.07] bg-[rgba(16,18,21,.72)] p-[8px_10px] text-left backdrop-blur-md
         transition-[background-color,border-color,transform] duration-300 ease-expo
