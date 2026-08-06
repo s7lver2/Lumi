@@ -137,13 +137,20 @@ spec → plan → implementación, y cada una debe producir software que funcion
 | **8** | **Catálogo de índices** | Instalar índices cifrados en Lumi Station, ver de qué procedencias está hecho cada uno y en qué proporción, elegir cuál usa cada modelo | Sin spec |
 | **9** | **Página web del proyecto** | El sitio público, a partir de mockups que aporta el owner | Sin spec |
 
-**Orden acordado:** `1 → 2 → 6 (esqueleto) → 4 → 5 → 3 → 7 → 8 → 9`. El razonamiento: el
+**Orden acordado:** `1 → 2 → 6 (esqueleto) → 4 → 7 → 8 → 5 → 3 → 9`. El razonamiento: el
 handshake, la autenticación y el esqueleto del cliente son el andamio sin el cual nada más se
 puede probar; la cola va antes que el motor porque el motor es un consumidor de la cola; el
-panel de admin va después porque es interfaz sobre cosas que ya deben existir. Los tres
-últimos son ampliaciones, no cimientos: el Indexer produce lo que el catálogo distribuye y el
-motor consume, así que ninguno puede especificarse antes de que el 5 fije qué es un índice; y
-la web describe un producto que conviene tener terminado antes de anunciarlo.
+panel de admin va casi al final porque es interfaz sobre cosas que ya deben existir; y la web
+describe un producto que conviene tener terminado antes de anunciarlo.
+
+**Por qué el Indexer se adelanta al motor.** El motor geolocaliza recuperando candidatos de
+un corpus georreferenciado y verificándolos geométricamente: sin índice no hay candidatos que
+verificar, y quien produce el índice es el 7. Se consideró que el 5 fijara el formato y leyera
+un índice de juguete construido a mano, y se descartó a propósito: el motor habría pasado su
+desarrollo entero contra material de mentira, y la primera vez que viera un índice real sería
+después de darlo por terminado. El coste asumido es el simétrico — el Indexer se diseña sin
+que su consumidor exista todavía, y Lumi Station sigue sin resolver ni un análisis durante dos
+subsistemas más.
 
 ### Los tres nuevos, en una frase cada uno
 
