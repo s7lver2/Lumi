@@ -187,6 +187,17 @@ impl Store {
             .query_row("SELECT v FROM meta WHERE k = ?1", [k], |r| r.get(0))
             .ok()
     }
+
+    /// Todo `en_curso` que exista al arrancar es un resto de una caída: ningún
+    /// trabajador sobrevive al daemon, así que no puede haber nada corriendo de
+    /// verdad. Sin esto, un corte de luz deja trabajos que nadie recogerá jamás.
+    ///
+    /// Devuelve cuántos ha rearmado, para poder decirlo en el log de arranque.
+    pub fn rearmar_trabajos_huerfanos(&self) -> usize {
+        self.conn()
+            .execute("UPDATE analyses SET state = 'pendiente' WHERE state = 'en_curso'", [])
+            .unwrap_or(0)
+    }
 }
 
 /// Columnas añadidas después de la primera versión del esquema.
@@ -210,6 +221,10 @@ fn migrate(c: &Connection) {
         // a exigir el estado.
         ("project_members", "status", "TEXT NOT NULL DEFAULT 'accepted'"),
         ("project_members", "invited_by", "INTEGER"),
+        // Cuántas veces ha vuelto a la cola por muerte de su trabajador. Sin
+        // tope, una imagen envenenada tumbaría a la misma GPU en bucle para
+        // siempre.
+        ("analyses", "requeues", "INTEGER NOT NULL DEFAULT 0"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }
@@ -255,6 +270,41 @@ mod tests {
         s.conn()
             .query_row("SELECT blocked FROM users WHERE 0", [], |_| Ok(()))
             .ok();
+        drop(s);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn los_trabajos_en_curso_se_rearman_al_abrir() {
+        let dir = std::env::temp_dir().join(format!("lumi-huerf-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let s = Store::open(&dir).unwrap();
+        s.conn()
+            .execute(
+                "INSERT INTO analyses (id, case_id, requested_by, model, state, created_at)
+                 VALUES (1, 1, 1, 'mini', 'en_curso', 0), (2, 1, 1, 'mini', 'pendiente', 0),
+                        (3, 1, 1, 'mini', 'hecho', 0)",
+                [],
+            )
+            .unwrap();
+
+        assert_eq!(s.rearmar_trabajos_huerfanos(), 1, "solo el que estaba en curso");
+
+        let estados: Vec<String> = {
+            let c = s.conn();
+            let mut q = c.prepare("SELECT state FROM analyses ORDER BY id").unwrap();
+            let v = q.query_map([], |r| r.get(0)).unwrap().flatten().collect();
+            v
+        };
+        assert_eq!(estados, vec!["pendiente", "pendiente", "hecho"], "lo hecho no se toca");
+
+        // Y la columna del tope de reintentos existe y nace a cero.
+        let r: i64 = s
+            .conn()
+            .query_row("SELECT requeues FROM analyses WHERE id = 1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(r, 0);
+
         drop(s);
         std::fs::remove_dir_all(&dir).ok();
     }

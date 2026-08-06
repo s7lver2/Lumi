@@ -147,6 +147,12 @@ pub struct Limits {
     pub max_storage_gb: i64,
     pub queue_priority: i64,
     pub can_create_projects: bool,
+    /// Si su trabajo pendiente sigue avanzando cuando se desconecta. Con esto
+    /// apagado, lo pendiente de quien se va se queda quieto hasta que vuelve;
+    /// con ello encendido avanza, pero siempre por detrás de quien sí está
+    /// delante de la pantalla. Lo que YA está corriendo termina en los dos
+    /// casos: el cómputo gastado no se tira.
+    pub background_jobs: bool,
 }
 
 impl Default for Limits {
@@ -158,6 +164,9 @@ impl Default for Limits {
             max_storage_gb: 20,
             queue_priority: 0,
             can_create_projects: true,
+            // Apagado por defecto: que el administrador lo *pueda* habilitar,
+            // no que esté habilitado sin que nadie lo decida.
+            background_jobs: false,
         }
     }
 }

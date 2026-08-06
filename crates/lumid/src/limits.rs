@@ -11,13 +11,14 @@ use std::collections::HashMap;
 
 /// Las claves válidas. Cualquier otra se rechaza al escribir: una errata en un
 /// PATCH crearía una fila que nadie lee nunca y un límite que nadie entiende.
-pub const KEYS: [&str; 6] = [
+pub const KEYS: [&str; 7] = [
     "models",
     "max_concurrent",
     "max_daily",
     "max_storage_gb",
     "queue_priority",
     "can_create_projects",
+    "background_jobs",
 ];
 
 fn rows(s: &Store, user_id: Option<i64>) -> HashMap<String, Value> {
@@ -53,6 +54,7 @@ fn apply(l: &mut Limits, k: &str, v: &Value) {
         "can_create_projects" => {
             l.can_create_projects = v.as_bool().unwrap_or(l.can_create_projects)
         }
+        "background_jobs" => l.background_jobs = v.as_bool().unwrap_or(l.background_jobs),
         _ => {}
     }
 }
@@ -151,6 +153,15 @@ mod tests {
         // Y quitarla devuelve al global, no al defecto de fábrica.
         clear(&s, Some(1), "max_daily").unwrap();
         assert_eq!(effective(&s, 1).max_daily, 200);
+
+        // El límite nuevo hereda la misma maquinaria de dos niveles que los
+        // otros seis, sin nada específico suyo.
+        assert!(!effective(&s, 1).background_jobs, "apagado por defecto");
+        set(&s, None, "background_jobs", &serde_json::json!(true)).unwrap();
+        assert!(effective(&s, 1).background_jobs);
+        set(&s, Some(1), "background_jobs", &serde_json::json!(false)).unwrap();
+        assert!(!effective(&s, 1).background_jobs);
+        assert!(effective(&s, 2).background_jobs);
 
         drop(s);
         std::fs::remove_dir_all(&dir).ok();
