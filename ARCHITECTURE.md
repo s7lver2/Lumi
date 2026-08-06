@@ -120,9 +120,9 @@ mejor. Eso es lo que justifica el soporte multi-GPU y el sistema de cola.
 
 ---
 
-## 5. Los seis subsistemas
+## 5. Los nueve subsistemas
 
-El proyecto no cabe en una sola spec. Se divide en seis piezas, cada una con su propio ciclo
+El proyecto no cabe en una sola spec. Se divide en nueve piezas, cada una con su propio ciclo
 spec → plan → implementación, y cada una debe producir software que funcione por sí solo.
 
 | # | Subsistema | Qué cubre | Estado |
@@ -133,11 +133,33 @@ spec → plan → implementación, y cada una debe producir software que funcion
 | **4** | **Cola y planificador** | Cientos de usuarios, pausa por desconexión, prioridades, multi-GPU y GPU+CPU | **Terminado** |
 | **5** | **Motor de inferencia** | Lumi Mini / Pro / Vision, ensemble de verificadores geométricos | Pendiente |
 | **6** | **Cliente y proyectos** | Workspaces tipo Burp/Caido, imágenes, historial, mapa | Esqueleto terminado |
+| **7** | **Lumi Indexer** | Aplicación Tauri aparte, con un único propósito: indexar territorio | Sin spec |
+| **8** | **Catálogo de índices** | Instalar índices cifrados en Lumi Station, ver de qué procedencias está hecho cada uno y en qué proporción, elegir cuál usa cada modelo | Sin spec |
+| **9** | **Página web del proyecto** | El sitio público, a partir de mockups que aporta el owner | Sin spec |
 
-**Orden acordado:** `1 → 2 → 6 (esqueleto) → 4 → 5 → 3`. El razonamiento: el handshake, la
-autenticación y el esqueleto del cliente son el andamio sin el cual nada más se puede
-probar; la cola va antes que el motor porque el motor es un consumidor de la cola; el panel
-de admin va último porque es interfaz sobre cosas que ya deben existir.
+**Orden acordado:** `1 → 2 → 6 (esqueleto) → 4 → 5 → 3 → 7 → 8 → 9`. El razonamiento: el
+handshake, la autenticación y el esqueleto del cliente son el andamio sin el cual nada más se
+puede probar; la cola va antes que el motor porque el motor es un consumidor de la cola; el
+panel de admin va después porque es interfaz sobre cosas que ya deben existir. Los tres
+últimos son ampliaciones, no cimientos: el Indexer produce lo que el catálogo distribuye y el
+motor consume, así que ninguno puede especificarse antes de que el 5 fije qué es un índice; y
+la web describe un producto que conviene tener terminado antes de anunciarlo.
+
+### Los tres nuevos, en una frase cada uno
+
+Están anotados aquí para no perderlos, **no diseñados**. Cada uno abre su ciclo
+spec → plan cuando le toque, y el owner aportará el detalle entonces.
+
+- **7 · Lumi Indexer.** Aplicación Tauri **independiente** de Lumi Station, no una sección
+  suya. Su único propósito es indexar territorio. Separada porque quien indexa y quien
+  investiga no son la misma persona ni trabajan en la misma máquina.
+- **8 · Catálogo de índices.** Índices cifrados como los de la v1, con un cambio de fondo:
+  los nuevos se entrenan con imágenes de **procedencias distintas**, y el catálogo tiene que
+  decir de cada índice **en qué porcentaje viene de cada una**. Es un requisito de cadena de
+  custodia, no una estadística de adorno: saber con qué material se entrenó lo que te dio la
+  respuesta es parte de poder defenderla.
+- **9 · Página web.** A partir de mockups que aportará el owner; hay que revisarlos y
+  detallarlos antes de escribir la spec.
 
 Se decidió **no** escribir un documento paraguas antes de empezar (este documento se escribe
 a posteriori). La consecuencia asumida: el protocolo cliente↔servidor y el modelo
