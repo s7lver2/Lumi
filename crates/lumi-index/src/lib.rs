@@ -1,0 +1,8 @@
+//! El núcleo del Indexer: formato del paquete, teselas, cobertura,
+//! procedencia y el contrato con el trabajador de embebido.
+//!
+//! Vive aparte de la aplicación porque es lógica pura y se prueba sin GPU, sin
+//! servicios y sin ventana — y porque los subsistemas 8 y 5 abrirán estos
+//! paquetes y deben depender de este crate en vez de copiar el formato.
+
+pub mod tiles;

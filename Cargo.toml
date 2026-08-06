@@ -1,10 +1,10 @@
 [workspace]
 resolver = "2"
-members = ["crates/lumi-proto", "crates/lumid", "crates/lumi-cli"]
-# ponytail: client/src-tauri es un proyecto Cargo aparte (lo gestiona `tauri`,
-# no este workspace); sin excluirlo, cargo lo reclama igual por estar bajo
-# este árbol de directorios.
-exclude = ["client/src-tauri"]
+members = ["crates/lumi-proto", "crates/lumi-index", "crates/lumid", "crates/lumi-cli"]
+# ponytail: client/src-tauri e indexer/src-tauri son proyectos Cargo aparte
+# (los gestiona `tauri`, no este workspace); sin excluirlos, cargo los reclama
+# igual por estar bajo este árbol de directorios.
+exclude = ["client/src-tauri", "indexer/src-tauri"]
 
 [workspace.package]
 version = "2.0.0"
@@ -13,6 +13,7 @@ license = "AGPL-3.0-or-later"
 
 [workspace.dependencies]
 lumi-proto = { path = "crates/lumi-proto" }
+lumi-index = { path = "crates/lumi-index" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
