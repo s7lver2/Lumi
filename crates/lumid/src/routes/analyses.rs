@@ -159,7 +159,10 @@ pub async fn create(
         }
         id
     };
-    tracing::info!("análisis #{id} en cola (modelo {}), sin motor todavía", req.model);
+    // Sin esto el trabajo esperaría al tic de dos segundos de la cola. Con
+    // esto sale hacia una GPU en cuanto hay una libre.
+    app.queue.avisar();
+    tracing::info!("análisis #{id} encolado (modelo {})", req.model);
     Ok(Json(Analysis {
         id,
         case_id,
@@ -210,12 +213,22 @@ pub async fn remove(
     Path(id): Path<i64>,
     headers: HeaderMap,
 ) -> Result<StatusCode, Fail> {
-    let case_id: i64 = app
+    let (case_id, state): (i64, String) = app
         .store
         .conn()
-        .query_row("SELECT case_id FROM analyses WHERE id = ?1", [id], |r| r.get(0))
+        .query_row("SELECT case_id, state FROM analyses WHERE id = ?1", [id], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe ese análisis"))?;
     guard_case(&app, &headers, case_id)?;
+    // Cancelar es esto: borrar lo que todavía no ha empezado. Lo que ya está en
+    // una GPU llega hasta el final — matarlo tiraría cómputo ya gastado.
+    if state == "en_curso" {
+        return Err(err(
+            StatusCode::CONFLICT,
+            "este análisis ya se está ejecutando; no se puede cancelar a mitad",
+        ));
+    }
     let c = app.store.conn();
     let _ = c.execute("DELETE FROM analysis_images WHERE analysis_id = ?1", [id]);
     c.execute("DELETE FROM analyses WHERE id = ?1", [id])

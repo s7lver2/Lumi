@@ -285,6 +285,24 @@ pub async fn remove(
         .query_row("SELECT case_id FROM images WHERE id = ?1", [id], |r| r.get(0))
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe esa imagen"))?;
     let (_, pid, _) = guard_case(&app, &headers, case_id)?;
+    // Si se fuera, el resultado aterrizaría sobre un caso al que le falta la
+    // prueba que lo produjo. En una herramienta forense eso no es aceptable.
+    let en_uso: i64 = app
+        .store
+        .conn()
+        .query_row(
+            "SELECT COUNT(*) FROM analysis_images ai JOIN analyses a ON a.id = ai.analysis_id
+             WHERE ai.image_id = ?1 AND a.state = 'en_curso'",
+            [id],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    if en_uso > 0 {
+        return Err(err(
+            StatusCode::CONFLICT,
+            "esta imagen se está analizando ahora mismo; espera a que termine",
+        ));
+    }
     {
         let c = app.store.conn();
         let _ = c.execute("DELETE FROM analysis_images WHERE image_id = ?1", [id]);
