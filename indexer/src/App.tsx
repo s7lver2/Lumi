@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { PlanetBackground } from "./ui/PlanetBackground";
 import { WindowFrame } from "./ui/WindowFrame";
 
-interface Saludo { version: string; so: string }
+interface Saludo { version: string; so: string; dir: string }
 
 export function App() {
   const [saludo, setSaludo] = useState<Saludo | null>(null);
@@ -19,7 +19,7 @@ export function App() {
             <span className="text-fg">✦</span>
             <span className="text-[17px] font-medium text-fg">Lumi Indexer</span>
             <span className="font-mono text-[9.5px] text-subtle">
-              {saludo ? `v${saludo.version} · ${saludo.so}` : "…"}
+              {saludo ? `v${saludo.version} · ${saludo.so} · ${saludo.dir}` : "…"}
             </span>
           </div>
         </div>
