@@ -1,6 +1,8 @@
 import { useState } from "react";
 
 import type { Saludo } from "../lib/api";
+import { ModelsStep } from "./ModelsStep";
+import { RuntimeStep } from "./RuntimeStep";
 import { ServicesStep } from "./ServicesStep";
 import { Stepper } from "./Stepper";
 
@@ -22,16 +24,8 @@ export function SetupWizard({ saludo, onListo }: { saludo: Saludo; onListo: () =
       </div>
       <Stepper pasos={PASOS} actual={paso} />
       {paso === 1 && <ServicesStep saludo={saludo} onListo={() => setPaso(2)} />}
-      {paso >= 2 && (
-        // Los pasos 3 y 4 los añade la tarea 11.
-        <div className="rounded-card border border-white/[.13] bg-[rgba(16,19,25,.66)] p-[20px_22px] backdrop-blur-xl">
-          <p className="text-sm text-fg">Servicios listos</p>
-          <p className="mt-[5px] text-[11px] text-muted">El runtime y los modelos llegan en la tarea 11.</p>
-          <button onClick={onListo} className="jg-press mt-4 rounded-lg bg-accent px-4 py-2 text-[11.5px] font-medium text-black">
-            Entrar
-          </button>
-        </div>
-      )}
+      {paso === 2 && <RuntimeStep onListo={() => setPaso(3)} />}
+      {paso === 3 && <ModelsStep onListo={onListo} />}
     </div>
   );
 }

@@ -5,7 +5,9 @@
 //! máquina. Lo que produce son paquetes `.lumidx` sellados.
 
 mod crypto;
+mod models;
 mod qdrant;
+mod runtime;
 mod services;
 mod store;
 
@@ -19,6 +21,7 @@ pub struct Estado {
     pub almacen: Almacen,
     pub maestra: Maestra,
     pub servicios: services::Servicios,
+    pub modelos: Vec<models::Modelo>,
 }
 
 /// Dónde vive todo. `LUMI_INDEXER_DATA` existe para poder correr una instancia
@@ -59,21 +62,42 @@ fn servicios_log(estado: tauri::State<'_, Estado>, desde: usize) -> Vec<String> 
     estado.servicios.log.desde(desde)
 }
 
+#[tauri::command]
+fn modelos_lista(estado: tauri::State<'_, Estado>) -> Vec<models::Modelo> {
+    estado.modelos.clone()
+}
+
+#[tauri::command]
+fn runtime_listo(estado: tauri::State<'_, Estado>) -> bool {
+    runtime::esta_instalado(&estado.dir)
+}
+
+#[tauri::command]
+async fn runtime_instalar(estado: tauri::State<'_, Estado>) -> Result<(), String> {
+    runtime::instalar(&estado.dir, estado.servicios.log.clone()).await.map_err(|e| e.to_string())
+}
+
 pub fn run() {
     let dir = directorio();
     let almacen = Almacen::abrir(&dir).expect("no se pudo abrir el almacén");
     let maestra = Maestra::abrir_o_crear(&dir).expect("no se pudo abrir la clave maestra");
     let servicios = services::Servicios::nuevo(dir.clone());
+    let modelos = models::cargar_registro(
+        &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../modelos"),
+    );
 
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
-        .manage(Estado { dir, almacen, maestra, servicios })
+        .manage(Estado { dir, almacen, maestra, servicios, modelos })
         .invoke_handler(tauri::generate_handler![
             saludo,
             servicios_arrancar,
             servicios_estado,
-            servicios_log
+            servicios_log,
+            modelos_lista,
+            runtime_listo,
+            runtime_instalar
         ])
         .run(tauri::generate_context!())
         .expect("no se pudo arrancar el Lumi Indexer");
