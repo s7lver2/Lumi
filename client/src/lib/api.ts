@@ -131,6 +131,13 @@ export interface Me { username: string; is_admin: boolean; limits: Limits }
 export interface MapConfig {
   provider: "mapbox" | "osm" | "none"; theme: string | null;
   has_key: boolean; reason: string | null;
+  /** Quién dibuja. `maplibre` no deja salir la clave del servidor; `mapbox`
+   *  la necesita aquí, porque su SDK firma las peticiones en el navegador. */
+  engine: "maplibre" | "mapbox";
+  /** Solo con `engine: "mapbox"`. Con el otro motor siempre `null`. */
+  key: string | null;
+  /** El estilo sin reescribir, solo con `engine: "mapbox"`. */
+  style: string | null;
 }
 export interface MapTheme { id: string; label: string; needs_key: boolean }
 

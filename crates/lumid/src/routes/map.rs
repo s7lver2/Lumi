@@ -135,11 +135,29 @@ pub async fn themes(headers: HeaderMap, State(app): State<App>) -> Result<Json<V
     ))
 }
 
-/// Qué le contamos al cliente. La clave no está aquí ni por asomo.
+/// El motor de dibujo elegido. `maplibre` mientras nadie diga lo contrario:
+/// es el único de los dos que no obliga a repartir la clave.
+fn current_engine(app: &App) -> String {
+    match app.store.get_meta("map_engine").as_deref() {
+        Some("mapbox") => "mapbox".into(),
+        _ => "maplibre".into(),
+    }
+}
+
+/// Qué le contamos al cliente.
+///
+/// Con el motor `maplibre` la clave no está aquí ni por asomo. Con `mapbox`
+/// sí: su SDK firma las peticiones en el navegador, así que no hay forma de
+/// usarlo sin repartirla. El administrador lo eligió sabiéndolo (ver el aviso
+/// de `MapRow`), y esta ruta exige sesión como todas — la clave no queda
+/// expuesta a cualquiera, solo a quien ya está dentro.
 pub async fn config(State(app): State<App>, headers: HeaderMap) -> Result<Json<MapConfig>, Fail> {
     require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
     let theme = current_theme(&app);
-    let has_key = app.store.get_meta("map_key").is_some_and(|k| !k.is_empty());
+    let key = app.store.get_meta("map_key").unwrap_or_default();
+    let has_key = !key.is_empty();
+    let engine = current_engine(&app);
+    let directo = engine == "mapbox";
     let reason = match theme {
         None => Some(
             "nadie ha elegido todavía un tema de mapa; pídeselo a tu administrador".into(),
@@ -147,13 +165,24 @@ pub async fn config(State(app): State<App>, headers: HeaderMap) -> Result<Json<M
         Some(t) if t.needs_key && !has_key => Some(
             "este tema es de Mapbox y no hay clave guardada; pídeselo a tu administrador".into(),
         ),
+        // El SDK de Mapbox exige una clave suya incluso para dibujar un estilo
+        // ajeno, así que con un tema de OpenStreetMap no hay nada que hacer.
+        Some(t) if directo && t.provider != "mapbox" => Some(
+            "el motor de Mapbox solo dibuja sus propios temas; elige uno de Mapbox o vuelve a MapLibre".into(),
+        ),
         _ => None,
     };
+    // Solo lo estrictamente necesario para ese modo, y solo si ese modo está
+    // activo: nada de mandar la clave «por si acaso».
+    let sirve = directo && reason.is_none();
     Ok(Json(MapConfig {
         provider: theme.map(|t| t.provider.to_string()).unwrap_or_else(|| "none".into()),
         theme: theme.map(|t| t.id.to_string()),
         has_key,
         reason,
+        engine,
+        key: sirve.then(|| key.clone()),
+        style: sirve.then(|| theme.map(|t| t.style.to_string())).flatten(),
     }))
 }
 
@@ -492,6 +521,17 @@ pub async fn patch_admin(
     // anotado; `style()` vuelve a anotarlo en cuanto el cliente lo pida.
     if let Some(k) = req.key {
         app.store.set_meta("map_key", k.trim()).map_err(fail)?;
+    }
+    if let Some(e) = req.engine.as_deref() {
+        // Lista cerrada: un valor cualquiera aquí acabaría en un cliente que
+        // no sabría qué hacer con él.
+        let e = match e {
+            "mapbox" => "mapbox",
+            "maplibre" => "maplibre",
+            _ => return Err(err(StatusCode::BAD_REQUEST, "ese motor no existe")),
+        };
+        app.store.set_meta("map_engine", e).map_err(fail)?;
+        tracing::info!("motor de mapa: {e}");
     }
     let _ = app.store.conn().execute(
         "DELETE FROM meta WHERE k IN ('map_mapbox_tileset', 'map_glyphs', 'map_sprite')",

@@ -419,11 +419,28 @@ pub struct MapConfig {
     /// El tema elegido del catálogo (`GET /v1/map/themes`), o `None` si nadie
     /// ha elegido ninguno todavía.
     pub theme: Option<String>,
-    /// `true` si hay clave guardada. El valor no sale de aquí jamás.
+    /// `true` si hay clave guardada. Con el motor `maplibre` el valor no sale
+    /// de aquí jamás; con `mapbox` sí, y va en `key` — ver abajo.
     pub has_key: bool,
     /// Por qué el mapa no está disponible, si no lo está. Nada de lienzo en
     /// blanco ni de spinner eterno.
     pub reason: Option<String>,
+    /// Quién dibuja: `maplibre` (por defecto) o `mapbox`.
+    ///
+    /// No es una preferencia estética, es un compromiso de seguridad que elige
+    /// el administrador. Con `maplibre` el daemon hace de proxy de teselas,
+    /// tipografías e iconos, y la clave no sale del servidor. Con `mapbox` el
+    /// SDK oficial habla directamente con la API de Mapbox y la firma **en el
+    /// cliente**, así que la clave tiene que viajar a cada equipo: quien la
+    /// extraiga del tráfico gasta la cuota del owner.
+    pub engine: String,
+    /// La clave, SOLO con `engine = "mapbox"`. Con `maplibre` es siempre
+    /// `None`: no hay ningún motivo para que el cliente la vea.
+    pub key: Option<String>,
+    /// El estilo tal cual lo publica el proveedor, SOLO con `engine =
+    /// "mapbox"`. Su SDK entiende el esquema `mapbox://` y no pasa por
+    /// nuestro proxy, así que no hay nada que reescribir.
+    pub style: Option<String>,
 }
 
 /// Un tema del catálogo cerrado que ofrece `GET /v1/map/themes`. Ya no se
@@ -442,4 +459,6 @@ pub struct MapConfigReq {
     pub theme: String,
     /// `None` deja la clave como estaba; `Some("")` la borra.
     pub key: Option<String>,
+    /// `maplibre` | `mapbox`. `None` deja el motor como estaba.
+    pub engine: Option<String>,
 }

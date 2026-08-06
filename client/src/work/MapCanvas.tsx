@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import maplibregl, { type StyleSpecification } from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
 import { api, type MapConfig } from "../lib/api";
-import { lumiUrl } from "../lib/bridge";
 import { useServer } from "../lib/store";
 import { Icon } from "../ui/Icon";
 import { addBuildings } from "./buildings";
+import { createMap, type AnyMap, type Gl } from "./mapEngine";
 
 export interface Marker {
   id: string;
@@ -57,8 +55,12 @@ export function MapCanvas({
   flyTo?: { lat: number; lng: number; zoom: number } | null;
 }) {
   const box = useRef<HTMLDivElement>(null);
-  const map = useRef<maplibregl.Map | null>(null);
-  const placed = useRef<maplibregl.Marker[]>([]);
+  const map = useRef<AnyMap | null>(null);
+  /** Las clases del motor que esté montado. Un marcador de MapLibre no se
+   *  puede añadir a un mapa de Mapbox ni al revés, así que hay que quedarse
+   *  con las del que se creó. */
+  const gl = useRef<Gl | null>(null);
+  const placed = useRef<{ remove: () => void; getElement: () => HTMLElement }[]>([]);
   /** `reason` es un fallo del que no se vuelve: no hay proveedor, o el estilo
    *  no llegó, y por tanto no hay lienzo que montar. */
   const [reason, setReason] = useState<string | null>(null);
@@ -95,53 +97,20 @@ export function MapCanvas({
       if (cfg.reason) { setReason(cfg.reason); return; }
       setReason(null);
 
-      // El estilo se pide a mano ANTES de dárselo a MapLibre. Si se lo pasas
-      // como URL (`style: lumiUrl(...)`) y el daemon contesta un error, lo
-      // único que llega es un `AJAXError: Bad Gateway` sin cuerpo: MapLibre no
-      // expone el texto de la respuesta, solo el código. El daemon sí explica
-      // el motivo real en ese cuerpo (por ejemplo, que la URL configurada es
-      // la página de vista previa de Mapbox Studio y no el estilo en JSON), y
-      // ese motivo es justo el que hay que enseñar.
-      let style: StyleSpecification;
+      // El estilo se pide a mano ANTES de dárselo al motor (ver `mapEngine`):
+      // si se le pasa como URL y el daemon contesta un error, lo único que
+      // llega es un `AJAXError` con el código, sin el motivo que el daemon sí
+      // escribió en el cuerpo — y ese motivo es justo el que hay que enseñar.
+      let motor;
       try {
-        const res = await fetch(lumiUrl("/v1/map/style"));
-        if (!res.ok) {
-          const body = await res.text().catch(() => "");
-          setReason(body || `el proveedor de mapas devolvió ${res.status}`);
-          return;
-        }
-        style = await res.json();
+        motor = await createMap(cfg, box.current, globe);
       } catch (e) {
-        setReason(`no se pudo pedir el estilo del mapa: ${String(e)}`);
+        setReason(e instanceof Error ? e.message : `no se pudo montar el mapa: ${String(e)}`);
         return;
       }
-      if (dead || !box.current) return;
-
-      // El planeta es una esfera, y a zoom de mundo entero verlo estirado en un
-      // rectángulo es una mentira cartográfica que además reparte fatal los
-      // resultados: Groenlandia del tamaño de Sudamérica. MapLibre 5 dibuja el
-      // globo de verdad y se deshace solo en plano al acercarte. La proyección
-      // es parte del estilo, no una opción del mapa, así que se inyecta aquí.
-      style.projection = { type: globe ? "globe" : "mercator" };
-
-      const m = new maplibregl.Map({
-        container: box.current,
-        style,
-        transformRequest: (url) =>
-          url.startsWith("/v1/") ? { url: lumiUrl(url) } : { url },
-        center: [0, 20],
-        zoom: 1.4,
-        maxPitch: 70,
-        attributionControl: { compact: true },
-        // El estilo lo eligió el administrador de un catálogo cerrado de
-        // estilos oficiales de Mapbox/OpenFreeMap, y el daemon ya comprobó su
-        // forma en `rewrite()`. El validador de MapLibre es más estricto que
-        // el propio Mapbox con campos de sus estilos oficiales (rechazaba
-        // `dark-v11` por una propiedad que Mapbox sí reconoce); desactivarlo
-        // aquí es no exigirle a un estilo oficial que pase un examen que su
-        // propio autor no le puso.
-        validateStyle: false,
-      });
+      if (dead) { motor.map.remove(); return; }
+      const m = motor.map;
+      gl.current = motor.gl;
       // Aparecer con un fundido en vez de un fogonazo de lienzo vacío: el
       // estilo tarda un instante en llegar y ese instante se veía en negro.
       m.once("load", () => {
@@ -241,8 +210,8 @@ export function MapCanvas({
             geometry: { type: "Polygon" as const, coordinates: [ring(mk.lat, mk.lng, mk.radiusM!)] },
           })),
       };
-      const src = m.getSource("conf") as maplibregl.GeoJSONSource | undefined;
-      if (src) { src.setData(data); return; }
+      const src = m.getSource("conf") as { setData?: (d: unknown) => void } | undefined;
+      if (src?.setData) { src.setData(data); return; }
       m.addSource("conf", { type: "geojson", data });
       m.addLayer({
         id: "conf-fill", type: "fill", source: "conf",
@@ -262,7 +231,7 @@ export function MapCanvas({
     if (!m) return;
     placed.current.forEach((p) => p.remove());
     placed.current = markers.map((mk) => {
-      const marker = new maplibregl.Marker({ element: el(mk) })
+      const marker = new gl.current!.Marker({ element: el(mk) })
         .setLngLat([mk.lng, mk.lat])
         .addTo(m);
       marker.getElement().addEventListener("click", () => {
@@ -282,7 +251,12 @@ export function MapCanvas({
   // Cambiar de proyección sin rehacer el mapa: reconstruirlo tiraría el estilo,
   // las teselas ya descargadas y la posición de la cámara.
   useEffect(() => {
-    map.current?.setProjection({ type: globe ? "globe" : "mercator" });
+    // Los dos motores llaman igual al método y esperan la clave con distinto
+    // nombre: MapLibre lee `type` y Mapbox lee `name`. Se mandan las dos y
+    // cada uno coge la suya, que es más corto que preguntar cuál está montado.
+    const p = globe ? "globe" : "mercator";
+    (map.current as { setProjection?: (o: unknown) => void } | null)
+      ?.setProjection?.({ type: p, name: p });
     localStorage.setItem("lumi.mapa.plano", globe ? "0" : "1");
   }, [globe]);
 
@@ -316,7 +290,7 @@ export function MapCanvas({
         m.flyTo({ center: [markers[0].lng, markers[0].lat], zoom: 11, duration: 1600, curve: 1.5, essential: true });
         return;
       }
-      const b = new maplibregl.LngLatBounds();
+      const b = new gl.current!.LngLatBounds();
       markers.forEach((mk) => b.extend([mk.lng, mk.lat]));
       // Hueco para el carril, el dock y el cajón: encuadrar contra el lienzo
       // entero mete los puntos justo debajo de lo que flota encima.

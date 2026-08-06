@@ -28,14 +28,14 @@ export function MapRow({ token }: { token: string }) {
     }).catch((e) => setError(String(e)));
   }, []);
 
-  async function pick(id: string) {
+  async function guardar(id: string, engine?: "maplibre" | "mapbox") {
     setTheme(id);
     setError(null);
     try {
       // Clave vacía = no la toques. Así se cambia de tema sin volver a
       // teclearla, que es imposible si se leyera del campo enmascarado.
       const c = await api.patch<MapConfig>(
-        "/v1/admin/map", { theme: id, key: key === "" ? null : key }, token,
+        "/v1/admin/map", { theme: id, key: key === "" ? null : key, engine: engine ?? null }, token,
       );
       setCfg(c);
       setKey("");
@@ -45,6 +45,7 @@ export function MapRow({ token }: { token: string }) {
       setError(String(e));
     }
   }
+  const pick = (id: string) => guardar(id);
 
   const needsKey = themes?.find((t) => t.id === theme)?.needs_key ?? false;
 
@@ -52,7 +53,7 @@ export function MapRow({ token }: { token: string }) {
     <div className="rounded-card border border-border p-3.5">
       <p className="text-[12.5px] text-fg">Mapa</p>
       <p className="mb-3 text-[11px] text-muted">
-        el servidor pide las teselas por ti: la clave no sale de aquí
+        un tema del catálogo y quién lo dibuja
       </p>
 
       {themes === null ? (
@@ -88,6 +89,52 @@ export function MapRow({ token }: { token: string }) {
           </button>
         </div>
       )}
+
+      {/* El motor no es una preferencia estética: es dónde vive la clave.
+          Por eso el compromiso va escrito en la propia opción y no en una
+          ayuda que nadie abre. */}
+      <div className="mt-3.5 border-t border-border pt-3">
+        <p className="text-[12.5px] text-fg">Quién dibuja</p>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {([
+            {
+              id: "maplibre" as const, nombre: "MapLibre · por el servidor",
+              nota: "el daemon hace de proxy: la clave no sale de aquí",
+              aviso: false,
+            },
+            {
+              id: "mapbox" as const, nombre: "Mapbox · directo",
+              nota: "su SDK firma en el navegador: la clave viaja a cada equipo",
+              aviso: true,
+            },
+          ]).map((e) => {
+            const on = (cfg?.engine ?? "maplibre") === e.id;
+            return (
+              <button key={e.id} onClick={() => theme && void guardar(theme, e.id)}
+                disabled={!theme}
+                className={`jg-press rounded-lg border p-2.5 text-left transition-colors duration-300
+                  ease-expo disabled:opacity-40 ${
+                    on ? "border-white/[.35] bg-white/[.05]" : "border-border hover:border-white/15"}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11.5px] text-fg">{e.nombre}</span>
+                  {on && <Icon name="check" size={12} className="shrink-0 text-fg" />}
+                </div>
+                <span className={`mt-0.5 block text-[9.5px] ${e.aviso ? "text-warning-fg" : "text-subtle"}`}>
+                  {e.nota}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {cfg?.engine === "mapbox" && (
+          <p className="mt-2 flex items-start gap-1.5 text-[10.5px] leading-snug text-warning-fg">
+            <Icon name="alert" size={12} className="mt-px shrink-0" />
+            Con este motor la clave de Mapbox se entrega a cualquiera que inicie sesión.
+            Quien la extraiga del tráfico gasta tu cuota. A cambio, los estilos salen tal
+            cual los diseña Mapbox y el daemon no ve ni una petición del mapa.
+          </p>
+        )}
+      </div>
 
       {cfg?.reason && <p className="mt-2.5 text-[11px] text-warning-fg">{cfg.reason}</p>}
       {error && <p className="mt-2.5 text-[11px] text-danger-fg">{error}</p>}
