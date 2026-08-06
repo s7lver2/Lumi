@@ -1,0 +1,25 @@
+[package]
+name = "indexer-app"
+version = "0.1.0"
+description = "Lumi Indexer"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+rust-version = "1.77.2"
+
+[lib]
+name = "indexer_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+tauri = { version = "2.11.3", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-log = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+log = "0.4"
+tokio = { version = "1", features = ["full"] }
+lumi-index = { path = "../../crates/lumi-index" }
