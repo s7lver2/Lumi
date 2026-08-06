@@ -5,4 +5,5 @@
 //! servicios y sin ventana — y porque los subsistemas 8 y 5 abrirán estos
 //! paquetes y deben depender de este crate en vez de copiar el formato.
 
+pub mod coverage;
 pub mod tiles;
