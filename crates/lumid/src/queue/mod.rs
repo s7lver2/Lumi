@@ -37,6 +37,47 @@ const LISTO_S: u64 = 120;
 const RELANZAR_MIN_S: u64 = 2;
 const RELANZAR_MAX_S: u64 = 60;
 
+/// Busca un intérprete de Python en el `PATH` en vez de fijar uno a ciegas.
+/// Ubuntu suele traer solo `python3`, pero no todos los entornos — sin esta
+/// búsqueda, un sistema donde el binario se llama distinto deja al daemon sin
+/// lanzar un solo trabajador, para siempre, sin ni un error que lo delate más
+/// allá del log.
+fn find_python() -> PathBuf {
+    for candidato in ["python3", "python"] {
+        let responde = std::process::Command::new(candidato)
+            .arg("--version")
+            .output()
+            .is_ok_and(|o| o.status.success());
+        if responde {
+            return PathBuf::from(candidato);
+        }
+    }
+    // Ninguno contestó: se deja "python3" para que el error de `spawn` diga
+    // qué binario faltaba, en vez de fallar aquí en silencio.
+    PathBuf::from("python3")
+}
+
+/// Dónde puede estar `lumi_worker.py`, de más a menos probable.
+///
+/// El directorio de datos es donde vivirá el día que un instalador lo copie
+/// ahí. El segundo candidato es la ruta del repositorio en la máquina donde
+/// se COMPILÓ el daemon — que es la misma donde se ejecuta, según la rutina
+/// de actualización de este proyecto (`cargo build` en el propio servidor).
+/// El último es relativo al directorio de trabajo, para `cargo run`/tests
+/// lanzados desde la raíz del repositorio.
+fn find_script(dir: &std::path::Path) -> PathBuf {
+    let candidatos = [
+        dir.join("workers/lumi_worker.py"),
+        PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../workers/lumi_worker.py")),
+        PathBuf::from("workers/lumi_worker.py"),
+    ];
+    candidatos
+        .iter()
+        .find(|p| p.exists())
+        .cloned()
+        .unwrap_or_else(|| PathBuf::from("workers/lumi_worker.py"))
+}
+
 fn ahora() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -123,10 +164,9 @@ impl Queue {
             // Sin runtime instalado cae al intérprete del sistema: el trabajador
             // de referencia no necesita nada más, y así el entorno de desarrollo
             // funciona sin haber pasado por el asistente.
-            .unwrap_or_else(|| PathBuf::from("python3"));
-        let candidato = dir.join("workers/lumi_worker.py");
-        let script =
-            if candidato.exists() { candidato } else { PathBuf::from("workers/lumi_worker.py") };
+            .unwrap_or_else(find_python);
+        let script = find_script(&dir);
+        tracing::info!("cola: intérprete {}, script {}", python.display(), script.display());
 
         let mut dispositivos: Vec<String> =
             gpus.iter().map(|g| format!("cuda:{}", g.index)).collect();
@@ -428,6 +468,13 @@ impl Queue {
             Err(_) => None,
         };
         tracing::error!("el trabajador de {dispositivo} ha muerto");
+        // Sin esto, un dispositivo que muere al instante (script que no
+        // existe, intérprete roto) se relanzaba cada `TICK_S` para siempre:
+        // el único sitio que antes anotaba el retraso creciente era un
+        // `spawn()` que fallara AL CREAR el proceso, no uno que muriera justo
+        // después. `revisar()` es quien lo relanza, así que aquí solo se
+        // anota la espera para cuando le toque mirar.
+        self.apuntar_fallo(dispositivo);
         let Some(id) = trabajo else { return };
 
         let veces: i64 = self
