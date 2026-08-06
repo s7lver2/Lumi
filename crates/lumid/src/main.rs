@@ -34,6 +34,9 @@ pub struct App {
     /// plataforma. Se mantiene vivo entre muestras para que la diferencia
     /// exista.
     pub sysinfo: Arc<Mutex<sysinfo::System>>,
+    /// La cola vive tanto como el daemon. Sus trabajadores son procesos hijo
+    /// con `kill_on_drop`, así que mueren con él y no dejan VRAM ocupada.
+    pub queue: Arc<queue::Queue>,
 }
 
 #[tokio::main]
@@ -49,14 +52,18 @@ async fn main() -> anyhow::Result<()> {
     std::fs::create_dir_all(&dir)?;
 
     let (tls_cfg, fingerprint) = tls::load(&dir).await?;
+    let store = Arc::new(store::Store::open(&dir)?);
+    let gpus = gpus();
+    let queue = queue::Queue::arrancar(store.clone(), dir.clone(), &gpus);
     let app = App {
-        store: Arc::new(store::Store::open(&dir)?),
+        store,
         fingerprint,
         mode: if std::path::Path::new("/.dockerenv").exists() { Mode::Docker } else { Mode::Native },
-        gpus: gpus(),
+        gpus,
         master: Arc::new(RwLock::new(master::load_at_boot(&dir))),
         dir: dir.clone(),
         sysinfo: Arc::new(Mutex::new(sysinfo::System::new_all())),
+        queue,
     };
 
     use axum::routing::post;

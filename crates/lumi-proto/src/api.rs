@@ -471,3 +471,53 @@ pub struct MapConfigReq {
     /// `maplibre` | `mapbox`. `None` deja el motor como estaba.
     pub engine: Option<String>,
 }
+
+/// Lo que se retransmite por el SSE de la cola. El progreso va por aquí y NO se
+/// escribe en ninguna parte: persistirlo es lo único que rompería el mutex
+/// único de SQLite, así que se emite y se olvida.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "tipo", rename_all = "lowercase")]
+pub enum Cambio {
+    Estado {
+        /// A quién pertenece. Se filtra en el servidor y no se envía: el
+        /// cliente no necesita su propio id para nada.
+        #[serde(skip)]
+        user_id: i64,
+        analysis_id: i64,
+        case_id: i64,
+        estado: String,
+    },
+    Progreso {
+        #[serde(skip)]
+        user_id: i64,
+        analysis_id: i64,
+        fase: String,
+        pct: u8,
+    },
+}
+
+impl Cambio {
+    pub fn user_id(&self) -> i64 {
+        match self {
+            Cambio::Estado { user_id, .. } | Cambio::Progreso { user_id, .. } => *user_id,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkerView {
+    pub dispositivo: String,
+    /// El modelo cargado ahora mismo. `null` mientras arranca o entre cambios.
+    pub modelo: Option<String>,
+    /// El análisis que tiene en la mano, si tiene alguno.
+    pub trabajo: Option<i64>,
+    /// Si ya dijo `listo`. Uno que no lo ha dicho está cargando, no colgado.
+    pub listo: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueueView {
+    pub pendientes: u32,
+    pub en_curso: u32,
+    pub trabajadores: Vec<WorkerView>,
+}
