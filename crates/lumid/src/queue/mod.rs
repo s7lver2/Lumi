@@ -71,10 +71,15 @@ fn find_script(dir: &std::path::Path) -> PathBuf {
         PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../workers/lumi_worker.py")),
         PathBuf::from("workers/lumi_worker.py"),
     ];
+    // Cada candidato con su resultado, no solo el elegido: sin esto, cuando
+    // ninguno existe de verdad, el único rastro es una ruta relativa que no
+    // dice ni dónde se buscó ni por qué falló cada intento.
+    for c in &candidatos {
+        tracing::info!("cola: ¿existe {}? {}", c.display(), c.exists());
+    }
     candidatos
-        .iter()
+        .into_iter()
         .find(|p| p.exists())
-        .cloned()
         .unwrap_or_else(|| PathBuf::from("workers/lumi_worker.py"))
 }
 
