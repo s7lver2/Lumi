@@ -133,11 +133,12 @@ spec → plan → implementación, y cada una debe producir software que funcion
 | **4** | **Cola y planificador** | Cientos de usuarios, pausa por desconexión, prioridades, multi-GPU y GPU+CPU | **Terminado** |
 | **5** | **Motor de inferencia** | Lumi Mini / Pro / Vision, ensemble de verificadores geométricos | Pendiente |
 | **6** | **Cliente y proyectos** | Workspaces tipo Burp/Caido, imágenes, historial, mapa | Esqueleto terminado |
-| **7** | **Lumi Indexer** | Aplicación Tauri aparte, con un único propósito: indexar territorio | Sin spec |
-| **8** | **Catálogo de índices** | Instalar índices cifrados en Lumi Station, ver de qué procedencias está hecho cada uno y en qué proporción, elegir cuál usa cada modelo | Sin spec |
+| **7a** | **Lumi Indexer · cimientos** | App Tauri aparte; las tres bases; el paquete de índice troceado; procedencia de imágenes y de trabajo; mapa, territorio y la regla de no indexar dos veces; orígenes locales | Spec escrita |
+| **7b** | **Lumi Indexer · orígenes de red** | Street view, satélite y fotos públicas: claves de API, cuotas y coste por petición | Sin spec |
+| **8** | **Catálogo de índices** | Publicar e instalar índices cifrados, buscar en el catálogo, ver de qué procedencias está hecho cada uno y en qué proporción | Sin spec |
 | **9** | **Página web del proyecto** | El sitio público, a partir de mockups que aporta el owner | Sin spec |
 
-**Orden acordado:** `1 → 2 → 6 (esqueleto) → 4 → 7 → 8 → 5 → 3 → 9`. El razonamiento: el
+**Orden acordado:** `1 → 2 → 6 (esqueleto) → 4 → 7a → 7b → 8 → 5 → 3 → 9`. El razonamiento: el
 handshake, la autenticación y el esqueleto del cliente son el andamio sin el cual nada más se
 puede probar; la cola va antes que el motor porque el motor es un consumidor de la cola; el
 panel de admin va casi al final porque es interfaz sobre cosas que ya deben existir; y la web
@@ -157,14 +158,19 @@ subsistemas más.
 Están anotados aquí para no perderlos, **no diseñados**. Cada uno abre su ciclo
 spec → plan cuando le toque, y el owner aportará el detalle entonces.
 
-- **7 · Lumi Indexer.** Aplicación Tauri **independiente** de Lumi Station, no una sección
-  suya. Su único propósito es indexar territorio. Separada porque quien indexa y quien
-  investiga no son la misma persona ni trabajan en la misma máquina.
-- **8 · Catálogo de índices.** Índices cifrados como los de la v1, con un cambio de fondo:
-  los nuevos se entrenan con imágenes de **procedencias distintas**, y el catálogo tiene que
-  decir de cada índice **en qué porcentaje viene de cada una**. Es un requisito de cadena de
-  custodia, no una estadística de adorno: saber con qué material se entrenó lo que te dio la
-  respuesta es parte de poder defenderla.
+- **7a/7b · Lumi Indexer.** Aplicación Tauri **independiente** de Lumi Station, no una
+  sección suya, y sin cuentas ni servidor: un solo operador sobre su propia máquina.
+  Separada porque quien indexa y quien investiga no son la misma persona ni trabajan en el
+  mismo equipo. Su spec está en
+  [`specs/2026-08-06-lumi-indexer-7a-design.md`](docs/superpowers/specs/2026-08-06-lumi-indexer-7a-design.md).
+- **8 · Catálogo de índices.** Índices cifrados como los de la v1, con dos cambios de fondo.
+  El primero: un índice se puebla con imágenes de **procedencias distintas** y el catálogo
+  dice **en qué porcentaje viene de cada una**, por imágenes y por territorio. Es cadena de
+  custodia, no estadística de adorno — saber con qué material se construyó lo que te dio la
+  respuesta es parte de poder defenderla. El segundo: el formato de publicación pasa a estar
+  **troceado por tesela y direccionado por contenido**, con cifrado por fragmento, para que
+  se pueda descargar una parte, republicar solo lo que cambió y heredar el trabajo de otro
+  de forma comprobable.
 - **9 · Página web.** A partir de mockups que aportará el owner; hay que revisarlos y
   detallarlos antes de escribir la spec.
 
@@ -217,6 +223,36 @@ real ("el contenedor solo recibe gpu0; requiere `--gpus all` y acceso directo a
 
 Este es un principio de producto, no un detalle del instalador: aplica a cada sitio de la
 app donde algo aparezca deshabilitado.
+
+### Tres bases de datos
+
+Decidido por el owner durante el diseño del 7a, y aplica a **los dos lados** — el daemon de
+Lumi Station y el Indexer:
+
+| Base | Qué guarda |
+|---|---|
+| **SQLite** | Todo lo relacional y todo lo que tiene que sobrevivir a un corte de luz |
+| **Redis** | Colas y estado caliente: progreso en vivo, contadores en curso |
+| **Qdrant** | Los vectores. Una colección por `(modelo, versión)` |
+
+Qdrant no se discute: `pgvector` tiene un tope duro de 2000 dimensiones para HNSW e ivfflat,
+MegaLoc son 8448 y Lumi 2 son 12288, y por eso la v1 acabó haciendo escaneo coseno secuencial
+sobre la tabla entera.
+
+Redis **sí se discutió y el owner lo confirmó** con el coste enumerado: la cola del
+subsistema 4 ya funciona sin ningún servicio externo, su estado durable son tres escrituras
+por análisis en SQLite, y el progreso —lo verdaderamente rápido— nunca se persiste. Redis
+añade un servicio que instalar, vigilar y explicar en el asistente. La regla que lo mantiene
+sano está escrita en el código del 7a y hay que respetarla en los dos lados: **Redis es el
+timbre y el estado caliente; SQLite es la verdad.** Si Redis se vacía se pierde la barra de
+progreso, nunca el trabajo.
+
+Consecuencia pendiente: migrar la cola del subsistema 4 a Redis y añadir Redis y Qdrant al
+aprovisionamiento del servidor. Es trabajo sobre algo ya terminado y probado.
+
+**Redis no publica binarios oficiales para Windows.** En el servidor da igual (Linux nativo
+es el camino primario, más abajo). En el Indexer obliga a que también sea Linux primero, y en
+Windows a instalarlo dentro de WSL.
 
 ### Confianza y transporte
 
@@ -398,12 +434,16 @@ tope de tamaño. El detalle de cada uno de estos aparcamientos vive en `FUTURO.m
 
 ## 10. Deuda y decisiones pendientes
 
-**Base de datos. Revisado en el subsistema 4: SQLite se queda.** Un análisis son unas tres
-escrituras (a `en_curso`, el resultado, el cierre); con ocho GPUs y trabajos de treinta
-segundos eso es menos de una escritura por segundo y el mutex ni se entera. La condición bajo
-la que esto se sostiene está escrita en el código y hay que respetarla: **el progreso de un
-trabajo no se persiste nunca**, se retransmite por el SSE y se olvida. El día que alguien lo
-guarde, esta decisión deja de valer.
+**Base de datos. Revisado dos veces.** En el subsistema 4 se confirmó que SQLite basta para
+lo relacional: un análisis son unas tres escrituras (a `en_curso`, el resultado, el cierre), y
+con ocho GPUs y trabajos de treinta segundos eso es menos de una escritura por segundo. La
+condición sigue viva y hay que respetarla: **el progreso de un trabajo no se persiste nunca**,
+se retransmite por el SSE y se olvida.
+
+En el diseño del 7a el owner añadió Redis y Qdrant al lado de SQLite (§7, «Tres bases de
+datos»). SQLite no se va: gana dos compañeros con un reparto explícito. Lo que queda como
+deuda es la migración de la cola del 4 a Redis y el aprovisionamiento de los dos servicios
+nuevos en el servidor.
 
 **Rotación de certificado.** Anclar la huella significa que renovar el certificado invalida
 las claves emitidas y obliga a re-vincular. Aceptable con validez de 10 años; hay que

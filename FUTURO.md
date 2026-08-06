@@ -95,6 +95,40 @@ tope configurable y una política de desalojo.
 
 ---
 
+## Indexer (subsistema 7a)
+
+### Imágenes retenidas para evaluación ciega
+
+La v1 tenía `index_holdout_images`: imágenes apartadas del corpus, sin vector, que existen
+solo para consultarlas contra el índice y ver si lo encuentra. Vivían en una tabla separada a
+propósito, porque una fila retenida dentro de `indexed_images` sería recuperable justo por la
+búsqueda que existe para evaluar a ciegas.
+
+No está en el 7a porque quien las usa para medirse es el motor, el subsistema 5. Lo que el 7a
+sí debe dejar hecho es apartarlas al ingerir; medir con ellas es del 5.
+
+### Reducción de dimensión aprendida
+
+Por encima de la cuantización int8 y binaria, una proyección aprendida o un truncado
+matryoshka reduciría más. La v1 tenía la matriz de proyección de Cicada para esto. Se aparca
+porque la cuantización ya da el grueso del ahorro —de 49 KB por vector a 1.5 KB— y una
+proyección añade un artefacto versionado que hay que distribuir y verificar.
+
+### Ajuste fino del modelo sobre un territorio
+
+Que un índice viaje con pesos ajustados al material de su zona. El formato del paquete se
+diseñó para que quepan sin romper los índices ya publicados, pero el bucle de entrenamiento,
+el conjunto de validación y las métricas no están en el 7a: allí «entrenar un índice»
+significa poblarlo, no tocar pesos.
+
+### Recaptura por tesela
+
+El 7a impide reindexar territorio ya cubierto, y esa regla necesita una salida para cuando el
+material existente esté desfasado: pedir la recaptura de una tesela concreta, con su motivo
+anotado. Sin ella la única alternativa es no usar la herramienta, que es peor.
+
+---
+
 ## Transversales
 
 ### Panel de administración real
