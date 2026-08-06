@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Lumi Indexer · territorio y no indexar dos veces</title>
+<style>
+:root{
+  --bg:#0e0f11; --surface:#15171a; --panel:#1a1b1e; --elevated:#202226;
+  --border:#26282c; --muted:#9a9a95; --subtle:#6a6c70; --fg:#e8e8e6;
+  --accent:#f2f3f5; --warning:#ef9f27; --warning-fg:#efb968;
+  --danger:#a33; --danger-fg:#e88f8f; --draw:#378add; --draw-fg:#85b7eb;
+  --expo:cubic-bezier(.16,1,.3,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#08090a;color:var(--fg);font-family:Inter,system-ui,'Segoe UI',sans-serif;
+  -webkit-font-smoothing:antialiased;padding:34px 26px 80px}
+.mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+h1{font-size:17px;font-weight:500;letter-spacing:-.01em}
+.lede{color:var(--muted);font-size:12px;margin-top:6px;max-width:780px;line-height:1.65}
+.tag{font-size:8.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--subtle)}
+.k{font-size:8px;letter-spacing:.11em;text-transform:uppercase;color:var(--subtle)}
+.v{font-size:11.5px;color:var(--fg);margin-top:3px}
+.v.dim{color:var(--subtle)}
+
+.shot{margin-top:38px}
+.shot > .cap{display:flex;align-items:baseline;gap:10px;margin-bottom:9px}
+.shot > .cap b{font-size:12.5px;font-weight:500}
+.shot > .cap span{font-size:11px;color:var(--subtle);max-width:830px;line-height:1.55}
+.frame{width:1280px;height:800px;background:var(--bg);border:1px solid #202226;
+  border-radius:10px;overflow:hidden;position:relative;
+  box-shadow:0 24px 60px rgba(0,0,0,.55);transform-origin:top left}
+@media (max-width:1360px){.frame{transform:scale(.78)}.shot{height:672px}}
+
+.glass{background:rgba(16,19,25,.66);border:1px solid rgba(255,255,255,.13);
+  border-radius:12px;box-shadow:0 18px 40px rgba(0,0,0,.4);backdrop-filter:blur(18px)}
+.btn{border-radius:8px;font-size:11.5px;padding:8px 16px;border:0;display:inline-block}
+.btn.pri{background:var(--accent);color:#000;font-weight:500}
+.btn.gho{background:transparent;color:var(--fg);border:1px solid rgba(255,255,255,.15)}
+.btn.dis{opacity:.4}
+.chip{border:1px solid var(--border);border-radius:5px;padding:1px 6px;
+  font-size:8.5px;color:var(--subtle);letter-spacing:.04em;white-space:nowrap}
+.chip.on{border-color:rgba(255,255,255,.28);color:var(--fg)}
+.chip.amber{border-color:rgba(239,159,39,.4);color:var(--warning-fg)}
+.chip.blue{border-color:rgba(133,183,235,.4);color:var(--draw-fg)}
+
+.rail{position:absolute;inset:0 auto 0 0;width:44px;z-index:30;display:flex;
+  flex-direction:column;align-items:center;gap:3px;padding:10px 0;
+  background:rgba(13,15,17,.9);border-right:1px solid var(--border);backdrop-filter:blur(8px)}
+.rail .ri{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;
+  color:var(--subtle);position:relative}
+.rail .ri.on{background:rgba(255,255,255,.07);color:var(--fg)}
+.rail .ri.on::before{content:"";position:absolute;left:-10px;top:7px;bottom:7px;width:2px;
+  border-radius:0 2px 2px 0;background:var(--fg)}
+.rail .sp{flex:1}
+.top{position:absolute;top:0;left:44px;right:0;height:38px;z-index:25;display:flex;
+  align-items:center;gap:9px;padding:0 12px;background:rgba(13,15,17,.78);
+  border-bottom:1px solid var(--border);backdrop-filter:blur(10px)}
+.crumb{font-size:11.5px;color:var(--subtle);display:flex;align-items:center;gap:7px}
+.crumb b{font-weight:400;color:var(--fg)}
+.crumb .sep{color:#3a3e44}
+
+/* mapa oscuro estilo Mapbox */
+.map{position:absolute;inset:0;background:
+  radial-gradient(120% 90% at 50% 30%, #1d2126 0%, #14171a 42%, #0d0f11 100%)}
+.map svg{position:absolute;inset:0;width:100%;height:100%}
+.map .grid line{stroke:rgba(255,255,255,.03);stroke-width:1}
+.map .road{stroke:rgba(255,255,255,.075);fill:none;stroke-linecap:round}
+.map .road.big{stroke:rgba(255,255,255,.13);stroke-width:2.4}
+.map .water{fill:rgba(55,138,221,.10)}
+.map .block{fill:rgba(255,255,255,.022)}
+
+/* teselas de cobertura: sólido = ya existe, punteado = no existe todavía */
+.t{position:absolute;width:46px;height:46px;border-radius:2px}
+.t.mio{background:rgba(232,232,230,.13);border:1px solid rgba(232,232,230,.38)}
+.t.cat{background:rgba(55,138,221,.15);border:1px solid rgba(133,183,235,.5)}
+.t.new{background:rgba(255,255,255,.015);border:1px dashed rgba(154,154,149,.42)}
+
+.leg{display:flex;gap:15px;flex-wrap:wrap}
+.leg > div{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--muted)}
+.leg s{width:11px;height:11px;border-radius:2px;display:block;text-decoration:none;flex-shrink:0}
+.leg b{font-weight:400;color:var(--fg);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px}
+svg.i{display:block}
+.logline{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;line-height:1.85;color:var(--muted)}
+.logline em{font-style:normal;color:var(--subtle)}
+.logline b{font-weight:400;color:var(--fg)}
+</style>
+</head>
+<body>
+
+<h1>Lumi Indexer · territorio, y no indexar nunca lo mismo dos veces</h1>
+<p class="lede">Cuatro pantallas. Mapbox para dibujar, y la regla de fondo: la cobertura del territorio es planetaria
+y compartida. Antes de indexar nada, el área dibujada se descompone en teselas y cada una se clasifica en tres
+estados. Solo se indexa lo que no existe en ningún sitio. Y aparece una segunda procedencia que hasta ahora no
+existía: la <b style="font-weight:400;color:var(--fg)">del trabajo</b> — quién pagó por indexar cada tesela —
+distinta de la de las imágenes, y atribuible.</p>
+
+<!-- ══════════════ 1. DIBUJAR ══════════════ -->
+<section class="shot">
+  <div class="cap"><b>1 · Dibujar el área</b>
+    <span>el polígono se dibuja sobre Mapbox y las teselas se clasifican en vivo mientras arrastras. Sólido es lo que ya existe —blanco lo tuyo, azul lo publicado por otros—; punteado es lo único que costaría dinero y GPU. El coste que se enseña es solo el de lo punteado.</span></div>
+  <div class="frame">
+    <div class="map">
+      <svg viewBox="0 0 1280 800" preserveAspectRatio="none">
+        <g class="grid">
+          <line x1="0" y1="140" x2="1280" y2="120"/><line x1="0" y1="300" x2="1280" y2="272"/>
+          <line x1="0" y1="470" x2="1280" y2="450"/><line x1="0" y1="640" x2="1280" y2="628"/>
+          <line x1="230" y1="0" x2="180" y2="800"/><line x1="520" y1="0" x2="490" y2="800"/>
+          <line x1="820" y1="0" x2="800" y2="800"/><line x1="1090" y1="0" x2="1080" y2="800"/>
+        </g>
+        <path class="water" d="M0 620 C 260 570, 420 700, 700 650 C 940 610, 1100 710, 1280 670 L1280 800 L0 800 Z"/>
+        <rect class="block" x="430" y="230" width="130" height="90" rx="4"/>
+        <rect class="block" x="600" y="300" width="100" height="130" rx="4"/>
+        <rect class="block" x="760" y="250" width="140" height="80" rx="4"/>
+        <path class="road big" d="M-20 380 C 300 330, 620 430, 1300 350"/>
+        <path class="road" d="M400 -10 C 430 240, 360 520, 420 820"/>
+        <path class="road" d="M900 -10 C 870 250, 960 500, 910 820"/>
+        <path class="road" d="M-20 200 C 400 180, 800 240, 1300 190"/>
+      </svg>
+    </div>
+
+    <!-- teselas -->
+    <div style="position:absolute;left:352px;top:150px;z-index:11">
+      <!-- fila 1 -->
+      <div class="t mio" style="left:0;top:0"></div>
+      <div class="t mio" style="left:48px;top:0"></div>
+      <div class="t mio" style="left:96px;top:0"></div>
+      <div class="t cat" style="left:144px;top:0"></div>
+      <div class="t cat" style="left:192px;top:0"></div>
+      <div class="t new" style="left:240px;top:0"></div>
+      <div class="t new" style="left:288px;top:0"></div>
+      <div class="t new" style="left:336px;top:0"></div>
+      <!-- fila 2 -->
+      <div class="t mio" style="left:0;top:48px"></div>
+      <div class="t mio" style="left:48px;top:48px"></div>
+      <div class="t cat" style="left:96px;top:48px"></div>
+      <div class="t cat" style="left:144px;top:48px"></div>
+      <div class="t cat" style="left:192px;top:48px"></div>
+      <div class="t cat" style="left:240px;top:48px"></div>
+      <div class="t new" style="left:288px;top:48px"></div>
+      <div class="t new" style="left:336px;top:48px"></div>
+      <!-- fila 3 -->
+      <div class="t mio" style="left:0;top:96px"></div>
+      <div class="t cat" style="left:48px;top:96px"></div>
+      <div class="t cat" style="left:96px;top:96px"></div>
+      <div class="t cat" style="left:144px;top:96px"></div>
+      <div class="t new" style="left:192px;top:96px"></div>
+      <div class="t new" style="left:240px;top:96px"></div>
+      <div class="t new" style="left:288px;top:96px"></div>
+      <div class="t new" style="left:336px;top:96px"></div>
+      <!-- fila 4 -->
+      <div class="t cat" style="left:0;top:144px"></div>
+      <div class="t cat" style="left:48px;top:144px"></div>
+      <div class="t new" style="left:96px;top:144px"></div>
+      <div class="t new" style="left:144px;top:144px"></div>
+      <div class="t new" style="left:192px;top:144px"></div>
+      <div class="t new" style="left:240px;top:144px"></div>
+      <div class="t new" style="left:288px;top:144px"></div>
+      <div class="t new" style="left:336px;top:144px"></div>
+      <!-- fila 5 -->
+      <div class="t new" style="left:48px;top:192px"></div>
+      <div class="t new" style="left:96px;top:192px"></div>
+      <div class="t new" style="left:144px;top:192px"></div>
+      <div class="t new" style="left:192px;top:192px"></div>
+      <div class="t new" style="left:240px;top:192px"></div>
+      <div class="t new" style="left:288px;top:192px"></div>
+    </div>
+
+    <!-- polígono dibujado -->
+    <svg style="position:absolute;inset:0;width:100%;height:100%;z-index:13;pointer-events:none">
+      <path d="M348 146 L742 146 L742 290 L690 290 L690 386 L400 386 L348 338 Z"
+        fill="rgba(55,138,221,.07)" stroke="var(--draw-fg)" stroke-width="1.6" stroke-linejoin="round"/>
+      <circle cx="348" cy="146" r="4" fill="var(--draw-fg)"/><circle cx="742" cy="146" r="4" fill="var(--draw-fg)"/>
+      <circle cx="742" cy="290" r="4" fill="var(--draw-fg)"/><circle cx="690" cy="386" r="4" fill="var(--draw-fg)"/>
+      <circle cx="400" cy="386" r="4" fill="var(--draw-fg)"/><circle cx="348" cy="338" r="4" fill="var(--draw-fg)"/>
+    </svg>
+
+    <nav class="rail">
+      <div class="ri" style="color:var(--fg);margin-bottom:6px">
+        <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/><path d="M3 12l9 4.5 9-4.5"/></svg></div>
+      <div class="ri on" title="Territorio">
+        <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3 5.5v15L9 18l6 3 6-2.5v-15L15 6z"/><path d="M9 3v15M15 6v15"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4 18.5h16"/></svg></div>
+      <div class="sp"></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8"/></svg></div>
+    </nav>
+
+    <div class="top">
+      <div class="crumb"><span>Territorio</span><span class="sep">/</span><b>Nueva selección</b></div>
+      <div style="flex:1"></div>
+      <span class="chip blue">dibujando</span>
+      <span class="mono" style="font-size:10px;color:var(--subtle)">z14 · 42.9142, -8.7301</span>
+    </div>
+
+    <!-- herramientas de dibujo -->
+    <div class="glass" style="position:absolute;left:58px;top:52px;z-index:20;padding:5px;display:flex;gap:3px">
+      <span style="width:28px;height:28px;border-radius:7px;background:rgba(255,255,255,.09);display:grid;place-items:center">
+        <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h7l9 9-7 7-9-9z"/><circle cx="8.5" cy="8.5" r=".6" fill="currentColor" stroke="none"/></svg></span>
+      <span style="width:28px;height:28px;border-radius:7px;display:grid;place-items:center;color:var(--subtle)">
+        <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/></svg></span>
+      <span style="width:28px;height:28px;border-radius:7px;display:grid;place-items:center;color:var(--subtle)">
+        <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.4"/></svg></span>
+      <span style="width:1px;background:rgba(255,255,255,.1);margin:4px 2px"></span>
+      <span style="width:28px;height:28px;border-radius:7px;display:grid;place-items:center;color:var(--subtle)">
+        <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></span>
+    </div>
+
+    <!-- panel derecho -->
+    <aside style="position:absolute;top:38px;bottom:0;right:0;width:328px;z-index:20;
+      background:rgba(16,18,21,.93);border-left:1px solid var(--border);backdrop-filter:blur(14px);
+      padding:18px 16px;display:flex;flex-direction:column">
+      <div class="tag">Área dibujada</div>
+      <div style="display:flex;gap:22px;margin-top:9px">
+        <div><div class="k">Superficie</div><div class="v mono">41.2 km²</div></div>
+        <div><div class="k">Teselas z14</div><div class="v mono">312</div></div>
+      </div>
+
+      <div class="tag" style="margin-top:20px">Cobertura existente</div>
+
+      <!-- barra de estados -->
+      <div style="display:flex;height:5px;border-radius:3px;overflow:hidden;background:var(--elevated);margin-top:9px">
+        <i style="display:block;height:100%;width:31%;background:var(--fg)"></i>
+        <i style="display:block;height:100%;width:38%;background:var(--draw)"></i>
+        <i style="display:block;height:100%;width:31%;background:#33373d"></i>
+      </div>
+
+      <div style="margin-top:13px;display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;gap:9px">
+          <s style="width:11px;height:11px;border-radius:2px;background:rgba(232,232,230,.13);
+            border:1px solid rgba(232,232,230,.38);display:block"></s>
+          <span style="font-size:11.5px;flex:1">ya en tus índices</span>
+          <span class="mono" style="font-size:11px">96</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px">
+          <s style="width:11px;height:11px;border-radius:2px;background:rgba(55,138,221,.15);
+            border:1px solid rgba(133,183,235,.5);display:block"></s>
+          <span style="font-size:11.5px;flex:1;color:var(--draw-fg)">publicadas en el catálogo</span>
+          <span class="mono" style="font-size:11px;color:var(--draw-fg)">118</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px">
+          <s style="width:11px;height:11px;border-radius:2px;background:rgba(255,255,255,.015);
+            border:1px dashed rgba(154,154,149,.42);display:block"></s>
+          <span style="font-size:11.5px;flex:1;color:var(--muted)">sin indexar en ningún sitio</span>
+          <span class="mono" style="font-size:11px;color:var(--muted)">98</span>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;border:1px solid var(--border);border-radius:9px;padding:11px 12px">
+        <div class="k">Quién publicó lo azul</div>
+        <div style="margin-top:9px;display:flex;flex-direction:column;gap:7px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:18px;height:18px;border-radius:50%;background:#2b2f35;display:grid;
+              place-items:center;font-size:8.5px">M</span>
+            <span style="font-size:11px;flex:1">marta / lumi-costa</span>
+            <span class="mono" style="font-size:10px;color:var(--subtle)">81</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:18px;height:18px;border-radius:50%;background:#2b2f35;display:grid;
+              place-items:center;font-size:8.5px">J</span>
+            <span style="font-size:11px;flex:1">jlorenzo / galicia-oeste</span>
+            <span class="mono" style="font-size:10px;color:var(--subtle)">37</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tag" style="margin-top:20px">Lo que costaría</div>
+      <div style="margin-top:10px;border:1px solid var(--border);border-radius:9px;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:1px solid var(--border)">
+          <svg class="i" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--draw-fg)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4 18.5h16"/></svg>
+          <span style="font-size:11px;flex:1;color:var(--muted)">descargar 118 teselas</span>
+          <span class="mono" style="font-size:10.5px">2.1 GB</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:1px solid var(--border)">
+          <svg class="i" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.4"/></svg>
+          <span style="font-size:11px;flex:1;color:var(--muted)">indexar 98 teselas</span>
+          <span class="mono" style="font-size:10.5px">~63 000 img</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;padding:9px 12px">
+          <svg class="i" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <span style="font-size:11px;flex:1;color:var(--muted)">tiempo de GPU</span>
+          <span class="mono" style="font-size:10.5px">~4 h 10 min</span>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:flex-start;gap:7px;margin-top:11px">
+        <svg class="i" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--subtle)" stroke-width="1.7" style="margin-top:1px;flex-shrink:0"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5" stroke-linecap="round"/><circle cx="12" cy="7.5" r=".6" fill="currentColor" stroke="none"/></svg>
+        <span style="font-size:10.5px;color:var(--subtle);line-height:1.55">
+          Las 214 teselas que ya existen no se vuelven a descargar del proveedor ni se vuelven a embeber.</span>
+      </div>
+
+      <div style="flex:1"></div>
+      <span class="btn pri" style="text-align:center">Planificar el indexado</span>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════════ 2. YA CUBIERTO ENTERO ══════════════ -->
+<section class="shot">
+  <div class="cap"><b>2 · El área ya está indexada entera</b>
+    <span>no hay botón de indexar, y no está apagado por prudencia: es que literalmente no hay trabajo que hacer. El candado ámbar es el mismo icono grande de estado del resto de la app. La salida es instalar lo que ya existe.</span></div>
+  <div class="frame">
+    <div class="map" style="filter:blur(1.5px) brightness(.75)">
+      <svg viewBox="0 0 1280 800" preserveAspectRatio="none">
+        <g class="grid"><line x1="0" y1="240" x2="1280" y2="220"/><line x1="0" y1="500" x2="1280" y2="480"/>
+        <line x1="400" y1="0" x2="370" y2="800"/><line x1="880" y1="0" x2="860" y2="800"/></g>
+        <path class="road big" d="M-20 430 C 320 380, 700 480, 1300 400"/>
+      </svg>
+    </div>
+    <div style="position:absolute;inset:0;background:rgba(5,7,10,.55);backdrop-filter:blur(3px);z-index:10"></div>
+
+    <div class="glass" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+      width:552px;z-index:20;padding:22px 24px">
+      <div style="display:flex;justify-content:center;position:relative;margin-bottom:4px">
+        <span style="position:absolute;width:52px;height:52px;border-radius:50%;background:var(--warning);
+          filter:blur(18px);opacity:.14;top:-9px"></span>
+        <svg class="i" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="position:relative">
+          <rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      </div>
+
+      <div style="text-align:center;margin-top:12px">
+        <div style="font-size:14px">Este territorio ya está indexado</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:5px;line-height:1.6">
+          Las 84 teselas de tu selección existen ya, entre tus índices y el catálogo.<br>
+          Reindexarlas gastaría cuota del proveedor y GPU para llegar al mismo sitio.</div>
+      </div>
+
+      <div style="margin-top:18px;border:1px solid var(--border);border-radius:9px;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:11px;padding:12px 14px;border-bottom:1px solid var(--border)">
+          <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          <span style="font-size:11.5px;flex:1">Madrid centro <span style="color:var(--subtle)">· tuyo, instalado</span></span>
+          <span class="mono" style="font-size:10.5px;color:var(--subtle)">51 teselas</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:11px;padding:12px 14px;border-bottom:1px solid var(--border)">
+          <span style="width:19px;height:19px;border-radius:50%;background:#2b2f35;display:grid;
+            place-items:center;font-size:9px">M</span>
+          <span style="font-size:11.5px;flex:1">marta / lumi-centro <span style="color:var(--subtle)">· publicado</span></span>
+          <span class="mono" style="font-size:10.5px;color:var(--subtle)">26 teselas · 780 MB</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:11px;padding:12px 14px">
+          <span style="width:19px;height:19px;border-radius:50%;background:#2b2f35;display:grid;
+            place-items:center;font-size:9px">J</span>
+          <span style="font-size:11.5px;flex:1">jlorenzo / retiro <span style="color:var(--subtle)">· publicado</span></span>
+          <span class="mono" style="font-size:10.5px;color:var(--subtle)">7 teselas · 190 MB</span>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:flex-start;gap:7px;margin-top:13px">
+        <svg class="i" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--subtle)" stroke-width="1.7" style="margin-top:1px;flex-shrink:0"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5" stroke-linecap="round"/><circle cx="12" cy="7.5" r=".6" fill="currentColor" stroke="none"/></svg>
+        <span style="font-size:10.5px;color:var(--subtle);line-height:1.55">
+          Si crees que el material existente está desfasado, amplía la selección o pide una recaptura desde el
+          detalle de la tesela. Lo que no hay es un botón de rehacerlo porque sí.</span>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px">
+        <span class="btn gho">Ajustar el área</span>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="mono" style="font-size:9.5px;color:var(--subtle)">970 MB de descarga</span>
+          <span class="btn pri">Instalar lo que existe</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 3. EL PLAN ══════════════ -->
+<section class="shot">
+  <div class="cap"><b>3 · El plan, antes de gastar nada</b>
+    <span>tres grupos, y el orden importa: primero se adjunta lo que ya existe, después se indexa lo nuevo. Si el trabajo se interrumpe a la mitad, lo heredado ya está dentro y lo que falta sigue siendo exactamente lo punteado.</span></div>
+  <div class="frame">
+    <div class="map" style="filter:blur(1.5px) brightness(.75)">
+      <svg viewBox="0 0 1280 800" preserveAspectRatio="none">
+        <g class="grid"><line x1="0" y1="240" x2="1280" y2="220"/><line x1="0" y1="500" x2="1280" y2="480"/>
+        <line x1="400" y1="0" x2="370" y2="800"/><line x1="880" y1="0" x2="860" y2="800"/></g>
+        <path class="road big" d="M-20 430 C 320 380, 700 480, 1300 400"/>
+      </svg>
+    </div>
+    <div style="position:absolute;inset:0;background:rgba(5,7,10,.55);backdrop-filter:blur(3px);z-index:10"></div>
+
+    <div class="glass" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+      width:584px;z-index:20;padding:20px 22px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:14px">✦</span>
+        <span style="font-size:14px;font-weight:500">Indexar «Costa da Morte»</span>
+        <div style="flex:1"></div>
+        <span class="mono" style="font-size:10px;color:var(--subtle)">312 teselas z14 · 41.2 km²</span>
+      </div>
+
+      <!-- grupo 1 -->
+      <div style="margin-top:16px;border:1px solid var(--border);border-radius:10px;padding:13px 15px">
+        <div style="display:flex;align-items:center;gap:9px">
+          <span style="width:20px;height:20px;border-radius:50%;background:var(--fg);color:#000;
+            font-size:10px;display:grid;place-items:center">1</span>
+          <span style="font-size:12.5px;flex:1">Se adjunta lo que ya tienes</span>
+          <span class="mono" style="font-size:11px">96 teselas</span>
+        </div>
+        <div class="mono" style="font-size:10px;color:var(--subtle);margin-top:7px;padding-left:29px">
+          desde «Madrid centro» · sin descarga, sin GPU, se referencian los mismos fragmentos</div>
+      </div>
+
+      <!-- grupo 2 -->
+      <div style="margin-top:8px;border:1px solid rgba(133,183,235,.28);border-radius:10px;padding:13px 15px;
+        background:rgba(55,138,221,.05)">
+        <div style="display:flex;align-items:center;gap:9px">
+          <span style="width:20px;height:20px;border-radius:50%;border:1px solid var(--draw-fg);
+            color:var(--draw-fg);font-size:10px;display:grid;place-items:center">2</span>
+          <span style="font-size:12.5px;flex:1;color:var(--draw-fg)">Se descarga del catálogo</span>
+          <span class="mono" style="font-size:11px;color:var(--draw-fg)">118 teselas · 2.1 GB</span>
+        </div>
+        <div style="margin-top:10px;padding-left:29px;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:18px;height:18px;border-radius:50%;background:#2b2f35;display:grid;
+              place-items:center;font-size:8.5px">M</span>
+            <span style="font-size:11px;flex:1">marta / lumi-costa</span>
+            <span class="chip">CC BY-SA 4.0</span>
+            <span class="mono" style="font-size:10px;color:var(--subtle);width:64px;text-align:right">81 · 1.4 GB</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:18px;height:18px;border-radius:50%;background:#2b2f35;display:grid;
+              place-items:center;font-size:8.5px">J</span>
+            <span style="font-size:11px;flex:1">jlorenzo / galicia-oeste</span>
+            <span class="chip">CC BY-SA 4.0</span>
+            <span class="mono" style="font-size:10px;color:var(--subtle);width:64px;text-align:right">37 · 0.7 GB</span>
+          </div>
+        </div>
+        <div style="margin-top:10px;padding-left:29px;font-size:10.5px;color:var(--muted);line-height:1.55">
+          Su atribución viaja con las teselas y aparecerá en tu índice. No se puede quitar.</div>
+      </div>
+
+      <!-- grupo 3 -->
+      <div style="margin-top:8px;border:1px solid var(--border);border-radius:10px;padding:13px 15px">
+        <div style="display:flex;align-items:center;gap:9px">
+          <span style="width:20px;height:20px;border-radius:50%;border:1px dashed #4a4e54;
+            color:var(--muted);font-size:10px;display:grid;place-items:center">3</span>
+          <span style="font-size:12.5px;flex:1">Se indexa nuevo</span>
+          <span class="mono" style="font-size:11px">98 teselas</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;margin-top:11px;margin-left:29px;
+          background:var(--border);border:1px solid var(--border);border-radius:9px;overflow:hidden">
+          <div style="background:var(--surface);padding:9px 11px">
+            <div class="k">Imágenes</div><div class="v mono">~63 000</div></div>
+          <div style="background:var(--surface);padding:9px 11px">
+            <div class="k">GPU</div><div class="v mono">~4 h 10 min</div></div>
+          <div style="background:var(--surface);padding:9px 11px">
+            <div class="k">Peticiones</div><div class="v mono">~15 800</div></div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px;border:1px solid var(--border);border-radius:8px;background:#0b0d0f;padding:11px 13px">
+        <div class="logline">
+          Al terminar, «Costa da Morte» será <b>69 % trabajo heredado</b> y <b>31 % indexado aquí</b>.<br>
+          <em>Eso queda escrito en el manifiesto y se enseña en el catálogo.</em>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:17px">
+        <span class="btn gho">Volver al mapa</span>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="mono" style="font-size:9.5px;color:var(--subtle)">puedes pausarlo y cerrar</span>
+          <span class="btn pri">Empezar</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 4. LAS DOS PROCEDENCIAS ══════════════ -->
+<section class="shot">
+  <div class="cap"><b>4 · Las dos procedencias, en el catálogo</b>
+    <span>la de las imágenes dice de dónde salió el píxel; la del trabajo dice quién pagó por indexarlo. Son preguntas distintas y ahora hay dos tablas. Un índice que es 69 % trabajo ajeno lo declara, y la atribución de quien lo hizo viaja con las teselas y no se puede quitar.</span></div>
+  <div class="frame">
+    <nav class="rail">
+      <div class="ri" style="color:var(--fg);margin-bottom:6px">
+        <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/></svg></div>
+      <div class="ri on"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/><path d="M3 12l9 4.5 9-4.5"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3 5.5v15L9 18l6 3 6-2.5v-15L15 6z"/><path d="M9 3v15M15 6v15"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4 18.5h16"/></svg></div>
+      <div class="sp"></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8"/></svg></div>
+    </nav>
+
+    <div class="top">
+      <div class="ri" style="width:22px;height:22px;border-radius:6px;color:var(--subtle)">
+        <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></div>
+      <div class="crumb"><span>Índices</span><span class="sep">/</span><b>Costa da Morte</b></div>
+      <div style="flex:1"></div>
+      <span class="chip on">sellado</span>
+      <span class="mono" style="font-size:10px;color:var(--subtle)">312 teselas · 6.4 GB</span>
+    </div>
+
+    <div style="position:absolute;inset:38px 0 0 44px;padding:22px 26px;overflow:hidden">
+      <div style="display:flex;gap:26px">
+
+        <!-- imágenes -->
+        <div style="flex:1">
+          <div class="tag">Procedencia de las imágenes</div>
+          <div style="font-size:10.5px;color:var(--subtle);margin-top:6px;line-height:1.55">
+            de dónde salió el píxel</div>
+          <div style="display:flex;height:5px;border-radius:3px;overflow:hidden;background:var(--elevated);margin-top:12px">
+            <i style="display:block;height:100%;width:71%;background:var(--fg)"></i>
+            <i style="display:block;height:100%;width:20%;background:var(--muted)"></i>
+            <i style="display:block;height:100%;width:9%;background:var(--subtle)"></i>
+          </div>
+          <div style="margin-top:14px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+            <div style="display:grid;grid-template-columns:1fr 78px 78px;background:var(--surface);padding:8px 13px;border-bottom:1px solid var(--border)">
+              <span class="k">Tipo</span><span class="k" style="text-align:right">Imágenes</span><span class="k" style="text-align:right">Territorio</span></div>
+            <div style="display:grid;grid-template-columns:1fr 78px 78px;padding:10px 13px;border-bottom:1px solid var(--border);align-items:center">
+              <span style="font-size:11.5px;display:flex;align-items:center;gap:7px"><s style="width:7px;height:7px;border-radius:2px;background:var(--fg);display:block"></s>calle</span>
+              <span class="mono" style="font-size:11px;text-align:right">71 %</span><span class="mono" style="font-size:11px;text-align:right">88 %</span></div>
+            <div style="display:grid;grid-template-columns:1fr 78px 78px;padding:10px 13px;border-bottom:1px solid var(--border);align-items:center">
+              <span style="font-size:11.5px;display:flex;align-items:center;gap:7px"><s style="width:7px;height:7px;border-radius:2px;background:var(--muted);display:block"></s>cenital</span>
+              <span class="mono" style="font-size:11px;text-align:right">20 %</span><span class="mono" style="font-size:11px;text-align:right">54 %</span></div>
+            <div style="display:grid;grid-template-columns:1fr 78px 78px;padding:10px 13px;align-items:center">
+              <span style="font-size:11.5px;display:flex;align-items:center;gap:7px"><s style="width:7px;height:7px;border-radius:2px;background:var(--subtle);display:block"></s>suelta</span>
+              <span class="mono" style="font-size:11px;text-align:right">9 %</span><span class="mono" style="font-size:11px;text-align:right">12 %</span></div>
+          </div>
+          <div class="mono" style="font-size:9.5px;color:var(--subtle);margin-top:9px">
+            territorio suma 154 % · dos orígenes pueden cubrir la misma tesela</div>
+        </div>
+
+        <!-- trabajo -->
+        <div style="flex:1">
+          <div class="tag">Procedencia del trabajo</div>
+          <div style="font-size:10.5px;color:var(--subtle);margin-top:6px;line-height:1.55">
+            quién pagó la descarga y la GPU</div>
+          <div style="display:flex;height:5px;border-radius:3px;overflow:hidden;background:var(--elevated);margin-top:12px">
+            <i style="display:block;height:100%;width:31%;background:var(--fg)"></i>
+            <i style="display:block;height:100%;width:38%;background:var(--draw)"></i>
+            <i style="display:block;height:100%;width:31%;background:#4a5058"></i>
+          </div>
+          <div style="margin-top:14px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+            <div style="display:grid;grid-template-columns:1fr 78px 78px;background:var(--surface);padding:8px 13px;border-bottom:1px solid var(--border)">
+              <span class="k">Origen</span><span class="k" style="text-align:right">Teselas</span><span class="k" style="text-align:right">Cuota</span></div>
+            <div style="display:grid;grid-template-columns:1fr 78px 78px;padding:10px 13px;border-bottom:1px solid var(--border);align-items:center">
+              <span style="font-size:11.5px;display:flex;align-items:center;gap:7px"><s style="width:7px;height:7px;border-radius:2px;background:var(--fg);display:block"></s>indexado aquí</span>
+              <span class="mono" style="font-size:11px;text-align:right">98</span><span class="mono" style="font-size:11px;text-align:right">31 %</span></div>
+            <div style="display:grid;grid-template-columns:1fr 78px 78px;padding:10px 13px;border-bottom:1px solid var(--border);align-items:center">
+              <span style="font-size:11.5px;display:flex;align-items:center;gap:7px;color:var(--draw-fg)"><s style="width:7px;height:7px;border-radius:2px;background:var(--draw);display:block"></s>marta / lumi-costa</span>
+              <span class="mono" style="font-size:11px;text-align:right;color:var(--draw-fg)">81</span><span class="mono" style="font-size:11px;text-align:right;color:var(--draw-fg)">26 %</span></div>
+            <div style="display:grid;grid-template-columns:1fr 78px 78px;padding:10px 13px;border-bottom:1px solid var(--border);align-items:center">
+              <span style="font-size:11.5px;display:flex;align-items:center;gap:7px;color:var(--draw-fg)"><s style="width:7px;height:7px;border-radius:2px;background:var(--draw);display:block"></s>jlorenzo / galicia-oeste</span>
+              <span class="mono" style="font-size:11px;text-align:right;color:var(--draw-fg)">37</span><span class="mono" style="font-size:11px;text-align:right;color:var(--draw-fg)">12 %</span></div>
+            <div style="display:grid;grid-template-columns:1fr 78px 78px;padding:10px 13px;align-items:center">
+              <span style="font-size:11.5px;display:flex;align-items:center;gap:7px;color:var(--muted)"><s style="width:7px;height:7px;border-radius:2px;background:#4a5058;display:block"></s>de «Madrid centro»</span>
+              <span class="mono" style="font-size:11px;text-align:right;color:var(--muted)">96</span><span class="mono" style="font-size:11px;text-align:right;color:var(--muted)">31 %</span></div>
+          </div>
+          <div class="mono" style="font-size:9.5px;color:var(--subtle);margin-top:9px">
+            suma 100 % · una tesela la indexó exactamente uno</div>
+        </div>
+      </div>
+
+      <!-- atribución -->
+      <div style="margin-top:24px;border:1px solid var(--border);border-radius:10px;padding:14px 16px">
+        <div style="display:flex;align-items:center;gap:9px">
+          <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 20 7v5.5c0 4.6-3.2 7-8 8.5-4.8-1.5-8-3.9-8-8.5V7z"/><path d="M9.5 12.2 11.4 14l3.4-3.6"/></svg>
+          <span style="font-size:12.5px">Atribución obligatoria</span>
+          <div style="flex:1"></div>
+          <span class="chip">viaja dentro del paquete</span>
+        </div>
+        <div class="mono" style="font-size:10.5px;color:var(--muted);margin-top:11px;line-height:1.85">
+          Este índice contiene 118 teselas indexadas por terceros y publicadas bajo CC BY-SA 4.0.<br>
+          &nbsp;&nbsp;· marta &lt;github.com/marta/lumi-costa&gt; — 81 teselas<br>
+          &nbsp;&nbsp;· jlorenzo &lt;github.com/jlorenzo/galicia-oeste&gt; — 37 teselas
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:7px;margin-top:11px;padding-top:11px;border-top:1px solid var(--border)">
+          <svg class="i" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--subtle)" stroke-width="1.7" style="margin-top:1px;flex-shrink:0"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5" stroke-linecap="round"/><circle cx="12" cy="7.5" r=".6" fill="currentColor" stroke="none"/></svg>
+          <span style="font-size:10.5px;color:var(--subtle);line-height:1.55">
+            El fragmento heredado conserva su hash original, así que su autoría es comprobable y no una
+            declaración de buena fe. Quitar la atribución rompería SHA256SUMS.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

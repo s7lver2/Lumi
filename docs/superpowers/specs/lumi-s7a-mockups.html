@@ -1,0 +1,818 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Lumi Indexer · subsistema 7a</title>
+<style>
+/* Tokens copiados de tailwind.config.ts. Ni un color nuevo. */
+:root{
+  --bg:#0e0f11; --surface:#15171a; --panel:#1a1b1e; --elevated:#202226;
+  --border:#26282c; --muted:#9a9a95; --subtle:#6a6c70; --fg:#e8e8e6;
+  --accent:#f2f3f5; --warning:#ef9f27; --warning-fg:#efb968;
+  --danger:#a33; --danger-fg:#e88f8f; --draw:#378add; --draw-fg:#85b7eb;
+  --space:#05070a;
+  --expo:cubic-bezier(.16,1,.3,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#08090a;color:var(--fg);font-family:Inter,system-ui,'Segoe UI',sans-serif;
+  -webkit-font-smoothing:antialiased;padding:34px 26px 80px}
+.mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+
+h1{font-size:17px;font-weight:500;letter-spacing:-.01em}
+.lede{color:var(--muted);font-size:12px;margin-top:6px;max-width:760px;line-height:1.65}
+.tag{font-size:8.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--subtle)}
+.k{font-size:8px;letter-spacing:.11em;text-transform:uppercase;color:var(--subtle)}
+.v{font-size:11.5px;color:var(--fg);margin-top:3px}
+.v.dim{color:var(--subtle)}
+
+.shot{margin-top:38px}
+.shot > .cap{display:flex;align-items:baseline;gap:10px;margin-bottom:9px}
+.shot > .cap b{font-size:12.5px;font-weight:500}
+.shot > .cap span{font-size:11px;color:var(--subtle);max-width:820px;line-height:1.55}
+.frame{width:1280px;height:800px;background:var(--bg);border:1px solid #202226;
+  border-radius:10px;overflow:hidden;position:relative;
+  box-shadow:0 24px 60px rgba(0,0,0,.55);transform-origin:top left}
+@media (max-width:1360px){.frame{transform:scale(.78)}.shot{height:672px}}
+
+.glass{background:rgba(16,19,25,.66);border:1px solid rgba(255,255,255,.13);
+  border-radius:12px;box-shadow:0 18px 40px rgba(0,0,0,.4);backdrop-filter:blur(18px)}
+.btn{border-radius:8px;font-size:11.5px;padding:8px 16px;border:0;cursor:default;display:inline-block}
+.btn.pri{background:var(--accent);color:#000;font-weight:500}
+.btn.gho{background:transparent;color:var(--fg);border:1px solid rgba(255,255,255,.15)}
+.btn.dis{opacity:.4}
+.chip{border:1px solid var(--border);border-radius:5px;padding:1px 6px;
+  font-size:8.5px;color:var(--subtle);letter-spacing:.04em;white-space:nowrap}
+.chip.on{border-color:rgba(255,255,255,.28);color:var(--fg)}
+.chip.amber{border-color:rgba(239,159,39,.4);color:var(--warning-fg)}
+.chip.blue{border-color:rgba(133,183,235,.4);color:var(--draw-fg)}
+
+/* carril de 44 px, idéntico al del subsistema 6 */
+.rail{position:absolute;inset:0 auto 0 0;width:44px;z-index:30;display:flex;
+  flex-direction:column;align-items:center;gap:3px;padding:10px 0;
+  background:rgba(13,15,17,.9);border-right:1px solid var(--border);backdrop-filter:blur(8px)}
+.rail .ri{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;
+  color:var(--subtle);position:relative}
+.rail .ri.on{background:rgba(255,255,255,.07);color:var(--fg)}
+.rail .ri.on::before{content:"";position:absolute;left:-10px;top:7px;bottom:7px;width:2px;
+  border-radius:0 2px 2px 0;background:var(--fg)}
+.rail .sp{flex:1}
+
+.top{position:absolute;top:0;left:44px;right:0;height:38px;z-index:25;display:flex;
+  align-items:center;gap:9px;padding:0 12px;background:rgba(13,15,17,.78);
+  border-bottom:1px solid var(--border);backdrop-filter:blur(10px)}
+.crumb{font-size:11.5px;color:var(--subtle);display:flex;align-items:center;gap:7px}
+.crumb b{font-weight:400;color:var(--fg)}
+.crumb .sep{color:#3a3e44}
+
+/* barra de procedencias: rampa de neutros + ámbar para lo desconocido */
+.prov{display:flex;height:5px;border-radius:3px;overflow:hidden;background:var(--elevated)}
+.prov i{display:block;height:100%}
+.p-calle{background:var(--fg)}
+.p-cenital{background:var(--muted)}
+.p-suelta{background:var(--subtle)}
+.p-desc{background:var(--warning)}
+.leg{display:flex;flex-wrap:wrap;gap:12px;margin-top:9px}
+.leg > div{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--muted)}
+.leg s{width:7px;height:7px;border-radius:2px;display:block;text-decoration:none}
+.leg b{font-weight:400;color:var(--fg);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px}
+
+svg.i{display:block}
+
+/* fondo de planeta, reducido a lo esencial para una maqueta estática */
+.space{position:absolute;inset:0;background:var(--space);overflow:hidden}
+.space .star{position:absolute;width:2px;height:2px;border-radius:50%;background:#c9d2dd;opacity:.5}
+.space .planet{position:absolute;right:-160px;bottom:-208px;width:520px;height:520px;border-radius:50%;
+  background:radial-gradient(38% 34% at 34% 28%, #2a3543 0%, transparent 60%),
+             radial-gradient(46% 40% at 72% 64%, #222c38 0%, transparent 62%),
+             radial-gradient(100% 100% at 50% 50%, #18202b 0%, #0d131b 72%, #080d13 100%);
+  box-shadow:inset -46px -30px 90px rgba(0,0,0,.72)}
+
+.logline{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;line-height:1.85;color:var(--muted)}
+.logline em{font-style:normal;color:var(--subtle)}
+.logline b{font-weight:400;color:var(--fg)}
+</style>
+</head>
+<body>
+
+<h1>Lumi Indexer · subsistema 7a</h1>
+<p class="lede">Seis pantallas. Aplicación Tauri independiente, un solo operador, sin cuentas ni servidor.
+Mismos tokens que <span class="mono">client/</span>, mismo carril de 44 px, mismos iconos a mano. Sin mapa:
+dibujar territorio es el 7b. La barra de procedencias usa la rampa de neutros para los tres tipos reales y
+<span style="color:var(--warning-fg)">ámbar</span> para lo desconocido, porque no es una categoría más —
+es una advertencia sobre lo que el índice no sabe de sí mismo.</p>
+
+<!-- ══════════════ 1. APROVISIONAMIENTO ══════════════ -->
+<section class="shot">
+  <div class="cap"><b>1 · Primer arranque</b>
+    <span>misma composición que el wizard del subsistema 1: tarjeta de cristal de 552 px sobre el fondo de planeta, brandline ✦, stepper de burbujas. Instala lo que hace falta y enseña el log crudo, porque son gigabytes y minutos.</span></div>
+  <div class="frame">
+    <div class="space">
+      <span class="star" style="left:12%;top:18%"></span><span class="star" style="left:27%;top:64%"></span>
+      <span class="star" style="left:41%;top:11%"></span><span class="star" style="left:58%;top:37%"></span>
+      <span class="star" style="left:69%;top:73%"></span><span class="star" style="left:81%;top:22%"></span>
+      <span class="star" style="left:8%;top:47%"></span><span class="star" style="left:35%;top:86%"></span>
+      <div class="planet"></div>
+    </div>
+
+    <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:552px;z-index:10">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:20px">
+        <span style="font-size:15px">✦</span>
+        <span style="font-size:17px;font-weight:500;letter-spacing:-.01em">Lumi Indexer</span>
+        <span class="mono" style="font-size:9.5px;color:var(--subtle);margin-left:2px">v0.1.0</span>
+      </div>
+
+      <!-- stepper de burbujas -->
+      <div style="display:flex;align-items:center;gap:0;margin-bottom:18px">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:104px">
+          <span style="width:19px;height:19px;border-radius:50%;background:var(--fg);color:#000;
+            font-size:9.5px;display:grid;place-items:center">
+            <svg class="i" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
+          <span style="font-size:10.5px;color:var(--fg)">Carpeta</span>
+        </div>
+        <span style="flex:1;height:1px;background:var(--border);margin-bottom:20px"></span>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:104px">
+          <span style="width:19px;height:19px;border-radius:50%;border:1px solid var(--draw-fg);
+            color:var(--draw-fg);font-size:9.5px;display:grid;place-items:center">2</span>
+          <span style="font-size:10.5px;color:var(--fg)">Servicios</span>
+        </div>
+        <span style="flex:1;height:1px;background:var(--border);margin-bottom:20px"></span>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:104px">
+          <span style="width:19px;height:19px;border-radius:50%;border:1px solid #3a3e44;
+            color:var(--subtle);font-size:9.5px;display:grid;place-items:center">3</span>
+          <span style="font-size:10.5px;color:var(--subtle)">Runtime</span>
+        </div>
+        <span style="flex:1;height:1px;background:var(--border);margin-bottom:20px"></span>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:104px">
+          <span style="width:19px;height:19px;border-radius:50%;border:1px solid #3a3e44;
+            color:var(--subtle);font-size:9.5px;display:grid;place-items:center">4</span>
+          <span style="font-size:10.5px;color:var(--subtle)">Modelos</span>
+        </div>
+      </div>
+
+      <div class="glass" style="padding:20px 22px">
+        <div style="font-size:14px">Levantando los servicios locales</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:5px;line-height:1.6">
+          Redis para la cola, Qdrant para los vectores. Los dos escuchan solo en
+          <span class="mono" style="color:var(--fg)">127.0.0.1</span>, nunca en la red.</div>
+
+        <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;gap:9px">
+            <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            <span style="font-size:12px;flex:1">Qdrant</span>
+            <span class="mono" style="font-size:10px;color:var(--subtle)">127.0.0.1:6333 · v1.12.4</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px">
+            <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--draw-fg)" stroke-width="1.8" stroke-linecap="round"><path d="M12 3a9 9 0 1 1-6.4 2.6"/><path d="M5 3v3.5h3.5"/></svg>
+            <span style="font-size:12px;flex:1;color:var(--fg)">Redis</span>
+            <span class="mono" style="font-size:10px;color:var(--draw-fg)">arrancando</span>
+          </div>
+        </div>
+
+        <div style="margin-top:15px;border:1px solid var(--border);border-radius:8px;
+          background:#0b0d0f;padding:10px 12px;max-height:132px;overflow:hidden">
+          <div class="logline">
+            <em>18:04:11</em> qdrant: <b>storage abierto</b> en ~/.lumi-indexer/qdrant<br>
+            <em>18:04:11</em> qdrant: escuchando en 127.0.0.1:6333<br>
+            <em>18:04:12</em> redis: cargando redis.conf generado<br>
+            <em>18:04:12</em> redis: bind 127.0.0.1 · protected-mode yes<br>
+            <em>18:04:12</em> redis: <b>appendonly yes</b>, dir ~/.lumi-indexer/redis<br>
+            <em>18:04:13</em> redis: esperando a que acepte conexiones…
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:flex-start;gap:7px;margin-top:13px">
+          <svg class="i" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--warning-fg)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-top:1px;flex-shrink:0"><path d="M12 3.2 22.2 20.8H1.8z"/><path d="M12 10v4.2"/><circle cx="12" cy="17.6" r=".6" fill="currentColor" stroke="none"/></svg>
+          <span style="font-size:10.5px;color:var(--warning-fg);line-height:1.55">
+            Redis no publica binarios oficiales para Windows. Este equipo es
+            <span class="mono">Linux x86_64</span>, así que corre nativo. En Windows, el Indexer se
+            instala dentro de WSL.</span>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:17px">
+          <span class="mono" style="font-size:9.5px;color:var(--subtle)">puedes cerrar: se retoma solo</span>
+          <div style="display:flex;gap:8px">
+            <span class="btn gho">Ver log completo</span>
+            <span class="btn pri dis">Continuar</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 2. CATÁLOGO DE ÍNDICES ══════════════ -->
+<section class="shot">
+  <div class="cap"><b>2 · Los índices de este equipo</b>
+    <span>la pantalla de inicio. Cada índice enseña su barra de procedencias en la propia fila, porque «de qué está hecho» es tan identificativo como su nombre. El de arriba tiene 31 % de origen desconocido y lo dice sin que haya que abrirlo.</span></div>
+  <div class="frame">
+    <nav class="rail">
+      <div class="ri" style="color:var(--fg);margin-bottom:6px">
+        <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/></svg></div>
+      <div class="ri on" title="Índices">
+        <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/><path d="M3 12l9 4.5 9-4.5"/><path d="M3 17l9 4.5 9-4.5"/></svg></div>
+      <div class="ri" title="Ingesta">
+        <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4 18.5h16"/></svg></div>
+      <div class="ri" title="Modelos">
+        <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/><path d="M11 7.5h4a2 2 0 0 1 2 2v3.5"/></svg></div>
+      <div class="sp"></div>
+      <div class="ri" title="Ajustes">
+        <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8M18.5 18.5l-1.8-1.8M7.3 7.3 5.5 5.5"/></svg></div>
+    </nav>
+
+    <div class="top">
+      <div class="crumb"><b>Índices</b></div>
+      <div style="flex:1"></div>
+      <span class="mono" style="font-size:10px;color:var(--subtle)">3 índices · 41.2 GB en disco</span>
+      <span style="width:1px;height:14px;background:var(--border)"></span>
+      <span class="mono" style="font-size:10px;color:var(--subtle)">redis ok · qdrant ok</span>
+    </div>
+
+    <div style="position:absolute;inset:38px 0 0 44px;padding:22px 28px;overflow:hidden">
+      <div style="display:flex;align-items:baseline;justify-content:space-between">
+        <div>
+          <div style="font-size:20px;font-weight:500;letter-spacing:-.012em">Índices de este equipo</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:5px">
+            un paquete sellado se copia a un disco y funciona en otra máquina</div>
+        </div>
+        <span class="btn pri">+ Nuevo índice</span>
+      </div>
+
+      <!-- fila 1: sellado, con desconocida alta -->
+      <div style="margin-top:22px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.035);
+        border-radius:12px;padding:15px 17px;position:relative">
+        <span style="position:absolute;left:0;top:15px;bottom:15px;width:2px;background:var(--fg);border-radius:0 2px 2px 0"></span>
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <span style="font-size:14px">Madrid centro</span>
+          <span class="chip on">sellado</span>
+          <span class="chip amber">31 % de origen desconocido</span>
+          <div style="flex:1"></div>
+          <span class="mono" style="font-size:10px;color:var(--subtle)">madrid-centro-v1.lumidx · 18.4 GB</span>
+        </div>
+        <div style="display:flex;gap:26px;margin-top:12px">
+          <div><div class="k">Imágenes</div><div class="v mono">214 830</div></div>
+          <div><div class="k">Vectores</div><div class="v mono">214 830 <span style="color:var(--subtle)">× 2 modelos</span></div></div>
+          <div><div class="k">Teselas z14</div><div class="v mono">312</div></div>
+          <div><div class="k">Sellado</div><div class="v mono">4 ago 2026</div></div>
+        </div>
+        <div style="margin-top:14px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between">
+            <span class="k">Procedencia · por imágenes</span>
+            <span class="mono" style="font-size:9.5px;color:var(--subtle)">suma 100 %</span>
+          </div>
+          <div class="prov" style="margin-top:6px">
+            <i class="p-calle" style="width:52%"></i><i class="p-cenital" style="width:11%"></i>
+            <i class="p-suelta" style="width:6%"></i><i class="p-desc" style="width:31%"></i>
+          </div>
+          <div class="leg">
+            <div><s class="p-calle"></s>calle <b>52 %</b></div>
+            <div><s class="p-cenital"></s>cenital <b>11 %</b></div>
+            <div><s class="p-suelta"></s>suelta <b>6 %</b></div>
+            <div style="color:var(--warning-fg)"><s class="p-desc"></s>desconocida <b style="color:var(--warning-fg)">31 %</b></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- fila 2: en construcción -->
+      <div style="margin-top:10px;border:1px solid var(--border);border-radius:12px;padding:15px 17px">
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <span style="font-size:14px">Costa da Morte</span>
+          <span class="chip blue">indexando · 2 lotes en cola</span>
+          <div style="flex:1"></div>
+          <span class="mono" style="font-size:10px;color:var(--subtle)">sin sellar · 9.1 GB</span>
+        </div>
+        <div style="display:flex;gap:26px;margin-top:12px">
+          <div><div class="k">Imágenes</div><div class="v mono">88 410</div></div>
+          <div><div class="k">Sin vector</div><div class="v mono" style="color:var(--draw-fg)">12 907</div></div>
+          <div><div class="k">Teselas z14</div><div class="v mono">147</div></div>
+          <div><div class="k">Último lote</div><div class="v mono">hace 4 min</div></div>
+        </div>
+        <div style="margin-top:14px">
+          <span class="k">Procedencia · por imágenes</span>
+          <div class="prov" style="margin-top:6px">
+            <i class="p-calle" style="width:74%"></i><i class="p-suelta" style="width:26%"></i>
+          </div>
+          <div class="leg">
+            <div><s class="p-calle"></s>calle <b>74 %</b></div>
+            <div><s class="p-suelta"></s>suelta <b>26 %</b></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- fila 3: pequeño -->
+      <div style="margin-top:10px;border:1px solid var(--border);border-radius:12px;padding:15px 17px;opacity:.82">
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <span style="font-size:14px">Pruebas · carpeta del dron</span>
+          <span class="chip">sellado</span>
+          <div style="flex:1"></div>
+          <span class="mono" style="font-size:10px;color:var(--subtle)">dron-v1.lumidx · 640 MB</span>
+        </div>
+        <div style="display:flex;gap:26px;margin-top:12px">
+          <div><div class="k">Imágenes</div><div class="v mono">1 204</div></div>
+          <div><div class="k">Vectores</div><div class="v mono">1 204 <span style="color:var(--subtle)">× 1 modelo</span></div></div>
+          <div><div class="k">Teselas z14</div><div class="v mono">9</div></div>
+          <div><div class="k">Sellado</div><div class="v mono">2 ago 2026</div></div>
+        </div>
+        <div style="margin-top:14px">
+          <span class="k">Procedencia · por imágenes</span>
+          <div class="prov" style="margin-top:6px"><i class="p-cenital" style="width:100%"></i></div>
+          <div class="leg"><div><s class="p-cenital"></s>cenital <b>100 %</b></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 3. DETALLE DE UN ÍNDICE ══════════════ -->
+<section class="shot">
+  <div class="cap"><b>3 · Detalle · los dos porcentajes juntos</b>
+    <span>lo que ninguno de los dos números dice solo: 11 % de las imágenes son cenitales, pero cubren el 68 % del territorio. Eso significa que en dos tercios del área solo hay vista de pájaro, y ahí la herramienta va a ir peor. La columna de territorio suma más de 100 % y lo dice en vez de normalizar.</span></div>
+  <div class="frame">
+    <nav class="rail">
+      <div class="ri" style="color:var(--fg);margin-bottom:6px">
+        <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/></svg></div>
+      <div class="ri on"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/><path d="M3 12l9 4.5 9-4.5"/><path d="M3 17l9 4.5 9-4.5"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4 18.5h16"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/><path d="M11 7.5h4a2 2 0 0 1 2 2v3.5"/></svg></div>
+      <div class="sp"></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8"/></svg></div>
+    </nav>
+
+    <div class="top">
+      <div class="ri" style="width:22px;height:22px;border-radius:6px;color:var(--subtle)">
+        <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></div>
+      <div class="crumb"><span>Índices</span><span class="sep">/</span><b>Madrid centro</b></div>
+      <div style="flex:1"></div>
+      <span class="chip on">sellado</span>
+      <span class="mono" style="font-size:10px;color:var(--subtle)">214 830 imágenes · 18.4 GB</span>
+    </div>
+
+    <div style="position:absolute;inset:38px 0 0 44px;display:flex">
+      <!-- izquierda: procedencia -->
+      <div style="flex:1;padding:22px 24px;overflow:hidden">
+        <div class="tag">Procedencia</div>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:7px;line-height:1.6;max-width:520px">
+          Dos medidas, porque miden cosas distintas. Cuántas imágenes vienen de cada sitio, y qué parte del
+          territorio cubre cada uno.</div>
+
+        <!-- tabla de dos columnas -->
+        <div style="margin-top:18px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+          <div style="display:grid;grid-template-columns:150px 1fr 1fr;background:var(--surface);
+            padding:9px 14px;border-bottom:1px solid var(--border)">
+            <span class="k">Tipo</span><span class="k">Por imágenes</span><span class="k">Por territorio · z14</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:150px 1fr 1fr;align-items:center;padding:11px 14px;border-bottom:1px solid var(--border)">
+            <span style="font-size:12px;display:flex;align-items:center;gap:7px"><s class="p-calle" style="width:7px;height:7px;border-radius:2px;display:block"></s>calle</span>
+            <span style="display:flex;align-items:center;gap:9px">
+              <span style="flex:1;height:4px;border-radius:2px;background:var(--elevated);overflow:hidden;max-width:170px">
+                <span style="display:block;width:52%;height:100%" class="p-calle"></span></span>
+              <span class="mono" style="font-size:11px">52 %</span></span>
+            <span style="display:flex;align-items:center;gap:9px">
+              <span style="flex:1;height:4px;border-radius:2px;background:var(--elevated);overflow:hidden;max-width:170px">
+                <span style="display:block;width:41%;height:100%" class="p-calle"></span></span>
+              <span class="mono" style="font-size:11px">41 %</span></span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:150px 1fr 1fr;align-items:center;padding:11px 14px;border-bottom:1px solid var(--border)">
+            <span style="font-size:12px;display:flex;align-items:center;gap:7px"><s class="p-cenital" style="width:7px;height:7px;border-radius:2px;display:block"></s>cenital</span>
+            <span style="display:flex;align-items:center;gap:9px">
+              <span style="flex:1;height:4px;border-radius:2px;background:var(--elevated);overflow:hidden;max-width:170px">
+                <span style="display:block;width:11%;height:100%" class="p-cenital"></span></span>
+              <span class="mono" style="font-size:11px">11 %</span></span>
+            <span style="display:flex;align-items:center;gap:9px">
+              <span style="flex:1;height:4px;border-radius:2px;background:var(--elevated);overflow:hidden;max-width:170px">
+                <span style="display:block;width:68%;height:100%" class="p-cenital"></span></span>
+              <span class="mono" style="font-size:11px">68 %</span></span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:150px 1fr 1fr;align-items:center;padding:11px 14px;border-bottom:1px solid var(--border)">
+            <span style="font-size:12px;display:flex;align-items:center;gap:7px"><s class="p-suelta" style="width:7px;height:7px;border-radius:2px;display:block"></s>suelta</span>
+            <span style="display:flex;align-items:center;gap:9px">
+              <span style="flex:1;height:4px;border-radius:2px;background:var(--elevated);overflow:hidden;max-width:170px">
+                <span style="display:block;width:6%;height:100%" class="p-suelta"></span></span>
+              <span class="mono" style="font-size:11px">6 %</span></span>
+            <span style="display:flex;align-items:center;gap:9px">
+              <span style="flex:1;height:4px;border-radius:2px;background:var(--elevated);overflow:hidden;max-width:170px">
+                <span style="display:block;width:9%;height:100%" class="p-suelta"></span></span>
+              <span class="mono" style="font-size:11px">9 %</span></span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:150px 1fr 1fr;align-items:center;padding:11px 14px;
+            background:rgba(239,159,39,.05)">
+            <span style="font-size:12px;display:flex;align-items:center;gap:7px;color:var(--warning-fg)"><s class="p-desc" style="width:7px;height:7px;border-radius:2px;display:block"></s>desconocida</span>
+            <span style="display:flex;align-items:center;gap:9px">
+              <span style="flex:1;height:4px;border-radius:2px;background:var(--elevated);overflow:hidden;max-width:170px">
+                <span style="display:block;width:31%;height:100%" class="p-desc"></span></span>
+              <span class="mono" style="font-size:11px;color:var(--warning-fg)">31 %</span></span>
+            <span style="display:flex;align-items:center;gap:9px">
+              <span style="flex:1;height:4px;border-radius:2px;background:var(--elevated);overflow:hidden;max-width:170px">
+                <span style="display:block;width:24%;height:100%" class="p-desc"></span></span>
+              <span class="mono" style="font-size:11px;color:var(--warning-fg)">24 %</span></span>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:flex-start;gap:7px;margin-top:11px">
+          <svg class="i" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--subtle)" stroke-width="1.7" style="margin-top:1px;flex-shrink:0"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5" stroke-linecap="round"/><circle cx="12" cy="7.5" r=".6" fill="currentColor" stroke="none"/></svg>
+          <span style="font-size:10.5px;color:var(--subtle);line-height:1.55">
+            La columna de territorio suma <span class="mono" style="color:var(--muted)">142 %</span>:
+            dos orígenes pueden cubrir la misma tesela. No se normaliza porque normalizarla sería inventarse
+            una exclusividad que no existe.</span>
+        </div>
+
+        <div class="tag" style="margin-top:24px">Fuentes concretas</div>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;max-width:560px">
+          <div style="display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:9px;padding:8px 11px">
+            <span style="font-size:11.5px;flex:1">Mapillary</span>
+            <span class="chip">CC BY-SA 4.0</span>
+            <span class="mono" style="font-size:10px;color:var(--muted);width:78px;text-align:right">111 712</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:9px;padding:8px 11px">
+            <span style="font-size:11.5px;flex:1">carpeta: vuelo-dron-mayo</span>
+            <span class="chip">propia</span>
+            <span class="mono" style="font-size:10px;color:var(--muted);width:78px;text-align:right">23 631</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;border:1px solid rgba(239,159,39,.3);border-radius:9px;padding:8px 11px">
+            <span style="font-size:11.5px;flex:1;color:var(--warning-fg)">desconocida</span>
+            <span class="chip amber">del paquete legacy</span>
+            <span class="mono" style="font-size:10px;color:var(--warning-fg);width:78px;text-align:right">66 597</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- derecha: lotes -->
+      <aside style="width:326px;border-left:1px solid var(--border);background:var(--surface);
+        padding:18px 16px;display:flex;flex-direction:column">
+        <div class="tag">Lotes de ingesta</div>
+        <div style="font-size:10.5px;color:var(--subtle);margin-top:6px;line-height:1.55">
+          cada imagen apunta a su lote. Esto es la cadena de custodia, y no hace falta un campo aparte.</div>
+
+        <div style="margin-top:14px;display:flex;flex-direction:column;gap:7px">
+          <div style="border:1px solid var(--border);border-radius:9px;padding:10px 11px">
+            <div style="display:flex;align-items:baseline;gap:8px">
+              <span style="font-size:11.5px">Paquete legacy v1</span>
+              <div style="flex:1"></div>
+              <span class="mono" style="font-size:9.5px;color:var(--subtle)">28 jul</span>
+            </div>
+            <div class="mono" style="font-size:10px;color:var(--muted);margin-top:5px;line-height:1.6">
+              github.com/inigo/lumi-madrid<br>lumi-preview-v1.0 · 66 597 img</div>
+            <div style="display:flex;gap:5px;margin-top:7px">
+              <span class="chip amber">fuente desconocida</span>
+              <span class="chip">vectores importados</span>
+            </div>
+          </div>
+
+          <div style="border:1px solid var(--border);border-radius:9px;padding:10px 11px">
+            <div style="display:flex;align-items:baseline;gap:8px">
+              <span style="font-size:11.5px">Carpeta local</span>
+              <div style="flex:1"></div>
+              <span class="mono" style="font-size:9.5px;color:var(--subtle)">30 jul</span>
+            </div>
+            <div class="mono" style="font-size:10px;color:var(--muted);margin-top:5px;line-height:1.6">
+              /datos/vuelo-dron-mayo<br>cenital · 23 631 img</div>
+            <div style="display:flex;gap:5px;margin-top:7px">
+              <span class="chip">EXIF · GPS</span><span class="chip">embebido aquí</span>
+            </div>
+          </div>
+
+          <div style="border:1px solid var(--border);border-radius:9px;padding:10px 11px;opacity:.8">
+            <div style="display:flex;align-items:baseline;gap:8px">
+              <span style="font-size:11.5px">Paquete legacy v1</span>
+              <div style="flex:1"></div>
+              <span class="mono" style="font-size:9.5px;color:var(--subtle)">26 jul</span>
+            </div>
+            <div class="mono" style="font-size:10px;color:var(--muted);margin-top:5px;line-height:1.6">
+              github.com/marta/lumi-centro<br>lumi-2-v1.0 · 124 602 img</div>
+            <div style="display:flex;gap:5px;margin-top:7px">
+              <span class="chip">calle · declarada</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="flex:1"></div>
+        <div style="border-top:1px solid var(--border);padding-top:13px">
+          <div class="k">Integridad</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+            <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            <span class="mono" style="font-size:10px;color:var(--muted)">SHA256SUMS verificado</span>
+          </div>
+          <div class="mono" style="font-size:9.5px;color:var(--subtle);margin-top:6px;word-break:break-all;line-height:1.6">
+            3f9a1c7e…d20b4a86</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 4. IMPORTAR PAQUETE LEGACY ══════════════ -->
+<section class="shot">
+  <div class="cap"><b>4 · Importar un paquete legacy de la v1</b>
+    <span>la tubería de validación es visible, paso a paso, porque el material viene del repositorio de un desconocido. Y el hallazgo que cambió el diseño: el manifiesto de la v1 no lleva procedencia dentro, así que el Indexer no la adivina — la pide, y si no la sabes queda como desconocida y sale en los porcentajes.</span></div>
+  <div class="frame">
+    <div style="position:absolute;inset:0;background:var(--bg);opacity:.28;filter:blur(1px)"></div>
+    <div style="position:absolute;inset:0;background:rgba(5,7,10,.55);backdrop-filter:blur(3px);z-index:10"></div>
+
+    <div class="glass" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+      width:552px;z-index:20;padding:20px 22px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:14px">✦</span>
+        <span style="font-size:14px;font-weight:500">Importar a «Madrid centro»</span>
+        <div style="flex:1"></div>
+        <span class="chip">paquete cifrado de la v1</span>
+      </div>
+      <div class="mono" style="font-size:10px;color:var(--subtle);margin-top:7px;word-break:break-all">
+        github.com/inigo/lumi-madrid · release lumi-preview-v1.0 · bundle.zip.enc · 4.7 GB</div>
+
+      <!-- pasos de validación -->
+      <div style="margin-top:16px;border:1px solid var(--border);border-radius:9px;background:#0b0d0f;padding:12px 14px">
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <div style="display:flex;align-items:center;gap:9px">
+            <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            <span style="font-size:11.5px;flex:1">Tamaño declarado dentro de los topes</span>
+            <span class="mono" style="font-size:10px;color:var(--subtle)">4.7 GB / 32 GB · 214 830 ficheros</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px">
+            <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            <span style="font-size:11.5px;flex:1">Descifrado</span>
+            <span class="mono" style="font-size:10px;color:var(--subtle)">AES-256-GCM · authTag válido</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px">
+            <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            <span style="font-size:11.5px;flex:1">Manifiesto validado campo a campo</span>
+            <span class="mono" style="font-size:10px;color:var(--subtle)">versión 2 · models[] × 1</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px">
+            <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            <span style="font-size:11.5px;flex:1">Nombres sin rutas hacia arriba</span>
+            <span class="mono" style="font-size:10px;color:var(--subtle)">0 rechazados</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px">
+            <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--draw-fg)" stroke-width="1.8" stroke-linecap="round"><path d="M12 3a9 9 0 1 1-6.4 2.6"/><path d="M5 3v3.5h3.5"/></svg>
+            <span style="font-size:11.5px;flex:1;color:var(--fg)">Cada fichero decodifica como imagen</span>
+            <span class="mono" style="font-size:10px;color:var(--draw-fg)">148 903 / 214 830</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;opacity:.45">
+            <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            <span style="font-size:11.5px;flex:1">Copiar al índice e importar vectores</span>
+            <span class="mono" style="font-size:10px;color:var(--subtle)">en espera</span>
+          </div>
+        </div>
+        <div class="mono" style="font-size:9.5px;color:var(--subtle);margin-top:11px;padding-top:10px;
+          border-top:1px solid var(--border)">
+          todo en /tmp/lumidx-stage-8f2c · cualquier fallo lo borra entero, sin escribir nada</div>
+      </div>
+
+      <!-- procedencia a declarar -->
+      <div style="margin-top:15px;border:1px solid rgba(239,159,39,.3);border-radius:9px;
+        background:rgba(239,159,39,.05);padding:12px 14px">
+        <div style="display:flex;align-items:flex-start;gap:8px">
+          <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--warning-fg)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-top:1px;flex-shrink:0"><path d="M12 3.2 22.2 20.8H1.8z"/><path d="M12 10v4.2"/><circle cx="12" cy="17.6" r=".6" fill="currentColor" stroke="none"/></svg>
+          <div>
+            <div style="font-size:11.5px;color:var(--warning-fg)">Este paquete no dice de dónde salieron sus imágenes</div>
+            <div style="font-size:10.5px;color:var(--muted);margin-top:4px;line-height:1.55">
+              El manifiesto de la v1 lleva coordenadas y vectores, pero no proveedor ni atribución. Puedes
+              declararlo tú si lo sabes; quedará anotado como declarado por el operador, no leído del material.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <div style="flex:1">
+            <div class="k">Tipo</div>
+            <div style="display:flex;gap:5px;margin-top:6px">
+              <span style="border:1px solid rgba(255,255,255,.28);border-radius:7px;padding:5px 11px;font-size:11px">calle</span>
+              <span style="border:1px solid var(--border);border-radius:7px;padding:5px 11px;font-size:11px;color:var(--subtle)">cenital</span>
+              <span style="border:1px solid var(--border);border-radius:7px;padding:5px 11px;font-size:11px;color:var(--subtle)">suelta</span>
+            </div>
+          </div>
+          <div style="width:214px">
+            <div class="k">Fuente</div>
+            <div style="margin-top:6px;border:1px solid var(--border);border-radius:7px;padding:6px 10px;
+              background:#0d0f12;font-size:11px;color:var(--warning-fg);display:flex;align-items:center;gap:7px">
+              desconocida
+              <div style="flex:1"></div>
+              <svg class="i" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px">
+        <span class="mono" style="font-size:9.5px;color:var(--subtle)">los vectores vienen dentro · no se gasta GPU</span>
+        <div style="display:flex;gap:8px">
+          <span class="btn gho">Cancelar</span>
+          <span class="btn pri dis">Importar</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 5. INGESTA EN CURSO ══════════════ -->
+<section class="shot">
+  <div class="cap"><b>5 · Ingesta en curso</b>
+    <span>Redis es el timbre y el estado caliente; SQLite es la verdad. Si Redis se vacía se pierde la barra, no el trabajo. Las dos clases de fallo se ven separadas: «esta imagen no se puede embeber» es un resultado que se anota y se salta; que el proceso se muera es una avería que devuelve el lote a la cola.</span></div>
+  <div class="frame">
+    <nav class="rail">
+      <div class="ri" style="color:var(--fg);margin-bottom:6px">
+        <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/><path d="M3 12l9 4.5 9-4.5"/></svg></div>
+      <div class="ri on"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4 18.5h16"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></div>
+      <div class="sp"></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8"/></svg></div>
+    </nav>
+
+    <div class="top">
+      <div class="crumb"><span>Ingesta</span><span class="sep">/</span><b>Costa da Morte</b></div>
+      <div style="flex:1"></div>
+      <span class="chip blue">trabajando</span>
+      <span class="mono" style="font-size:10px;color:var(--subtle)">cerrar la ventana la manda a la bandeja</span>
+    </div>
+
+    <div style="position:absolute;inset:38px 0 0 44px;display:flex">
+      <div style="flex:1;padding:22px 24px;overflow:hidden">
+        <!-- lote activo -->
+        <div style="border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.03);
+          border-radius:12px;padding:16px 18px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--draw-fg)" stroke-width="1.8" stroke-linecap="round"><path d="M12 3a9 9 0 1 1-6.4 2.6"/><path d="M5 3v3.5h3.5"/></svg>
+            <span style="font-size:13px">Embebiendo · carpeta /datos/muxia-2026</span>
+            <div style="flex:1"></div>
+            <span class="mono" style="font-size:10px;color:var(--subtle)">lote 4 de 6</span>
+          </div>
+
+          <div style="height:4px;border-radius:2px;background:var(--elevated);margin-top:14px;overflow:hidden">
+            <div style="width:63%;height:100%;background:var(--draw-fg)"></div></div>
+          <div style="display:flex;justify-content:space-between;margin-top:7px">
+            <span class="mono" style="font-size:10px;color:var(--muted)">12 907 de 20 480 imágenes · 63 %</span>
+            <span class="mono" style="font-size:10px;color:var(--subtle)">~18 min restantes</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin-top:16px;
+            background:var(--border);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+            <div style="background:var(--surface);padding:11px 13px">
+              <div class="k">Modelo cargado</div><div class="v mono">lumi-2 · 1.0</div></div>
+            <div style="background:var(--surface);padding:11px 13px">
+              <div class="k">Dispositivo</div><div class="v mono">cuda:0</div></div>
+            <div style="background:var(--surface);padding:11px 13px">
+              <div class="k">Lote actual</div><div class="v mono">32 img</div></div>
+            <div style="background:var(--surface);padding:11px 13px">
+              <div class="k">Saltadas</div><div class="v mono" style="color:var(--warning-fg)">41</div></div>
+          </div>
+        </div>
+
+        <!-- cola -->
+        <div class="tag" style="margin-top:22px">En cola</div>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:11px;border:1px solid var(--border);border-radius:9px;padding:10px 12px">
+            <span style="width:17px;height:17px;border-radius:50%;border:1px solid rgba(255,255,255,.22);
+              font-size:9px;display:grid;place-items:center;color:var(--muted)">5</span>
+            <span style="font-size:11.5px;flex:1">Carpeta /datos/fisterra-norte</span>
+            <span class="chip">calle · propia</span>
+            <span class="mono" style="font-size:10px;color:var(--subtle);width:82px;text-align:right">9 402 img</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:11px;border:1px solid var(--border);border-radius:9px;padding:10px 12px">
+            <span style="width:17px;height:17px;border-radius:50%;border:1px solid rgba(255,255,255,.22);
+              font-size:9px;display:grid;place-items:center;color:var(--muted)">6</span>
+            <span style="font-size:11.5px;flex:1">Paquete legacy · github.com/marta/lumi-costa</span>
+            <span class="chip amber">fuente desconocida</span>
+            <span class="mono" style="font-size:10px;color:var(--subtle);width:82px;text-align:right">31 118 img</span>
+          </div>
+        </div>
+
+        <!-- lo saltado -->
+        <div class="tag" style="margin-top:22px">Saltadas · se anotan y se sigue, no se reintentan</div>
+        <div style="margin-top:10px;border:1px solid var(--border);border-radius:9px;background:#0b0d0f;padding:11px 13px">
+          <div class="logline">
+            <em>DSC_0412.jpg</em> — <b>sin coordenadas</b>: ni EXIF GPS ni fila en el CSV<br>
+            <em>DSC_0518.jpg</em> — el fichero no decodifica como imagen<br>
+            <em>DSC_0771.jpg</em> — <b>sin coordenadas</b>: ni EXIF GPS ni fila en el CSV<br>
+            <em>panorama_03.jpg</em> — 24 118 × 12 059 px, por encima del tope de entrada
+          </div>
+          <div class="mono" style="font-size:9.5px;color:var(--subtle);margin-top:9px;padding-top:9px;border-top:1px solid var(--border)">
+            41 en total · exportables como CSV</div>
+        </div>
+      </div>
+
+      <!-- derecha: salud -->
+      <aside style="width:292px;border-left:1px solid var(--border);background:var(--surface);
+        padding:18px 16px;display:flex;flex-direction:column">
+        <div class="tag">Trabajador</div>
+        <div style="margin-top:11px;border:1px solid var(--border);border-radius:9px;padding:11px 12px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            <span style="font-size:11.5px;flex:1">listo</span>
+            <span class="mono" style="font-size:10px;color:var(--subtle)">pid 8841</span>
+          </div>
+          <div class="mono" style="font-size:10px;color:var(--muted);margin-top:7px;line-height:1.7">
+            modelo lumi-2 · 1.0<br>vivo desde hace 2 h 14 min<br>reinicios: 1</div>
+        </div>
+
+        <div style="display:flex;align-items:flex-start;gap:7px;margin-top:11px">
+          <svg class="i" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--subtle)" stroke-width="1.7" style="margin-top:1px;flex-shrink:0"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5" stroke-linecap="round"/><circle cx="12" cy="7.5" r=".6" fill="currentColor" stroke="none"/></svg>
+          <span style="font-size:10.5px;color:var(--subtle);line-height:1.55">
+            Se murió una vez a las 16:41 y su lote volvió a la cola. Reanudó sin repetir lo hecho.</span>
+        </div>
+
+        <div class="tag" style="margin-top:22px">Servicios</div>
+        <div style="margin-top:11px;display:flex;flex-direction:column;gap:7px">
+          <div style="display:flex;align-items:center;gap:9px;border:1px solid var(--border);border-radius:9px;padding:9px 11px">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--fg)"></span>
+            <span style="font-size:11.5px;flex:1">Redis</span>
+            <span class="mono" style="font-size:9.5px;color:var(--subtle)">2 colas · 40 471</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;border:1px solid var(--border);border-radius:9px;padding:9px 11px">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--fg)"></span>
+            <span style="font-size:11.5px;flex:1">Qdrant</span>
+            <span class="mono" style="font-size:9.5px;color:var(--subtle)">2 colecciones</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;border:1px solid var(--border);border-radius:9px;padding:9px 11px">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--fg)"></span>
+            <span style="font-size:11.5px;flex:1">SQLite</span>
+            <span class="mono" style="font-size:9.5px;color:var(--subtle)">WAL · 214 MB</span>
+          </div>
+        </div>
+
+        <div style="flex:1"></div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <span class="btn gho" style="text-align:center">Pausar la cola</span>
+          <span class="mono" style="font-size:9.5px;color:var(--subtle);text-align:center;line-height:1.6">
+            termina el lote en curso<br>y no coge el siguiente</span>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 6. SELLAR ══════════════ -->
+<section class="shot">
+  <div class="cap"><b>6 · Sellar el paquete</b>
+    <span>vuelca los vectores de Qdrant a los ficheros planos en el orden exacto que declara indice.db, y hace lo que hizo el script de migración de la v1: cuenta filas contra vectores y se niega a declarar éxito si no cuadran. Aquí no cuadran, y por eso el botón está apagado.</span></div>
+  <div class="frame">
+    <div style="position:absolute;inset:0;background:var(--bg);opacity:.28;filter:blur(1px)"></div>
+    <div style="position:absolute;inset:0;background:rgba(5,7,10,.55);backdrop-filter:blur(3px);z-index:10"></div>
+
+    <div class="glass" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+      width:552px;z-index:20;padding:22px 24px">
+      <!-- icono grande de estado: 32 px, entero en su color, con halo -->
+      <div style="display:flex;justify-content:center;position:relative;margin-bottom:4px">
+        <span style="position:absolute;width:52px;height:52px;border-radius:50%;background:var(--warning);
+          filter:blur(18px);opacity:.14;top:-9px"></span>
+        <svg class="i" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="position:relative">
+          <rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      </div>
+
+      <div style="text-align:center;margin-top:12px">
+        <div style="font-size:14px">Sellar «Costa da Morte»</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:5px;line-height:1.6">
+          Un paquete sellado no se puede seguir llenando.<br>Se copia, se publica y se abre en otra máquina.</div>
+      </div>
+
+      <div style="margin-top:18px;border:1px solid var(--border);border-radius:9px;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--border)">
+          <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          <span style="font-size:11.5px;flex:1">Filas en <span class="mono">indice.db</span></span>
+          <span class="mono" style="font-size:11px">88 410</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--border)">
+          <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          <span style="font-size:11.5px;flex:1">Vectores en <span class="mono">lumi-preview-1.0.f32</span></span>
+          <span class="mono" style="font-size:11px">88 410</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:11px 14px;background:rgba(163,51,51,.07)">
+          <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--danger-fg)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2 22.2 20.8H1.8z"/><path d="M12 10v4.2"/><circle cx="12" cy="17.6" r=".6" fill="currentColor" stroke="none"/></svg>
+          <span style="font-size:11.5px;flex:1;color:var(--danger-fg)">Vectores en <span class="mono">lumi-2-1.0.f32</span></span>
+          <span class="mono" style="font-size:11px;color:var(--danger-fg)">75 503</span>
+        </div>
+      </div>
+
+      <div style="margin-top:13px;border:1px solid var(--border);border-radius:8px;background:#0b0d0f;padding:11px 13px">
+        <div class="logline">
+          <b>12 907 imágenes no tienen vector de lumi-2.</b><br>
+          Un paquete sellado a medias es peor que ninguno, porque parece bueno.
+        </div>
+      </div>
+
+      <div style="margin-top:15px">
+        <div class="k">Al sellar se escribirá</div>
+        <div class="mono" style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.9">
+          costa-da-morte-v1.lumidx/<br>
+          &nbsp;&nbsp;manifiesto.json &nbsp;<span style="color:var(--subtle)">procedencias, los dos porcentajes, versión de formato</span><br>
+          &nbsp;&nbsp;indice.db &nbsp;<span style="color:var(--subtle)">imágenes, coordenadas, quadkeys, lotes</span><br>
+          &nbsp;&nbsp;vectores/ &nbsp;<span style="color:var(--subtle)">un .f32 por modelo, en el orden de indice.db</span><br>
+          &nbsp;&nbsp;imagenes/ &nbsp;<span style="color:var(--subtle)">originales, sin recomprimir ni tocar el EXIF</span><br>
+          &nbsp;&nbsp;SHA256SUMS
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px">
+        <span class="btn gho">Terminar de embeber</span>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="mono" style="font-size:9.5px;color:var(--subtle)">~19 min de GPU</span>
+          <span class="btn pri dis">Sellar</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>
