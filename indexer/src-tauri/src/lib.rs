@@ -5,6 +5,7 @@
 //! máquina. Lo que produce son paquetes `.lumidx` sellados.
 
 mod crypto;
+mod ingest;
 mod models;
 mod qdrant;
 mod queue;
@@ -90,6 +91,52 @@ fn cola_pausar(estado: tauri::State<'_, Estado>, pausada: bool) {
     estado.cola.pausar(pausada);
 }
 
+#[tauri::command]
+fn ingesta_carpeta(
+    estado: tauri::State<'_, Estado>,
+    indice_id: i64,
+    ruta: String,
+    tipo: String,
+    fuente: String,
+    licencia: Option<String>,
+) -> Result<ingest::Resumen, String> {
+    let modelos: Vec<String> = estado.modelos.iter().map(|m| m.id.clone()).collect();
+    ingest::desde_carpeta(
+        &estado.almacen,
+        indice_id,
+        std::path::Path::new(&ruta),
+        &tipo,
+        &fuente,
+        licencia.as_deref(),
+        &modelos,
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn ingesta_legacy(
+    estado: tauri::State<'_, Estado>,
+    indice_id: i64,
+    ruta: String,
+    tipo: Option<String>,
+    fuente: String,
+    declarada: bool,
+) -> Result<ingest::Resumen, String> {
+    let modelos: Vec<String> = estado.modelos.iter().map(|m| m.id.clone()).collect();
+    let destino = estado.dir.join("imagenes").join(indice_id.to_string());
+    ingest::desde_legacy(
+        &estado.almacen,
+        indice_id,
+        std::path::Path::new(&ruta),
+        tipo.as_deref(),
+        &fuente,
+        declarada,
+        &modelos,
+        &destino,
+    )
+    .map_err(|e| e.to_string())
+}
+
 pub fn run() {
     let dir = directorio();
     let almacen = Arc::new(Almacen::abrir(&dir).expect("no se pudo abrir el almacén"));
@@ -122,7 +169,9 @@ pub fn run() {
             runtime_listo,
             runtime_instalar,
             cola_progreso,
-            cola_pausar
+            cola_pausar,
+            ingesta_carpeta,
+            ingesta_legacy
         ])
         .run(tauri::generate_context!())
         .expect("no se pudo arrancar el Lumi Indexer");
