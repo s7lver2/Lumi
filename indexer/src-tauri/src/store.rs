@@ -362,6 +362,24 @@ impl Almacen {
         Ok(filas)
     }
 
+    /// Guarda un secreto ya cifrado por `Maestra` bajo una clave de ajuste,
+    /// como la de Mapbox. Nunca se guarda en claro.
+    pub fn guardar_ajuste_sellado(&self, clave: &str, sellado: &[u8]) -> Result<()> {
+        let c = self.0.lock().unwrap();
+        c.execute(
+            "INSERT OR REPLACE INTO ajustes (clave, sellado) VALUES (?1, ?2)",
+            params![clave, sellado],
+        )?;
+        Ok(())
+    }
+
+    pub fn leer_ajuste_sellado(&self, clave: &str) -> Result<Option<Vec<u8>>> {
+        let c = self.0.lock().unwrap();
+        Ok(c
+            .query_row("SELECT sellado FROM ajustes WHERE clave = ?1", params![clave], |r| r.get(0))
+            .ok())
+    }
+
     pub fn quadkey_de_imagen(&self, imagen_id: i64) -> Result<String> {
         let c = self.0.lock().unwrap();
         Ok(c.query_row("SELECT quadkey FROM imagenes WHERE id = ?1", params![imagen_id], |r| {

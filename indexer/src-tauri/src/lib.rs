@@ -12,6 +12,7 @@ mod queue;
 mod runtime;
 mod services;
 mod store;
+mod territory;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -184,6 +185,35 @@ fn indices_lista(estado: tauri::State<'_, Estado>) -> Result<Vec<ResumenIndice>,
         .collect()
 }
 
+/// El polígono dibujado, ya clasificado tesela a tesela contra lo local y lo
+/// publicado. Sin catálogo remoto todavía (el 8), así que por ahora solo mira
+/// lo local — el mismo camino de código que usará el 8 cuando exista.
+#[tauri::command]
+fn territorio_clasificar(
+    estado: tauri::State<'_, Estado>,
+    poligono: Vec<lumi_index::tiles::Punto>,
+) -> Result<territory::Clasificacion, String> {
+    let locales = territory::coberturas_locales(&estado.dir.join("paquetes"));
+    territory::clasificar_area(&poligono, &locales, &[]).map_err(|e| e.to_string())
+}
+
+/// La clave de Mapbox del operador, cifrada con la maestra del equipo. No es
+/// un secreto de servidor: vive local, igual que el resto de `ajustes`.
+#[tauri::command]
+fn mapbox_clave_guardar(estado: tauri::State<'_, Estado>, clave: String) -> Result<(), String> {
+    let sellado = estado.maestra.sellar(clave.as_bytes()).map_err(|e| e.to_string())?;
+    estado.almacen.guardar_ajuste_sellado("mapbox", &sellado).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn mapbox_clave_leer(estado: tauri::State<'_, Estado>) -> Result<Option<String>, String> {
+    let Some(sellado) = estado.almacen.leer_ajuste_sellado("mapbox").map_err(|e| e.to_string())? else {
+        return Ok(None);
+    };
+    let claro = estado.maestra.abrir(&sellado).map_err(|e| e.to_string())?;
+    String::from_utf8(claro).map(Some).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn ingesta_legacy(
     estado: tauri::State<'_, Estado>,
@@ -245,7 +275,10 @@ pub fn run() {
             ingesta_legacy,
             indices_lista,
             indice_detalle,
-            indice_lotes
+            indice_lotes,
+            territorio_clasificar,
+            mapbox_clave_guardar,
+            mapbox_clave_leer
         ])
         .run(tauri::generate_context!())
         .expect("no se pudo arrancar el Lumi Indexer");

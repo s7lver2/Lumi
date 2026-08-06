@@ -22,6 +22,20 @@ export interface ResumenIndice {
 export interface DetalleIndice { imagenes: PorcentajesImagenes; trabajo: [string, number, number][] }
 export interface LoteResumen { id: number; clase: string; origen: string; estado: string }
 
+export interface Punto { lat: number; lng: number }
+export type EstadoTesela =
+  | { estado: "local"; indice: string; sha256: string }
+  | { estado: "catalogo"; indice: string; sha256: string; bytes: number; atribucion: { autor: string; url: string; licencia: string } }
+  | { estado: "nuevo" };
+export interface Clasificacion {
+  teselas: [string, EstadoTesela][];
+  locales: number;
+  catalogo: number;
+  nuevas: number;
+  bytes_a_descargar: number;
+  autores: [string, number][];
+}
+
 export const api = {
   saludo: () => invoke<Saludo>("saludo"),
   serviciosArrancar: () => invoke<void>("servicios_arrancar"),
@@ -37,4 +51,7 @@ export const api = {
   indicesLista: () => invoke<ResumenIndice[]>("indices_lista"),
   indiceDetalle: (id: number) => invoke<DetalleIndice>("indice_detalle", { id }),
   indiceLotes: (id: number) => invoke<LoteResumen[]>("indice_lotes", { id }),
+  territorioClasificar: (poligono: Punto[]) => invoke<Clasificacion>("territorio_clasificar", { poligono }),
+  mapboxClaveGuardar: (clave: string) => invoke<void>("mapbox_clave_guardar", { clave }),
+  mapboxClave: () => invoke<string | null>("mapbox_clave_leer"),
 };

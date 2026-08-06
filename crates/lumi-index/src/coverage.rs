@@ -36,7 +36,13 @@ pub struct Cobertura {
 }
 
 /// En qué situación está una tesela que el operador quiere indexar.
-#[derive(Debug, Clone, PartialEq)]
+///
+/// ponytail: la tarea 2 no lo pedía serializable (sus tests solo comparan en
+/// memoria), pero la tarea 15 lo devuelve tal cual por un comando Tauri, y sin
+/// `Serialize` eso no compila. Añadirlo aquí en vez de duplicar el tipo del
+/// lado de la aplicación.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "estado", rename_all = "lowercase")]
 pub enum Estado {
     /// Ya en un índice de este equipo. Ni descarga ni GPU: se referencia el
     /// mismo fragmento.
