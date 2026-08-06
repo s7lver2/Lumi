@@ -8,5 +8,6 @@ pub mod hello;
 pub mod images;
 pub mod map;
 pub mod projects;
+pub mod queue;
 pub mod tasks;
 pub mod telemetry;

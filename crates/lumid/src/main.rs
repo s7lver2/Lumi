@@ -78,6 +78,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/tasks/:id", get(routes::tasks::get))
         .route("/v1/tasks/:id/log", get(routes::tasks::log_sse))
         .route("/v1/telemetry", get(routes::telemetry::sse))
+        .route("/v1/queue/events", get(routes::queue::events))
+        .route("/v1/queue", get(routes::queue::view))
         .route("/v1/access-requests", post(routes::access::create))
         .route("/v1/access-requests/status", get(routes::access::status))
         .route("/v1/accounts", post(routes::access::create_account))

@@ -54,9 +54,11 @@ pub fn sample(app: &App) -> Sample {
         cpu_pct,
         ram_used_mb,
         disk_free_mb,
-        // La cola llega en el subsistema 4. Hasta entonces, cero y no pausada:
-        // la franja ya tiene su celda y no habrá que rediseñarla.
-        queue_depth: 0,
-        queue_paused: app.master.try_read().map(|m| m.is_none()).unwrap_or(false),
+        queue_depth: app.queue.profundidad(),
+        // «Pausada» quiere decir que no está repartiendo, y la única razón por
+        // la que puede no repartir es no tener ni un trabajador listo. Antes
+        // esto miraba la clave maestra, sobre la premisa de que las imágenes
+        // estaban cifradas en reposo — y todavía no lo están.
+        queue_paused: !app.queue.hay_trabajadores(),
     }
 }
