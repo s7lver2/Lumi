@@ -1,16 +1,25 @@
 import { useEffect, useState } from "react";
 
-import { api, type Clasificacion, type FichaOrigen, type Punto, type SondeoTesela } from "../lib/api";
+import { api, type Clasificacion, type Estimacion, type FichaOrigen, type Punto, type SondeoTesela } from "../lib/api";
 import { AvailabilityPanel } from "./AvailabilityPanel";
 import { BlockedDialog } from "./BlockedDialog";
 import { CoveragePanel } from "./CoveragePanel";
+import { EstimateDialog } from "./EstimateDialog";
 import { MapCanvas } from "./MapCanvas";
 import { PlanDialog } from "./PlanDialog";
 
 /** Dibujar, clasificar y decidir: el plan si hay algo nuevo, el bloqueo si no
  *  queda nada. Confirmar el plan anota primero lo heredado y solo después crea
  *  los lotes de lo nuevo — si se corta a la mitad, lo heredado ya está dentro. */
-export function TerritoryView({ nombre }: { nombre: string }) {
+export function TerritoryView({
+  nombre,
+  indiceId,
+  onDescargando,
+}: {
+  nombre: string;
+  indiceId?: number;
+  onDescargando?: () => void;
+}) {
   const [dibujo, setDibujo] = useState<Punto[]>([]);
   const [clasificacion, setClasificacion] = useState<Clasificacion | null>(null);
   const [mostrarPlan, setMostrarPlan] = useState(false);
@@ -20,6 +29,8 @@ export function TerritoryView({ nombre }: { nombre: string }) {
   const [sondeos, setSondeos] = useState<SondeoTesela[]>([]);
   const [sondeando, setSondeando] = useState(false);
   const [tokenMapillary, setTokenMapillary] = useState<string | null>(null);
+  const [estimacion, setEstimacion] = useState<Estimacion | null>(null);
+  const [nuevasPorOrigen, setNuevasPorOrigen] = useState<Record<string, string[]>>({});
 
   useEffect(() => { void api.origenesLista().then(setFichas); }, []);
   useEffect(() => { void api.claveLeer("mapillary").then(setTokenMapillary); }, []);
@@ -53,6 +64,41 @@ export function TerritoryView({ nombre }: { nombre: string }) {
     setClasificacion(null);
     setMostrarPlan(false);
     setSondeos([]);
+    setEstimacion(null);
+    setNuevasPorOrigen({});
+  }
+
+  // El plan del 7a solo distingue local/catálogo/nuevo en bloque. Sin un
+  // catálogo remoto real (el 8), lo "nuevo" del bloque es lo mismo para todos
+  // los orígenes activos: cada origen que se encienda tiene que preguntarse
+  // por las mismas teselas sin cobertura local.
+  async function alConfirmarPlan() {
+    if (!clasificacion) return;
+    const nuevas = clasificacion.teselas.filter(([, e]) => e.estado === "nuevo").map(([qk]) => qk);
+    const nuevasMap: Record<string, string[]> = {};
+    for (const f of activos) nuevasMap[f] = nuevas;
+    setNuevasPorOrigen(nuevasMap);
+    setEstimacion(await api.estimarArea(nuevasMap));
+  }
+
+  async function confirmarDescarga(soloGratis: boolean) {
+    if (!estimacion || indiceId === undefined) {
+      reiniciar();
+      return;
+    }
+    const activas = soloGratis
+      ? new Set(estimacion.lineas.filter((l) => l.coste_eur === 0).map((l) => l.fuente))
+      : new Set(estimacion.lineas.map((l) => l.fuente));
+    const nuevas = Object.fromEntries(
+      Object.entries(nuevasPorOrigen).filter(([f]) => activas.has(f)),
+    );
+    // El presupuesto que viaja con la descarga es LO ESTIMADO, no lo que queda
+    // del mes: así un origen que se desmadre se queda sin saldo en su propio
+    // trabajo en vez de comerse el tope entero.
+    const presupuesto = soloGratis ? 0 : estimacion.total_eur;
+    await api.descargaArrancar(indiceId, nuevas, presupuesto);
+    reiniciar();
+    onDescargando?.();
   }
 
   return (
@@ -89,9 +135,24 @@ export function TerritoryView({ nombre }: { nombre: string }) {
         </div>
       )}
 
-      {clasificacion && mostrarPlan && clasificacion.nuevas > 0 && (
+      {clasificacion && mostrarPlan && clasificacion.nuevas > 0 && !estimacion && (
         <div className="absolute inset-0 z-40 grid place-items-center bg-black/40">
-          <PlanDialog nombre={nombre} c={clasificacion} onCancelar={() => setMostrarPlan(false)} onConfirmar={reiniciar} />
+          <PlanDialog
+            nombre={nombre}
+            c={clasificacion}
+            onCancelar={() => setMostrarPlan(false)}
+            onConfirmar={() => void alConfirmarPlan()}
+          />
+        </div>
+      )}
+
+      {estimacion && (
+        <div className="absolute inset-0 z-40 grid place-items-center bg-black/40">
+          <EstimateDialog
+            e={estimacion}
+            onCancelar={() => setEstimacion(null)}
+            onConfirmar={(soloGratis) => void confirmarDescarga(soloGratis)}
+          />
         </div>
       )}
     </div>
