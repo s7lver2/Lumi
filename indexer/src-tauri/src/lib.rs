@@ -5,6 +5,7 @@
 //! máquina. Lo que produce son paquetes `.lumidx` sellados.
 
 mod crypto;
+mod download;
 mod ingest;
 mod keys;
 mod models;
@@ -36,6 +37,9 @@ pub struct Estado {
     pub servicios: Arc<services::Servicios>,
     pub modelos: Vec<models::Modelo>,
     pub cola: Arc<queue::Cola>,
+    /// La descarga de red en curso, si hay alguna. Se reemplaza entera al
+    /// arrancar una nueva: solo hay una a la vez.
+    pub descarga: std::sync::Mutex<Option<Arc<download::Descarga>>>,
 }
 
 /// Dónde vive todo. `LUMI_INDEXER_DATA` existe para poder correr una instancia
@@ -253,6 +257,44 @@ async fn estimar_area(
     Ok(probe::estimar(&estado.almacen, &o, &nuevas, claves.tope_eur()).await)
 }
 
+#[tauri::command]
+async fn descarga_arrancar(
+    estado: tauri::State<'_, Estado>,
+    indice_id: i64,
+    nuevas: std::collections::BTreeMap<String, Vec<String>>,
+    presupuesto_eur: f64,
+) -> Result<(), String> {
+    let origenes = origenes_de(&estado);
+    let modelos: Vec<String> = estado.modelos.iter().map(|m| m.id.clone()).collect();
+    let d = std::sync::Arc::new(download::Descarga::nueva(
+        estado.almacen.clone(),
+        indice_id,
+        presupuesto_eur,
+        &modelos,
+    ));
+    *estado.descarga.lock().unwrap() = Some(d.clone());
+    tauri::async_runtime::spawn(async move {
+        for o in &origenes {
+            let Some(teselas) = nuevas.get(o.id()) else { continue };
+            d.un_origen(o, teselas).await;
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
+async fn descarga_progreso(estado: tauri::State<'_, Estado>) -> Result<download::Progreso, String> {
+    Ok(estado.descarga.lock().unwrap().as_ref().map(|d| d.progreso()).unwrap_or_default())
+}
+
+#[tauri::command]
+async fn descarga_parar(estado: tauri::State<'_, Estado>) -> Result<(), String> {
+    if let Some(d) = estado.descarga.lock().unwrap().as_ref() {
+        d.parar();
+    }
+    Ok(())
+}
+
 /// La clave de Mapbox del operador, cifrada con la maestra del equipo. No es
 /// un secreto de servidor: vive local, igual que el resto de `ajustes`.
 #[tauri::command]
@@ -417,7 +459,15 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
-        .manage(Estado { dir, almacen, maestra, servicios, modelos, cola })
+        .manage(Estado {
+            dir,
+            almacen,
+            maestra,
+            servicios,
+            modelos,
+            cola,
+            descarga: std::sync::Mutex::new(None),
+        })
         .invoke_handler(tauri::generate_handler![
             saludo,
             servicios_arrancar,
@@ -439,6 +489,9 @@ pub fn run() {
             origenes_lista,
             sondear_area,
             estimar_area,
+            descarga_arrancar,
+            descarga_progreso,
+            descarga_parar,
             mapbox_clave_guardar,
             mapbox_clave_leer,
             paquete_sellar,

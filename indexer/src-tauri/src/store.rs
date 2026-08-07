@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS indices (
 CREATE TABLE IF NOT EXISTS lotes (
     id         INTEGER PRIMARY KEY,
     indice_id  INTEGER NOT NULL,
-    clase      TEXT NOT NULL CHECK (clase IN ('legacy','carpeta','herencia')),
+    clase      TEXT NOT NULL CHECK (clase IN ('legacy','carpeta','herencia','red')),
     origen     TEXT NOT NULL,
     tipo       TEXT CHECK (tipo IN ('calle','cenital','suelta')),
     -- 'desconocida' es un valor como cualquier otro y sale en los porcentajes.
@@ -161,6 +161,25 @@ impl Almacen {
         ] {
             let _ = c.execute(alter, []);
         }
+
+        // `clase` gana 'red'. En SQLite un CHECK no se altera, así que en una
+        // base del 7a se recrea la tabla con el CHECK nuevo. Es barato:
+        // `lotes` tiene una fila por tanda de material, no por imagen.
+        let hay_red: bool = c
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='lotes'",
+                [],
+                |r| r.get::<_, String>(0),
+            )
+            .map(|sql| sql.contains("'red'"))
+            .unwrap_or(true);
+        if !hay_red {
+            c.execute_batch("ALTER TABLE lotes RENAME TO lotes_viejos")?;
+            c.execute_batch(ESQUEMA)?; // recrea `lotes` con el CHECK nuevo
+            c.execute_batch(
+                "INSERT INTO lotes SELECT * FROM lotes_viejos; DROP TABLE lotes_viejos;",
+            )?;
+        }
         Ok(Self(Mutex::new(c)))
     }
 
@@ -236,6 +255,57 @@ impl Almacen {
             c.execute(
                 "INSERT OR IGNORE INTO vectores (imagen_id, modelo, estado)
                  VALUES (?1, ?2, 'pendiente')",
+                params![id, m],
+            )?;
+        }
+        Ok(id)
+    }
+
+    /// Inserta una captura de red. A diferencia de `insertar_imagen`, esta
+    /// exige la atribución porque `Captura` la lleva dentro y no es opcional:
+    /// no hay forma de llamar a esto y quedarse sin ella.
+    ///
+    /// Las sueltas entran como `revision = 'pendiente'`; las capturas
+    /// sistemáticas no pasan por revisión y entran ya aceptadas.
+    pub fn insertar_imagen_de_red(
+        &self,
+        indice_id: i64,
+        lote_id: i64,
+        c: &lumi_index::network::Captura,
+        quadkey: &str,
+        modelos: &[String],
+    ) -> Result<i64> {
+        let revision = if c.fuente == "commons" || c.fuente == "flickr" { "pendiente" } else { "aceptada" };
+        let atrib = serde_json::to_string(&c.atribucion)?;
+        let cn = self.0.lock().unwrap();
+        cn.execute(
+            "INSERT INTO imagenes
+               (indice_id, lote_id, ruta, sha256, lat, lng, quadkey, capturada_en,
+                revision, licencia, atribucion, id_origen, rumbo, creada_en)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            params![
+                indice_id,
+                lote_id,
+                c.ruta.display().to_string(),
+                // El sha se calcula al sellar; aquí basta el identificador del
+                // proveedor, que ya es único y no obliga a releer el fichero.
+                format!("origen:{}:{}", c.fuente, c.id_origen),
+                c.lat,
+                c.lng,
+                quadkey,
+                c.capturada_en,
+                revision,
+                c.atribucion.licencia,
+                atrib,
+                c.id_origen,
+                c.rumbo,
+                Self::ahora()
+            ],
+        )?;
+        let id = cn.last_insert_rowid();
+        for m in modelos {
+            cn.execute(
+                "INSERT OR IGNORE INTO vectores (imagen_id, modelo, estado) VALUES (?1, ?2, 'pendiente')",
                 params![id, m],
             )?;
         }
