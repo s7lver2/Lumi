@@ -134,7 +134,7 @@ spec → plan → implementación, y cada una debe producir software que funcion
 | **5** | **Motor de inferencia** | Lumi Mini / Pro / Vision, ensemble de verificadores geométricos | Pendiente |
 | **6** | **Cliente y proyectos** | Workspaces tipo Burp/Caido, imágenes, historial, mapa | Esqueleto terminado |
 | **7a** | **Lumi Indexer · cimientos** | App Tauri aparte; las tres bases; el paquete de índice troceado; procedencia de imágenes y de trabajo; mapa, territorio y la regla de no indexar dos veces; orígenes locales | Terminado |
-| **7b** | **Lumi Indexer · orígenes de red** | Street view, satélite y fotos públicas: claves de API, cuotas y coste por petición | Sin spec |
+| **7b** | **Lumi Indexer · orígenes de red** | Seis adaptadores tras un contrato por tesela (Mapillary, KartaView, Google, Mapbox Satellite, Commons, Flickr); disponibilidad en el mapa; estimar, confirmar y tope de gasto; descarga reanudable con atribución; qué se puede republicar | Con spec |
 | **8** | **Catálogo de índices** | Publicar e instalar índices cifrados, buscar en el catálogo, ver de qué procedencias está hecho cada uno y en qué proporción | Sin spec |
 | **9** | **Página web del proyecto** | El sitio público, a partir de mockups que aporta el owner | Sin spec |
 
@@ -161,8 +161,13 @@ spec → plan cuando le toque, y el owner aportará el detalle entonces.
 - **7a/7b · Lumi Indexer.** Aplicación Tauri **independiente** de Lumi Station, no una
   sección suya, y sin cuentas ni servidor: un solo operador sobre su propia máquina.
   Separada porque quien indexa y quien investiga no son la misma persona ni trabajan en el
-  mismo equipo. Su spec está en
-  [`specs/2026-08-06-lumi-indexer-7a-design.md`](docs/superpowers/specs/2026-08-06-lumi-indexer-7a-design.md).
+  mismo equipo. Sus specs están en
+  [`specs/2026-08-06-lumi-indexer-7a-design.md`](docs/superpowers/specs/2026-08-06-lumi-indexer-7a-design.md)
+  y [`specs/2026-08-07-lumi-indexer-7b-design.md`](docs/superpowers/specs/2026-08-07-lumi-indexer-7b-design.md).
+  Del 7b salen dos cosas que tocan fuera: la clasificación de territorio del 7a pasa a
+  razonar **por tesela y por origen** —quien instala un paquete no hereda la cobertura no
+  redistribuible de quien lo publicó—, y el 8 hereda sin resolver la identidad del
+  publicador, porque hoy `atribucion.autor` es una cadena que nadie verifica.
 - **8 · Catálogo de índices.** Índices cifrados como los de la v1, con dos cambios de fondo.
   El primero: un índice se puebla con imágenes de **procedencias distintas** y el catálogo
   dice **en qué porcentaje viene de cada una**, por imágenes y por territorio. Es cadena de

@@ -129,6 +129,35 @@ anotado. Sin ella la única alternativa es no usar la herramienta, que es peor.
 
 ---
 
+## Indexer · orígenes de red (subsistema 7b)
+
+### Ortofotos públicas nacionales para el cenital
+
+PNOA en España, NAIP en EEUU y sus equivalentes por país vía WMS/WMTS: gratis, 0,25-0,5 m/px
+—mejor resolución que Mapbox— y **licencia abierta, así que las imágenes sí viajarían dentro
+del paquete publicable**. Eso es lo que las hace interesantes: el cenital de Mapbox no se
+puede republicar, y por eso el 7b no lo publica ni siquiera como vector.
+
+Se descartó porque no es un proveedor sino un mosaico por país, cada uno con su servidor, su
+proyección y sus rarezas. Habría que empezar por uno, y fuera de él el Indexer se quedaría
+sin cenital — peor que tener uno global aunque no se pueda republicar.
+
+Es la salida el día que la restricción de redistribución de Mapbox duela de verdad. Retomarlo
+es escribir un adaptador más contra el mismo `OrigenDeRed`, más la decisión de cómo se elige
+el servicio según dónde caiga la tesela.
+
+### Clasificador de escena para las fotos sueltas
+
+Por encima del filtro por reglas, un modelo pequeño que mire la foto y diga si es exterior y
+a escala de calle. Dejaría bastante más limpia la revisión manual.
+
+Se aparcó porque añade un modelo que instalar, versionar y anotar en el manifiesto, gasta GPU
+en fotos que se van a tirar, y un clasificador que se equivoca tira material bueno sin que
+nadie lo vea — mientras que la revisión por excepción sí lo enseña. Se replantea si el ruido
+que pasa las reglas resulta insoportable en la práctica.
+
+---
+
 ## Transversales
 
 ### Panel de administración real

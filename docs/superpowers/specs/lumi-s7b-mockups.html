@@ -1,0 +1,900 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Lumi Indexer · orígenes de red</title>
+<style>
+:root{
+  --bg:#0e0f11; --surface:#15171a; --panel:#1a1b1e; --elevated:#202226;
+  --border:#26282c; --muted:#9a9a95; --subtle:#6a6c70; --fg:#e8e8e6;
+  --accent:#f2f3f5; --warning:#ef9f27; --warning-fg:#efb968;
+  --danger:#a33; --danger-fg:#e88f8f; --draw:#378add; --draw-fg:#85b7eb;
+  --expo:cubic-bezier(.16,1,.3,1);
+  /* Paleta de proveedores. Vive SOLO en la capa de disponibilidad: es el
+     único sitio de toda la aplicación donde el color codifica una categoría,
+     y es deliberado — cinco orígenes simultáneos no se distinguen de otra
+     forma. Fuera de esta capa, la rampa vuelve a ser neutra. */
+  --p-mly:#4ec9a5; --p-kv:#a78bfa; --p-goo:#e8b04b; --p-com:#6ea8fe; --p-flk:#f472a6;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#08090a;color:var(--fg);font-family:Inter,system-ui,'Segoe UI',sans-serif;
+  -webkit-font-smoothing:antialiased;padding:34px 26px 80px}
+.mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+h1{font-size:17px;font-weight:500;letter-spacing:-.01em}
+h2{font-size:12px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--subtle);margin:52px 0 -14px}
+.lede{color:var(--muted);font-size:12px;margin-top:6px;max-width:800px;line-height:1.65}
+.lede b{font-weight:400;color:var(--fg)}
+.tag{font-size:8.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--subtle)}
+.k{font-size:8px;letter-spacing:.11em;text-transform:uppercase;color:var(--subtle)}
+.v{font-size:11.5px;color:var(--fg);margin-top:3px}
+.v.dim{color:var(--subtle)}
+
+.shot{margin-top:38px}
+.shot > .cap{display:flex;align-items:baseline;gap:10px;margin-bottom:9px}
+.shot > .cap b{font-size:12.5px;font-weight:500}
+.shot > .cap span{font-size:11px;color:var(--subtle);max-width:850px;line-height:1.55}
+.frame{width:1280px;height:800px;background:var(--bg);border:1px solid #202226;
+  border-radius:10px;overflow:hidden;position:relative;
+  box-shadow:0 24px 60px rgba(0,0,0,.55);transform-origin:top left}
+@media (max-width:1360px){.frame{transform:scale(.78)}.shot{height:672px}}
+
+.glass{background:rgba(16,19,25,.72);border:1px solid rgba(255,255,255,.13);
+  border-radius:12px;box-shadow:0 18px 40px rgba(0,0,0,.4);backdrop-filter:blur(18px)}
+.btn{border-radius:8px;font-size:11.5px;padding:8px 16px;border:0;display:inline-block}
+.btn.pri{background:var(--accent);color:#000;font-weight:500}
+.btn.gho{background:transparent;color:var(--fg);border:1px solid rgba(255,255,255,.15)}
+.btn.dis{opacity:.4}
+.chip{border:1px solid var(--border);border-radius:5px;padding:1px 6px;
+  font-size:8.5px;color:var(--subtle);letter-spacing:.04em;white-space:nowrap}
+.chip.on{border-color:rgba(255,255,255,.28);color:var(--fg)}
+.chip.amber{border-color:rgba(239,159,39,.4);color:var(--warning-fg)}
+.chip.blue{border-color:rgba(133,183,235,.4);color:var(--draw-fg)}
+.chip.red{border-color:rgba(163,51,51,.55);color:var(--danger-fg)}
+
+.rail{position:absolute;inset:0 auto 0 0;width:44px;z-index:30;display:flex;
+  flex-direction:column;align-items:center;gap:3px;padding:10px 0;
+  background:rgba(13,15,17,.9);border-right:1px solid var(--border);backdrop-filter:blur(8px)}
+.rail .ri{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;
+  color:var(--subtle);position:relative}
+.rail .ri.on{background:rgba(255,255,255,.07);color:var(--fg)}
+.rail .ri.on::before{content:"";position:absolute;left:-10px;top:7px;bottom:7px;width:2px;
+  border-radius:0 2px 2px 0;background:var(--fg)}
+.rail .sp{flex:1}
+.top{position:absolute;top:0;left:44px;right:0;height:38px;z-index:25;display:flex;
+  align-items:center;gap:9px;padding:0 12px;background:rgba(13,15,17,.78);
+  border-bottom:1px solid var(--border);backdrop-filter:blur(10px)}
+.crumb{font-size:11.5px;color:var(--subtle);display:flex;align-items:center;gap:7px}
+.crumb b{font-weight:400;color:var(--fg)}
+.crumb .sep{color:#3a3e44}
+
+.map{position:absolute;inset:0;background:
+  radial-gradient(120% 90% at 50% 30%, #1d2126 0%, #14171a 42%, #0d0f11 100%)}
+.map svg{position:absolute;inset:0;width:100%;height:100%}
+.map .grid line{stroke:rgba(255,255,255,.03);stroke-width:1}
+.map .road{stroke:rgba(255,255,255,.075);fill:none;stroke-linecap:round}
+.map .road.big{stroke:rgba(255,255,255,.13);stroke-width:2.4}
+.map .water{fill:rgba(55,138,221,.10)}
+.map .block{fill:rgba(255,255,255,.022)}
+
+/* Sombreado por tesela: para los orígenes que solo se pueden sondear por
+   muestreo. Tres niveles y nada más — el sondeo no sabe contar mejor. */
+.t{position:absolute;width:46px;height:46px;border-radius:2px}
+.t.new{background:rgba(255,255,255,.015);border:1px dashed rgba(154,154,149,.35)}
+.sh{position:absolute;width:46px;height:46px;border-radius:2px}
+.sh.mucho{opacity:.30} .sh.poco{opacity:.13} .sh.nada{opacity:0}
+
+.row{display:flex;align-items:center;gap:9px}
+.sw{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.sq{width:11px;height:11px;border-radius:2px;flex-shrink:0;display:block}
+.tog{width:26px;height:15px;border-radius:8px;background:#2a2d32;position:relative;flex-shrink:0}
+.tog i{position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;
+  background:#6a6c70;display:block}
+.tog.on{background:rgba(255,255,255,.22)} .tog.on i{left:13px;background:var(--fg)}
+
+table.t2{width:100%;border-collapse:collapse;font-size:11.5px}
+table.t2 th{text-align:left;font-size:8px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--subtle);font-weight:400;padding:0 0 8px}
+table.t2 td{padding:8px 0;border-top:1px solid var(--border);vertical-align:middle}
+table.t2 td.n{text-align:right;font-family:ui-monospace,Menlo,Consolas,monospace}
+table.t2 tr.tot td{border-top:1px solid rgba(255,255,255,.2);font-weight:500;padding-top:11px}
+
+.bar{height:5px;border-radius:3px;background:var(--elevated);overflow:hidden;display:flex}
+.bar i{display:block;height:100%}
+
+/* Fotos de la rejilla de revisión: degradados, no ficheros. */
+.ph{aspect-ratio:4/3;border-radius:6px;position:relative;overflow:hidden;
+  border:1px solid var(--border)}
+.ph.no{opacity:.32}
+.ph.no::after{content:"";position:absolute;inset:0;background:rgba(163,51,51,.22);
+  border:1.5px solid var(--danger);border-radius:5px}
+.ph .lic{position:absolute;left:5px;bottom:5px;z-index:3;font-size:8px;
+  font-family:ui-monospace,Menlo,Consolas,monospace;color:rgba(255,255,255,.75);
+  background:rgba(0,0,0,.5);border-radius:3px;padding:1px 4px}
+.ph .x{position:absolute;right:5px;top:5px;z-index:4;width:15px;height:15px;border-radius:50%;
+  background:var(--danger);display:grid;place-items:center}
+.logline{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;line-height:1.9;color:var(--muted)}
+.logline em{font-style:normal;color:var(--subtle)}
+.logline b{font-weight:400;color:var(--fg)}
+svg.i{display:block}
+.note{font-size:10.5px;line-height:1.6;color:var(--subtle)}
+.note b{font-weight:400;color:var(--fg)}
+</style>
+</head>
+<body>
+
+<h1>Lumi Indexer · orígenes de red</h1>
+<p class="lede">Seis pantallas. El 7a sabe dibujar un área y decir qué teselas no ha indexado nadie, pero no sabe
+<b>conseguir</b> imágenes para ellas. Esto es esa mitad: seis adaptadores —Mapillary, KartaView, Google Street View,
+Mapbox Satellite, Wikimedia Commons y Flickr— detrás de un mismo contrato por tesela. Dos ideas gobiernan todas las
+pantallas: <b>nada de pago ocurre sin que lo hayas visto en euros antes</b>, y <b>la atribución se captura al
+descargar</b>, porque después ya no se puede recuperar.</p>
+
+<!-- ══════════════════════════ 1 ══════════════════════════ -->
+<h2>Ver antes de gastar</h2>
+
+<section class="shot">
+  <div class="cap"><b>1 · La capa de disponibilidad</b>
+    <span>apagada por defecto, y <b style="color:var(--fg);font-weight:400">nunca se sondea al mover el mapa</b>: solo dentro del polígono y solo cuando lo pides. Mapillary y KartaView salen como puntos exactos, directos de sus teselas vectoriales y gratis. Google, Commons y Flickr no tienen capa de cobertura, así que se sondean por muestreo y solo se puede decir «hay / poco / no hay» de la tesela entera. La asimetría es real y se ve.</span></div>
+  <div class="frame">
+    <div class="map">
+      <svg viewBox="0 0 1280 800" preserveAspectRatio="none">
+        <g class="grid">
+          <line x1="0" y1="140" x2="1280" y2="120"/><line x1="0" y1="300" x2="1280" y2="272"/>
+          <line x1="0" y1="470" x2="1280" y2="450"/><line x1="0" y1="640" x2="1280" y2="628"/>
+          <line x1="230" y1="0" x2="180" y2="800"/><line x1="520" y1="0" x2="490" y2="800"/>
+          <line x1="820" y1="0" x2="800" y2="800"/><line x1="1090" y1="0" x2="1080" y2="800"/>
+        </g>
+        <path class="water" d="M0 620 C 260 570, 420 700, 700 650 C 940 610, 1100 710, 1280 670 L1280 800 L0 800 Z"/>
+        <rect class="block" x="430" y="230" width="130" height="90" rx="4"/>
+        <rect class="block" x="600" y="300" width="100" height="130" rx="4"/>
+        <rect class="block" x="760" y="250" width="140" height="80" rx="4"/>
+        <path class="road big" d="M-20 380 C 300 330, 620 430, 1300 350"/>
+        <path class="road" d="M400 -10 C 430 240, 360 520, 420 820"/>
+        <path class="road" d="M900 -10 C 870 250, 960 500, 910 820"/>
+        <path class="road" d="M-20 200 C 400 180, 800 240, 1300 190"/>
+      </svg>
+    </div>
+
+    <!-- sombreado por tesela (Google): tres niveles, nada más -->
+    <div style="position:absolute;left:352px;top:150px;z-index:10">
+      <div class="sh mucho" style="left:0;top:0;background:var(--p-goo)"></div>
+      <div class="sh mucho" style="left:48px;top:0;background:var(--p-goo)"></div>
+      <div class="sh poco"  style="left:96px;top:0;background:var(--p-goo)"></div>
+      <div class="sh mucho" style="left:144px;top:0;background:var(--p-goo)"></div>
+      <div class="sh mucho" style="left:192px;top:0;background:var(--p-goo)"></div>
+      <div class="sh poco"  style="left:240px;top:0;background:var(--p-goo)"></div>
+      <div class="sh nada"  style="left:288px;top:0;background:var(--p-goo)"></div>
+      <div class="sh mucho" style="left:0;top:48px;background:var(--p-goo)"></div>
+      <div class="sh mucho" style="left:48px;top:48px;background:var(--p-goo)"></div>
+      <div class="sh mucho" style="left:96px;top:48px;background:var(--p-goo)"></div>
+      <div class="sh poco"  style="left:144px;top:48px;background:var(--p-goo)"></div>
+      <div class="sh poco"  style="left:192px;top:48px;background:var(--p-goo)"></div>
+      <div class="sh nada"  style="left:240px;top:48px;background:var(--p-goo)"></div>
+      <div class="sh mucho" style="left:0;top:96px;background:var(--p-goo)"></div>
+      <div class="sh poco"  style="left:48px;top:96px;background:var(--p-goo)"></div>
+      <div class="sh mucho" style="left:96px;top:96px;background:var(--p-goo)"></div>
+      <div class="sh poco"  style="left:144px;top:96px;background:var(--p-goo)"></div>
+      <div class="sh nada"  style="left:192px;top:96px;background:var(--p-goo)"></div>
+      <div class="sh poco"  style="left:0;top:144px;background:var(--p-goo)"></div>
+      <div class="sh poco"  style="left:48px;top:144px;background:var(--p-goo)"></div>
+      <div class="sh nada"  style="left:96px;top:144px;background:var(--p-goo)"></div>
+      <div class="sh poco"  style="left:144px;top:144px;background:var(--p-goo)"></div>
+    </div>
+
+    <!-- rejilla de teselas sin indexar -->
+    <div style="position:absolute;left:352px;top:150px;z-index:11">
+      <div class="t new" style="left:0;top:0"></div><div class="t new" style="left:48px;top:0"></div>
+      <div class="t new" style="left:96px;top:0"></div><div class="t new" style="left:144px;top:0"></div>
+      <div class="t new" style="left:192px;top:0"></div><div class="t new" style="left:240px;top:0"></div>
+      <div class="t new" style="left:288px;top:0"></div>
+      <div class="t new" style="left:0;top:48px"></div><div class="t new" style="left:48px;top:48px"></div>
+      <div class="t new" style="left:96px;top:48px"></div><div class="t new" style="left:144px;top:48px"></div>
+      <div class="t new" style="left:192px;top:48px"></div><div class="t new" style="left:240px;top:48px"></div>
+      <div class="t new" style="left:0;top:96px"></div><div class="t new" style="left:48px;top:96px"></div>
+      <div class="t new" style="left:96px;top:96px"></div><div class="t new" style="left:144px;top:96px"></div>
+      <div class="t new" style="left:192px;top:96px"></div>
+      <div class="t new" style="left:0;top:144px"></div><div class="t new" style="left:48px;top:144px"></div>
+      <div class="t new" style="left:96px;top:144px"></div><div class="t new" style="left:144px;top:144px"></div>
+    </div>
+
+    <!-- puntos exactos: Mapillary y KartaView, desde teselas vectoriales -->
+    <svg style="position:absolute;inset:0;width:100%;height:100%;z-index:12;pointer-events:none">
+      <g fill="var(--p-mly)">
+        <circle cx="372" cy="196" r="1.9"/><circle cx="386" cy="197" r="1.9"/><circle cx="400" cy="199" r="1.9"/>
+        <circle cx="414" cy="200" r="1.9"/><circle cx="428" cy="202" r="1.9"/><circle cx="442" cy="203" r="1.9"/>
+        <circle cx="456" cy="205" r="1.9"/><circle cx="470" cy="206" r="1.9"/><circle cx="484" cy="208" r="1.9"/>
+        <circle cx="498" cy="209" r="1.9"/><circle cx="512" cy="211" r="1.9"/><circle cx="526" cy="212" r="1.9"/>
+        <circle cx="540" cy="214" r="1.9"/><circle cx="554" cy="215" r="1.9"/><circle cx="568" cy="217" r="1.9"/>
+        <circle cx="404" cy="160" r="1.9"/><circle cx="406" cy="174" r="1.9"/><circle cx="408" cy="188" r="1.9"/>
+        <circle cx="410" cy="216" r="1.9"/><circle cx="409" cy="230" r="1.9"/><circle cx="407" cy="244" r="1.9"/>
+        <circle cx="404" cy="258" r="1.9"/><circle cx="401" cy="272" r="1.9"/><circle cx="398" cy="286" r="1.9"/>
+        <circle cx="510" cy="163" r="1.9"/><circle cx="512" cy="177" r="1.9"/><circle cx="514" cy="191" r="1.9"/>
+        <circle cx="516" cy="205" r="1.9"/><circle cx="518" cy="219" r="1.9"/><circle cx="520" cy="233" r="1.9"/>
+        <circle cx="522" cy="247" r="1.9"/><circle cx="524" cy="261" r="1.9"/>
+        <circle cx="372" cy="300" r="1.9"/><circle cx="388" cy="301" r="1.9"/><circle cx="404" cy="302" r="1.9"/>
+        <circle cx="420" cy="303" r="1.9"/><circle cx="436" cy="304" r="1.9"/><circle cx="452" cy="304" r="1.9"/>
+      </g>
+      <g fill="var(--p-kv)">
+        <circle cx="378" cy="203" r="1.7"/><circle cx="396" cy="205" r="1.7"/><circle cx="418" cy="207" r="1.7"/>
+        <circle cx="440" cy="209" r="1.7"/><circle cx="462" cy="211" r="1.7"/><circle cx="484" cy="213" r="1.7"/>
+        <circle cx="415" cy="167" r="1.7"/><circle cx="417" cy="189" r="1.7"/><circle cx="416" cy="223" r="1.7"/>
+        <circle cx="414" cy="245" r="1.7"/><circle cx="411" cy="267" r="1.7"/>
+        <circle cx="608" cy="228" r="1.7"/><circle cx="622" cy="231" r="1.7"/><circle cx="636" cy="234" r="1.7"/>
+        <circle cx="650" cy="237" r="1.7"/>
+      </g>
+      <!-- polígono -->
+      <path d="M348 146 L582 146 L582 244 L536 244 L536 342 L400 342 L348 296 Z"
+        fill="rgba(55,138,221,.05)" stroke="var(--draw-fg)" stroke-width="1.6" stroke-linejoin="round"/>
+    </svg>
+
+    <nav class="rail">
+      <div class="ri" style="color:var(--fg);margin-bottom:6px">
+        <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/><path d="M3 12l9 4.5 9-4.5"/></svg></div>
+      <div class="ri on" title="Territorio">
+        <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3 5.5v15L9 18l6 3 6-2.5v-15L15 6z"/><path d="M9 3v15M15 6v15"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4 18.5h16"/></svg></div>
+      <div class="sp"></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8"/></svg></div>
+    </nav>
+
+    <div class="top">
+      <div class="crumb"><span>Territorio</span><span class="sep">/</span><b>lugo-norte</b></div>
+      <div style="flex:1"></div>
+      <span class="chip on">98 teselas sin indexar</span>
+      <span class="mono" style="font-size:10px;color:var(--subtle)">z14 · 43.0121, -7.5560</span>
+    </div>
+
+    <!-- panel de disponibilidad -->
+    <aside class="glass" style="position:absolute;left:58px;top:52px;z-index:20;width:286px;padding:15px 15px 13px">
+      <div class="row"><span class="tag" style="flex:1">Disponibilidad</span>
+        <span class="chip">sondeado hace 2 d</span></div>
+
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:9px">
+        <div class="row"><span class="tog on"><i></i></span>
+          <span class="sw" style="background:var(--p-mly)"></span>
+          <span style="font-size:11.5px;flex:1">Mapillary</span>
+          <span class="mono" style="font-size:10px;color:var(--subtle)">exacto</span></div>
+        <div class="row"><span class="tog on"><i></i></span>
+          <span class="sw" style="background:var(--p-kv)"></span>
+          <span style="font-size:11.5px;flex:1">KartaView</span>
+          <span class="mono" style="font-size:10px;color:var(--subtle)">exacto</span></div>
+        <div class="row"><span class="tog on"><i></i></span>
+          <span class="sq" style="background:var(--p-goo);opacity:.55"></span>
+          <span style="font-size:11.5px;flex:1">Google Street View</span>
+          <span class="mono" style="font-size:10px;color:var(--warning-fg)">muestreo</span></div>
+        <div class="row" style="opacity:.5"><span class="tog"><i></i></span>
+          <span class="sq" style="background:var(--p-com);opacity:.55"></span>
+          <span style="font-size:11.5px;flex:1">Wikimedia Commons</span>
+          <span class="mono" style="font-size:10px;color:var(--subtle)">muestreo</span></div>
+        <div class="row" style="opacity:.5"><span class="tog"><i></i></span>
+          <span class="sq" style="background:var(--p-flk);opacity:.55"></span>
+          <span style="font-size:11.5px;flex:1">Flickr</span>
+          <span class="mono" style="font-size:10px;color:var(--subtle)">muestreo</span></div>
+        <div class="row" style="opacity:.35"><span class="tog"><i></i></span>
+          <span class="sq" style="background:#4a4d52"></span>
+          <span style="font-size:11.5px;flex:1">Mapbox Satellite</span>
+          <span class="mono" style="font-size:10px">global</span></div>
+      </div>
+
+      <div style="height:1px;background:var(--border);margin:13px 0 11px"></div>
+      <div class="note">Mapbox cenital no se dibuja: «hay satélite en todas partes» no informa de nada.
+        Y el muestreo solo distingue tres niveles — <b>hay</b>, <b>poco</b>, <b>no hay</b>— porque
+        no sabe contar mejor.</div>
+
+      <div style="display:flex;gap:7px;margin-top:12px">
+        <span class="btn gho" style="flex:1;text-align:center;padding:7px 0">Volver a sondear</span>
+      </div>
+      <div class="note" style="margin-top:8px;text-align:center">
+        98 teselas · ~4 900 peticiones gratuitas · 0,00 €
+      </div>
+    </aside>
+
+    <!-- aviso de la regla dura -->
+    <div class="glass" style="position:absolute;left:58px;bottom:22px;z-index:20;width:286px;padding:11px 13px">
+      <div class="row" style="align-items:flex-start;gap:8px">
+        <svg class="i" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--warning-fg)" stroke-width="1.7" stroke-linecap="round" style="margin-top:1px;flex-shrink:0"><path d="M12 3.2 22.2 20.8H1.8z"/><path d="M12 9.8v4.4"/><circle cx="12" cy="17.4" r=".6" fill="currentColor" stroke="none"/></svg>
+        <span class="note" style="color:var(--warning-fg)">El sondeo <b style="color:var(--warning-fg)">no</b> se
+          repite al mover el mapa. Pasear por una ciudad con Google encendido quemaría cuota sin que nadie lo
+          hubiera decidido.</span>
+      </div>
+    </div>
+
+    <!-- leyenda -->
+    <div class="glass" style="position:absolute;right:16px;bottom:22px;z-index:20;padding:11px 14px">
+      <div class="tag">Leyenda</div>
+      <div style="display:flex;gap:18px;margin-top:9px">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div class="row"><span class="sw" style="background:var(--p-mly)"></span>
+            <span style="font-size:10.5px;color:var(--muted)">punto con foto</span></div>
+          <div class="row"><span class="sq" style="background:var(--p-goo);opacity:.30"></span>
+            <span style="font-size:10.5px;color:var(--muted)">tesela con mucho</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div class="row"><span class="sq" style="background:var(--p-goo);opacity:.13"></span>
+            <span style="font-size:10.5px;color:var(--muted)">tesela con poco</span></div>
+          <div class="row"><span class="sq" style="background:transparent;border:1px dashed rgba(154,154,149,.42)"></span>
+            <span style="font-size:10.5px;color:var(--muted)">sin indexar por nadie</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ 2 ══════════════════════════ -->
+<section class="shot">
+  <div class="cap"><b>2 · Estimar y confirmar</b>
+    <span>el sondeo ya sabe cuántas unidades de pago hace falta, así que la confirmación sale casi gratis: es la misma llamada que pintó los puntitos. Dos puertas distintas — esta, que es <b style="color:var(--fg);font-weight:400">informada</b>, y el tope mensual, que es una <b style="color:var(--fg);font-weight:400">barrera</b>. Lo gratis también se lista: hace falta para entender de dónde va a salir cada imagen.</span></div>
+  <div class="frame">
+    <div class="map" style="filter:brightness(.42) saturate(.6)">
+      <svg viewBox="0 0 1280 800" preserveAspectRatio="none">
+        <path class="road big" d="M-20 380 C 300 330, 620 430, 1300 350"/>
+        <path class="road" d="M400 -10 C 430 240, 360 520, 420 820"/>
+        <path class="road" d="M900 -10 C 870 250, 960 500, 910 820"/>
+      </svg>
+    </div>
+    <div style="position:absolute;inset:0;background:rgba(6,7,8,.62);z-index:14"></div>
+
+    <div class="glass" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+      z-index:22;width:600px;padding:22px 24px">
+      <p style="font-size:14px">Antes de descargar</p>
+      <p class="note" style="margin-top:5px;max-width:500px">98 teselas sin indexar en
+        <span class="mono" style="color:var(--fg)">lugo-norte</span>. Esto es lo que va a costar, por origen.</p>
+
+      <table class="t2" style="margin-top:18px">
+        <tr><th style="width:40%">Origen</th><th>Teselas</th><th>Unidades</th><th>Precio</th><th style="text-align:right">Coste</th></tr>
+        <tr>
+          <td><span class="row"><span class="sw" style="background:var(--p-mly)"></span>Mapillary</span></td>
+          <td class="n" style="text-align:left">71</td><td class="n" style="text-align:left">18 402 fotos</td>
+          <td style="color:var(--subtle)">gratis</td><td class="n" style="color:var(--subtle)">0,00 €</td>
+        </tr>
+        <tr>
+          <td><span class="row"><span class="sw" style="background:var(--p-kv)"></span>KartaView</span></td>
+          <td class="n" style="text-align:left">34</td><td class="n" style="text-align:left">4 118 fotos</td>
+          <td style="color:var(--subtle)">gratis</td><td class="n" style="color:var(--subtle)">0,00 €</td>
+        </tr>
+        <tr>
+          <td><span class="row"><span class="sq" style="background:var(--p-goo);opacity:.6"></span>Google Street View</span></td>
+          <td class="n" style="text-align:left">62</td><td class="n" style="text-align:left">9 240 imágenes</td>
+          <td class="mono" style="font-size:10.5px">7,00 $/1000</td><td class="n" style="color:var(--warning-fg)">59,86 €</td>
+        </tr>
+        <tr>
+          <td><span class="row"><span class="sq" style="background:#4a4d52"></span>Mapbox Satellite</span></td>
+          <td class="n" style="text-align:left">98</td><td class="n" style="text-align:left">6 272 teselas</td>
+          <td class="mono" style="font-size:10.5px">0,75 $/1000</td><td class="n" style="color:var(--warning-fg)">4,35 €</td>
+        </tr>
+        <tr>
+          <td><span class="row"><span class="sq" style="background:var(--p-com);opacity:.6"></span>Wikimedia Commons</span></td>
+          <td class="n" style="text-align:left">23</td><td class="n" style="text-align:left">611 fotos</td>
+          <td style="color:var(--subtle)">gratis</td><td class="n" style="color:var(--subtle)">0,00 €</td>
+        </tr>
+        <tr>
+          <td><span class="row"><span class="sq" style="background:var(--p-flk);opacity:.6"></span>Flickr <span class="chip">solo CC</span></span></td>
+          <td class="n" style="text-align:left">40</td><td class="n" style="text-align:left">2 044 fotos</td>
+          <td style="color:var(--subtle)">gratis</td><td class="n" style="color:var(--subtle)">0,00 €</td>
+        </tr>
+        <tr class="tot"><td colspan="4">Total estimado</td><td class="n">64,21 €</td></tr>
+      </table>
+
+      <div style="margin-top:18px;padding:12px 13px;border:1px solid var(--border);border-radius:9px">
+        <div class="row"><span class="k" style="flex:1">Presupuesto de agosto</span>
+          <span class="mono" style="font-size:10.5px;color:var(--muted)">148,30 € de 400,00 €</span></div>
+        <div class="bar" style="margin-top:8px">
+          <i style="width:37%;background:var(--fg)"></i>
+          <i style="width:16%;background:var(--warning)"></i>
+        </div>
+        <div class="row" style="margin-top:8px;gap:14px">
+          <span class="row" style="gap:6px"><s class="sq" style="background:var(--fg)"></s>
+            <span class="note">gastado</span></span>
+          <span class="row" style="gap:6px"><s class="sq" style="background:var(--warning)"></s>
+            <span class="note">esta descarga</span></span>
+          <span style="flex:1"></span>
+          <span class="note">quedarían <b>187,49 €</b></span>
+        </div>
+      </div>
+
+      <p class="note" style="margin-top:13px">Solo se apunta lo que el proveedor <b>sirva de verdad</b>: una
+        petición que falla y no devuelve imagen no se cobra ni se cuenta. Y el presupuesto va con la descarga
+        como contador vivo, no como una cifra que se mira al empezar.</p>
+
+      <div style="display:flex;gap:9px;justify-content:flex-end;margin-top:18px">
+        <span class="btn gho">Cancelar</span>
+        <span class="btn gho">Solo los gratuitos</span>
+        <span class="btn pri">Confirmar y descargar · 64,21 €</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="shot">
+  <div class="cap"><b>2b · El tope, que no es una advertencia</b>
+    <span>si <span class="mono">gastado + previsto &gt; tope</span>, el trabajo se rechaza <b style="color:var(--fg);font-weight:400">entero y ruidosamente</b>. Nunca a medias: media descarga es un índice con agujeros que nadie sabe dónde están. Misma regla que la v1.</span></div>
+  <div class="frame" style="height:420px">
+    <div style="position:absolute;inset:0;background:rgba(6,7,8,.72)"></div>
+    <div class="glass" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+      width:560px;padding:22px 24px;border-color:rgba(163,51,51,.45)">
+      <div class="row" style="align-items:flex-start;gap:10px">
+        <svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--danger-fg)" stroke-width="1.7" stroke-linecap="round" style="margin-top:2px;flex-shrink:0"><path d="M12 3.2 22.2 20.8H1.8z"/><path d="M12 9.8v4.4"/><circle cx="12" cy="17.4" r=".6" fill="currentColor" stroke="none"/></svg>
+        <div style="flex:1">
+          <p style="font-size:13.5px;color:var(--danger-fg)">Esta descarga pasaría el tope del mes</p>
+          <p class="note" style="margin-top:6px">Llevas <b>371,40 €</b> gastados en agosto y esto sumaría
+            <b>64,21 €</b>, que son <b>35,61 €</b> por encima del tope de <b>400,00 €</b>.
+            No se descarga nada.</p>
+        </div>
+      </div>
+      <div class="bar" style="margin-top:15px">
+        <i style="width:74%;background:var(--fg)"></i>
+        <i style="width:9%;background:var(--warning)"></i>
+        <i style="width:8%;background:var(--danger)"></i>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <span class="note" style="flex:1">lo rojo es lo que no cabe</span>
+        <span class="mono" style="font-size:10px;color:var(--subtle)">tope 400,00 €</span>
+      </div>
+      <div style="display:flex;gap:9px;justify-content:flex-end;margin-top:18px">
+        <span class="btn gho">Subir el tope en Ajustes</span>
+        <span class="btn gho">Solo los gratuitos · 0,00 €</span>
+        <span class="btn pri dis">Confirmar y descargar</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ 3 ══════════════════════════ -->
+<h2>Bajar, y no pagar dos veces</h2>
+
+<section class="shot">
+  <div class="cap"><b>3 · La descarga</b>
+    <span>la unidad de trabajo es <b style="color:var(--fg);font-weight:400">tesela × origen</b>, y se anota en SQLite al completarse. Eso es lo que hace que una descarga interrumpida se retome por tesela y —lo que importa— no vuelva a pagar por una tesela ya pagada. Las dos clases de fallo del 7a se mantienen: «esta imagen no se puede bajar» es un resultado que se anota y se salta; que se caiga la red es una avería que vuelve una vez.</span></div>
+  <div class="frame">
+    <nav class="rail">
+      <div class="ri" style="color:var(--fg);margin-bottom:6px">
+        <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/><path d="M3 12l9 4.5 9-4.5"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3 5.5v15L9 18l6 3 6-2.5v-15L15 6z"/><path d="M9 3v15M15 6v15"/></svg></div>
+      <div class="ri on" title="Ingesta"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4 18.5h16"/></svg></div>
+      <div class="sp"></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8"/></svg></div>
+    </nav>
+    <div class="top">
+      <div class="crumb"><span>lugo-norte</span><span class="sep">/</span><b>Descarga</b></div>
+      <div style="flex:1"></div>
+      <span class="chip blue">bajando</span>
+      <span class="chip amber mono">28,90 € de 64,21 €</span>
+    </div>
+
+    <div style="position:absolute;top:38px;left:44px;right:0;bottom:0;display:flex">
+      <!-- columna principal -->
+      <div style="flex:1;padding:20px 22px;overflow:hidden">
+        <div class="row">
+          <span style="font-size:13px;flex:1">Bajando imágenes de red</span>
+          <span class="mono" style="font-size:11px;color:var(--muted)">41 de 98 teselas</span>
+        </div>
+        <div class="bar" style="margin-top:10px;height:6px">
+          <i style="width:42%;background:var(--fg)"></i>
+        </div>
+
+        <div class="tag" style="margin-top:22px">Por origen</div>
+        <table class="t2" style="margin-top:9px">
+          <tr>
+            <td style="width:35%"><span class="row"><span class="sw" style="background:var(--p-mly)"></span>Mapillary</span></td>
+            <td style="width:34%"><span class="bar" style="width:150px"><i style="width:72%;background:var(--p-mly)"></i></span></td>
+            <td class="n" style="color:var(--muted)">51/71</td>
+            <td class="n" style="color:var(--subtle)">13 204 fotos</td>
+          </tr>
+          <tr>
+            <td><span class="row"><span class="sw" style="background:var(--p-kv)"></span>KartaView</span></td>
+            <td><span class="bar" style="width:150px"><i style="width:100%;background:var(--p-kv)"></i></span></td>
+            <td class="n" style="color:var(--muted)">34/34</td>
+            <td class="n" style="color:var(--subtle)">4 118 fotos</td>
+          </tr>
+          <tr>
+            <td><span class="row"><span class="sq" style="background:var(--p-goo);opacity:.6"></span>Google</span></td>
+            <td><span class="bar" style="width:150px"><i style="width:39%;background:var(--p-goo)"></i></span></td>
+            <td class="n" style="color:var(--muted)">24/62</td>
+            <td class="n" style="color:var(--warning-fg)">24,58 €</td>
+          </tr>
+          <tr>
+            <td><span class="row"><span class="sq" style="background:#4a4d52"></span>Mapbox cenital</span></td>
+            <td><span class="bar" style="width:150px"><i style="width:63%;background:#6c7076"></i></span></td>
+            <td class="n" style="color:var(--muted)">62/98</td>
+            <td class="n" style="color:var(--warning-fg)">4,32 €</td>
+          </tr>
+          <tr>
+            <td><span class="row"><span class="sq" style="background:var(--p-com);opacity:.6"></span>Commons</span></td>
+            <td><span class="bar" style="width:150px"><i style="width:100%;background:var(--p-com)"></i></span></td>
+            <td class="n" style="color:var(--muted)">23/23</td>
+            <td class="n" style="color:var(--subtle)">598 fotos</td>
+          </tr>
+          <tr>
+            <td><span class="row"><span class="sq" style="background:var(--p-flk);opacity:.6"></span>Flickr</span></td>
+            <td><span class="bar" style="width:150px"><i style="width:22%;background:var(--p-flk)"></i></span></td>
+            <td class="n" style="color:var(--muted)">9/40</td>
+            <td class="n" style="color:var(--subtle)">402 fotos</td>
+          </tr>
+        </table>
+
+        <div class="tag" style="margin-top:24px">Registro</div>
+        <div style="margin-top:8px;border:1px solid var(--border);border-radius:9px;padding:11px 13px;
+          background:rgba(0,0,0,.22);height:168px;overflow:hidden">
+          <div class="logline">
+            <em>10:41:02</em> mapillary <b>03113322013021</b> · 412 fotos, atribución de 412<br>
+            <em>10:41:05</em> flickr <b>03113322013021</b> · <span style="color:var(--warning-fg)">31 descartadas: licencia ND</span><br>
+            <em>10:41:09</em> google <b>03113322013022</b> · 148 imágenes · 1,04 €<br>
+            <em>10:41:11</em> commons <b>03113322013022</b> · 26 fotos, atribución de 26<br>
+            <em>10:41:14</em> mapillary <b>03113322013023</b> · <span style="color:var(--danger-fg)">2 no decodifican, se anotan y se saltan</span><br>
+            <em>10:41:18</em> mapbox <b>03113322013023</b> · 64 teselas cenitales · 0,04 €<br>
+            <em>10:41:22</em> kartaview <b>03113322013030</b> · <span style="color:var(--warning-fg)">avería de red, el lote vuelve una vez</span><br>
+            <em>10:41:26</em> kartaview <b>03113322013030</b> · 96 fotos, atribución de 96<br>
+          </div>
+        </div>
+      </div>
+
+      <!-- lateral -->
+      <aside style="width:300px;border-left:1px solid var(--border);padding:20px 18px;
+        background:rgba(16,18,21,.5)">
+        <div class="tag">Retomar</div>
+        <p class="note" style="margin-top:8px">Cada pareja <b>tesela × origen</b> se anota al terminar. Si
+          cierras esto a mitad, al volver se sigue por donde iba y <b>no se vuelve a pagar</b> por nada ya
+          descargado.</p>
+
+        <div style="height:1px;background:var(--border);margin:16px 0"></div>
+
+        <div class="tag">Atribución</div>
+        <p class="note" style="margin-top:8px">Se captura <b>ahora</b>, por imagen, junto al identificador de
+          origen y la licencia. Después es irrecuperable, y sin ella el índice no se puede publicar. Era el
+          agujero de la v1.</p>
+        <div style="margin-top:11px;display:flex;flex-direction:column;gap:7px">
+          <div class="row"><span style="font-size:11px;flex:1;color:var(--muted)">con atribución</span>
+            <span class="mono" style="font-size:11px">18 320</span></div>
+          <div class="row"><span style="font-size:11px;flex:1;color:var(--warning-fg)">sin atribución</span>
+            <span class="mono" style="font-size:11px;color:var(--warning-fg)">0</span></div>
+        </div>
+
+        <div style="height:1px;background:var(--border);margin:16px 0"></div>
+
+        <div class="tag">Directorio de paso</div>
+        <p class="note" style="margin-top:8px">Nada toca el índice hasta pasar el filtro: tope de tamaño antes de
+          descomprimir, nombres en lista blanca, y cada fichero tiene que decodificar de verdad como imagen.
+          Un fallo descarta el lote entero sin escribir.</p>
+
+        <div style="display:flex;gap:8px;margin-top:20px">
+          <span class="btn gho" style="flex:1;text-align:center;padding:7px 0">Pausar</span>
+          <span class="btn gho" style="flex:1;text-align:center;padding:7px 0">Detener</span>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ 4 ══════════════════════════ -->
+<h2>Limpiar lo que se ha bajado</h2>
+
+<section class="shot">
+  <div class="cap"><b>4 · Revisión por excepción</b>
+    <span>primero las reglas, que no abren ninguna imagen: precisión de la geoetiqueta, tamaño, proporción, categorías del proveedor, fecha. Lo que sobrevive llega aquí <b style="color:var(--fg);font-weight:400">ya aceptado</b>, y tú clicas lo malo. Aprobar tres mil fotos de una en una no lo hace nadie dos veces. Solo pasan por aquí las <b style="color:var(--fg);font-weight:400">sueltas</b>: una panorámica de calle o una tesela cenital son capturas sistemáticas, no material que curar.</span></div>
+  <div class="frame">
+    <nav class="rail">
+      <div class="ri" style="color:var(--fg);margin-bottom:6px">
+        <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/><path d="M3 12l9 4.5 9-4.5"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3 5.5v15L9 18l6 3 6-2.5v-15L15 6z"/><path d="M9 3v15M15 6v15"/></svg></div>
+      <div class="ri on"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4 18.5h16"/></svg></div>
+      <div class="sp"></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8"/></svg></div>
+    </nav>
+    <div class="top">
+      <div class="crumb"><span>lugo-norte</span><span class="sep">/</span><b>Revisión</b></div>
+      <div style="flex:1"></div>
+      <span class="chip">solo sueltas</span>
+      <span class="chip on mono">2 613 aceptadas</span>
+      <span class="chip red mono">34 descartadas por ti</span>
+    </div>
+
+    <div style="position:absolute;top:38px;left:44px;right:300px;bottom:0;padding:16px 18px;overflow:hidden">
+      <div class="row" style="margin-bottom:13px">
+        <span class="chip on">todas</span>
+        <span class="chip">Commons · 598</span>
+        <span class="chip">Flickr · 2 049</span>
+        <span style="flex:1"></span>
+        <span class="note">clic para descartar · <b>May</b>+clic para un rango</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:9px">
+        <div class="ph" style="background:linear-gradient(150deg,#3b4a5c,#1d2a36)"><span class="lic">CC BY-SA</span></div>
+        <div class="ph" style="background:linear-gradient(150deg,#5c4a3b,#362a1d)"><span class="lic">CC BY-SA</span></div>
+        <div class="ph no" style="background:linear-gradient(150deg,#6b5b4a,#2f2a24)">
+          <span class="x"><svg width="7" height="7" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="1.6"><path d="M1 1l8 8M9 1L1 9"/></svg></span>
+          <span class="lic">interior</span></div>
+        <div class="ph" style="background:linear-gradient(150deg,#44566b,#20303e)"><span class="lic">CC BY</span></div>
+        <div class="ph" style="background:linear-gradient(150deg,#4a5c47,#232f22)"><span class="lic">CC BY-SA</span></div>
+        <div class="ph" style="background:linear-gradient(150deg,#5b4560,#2b1f2f)"><span class="lic">CC0</span></div>
+
+        <div class="ph" style="background:linear-gradient(150deg,#3f5262,#1b2831)"><span class="lic">CC BY-SA</span></div>
+        <div class="ph no" style="background:linear-gradient(150deg,#7a5f52,#3a2c26)">
+          <span class="x"><svg width="7" height="7" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="1.6"><path d="M1 1l8 8M9 1L1 9"/></svg></span>
+          <span class="lic">primer plano</span></div>
+        <div class="ph" style="background:linear-gradient(150deg,#4d5f70,#232f39)"><span class="lic">CC BY</span></div>
+        <div class="ph" style="background:linear-gradient(150deg,#575c46,#2a2d21)"><span class="lic">CC BY-SA</span></div>
+        <div class="ph" style="background:linear-gradient(150deg,#3a4d5e,#1a252e)"><span class="lic">CC0</span></div>
+        <div class="ph no" style="background:linear-gradient(150deg,#6a4f5c,#33262c)">
+          <span class="x"><svg width="7" height="7" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="1.6"><path d="M1 1l8 8M9 1L1 9"/></svg></span>
+          <span class="lic">gente</span></div>
+
+        <div class="ph" style="background:linear-gradient(150deg,#495d6e,#212d36)"><span class="lic">CC BY-SA</span></div>
+        <div class="ph" style="background:linear-gradient(150deg,#5e5142,#2d271f)"><span class="lic">CC BY</span></div>
+        <div class="ph" style="background:linear-gradient(150deg,#42566a,#1e2933)"><span class="lic">CC BY-SA</span></div>
+        <div class="ph" style="background:linear-gradient(150deg,#4f6250,#252f26)"><span class="lic">CC0</span></div>
+        <div class="ph" style="background:linear-gradient(150deg,#5a4a65,#2a2231)"><span class="lic">CC BY-SA</span></div>
+        <div class="ph" style="background:linear-gradient(150deg,#3d5162,#1c2831)"><span class="lic">CC BY</span></div>
+
+        <div class="ph" style="background:linear-gradient(150deg,#52606b,#262d33)"><span class="lic">CC BY-SA</span></div>
+        <div class="ph" style="background:linear-gradient(150deg,#63554a,#302a24)"><span class="lic">CC BY-SA</span></div>
+        <div class="ph" style="background:linear-gradient(150deg,#465a6d,#202b34)"><span class="lic">CC0</span></div>
+        <div class="ph" style="background:linear-gradient(150deg,#4b5e4a,#232c23)"><span class="lic">CC BY</span></div>
+        <div class="ph" style="background:linear-gradient(150deg,#565068,#282533)"><span class="lic">CC BY-SA</span></div>
+        <div class="ph" style="background:linear-gradient(150deg,#405464,#1d2932)"><span class="lic">CC BY-SA</span></div>
+      </div>
+    </div>
+
+    <aside style="position:absolute;top:38px;right:0;bottom:0;width:300px;border-left:1px solid var(--border);
+      padding:20px 18px;background:rgba(16,18,21,.5)">
+      <div class="tag">Ya filtrado por reglas</div>
+      <p class="note" style="margin-top:8px">De <b>4 106</b> bajadas, las reglas descartaron <b>1 459</b> sin
+        abrir ninguna. Cada una con su motivo anotado, y ninguna se reintenta: eso es un resultado, no una
+        avería.</p>
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+        <div class="row"><span style="font-size:11px;flex:1;color:var(--muted)">geoetiqueta imprecisa</span>
+          <span class="mono" style="font-size:11px;color:var(--subtle)">612</span></div>
+        <div class="row"><span style="font-size:11px;flex:1;color:var(--muted)">demasiado pequeña</span>
+          <span class="mono" style="font-size:11px;color:var(--subtle)">388</span></div>
+        <div class="row"><span style="font-size:11px;flex:1;color:var(--muted)">categoría de interior</span>
+          <span class="mono" style="font-size:11px;color:var(--subtle)">301</span></div>
+        <div class="row"><span style="font-size:11px;flex:1;color:var(--muted)">licencia ND o NC</span>
+          <span class="mono" style="font-size:11px;color:var(--subtle)">158</span></div>
+      </div>
+
+      <div style="height:1px;background:var(--border);margin:18px 0"></div>
+
+      <div class="tag">Lo que entra al índice</div>
+      <div style="margin-top:10px">
+        <div class="bar" style="height:6px">
+          <i style="width:64%;background:var(--fg)"></i>
+          <i style="width:35%;background:#33373d"></i>
+          <i style="width:1%;background:var(--danger)"></i>
+        </div>
+        <div style="margin-top:11px;display:flex;flex-direction:column;gap:8px">
+          <div class="row"><s class="sq" style="background:var(--fg)"></s>
+            <span style="font-size:11.5px;flex:1">aceptadas</span>
+            <span class="mono" style="font-size:11px">2 613</span></div>
+          <div class="row"><s class="sq" style="background:#33373d"></s>
+            <span style="font-size:11.5px;flex:1;color:var(--muted)">fuera por reglas</span>
+            <span class="mono" style="font-size:11px;color:var(--muted)">1 459</span></div>
+          <div class="row"><s class="sq" style="background:var(--danger)"></s>
+            <span style="font-size:11.5px;flex:1;color:var(--danger-fg)">fuera por ti</span>
+            <span class="mono" style="font-size:11px;color:var(--danger-fg)">34</span></div>
+        </div>
+      </div>
+
+      <p class="note" style="margin-top:16px">Descartar aquí no borra el fichero: lo marca. Una imagen sin
+        vector sigue siendo material que se puede recuperar si cambias de opinión.</p>
+
+      <div style="position:absolute;left:18px;right:18px;bottom:20px;display:flex;gap:8px">
+        <span class="btn gho" style="flex:1;text-align:center;padding:7px 0">Ver descartadas</span>
+        <span class="btn pri" style="flex:1;text-align:center;padding:7px 0">Embeber 2 613</span>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ══════════════════════════ 5 ══════════════════════════ -->
+<h2>Publicar, con lo que se puede publicar</h2>
+
+<section class="shot">
+  <div class="cap"><b>5 · Qué viaja y qué no</b>
+    <span>lo tentador es publicar el vector de una imagen no redistribuible aunque no viaje su píxel. No sirve: el motor verifica geométricamente <b style="color:var(--fg);font-weight:400">contra la imagen</b>, así que un vector sin ella le da al receptor un candidato que no puede verificar nunca. Es peso a cambio de nada. Así que lo no redistribuible <b style="color:var(--fg);font-weight:400">no se publica en absoluto</b> — el índice local lo guarda todo y lo usa todo; publicar es un filtro.</span></div>
+  <div class="frame">
+    <nav class="rail">
+      <div class="ri" style="color:var(--fg);margin-bottom:6px">
+        <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/></svg></div>
+      <div class="ri on"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/><path d="M3 12l9 4.5 9-4.5"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3 5.5v15L9 18l6 3 6-2.5v-15L15 6z"/><path d="M9 3v15M15 6v15"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4 18.5h16"/></svg></div>
+      <div class="sp"></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8"/></svg></div>
+    </nav>
+    <div class="top">
+      <div class="crumb"><span>Índices</span><span class="sep">/</span><span>lugo-norte</span>
+        <span class="sep">/</span><b>Sellar</b></div>
+      <div style="flex:1"></div>
+      <span class="chip">v1 · z14</span>
+    </div>
+
+    <div style="position:absolute;top:38px;left:44px;right:0;bottom:0;padding:22px 26px;overflow:hidden">
+      <div style="max-width:820px">
+        <p style="font-size:13px">Al sellar <span class="mono" style="color:var(--fg)">lugo-norte-v1.lumidx</span></p>
+        <p class="note" style="margin-top:5px">21 418 imágenes en el índice. Esto es lo que sale del paquete y
+          por qué.</p>
+
+        <table class="t2" style="margin-top:20px">
+          <tr><th style="width:26%">Origen</th><th>Licencia</th><th style="text-align:right">En el índice</th>
+            <th style="text-align:right">Viajan</th><th style="width:26%">Por qué</th></tr>
+          <tr>
+            <td><span class="row"><span class="sw" style="background:var(--p-mly)"></span>Mapillary</span></td>
+            <td class="mono" style="font-size:10.5px;color:var(--muted)">CC BY-SA 4.0</td>
+            <td class="n">13 204</td><td class="n">13 204</td>
+            <td class="note">libre, con autor por fichero</td>
+          </tr>
+          <tr>
+            <td><span class="row"><span class="sw" style="background:var(--p-kv)"></span>KartaView</span></td>
+            <td class="mono" style="font-size:10.5px;color:var(--muted)">CC BY-SA 4.0</td>
+            <td class="n">4 118</td><td class="n">4 118</td>
+            <td class="note">libre, con autor por fichero</td>
+          </tr>
+          <tr>
+            <td><span class="row"><span class="sq" style="background:var(--p-com);opacity:.6"></span>Commons</span></td>
+            <td class="mono" style="font-size:10.5px;color:var(--muted)">CC0 / CC BY-SA</td>
+            <td class="n">598</td><td class="n">598</td>
+            <td class="note">libre por definición</td>
+          </tr>
+          <tr>
+            <td><span class="row"><span class="sq" style="background:var(--p-flk);opacity:.6"></span>Flickr</span></td>
+            <td class="mono" style="font-size:10.5px;color:var(--muted)">varía por foto</td>
+            <td class="n">2 049</td><td class="n">1 891</td>
+            <td class="note">158 con ND o NC se quedan</td>
+          </tr>
+          <tr>
+            <td><span class="row"><span class="sq" style="background:var(--p-goo);opacity:.6"></span>Google</span></td>
+            <td class="mono" style="font-size:10.5px;color:var(--danger-fg)">no redistribuible</td>
+            <td class="n">9 240</td><td class="n" style="color:var(--danger-fg)">0</td>
+            <td class="note" style="color:var(--danger-fg)">ni imagen ni vector</td>
+          </tr>
+          <tr>
+            <td><span class="row"><span class="sq" style="background:#4a4d52"></span>Mapbox cenital</span></td>
+            <td class="mono" style="font-size:10.5px;color:var(--danger-fg)">no redistribuible</td>
+            <td class="n">6 272</td><td class="n" style="color:var(--danger-fg)">0</td>
+            <td class="note" style="color:var(--danger-fg)">ni imagen ni vector</td>
+          </tr>
+          <tr class="tot"><td colspan="2">Total</td><td class="n">35 481</td><td class="n">19 811</td>
+            <td class="note" style="font-weight:400">56% del índice</td></tr>
+        </table>
+
+        <div style="display:flex;gap:14px;margin-top:24px">
+          <div style="flex:1;border:1px solid var(--border);border-radius:10px;padding:14px 15px">
+            <div class="tag">Cobertura que hereda quien lo instale</div>
+            <p class="note" style="margin-top:8px">98 teselas con material publicable, de 98 indexadas.
+              Ninguna se pierde entera — pero quien instale esto <b>no hereda tu cobertura de Google ni la
+              cenital</b>, así que para él esas teselas siguen estando sin indexar <b>en esos orígenes</b>.</p>
+            <p class="note" style="margin-top:9px">Por eso la regla de no indexar dos veces razona
+              <b>por tesela y por origen</b>, no solo por tesela.</p>
+          </div>
+          <div style="flex:1;border:1px solid rgba(239,159,39,.32);border-radius:10px;padding:14px 15px">
+            <div class="tag" style="color:var(--warning-fg)">Lo que te quedas</div>
+            <p class="note" style="margin-top:8px">Los 15 512 de Google y Mapbox <b>siguen en tu índice local</b>
+              y siguen usándose para buscar. Publicar es un filtro sobre la copia que sale, no un borrado.</p>
+            <div class="row" style="margin-top:11px">
+              <span class="bar" style="flex:1"><i style="width:56%;background:var(--fg)"></i><i style="width:44%;background:var(--warning)"></i></span>
+            </div>
+            <div class="row" style="margin-top:7px;gap:12px">
+              <span class="note">19 811 viajan</span>
+              <span class="note" style="color:var(--warning-fg)">15 512 se quedan</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:9px;justify-content:flex-end;margin-top:22px">
+          <span class="btn gho">Ver el manifiesto</span>
+          <span class="btn pri">Sellar · 19 811 imágenes</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ 6 ══════════════════════════ -->
+<section class="shot">
+  <div class="cap"><b>6 · Claves, cuotas y tope</b>
+    <span>las claves van cifradas con la clave maestra local, generalizando lo que el 7a ya hace con la de Mapbox. Un origen <b style="color:var(--fg);font-weight:400">sin clave no aparece como disponible</b>, en vez de aparecer y reventar cuando ya has confirmado el gasto. Y la nota de la última fila no es un descuido: Flickr y Google Static solo aceptan la clave por parámetro de consulta, no hay cabecera que valga.</span></div>
+  <div class="frame">
+    <nav class="rail">
+      <div class="ri" style="color:var(--fg);margin-bottom:6px">
+        <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/><path d="M3 12l9 4.5 9-4.5"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3 5.5v15L9 18l6 3 6-2.5v-15L15 6z"/><path d="M9 3v15M15 6v15"/></svg></div>
+      <div class="ri"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4 18.5h16"/></svg></div>
+      <div class="sp"></div>
+      <div class="ri on"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8"/></svg></div>
+    </nav>
+    <div class="top">
+      <div class="crumb"><span>Ajustes</span><span class="sep">/</span><b>Orígenes de red</b></div>
+    </div>
+
+    <div style="position:absolute;top:38px;left:44px;right:0;bottom:0;padding:22px 26px;overflow:hidden">
+      <div style="max-width:780px">
+        <p style="font-size:13px">Orígenes de red</p>
+        <p class="note" style="margin-top:5px">Tus claves, en tu máquina, cifradas con la clave maestra local.
+          Nunca salen de aquí ni viajan dentro de ningún paquete.</p>
+
+        <table class="t2" style="margin-top:20px">
+          <tr><th style="width:30%">Origen</th><th>Clave</th><th>Límite</th><th style="text-align:right">Coste</th><th style="width:16%"></th></tr>
+          <tr>
+            <td><span class="row"><span class="sw" style="background:var(--p-mly)"></span>Mapillary</span></td>
+            <td><span class="row" style="gap:7px"><span class="chip on">configurada</span>
+              <span class="mono" style="font-size:10px;color:var(--subtle)">MLY|····9f2c</span></span></td>
+            <td class="mono" style="font-size:10.5px;color:var(--muted)">8 req/s · 4 a la vez</td>
+            <td class="n" style="color:var(--subtle)">gratis</td>
+            <td style="text-align:right"><span class="btn gho" style="padding:5px 11px;font-size:10.5px">Cambiar</span></td>
+          </tr>
+          <tr>
+            <td><span class="row"><span class="sw" style="background:var(--p-kv)"></span>KartaView</span></td>
+            <td><span class="chip">no necesita</span></td>
+            <td class="mono" style="font-size:10.5px;color:var(--muted)">4 req/s · 2 a la vez</td>
+            <td class="n" style="color:var(--subtle)">gratis</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td><span class="row"><span class="sq" style="background:var(--p-goo);opacity:.6"></span>Google Street View</span></td>
+            <td><span class="row" style="gap:7px"><span class="chip on">configurada</span>
+              <span class="mono" style="font-size:10px;color:var(--subtle)">AIza····b71d</span></span></td>
+            <td class="mono" style="font-size:10.5px;color:var(--muted)">10 req/s · 4 a la vez</td>
+            <td class="n mono" style="font-size:10.5px;color:var(--warning-fg)">7,00 $/1000</td>
+            <td style="text-align:right"><span class="btn gho" style="padding:5px 11px;font-size:10.5px">Cambiar</span></td>
+          </tr>
+          <tr>
+            <td><span class="row"><span class="sq" style="background:#4a4d52"></span>Mapbox Satellite</span></td>
+            <td><span class="row" style="gap:7px"><span class="chip on">compartida con el mapa</span></span></td>
+            <td class="mono" style="font-size:10.5px;color:var(--muted)">16 req/s · 8 a la vez</td>
+            <td class="n mono" style="font-size:10.5px;color:var(--warning-fg)">0,75 $/1000</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td><span class="row"><span class="sq" style="background:var(--p-com);opacity:.6"></span>Wikimedia Commons</span></td>
+            <td><span class="chip">no necesita</span></td>
+            <td class="mono" style="font-size:10.5px;color:var(--muted)">2 req/s · 1 a la vez</td>
+            <td class="n" style="color:var(--subtle)">gratis</td>
+            <td></td>
+          </tr>
+          <tr style="opacity:.55">
+            <td><span class="row"><span class="sq" style="background:var(--p-flk);opacity:.6"></span>Flickr</span></td>
+            <td><span class="chip amber">sin configurar</span></td>
+            <td class="mono" style="font-size:10.5px;color:var(--subtle)">—</td>
+            <td class="n" style="color:var(--subtle)">gratis</td>
+            <td style="text-align:right"><span class="btn gho" style="padding:5px 11px;font-size:10.5px">Añadir</span></td>
+          </tr>
+        </table>
+
+        <p class="note" style="margin-top:11px;color:var(--warning-fg)">
+          Flickr está sin clave, así que <b style="color:var(--warning-fg)">no aparece</b> en la capa de
+          disponibilidad ni en la estimación. Mejor ausente que presente y reventando después de confirmar.
+        </p>
+
+        <div style="display:flex;gap:14px;margin-top:24px">
+          <div style="flex:1;border:1px solid var(--border);border-radius:10px;padding:15px 16px">
+            <div class="row"><span class="tag" style="flex:1">Tope mensual</span>
+              <span class="mono" style="font-size:11px;color:var(--fg)">400,00 €</span></div>
+            <div class="bar" style="margin-top:11px;height:6px"><i style="width:37%;background:var(--fg)"></i></div>
+            <div class="row" style="margin-top:9px">
+              <span class="note" style="flex:1">gastado en agosto</span>
+              <span class="mono" style="font-size:11px;color:var(--muted)">148,30 €</span></div>
+            <p class="note" style="margin-top:11px">Solo cuenta lo que el proveedor <b>sirvió</b>. Una petición
+              fallida no se cobra ni se apunta. Una fila por día y origen, y nada se borra.</p>
+            <div style="margin-top:12px"><span class="btn gho" style="padding:6px 13px;font-size:10.5px">Cambiar el tope</span></div>
+          </div>
+          <div style="flex:1;border:1px solid var(--border);border-radius:10px;padding:15px 16px">
+            <div class="tag">Dónde va la clave</div>
+            <p class="note" style="margin-top:9px">«Ningún secreto en una ruta» es una regla sobre
+              <b>nuestras</b> URLs y sigue en pie. Mapillary acepta <span class="mono">Authorization: OAuth</span>
+              y ahí se usa.</p>
+            <p class="note" style="margin-top:9px">Flickr y Google Static <b>solo</b> aceptan la clave por
+              parámetro de consulta: no hay cabecera que ofrezcan. No es un descuido nuestro, es lo único que
+              el proveedor admite — y va escrito para que dentro de seis meses nadie lo lea como un olvido.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>
