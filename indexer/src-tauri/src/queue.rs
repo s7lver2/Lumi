@@ -55,6 +55,10 @@ pub struct Cola {
 }
 
 struct Trabajador {
+    /// No se lee nunca, y aun así tiene que estar aquí: es lo que mantiene
+    /// vivo el proceso hijo. Al soltar el `Trabajador`, `kill_on_drop` lo
+    /// mata. Si se quitara el campo, el proceso moriría al salir de `arrancar`.
+    #[allow(dead_code)]
     hijo: Child,
     entrada: ChildStdin,
     salida: tokio::sync::mpsc::Receiver<MsgEmbed>,
@@ -137,8 +141,15 @@ impl Cola {
     }
 
     /// Bucle principal. Se lanza una vez al arrancar la app.
+    ///
+    /// `tauri::async_runtime::spawn` y no `tokio::spawn`: esto se llama antes
+    /// de construir la aplicación, donde todavía no hay ningún runtime en
+    /// contexto y `tokio::spawn` entra en pánico. El runtime de Tauri es un
+    /// tokio multihilo global que se crea al pedirlo, así que desde dentro de
+    /// la tarea `tokio::spawn`, `tokio::process` y los temporizadores ya
+    /// funcionan con normalidad.
     pub fn arrancar_bucle(self: Arc<Self>, modelo: String, dims: u32, version: String) {
-        tokio::spawn(async move {
+        tauri::async_runtime::spawn(async move {
             let qdrant = Cliente::nuevo();
             let coleccion = coleccion_de(&modelo, &version);
             if let Err(e) = qdrant.asegurar_coleccion(&coleccion, dims).await {

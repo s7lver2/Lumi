@@ -15,7 +15,6 @@ use std::collections::HashMap;
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Nonce};
 use anyhow::{bail, Context, Result};
-use base64::Engine;
 use serde::Deserialize;
 
 /// La misma clave que `apps/web/lib/datasets/shared-key.ts` de la v1. Sin ella
@@ -39,6 +38,10 @@ pub const CLAVE_COMPARTIDA: [u8; 32] = {
 /// la toca, esto lo dice en el mismo `cargo test` y no en producción.
 #[test]
 fn la_clave_es_la_de_la_v1() {
+    // El `use` va aquí dentro y no arriba: fuera de los tests nadie decodifica
+    // base64, y a nivel de módulo el trait quedaba sin usar en la compilación
+    // normal.
+    use base64::Engine;
     let esperada = base64::engine::general_purpose::STANDARD
         .decode("8GV57JbzQxrFNF3G/yEyxJ6dsFAZ2GiIHbxe6rK216w=")
         .unwrap();
