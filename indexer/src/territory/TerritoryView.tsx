@@ -16,7 +16,9 @@ export function TerritoryView({ nombre }: { nombre: string }) {
 
   async function alTerminarDibujo(p: Punto[]) {
     setDibujo(p);
-    setClasificacion(await api.territorioClasificar(p));
+    // La lista real de orígenes activos llega en la Task 14; de momento
+    // ninguno, así que el reparto por origen sale vacío.
+    setClasificacion(await api.territorioClasificar(p, []));
   }
 
   function reiniciar() {

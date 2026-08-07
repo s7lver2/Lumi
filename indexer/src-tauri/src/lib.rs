@@ -6,6 +6,7 @@
 
 mod crypto;
 mod ingest;
+mod keys;
 mod models;
 mod package;
 mod qdrant;
@@ -204,12 +205,15 @@ fn indices_lista(estado: tauri::State<'_, Estado>) -> Result<Vec<ResumenIndice>,
 /// publicado. Sin catálogo remoto todavía (el 8), así que por ahora solo mira
 /// lo local — el mismo camino de código que usará el 8 cuando exista.
 #[tauri::command]
-fn territorio_clasificar(
+async fn territorio_clasificar(
     estado: tauri::State<'_, Estado>,
     poligono: Vec<lumi_index::tiles::Punto>,
+    fuentes: Vec<String>,
 ) -> Result<territory::Clasificacion, String> {
     let locales = territory::coberturas_locales(&estado.dir.join("paquetes"));
-    territory::clasificar_area(&poligono, &locales, &[]).map_err(|e| e.to_string())
+    // ponytail: el catálogo remoto es del subsistema 8. Hasta entonces solo hay
+    // lo instalado, y la salida es pasar aquí lo que el 8 tenga descargado.
+    territory::clasificar_area(&poligono, &fuentes, &locales, &[]).map_err(|e| e.to_string())
 }
 
 /// La clave de Mapbox del operador, cifrada con la maestra del equipo. No es

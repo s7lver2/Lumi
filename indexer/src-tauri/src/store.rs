@@ -87,10 +87,47 @@ CREATE TABLE IF NOT EXISTS ajustes (
     sellado BLOB
 );
 
+-- La caché de sondeos. Solo la necesitan los orígenes que se sondean por
+-- muestreo: los de teselas vectoriales los pinta el navegador y no pasan
+-- por aquí.
+CREATE TABLE IF NOT EXISTS sondeos (
+    fuente      TEXT NOT NULL,
+    quadkey     TEXT NOT NULL,
+    nivel       TEXT NOT NULL CHECK (nivel IN ('mucho','poco','nada')),
+    estimadas   INTEGER NOT NULL,
+    sondeado_en INTEGER NOT NULL,
+    PRIMARY KEY (fuente, quadkey)
+);
+
+-- El libro de gasto. Una fila por día y origen, y NADA SE BORRA: es el
+-- registro de lo que se pagó, no un contador que se pueda poner a cero.
+CREATE TABLE IF NOT EXISTS gasto (
+    dia      TEXT NOT NULL,
+    fuente   TEXT NOT NULL,
+    unidades INTEGER NOT NULL,
+    coste    REAL NOT NULL,
+    PRIMARY KEY (dia, fuente)
+);
+
+-- La unidad de trabajo de una descarga. Que esto sea una tabla es lo que
+-- hace que cortar una descarga a la mitad no cueste dinero al retomarla.
+CREATE TABLE IF NOT EXISTS descargas (
+    indice_id  INTEGER NOT NULL,
+    fuente     TEXT NOT NULL,
+    quadkey    TEXT NOT NULL,
+    estado     TEXT NOT NULL CHECK (estado IN ('en_curso','hecho','error')),
+    imagenes   INTEGER NOT NULL DEFAULT 0,
+    unidades   INTEGER NOT NULL DEFAULT 0,
+    reintentos INTEGER NOT NULL DEFAULT 0,
+    motivo     TEXT,
+    PRIMARY KEY (indice_id, fuente, quadkey)
+);
+
 CREATE INDEX IF NOT EXISTS imagenes_por_indice ON imagenes(indice_id);
 CREATE INDEX IF NOT EXISTS imagenes_por_quadkey ON imagenes(indice_id, quadkey);
 CREATE INDEX IF NOT EXISTS lotes_por_indice ON lotes(indice_id);
 CREATE INDEX IF NOT EXISTS vectores_pendientes ON vectores(modelo) WHERE estado = 'pendiente';
+CREATE INDEX IF NOT EXISTS gasto_por_mes ON gasto(dia);
 ";
 
 pub struct Almacen(Mutex<Connection>);
@@ -107,6 +144,23 @@ impl Almacen {
              PRAGMA synchronous = NORMAL;",
         )?;
         c.execute_batch(ESQUEMA)?;
+        // Migración idempotente: `CREATE TABLE IF NOT EXISTS` no toca una tabla
+        // que ya existe, así que las columnas nuevas se añaden aparte y se
+        // ignora el error de «ya existe». Es la forma más barata de que una
+        // base del 7a siga abriendo.
+        for alter in [
+            // Estado de revisión: NULL en todo lo que no la necesita (calle,
+            // cenital), 'pendiente' | 'aceptada' | 'rechazada' en las sueltas.
+            "ALTER TABLE imagenes ADD COLUMN revision TEXT",
+            // Lo que el proveedor dijo de la propia foto, que es lo que decide
+            // si viaja en el paquete cuando la licencia va por imagen.
+            "ALTER TABLE imagenes ADD COLUMN licencia TEXT",
+            "ALTER TABLE imagenes ADD COLUMN atribucion TEXT",
+            "ALTER TABLE imagenes ADD COLUMN id_origen TEXT",
+            "ALTER TABLE imagenes ADD COLUMN rumbo REAL",
+        ] {
+            let _ = c.execute(alter, []);
+        }
         Ok(Self(Mutex::new(c)))
     }
 
@@ -429,6 +483,23 @@ impl Almacen {
         Ok(n)
     }
 
+    /// Las `fuente` distintas de las imágenes NO saltadas de una tesela. Es lo
+    /// que `cobertura.json` declara como cubierto por el fragmento, y por tanto
+    /// lo que otro operador puede dar por heredado al instalarlo.
+    pub fn fuentes_de_tesela(&self, indice_id: i64, quadkey: &str) -> Result<Vec<String>> {
+        let c = self.0.lock().unwrap();
+        let mut q = c.prepare(
+            "SELECT DISTINCT l.fuente
+               FROM imagenes i JOIN lotes l ON l.id = i.lote_id
+              WHERE i.indice_id = ?1 AND i.quadkey = ?2 AND i.saltada_motivo IS NULL
+              ORDER BY l.fuente",
+        )?;
+        let filas = q
+            .query_map(params![indice_id, quadkey], |r| r.get(0))?
+            .collect::<Result<Vec<String>, _>>()?;
+        Ok(filas)
+    }
+
     /// Sellar es irreversible: pasa el índice a `sellado`, con su ruta y
     /// cuándo. No hay camino de vuelta a `abierto`.
     pub fn sellar_indice(&self, indice_id: i64, ruta: &str) -> Result<()> {
@@ -438,5 +509,225 @@ impl Almacen {
             params![indice_id, ruta, Self::ahora()],
         )?;
         Ok(())
+    }
+
+    // ── Sondeos ──────────────────────────────────────────────────────────
+
+    pub fn sondeo_guardar(&self, fuente: &str, quadkey: &str, nivel: &str, estimadas: u32) -> Result<()> {
+        let c = self.0.lock().unwrap();
+        c.execute(
+            "INSERT OR REPLACE INTO sondeos (fuente, quadkey, nivel, estimadas, sondeado_en)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![fuente, quadkey, nivel, estimadas, Self::ahora()],
+        )?;
+        Ok(())
+    }
+
+    /// `None` si no está o si ya caducó. La caducidad se pasa como parámetro y
+    /// no como constante para que el test pueda pedir cero días.
+    pub fn sondeo_leer(&self, fuente: &str, quadkey: &str, dias: i64) -> Result<Option<(String, u32)>> {
+        let c = self.0.lock().unwrap();
+        let corte = Self::ahora() - dias * 86_400;
+        Ok(c.query_row(
+            "SELECT nivel, estimadas FROM sondeos
+              WHERE fuente = ?1 AND quadkey = ?2 AND sondeado_en > ?3",
+            params![fuente, quadkey, corte],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .ok())
+    }
+
+    // ── Gasto ────────────────────────────────────────────────────────────
+
+    /// Suma sobre la fila del día. `dia` en `YYYY-MM-DD`.
+    pub fn gasto_apuntar(&self, dia: &str, fuente: &str, unidades: u32, coste: f64) -> Result<()> {
+        let c = self.0.lock().unwrap();
+        c.execute(
+            "INSERT INTO gasto (dia, fuente, unidades, coste) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(dia, fuente) DO UPDATE SET
+               unidades = unidades + excluded.unidades,
+               coste    = coste    + excluded.coste",
+            params![dia, fuente, unidades, coste],
+        )?;
+        Ok(())
+    }
+
+    /// `mes` en `YYYY-MM`. El prefijo basta porque `dia` es ISO y ordena solo.
+    pub fn gasto_del_mes(&self, mes: &str) -> Result<f64> {
+        let c = self.0.lock().unwrap();
+        let s: Option<f64> = c.query_row(
+            "SELECT SUM(coste) FROM gasto WHERE dia LIKE ?1 || '-%'",
+            params![mes],
+            |r| r.get(0),
+        )?;
+        Ok(s.unwrap_or(0.0))
+    }
+
+    /// `(fuente, unidades, coste)` del mes, para el desglose de ajustes.
+    pub fn gasto_del_mes_por_origen(&self, mes: &str) -> Result<Vec<(String, u32, f64)>> {
+        let c = self.0.lock().unwrap();
+        let mut q = c.prepare(
+            "SELECT fuente, SUM(unidades), SUM(coste) FROM gasto
+              WHERE dia LIKE ?1 || '-%' GROUP BY fuente ORDER BY SUM(coste) DESC",
+        )?;
+        let filas = q
+            .query_map(params![mes], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(filas)
+    }
+
+    // ── Descargas ────────────────────────────────────────────────────────
+
+    pub fn descarga_estado(&self, indice_id: i64, fuente: &str, quadkey: &str) -> Result<Option<String>> {
+        let c = self.0.lock().unwrap();
+        Ok(c.query_row(
+            "SELECT estado FROM descargas WHERE indice_id = ?1 AND fuente = ?2 AND quadkey = ?3",
+            params![indice_id, fuente, quadkey],
+            |r| r.get(0),
+        )
+        .ok())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn descarga_marcar(
+        &self,
+        indice_id: i64,
+        fuente: &str,
+        quadkey: &str,
+        estado: &str,
+        imagenes: u32,
+        unidades: u32,
+        motivo: Option<&str>,
+    ) -> Result<()> {
+        let c = self.0.lock().unwrap();
+        c.execute(
+            "INSERT INTO descargas (indice_id, fuente, quadkey, estado, imagenes, unidades, motivo)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(indice_id, fuente, quadkey) DO UPDATE SET
+               estado = excluded.estado, imagenes = excluded.imagenes,
+               unidades = excluded.unidades, motivo = excluded.motivo",
+            params![indice_id, fuente, quadkey, estado, imagenes, unidades, motivo],
+        )?;
+        Ok(())
+    }
+
+    /// De las teselas pedidas, las que faltan por bajar de este origen.
+    /// **Solo `hecho` excluye.** Un `error` vuelve, porque es una avería; una
+    /// tesela `en_curso` de una ejecución anterior también, porque el proceso
+    /// murió sin terminarla.
+    pub fn descargas_pendientes(
+        &self,
+        indice_id: i64,
+        fuente: &str,
+        pedidas: &[String],
+    ) -> Result<Vec<String>> {
+        let c = self.0.lock().unwrap();
+        let mut q = c.prepare(
+            "SELECT quadkey FROM descargas
+              WHERE indice_id = ?1 AND fuente = ?2 AND estado = 'hecho'",
+        )?;
+        let hechas: std::collections::HashSet<String> = q
+            .query_map(params![indice_id, fuente], |r| r.get(0))?
+            .collect::<Result<_, _>>()?;
+        Ok(pedidas.iter().filter(|q| !hechas.contains(*q)).cloned().collect())
+    }
+
+    pub fn descarga_sumar_reintento(&self, indice_id: i64, fuente: &str, quadkey: &str) -> Result<u32> {
+        let c = self.0.lock().unwrap();
+        c.execute(
+            "UPDATE descargas SET reintentos = reintentos + 1
+              WHERE indice_id = ?1 AND fuente = ?2 AND quadkey = ?3",
+            params![indice_id, fuente, quadkey],
+        )?;
+        let n: u32 = c.query_row(
+            "SELECT reintentos FROM descargas WHERE indice_id = ?1 AND fuente = ?2 AND quadkey = ?3",
+            params![indice_id, fuente, quadkey],
+            |r| r.get(0),
+        )?;
+        Ok(n)
+    }
+
+    /// Ajustes que NO son secretos, como el tope mensual. Van en la columna
+    /// `valor` y no en `sellado`: cifrar un número que la propia pantalla
+    /// enseña sería teatro.
+    pub fn guardar_ajuste(&self, clave: &str, valor: &str) -> Result<()> {
+        let c = self.0.lock().unwrap();
+        c.execute(
+            "INSERT INTO ajustes (clave, valor) VALUES (?1, ?2)
+             ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor",
+            params![clave, valor],
+        )?;
+        Ok(())
+    }
+
+    pub fn leer_ajuste(&self, clave: &str) -> Result<Option<String>> {
+        let c = self.0.lock().unwrap();
+        Ok(c.query_row("SELECT valor FROM ajustes WHERE clave = ?1", params![clave], |r| r.get(0))
+            .ok()
+            .flatten())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temporal() -> (tempfile::TempDir, Almacen) {
+        let d = tempfile::tempdir().unwrap();
+        let a = Almacen::abrir(d.path()).unwrap();
+        (d, a)
+    }
+
+    #[test]
+    fn el_sondeo_se_guarda_y_caduca_a_los_treinta_dias() {
+        let (_d, a) = temporal();
+        a.sondeo_guardar("google", "03113322013021", "poco", 30).unwrap();
+
+        let fresco = a.sondeo_leer("google", "03113322013021", 30).unwrap();
+        assert_eq!(fresco, Some(("poco".to_string(), 30)));
+
+        // Con una ventana de cero días, lo de hace un instante ya está viejo.
+        assert_eq!(a.sondeo_leer("google", "03113322013021", 0).unwrap(), None);
+        // Y otro origen no se contamina con este.
+        assert_eq!(a.sondeo_leer("flickr", "03113322013021", 30).unwrap(), None);
+    }
+
+    #[test]
+    fn el_gasto_suma_por_dia_y_origen_y_el_mes_los_agrega() {
+        let (_d, a) = temporal();
+        a.gasto_apuntar("2026-08-07", "google", 1_000, 6.51).unwrap();
+        a.gasto_apuntar("2026-08-07", "google", 500, 3.26).unwrap();
+        a.gasto_apuntar("2026-08-07", "mapbox-satelite", 2_000, 1.40).unwrap();
+        a.gasto_apuntar("2026-07-31", "google", 9_000, 58.59).unwrap();
+
+        let agosto = a.gasto_del_mes("2026-08").unwrap();
+        assert!((agosto - 11.17).abs() < 1e-9, "{agosto}");
+        // Julio no se mezcla, aunque sea el día de antes.
+        let julio = a.gasto_del_mes("2026-07").unwrap();
+        assert!((julio - 58.59).abs() < 1e-9, "{julio}");
+    }
+
+    #[test]
+    fn una_tesela_ya_hecha_no_se_vuelve_a_descargar_ni_a_cobrar() {
+        // Esta es LA prueba del 7b: es lo que impide pagar dos veces por lo
+        // mismo cuando una descarga se corta a la mitad.
+        let (_d, a) = temporal();
+        let i = a.crear_indice("lugo-norte", "lugo-norte").unwrap();
+
+        assert_eq!(a.descarga_estado(i, "google", "AAA").unwrap(), None);
+        a.descarga_marcar(i, "google", "AAA", "hecho", 148, 148, None).unwrap();
+        assert_eq!(a.descarga_estado(i, "google", "AAA").unwrap(), Some("hecho".into()));
+
+        let pendientes = a.descargas_pendientes(i, "google", &["AAA".into(), "BBB".into()]).unwrap();
+        assert_eq!(pendientes, vec!["BBB".to_string()], "AAA ya está y no vuelve");
+
+        // Un error SÍ vuelve: es una avería, no un resultado.
+        a.descarga_marcar(i, "google", "BBB", "error", 0, 0, Some("se cayó la red")).unwrap();
+        let pendientes = a.descargas_pendientes(i, "google", &["AAA".into(), "BBB".into()]).unwrap();
+        assert_eq!(pendientes, vec!["BBB".to_string()]);
+
+        // Y el contador de reintentos es lo que impide el bucle infinito.
+        assert_eq!(a.descarga_sumar_reintento(i, "google", "BBB").unwrap(), 1);
+        assert_eq!(a.descarga_sumar_reintento(i, "google", "BBB").unwrap(), 2);
     }
 }

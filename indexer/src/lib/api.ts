@@ -55,7 +55,8 @@ export const api = {
   indicesLista: () => invoke<ResumenIndice[]>("indices_lista"),
   indiceDetalle: (id: number) => invoke<DetalleIndice>("indice_detalle", { id }),
   indiceLotes: (id: number) => invoke<LoteResumen[]>("indice_lotes", { id }),
-  territorioClasificar: (poligono: Punto[]) => invoke<Clasificacion>("territorio_clasificar", { poligono }),
+  territorioClasificar: (poligono: Punto[], fuentes: string[]) =>
+    invoke<Clasificacion>("territorio_clasificar", { poligono, fuentes }),
   mapboxClaveGuardar: (clave: string) => invoke<void>("mapbox_clave_guardar", { clave }),
   mapboxClave: () => invoke<string | null>("mapbox_clave_leer"),
   paqueteSellar: (indiceId: number, destino: string) => invoke<Informe>("paquete_sellar", { indiceId, destino }),
