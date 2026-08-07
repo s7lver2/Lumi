@@ -100,7 +100,12 @@ export function ResizeHandles() {
 // arrastre de ventana y los mismos controles, sin nada del cliente.
 export function WindowFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-bg">
+    // `h-full w-full` y NUNCA `h-screen w-screen`: `#root` se encoge a
+    // `100% / --ui-scale` y luego se estira con `transform: scale()`. Un hijo
+    // que mide en `vw` mide la ventana entera, se escala otra vez, y acaba un
+    // 20% más ancho que la ventana: los botones se salían por la derecha y
+    // todo el contenido quedaba descentrado hacia el mismo lado.
+    <div className="flex h-full w-full flex-col overflow-hidden bg-bg">
       <header data-tauri-drag-region
         className="relative z-[60] flex h-[38px] shrink-0 items-center gap-2.5 border-b border-border
           bg-[rgba(13,15,17,.92)] pl-2.5 backdrop-blur-md">
