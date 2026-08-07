@@ -10,10 +10,12 @@ mod keys;
 mod models;
 mod origins;
 mod package;
+mod probe;
 mod qdrant;
 mod queue;
 mod runtime;
 mod services;
+mod spend;
 mod store;
 mod territory;
 
@@ -217,6 +219,40 @@ async fn territorio_clasificar(
     territory::clasificar_area(&poligono, &fuentes, &locales, &[]).map_err(|e| e.to_string())
 }
 
+/// Se reconstruye en cada comando a propósito: así una clave recién guardada
+/// surte efecto sin reiniciar la aplicación.
+fn origenes_de(estado: &Estado) -> Vec<origins::Origen> {
+    let claves = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
+    origins::registro(&claves, estado.dir.join("stage"))
+        .into_iter()
+        .map(std::sync::Arc::from)
+        .collect()
+}
+
+#[tauri::command]
+async fn origenes_lista(estado: tauri::State<'_, Estado>) -> Result<Vec<probe::FichaOrigen>, String> {
+    Ok(probe::fichas(&origenes_de(&estado)))
+}
+
+#[tauri::command]
+async fn sondear_area(
+    estado: tauri::State<'_, Estado>,
+    teselas: Vec<String>,
+) -> Result<Vec<probe::SondeoTesela>, String> {
+    let o = origenes_de(&estado);
+    Ok(probe::sondear_area(&estado.almacen, &o, &teselas).await)
+}
+
+#[tauri::command]
+async fn estimar_area(
+    estado: tauri::State<'_, Estado>,
+    nuevas: std::collections::BTreeMap<String, Vec<String>>,
+) -> Result<probe::Estimacion, String> {
+    let o = origenes_de(&estado);
+    let claves = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
+    Ok(probe::estimar(&estado.almacen, &o, &nuevas, claves.tope_eur()).await)
+}
+
 /// La clave de Mapbox del operador, cifrada con la maestra del equipo. No es
 /// un secreto de servidor: vive local, igual que el resto de `ajustes`.
 #[tauri::command]
@@ -400,6 +436,9 @@ pub fn run() {
             indice_detalle,
             indice_lotes,
             territorio_clasificar,
+            origenes_lista,
+            sondear_area,
+            estimar_area,
             mapbox_clave_guardar,
             mapbox_clave_leer,
             paquete_sellar,
