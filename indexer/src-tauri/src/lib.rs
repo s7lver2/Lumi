@@ -8,6 +8,7 @@ mod crypto;
 mod ingest;
 mod keys;
 mod models;
+mod origins;
 mod package;
 mod qdrant;
 mod queue;

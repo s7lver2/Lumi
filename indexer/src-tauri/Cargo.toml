@@ -35,3 +35,5 @@ kamadak-exif = "0.5"
 sha2 = "0.10"
 tempfile = "3"
 zip = { version = "2", default-features = false, features = ["deflate"] }
+async-trait = "0.1"
+urlencoding = "2"
