@@ -130,6 +130,13 @@ CREATE INDEX IF NOT EXISTS vectores_pendientes ON vectores(modelo) WHERE estado 
 CREATE INDEX IF NOT EXISTS gasto_por_mes ON gasto(dia);
 ";
 
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct Cuentas {
+    pub pendientes: u32,
+    pub aceptadas: u32,
+    pub rechazadas: u32,
+}
+
 pub struct Almacen(Mutex<Connection>);
 
 impl Almacen {
@@ -328,7 +335,8 @@ impl Almacen {
         let mut q = c.prepare(
             "SELECT l.tipo, l.fuente, i.quadkey
                FROM imagenes i JOIN lotes l ON l.id = i.lote_id
-              WHERE i.indice_id = ?1 AND i.saltada_motivo IS NULL",
+              WHERE i.indice_id = ?1 AND i.saltada_motivo IS NULL
+                AND (i.revision IS NULL OR i.revision <> 'rechazada')",
         )?;
         let filas = q
             .query_map(params![indice_id], |r| {
@@ -393,7 +401,8 @@ impl Almacen {
         let n: u32 = c.query_row(
             "SELECT COUNT(*) FROM imagenes i JOIN vectores v ON v.imagen_id = i.id
               WHERE i.indice_id = ?1 AND v.modelo = ?2 AND v.estado = 'pendiente'
-                AND i.saltada_motivo IS NULL",
+                AND i.saltada_motivo IS NULL
+                AND (i.revision IS NULL OR i.revision <> 'rechazada')",
             params![indice_id, modelo],
             |r| r.get(0),
         )?;
@@ -414,6 +423,7 @@ impl Almacen {
             "SELECT i.id, i.ruta FROM imagenes i JOIN vectores v ON v.imagen_id = i.id
               WHERE i.indice_id = ?1 AND v.modelo = ?2 AND v.estado = 'pendiente'
                 AND i.saltada_motivo IS NULL
+                AND (i.revision IS NULL OR i.revision <> 'rechazada')
               ORDER BY i.id LIMIT ?3",
         )?;
         let filas = q
@@ -519,6 +529,7 @@ impl Almacen {
         let mut q = c.prepare(
             "SELECT id, ruta, quadkey FROM imagenes
               WHERE indice_id = ?1 AND saltada_motivo IS NULL
+                AND (revision IS NULL OR revision <> 'rechazada')
               ORDER BY id",
         )?;
         let filas = q
@@ -527,12 +538,14 @@ impl Almacen {
         Ok(filas)
     }
 
-    /// Cuántas imágenes (sin contar las saltadas) tiene el índice en total. Es
-    /// el "filas esperadas" contra el que se cuadra cada modelo al sellar.
+    /// Cuántas imágenes (sin contar las saltadas ni las rechazadas) tiene el
+    /// índice en total. Es el "filas esperadas" contra el que se cuadra cada
+    /// modelo al sellar.
     pub fn total_imagenes(&self, indice_id: i64) -> Result<u32> {
         let c = self.0.lock().unwrap();
         let n: u32 = c.query_row(
-            "SELECT COUNT(*) FROM imagenes WHERE indice_id = ?1 AND saltada_motivo IS NULL",
+            "SELECT COUNT(*) FROM imagenes WHERE indice_id = ?1 AND saltada_motivo IS NULL
+                AND (revision IS NULL OR revision <> 'rechazada')",
             params![indice_id],
             |r| r.get(0),
         )?;
@@ -546,28 +559,105 @@ impl Almacen {
         let n: u32 = c.query_row(
             "SELECT COUNT(*) FROM imagenes i JOIN vectores v ON v.imagen_id = i.id
               WHERE i.indice_id = ?1 AND v.modelo = ?2 AND v.estado = 'hecho'
-                AND i.saltada_motivo IS NULL",
+                AND i.saltada_motivo IS NULL
+                AND (i.revision IS NULL OR i.revision <> 'rechazada')",
             params![indice_id, modelo],
             |r| r.get(0),
         )?;
         Ok(n)
     }
 
-    /// Las `fuente` distintas de las imágenes NO saltadas de una tesela. Es lo
-    /// que `cobertura.json` declara como cubierto por el fragmento, y por tanto
-    /// lo que otro operador puede dar por heredado al instalarlo.
+    /// Las `fuente` distintas de las imágenes NO saltadas ni rechazadas de una
+    /// tesela. Es lo que `cobertura.json` declara como cubierto por el
+    /// fragmento, y por tanto lo que otro operador puede dar por heredado al
+    /// instalarlo.
     pub fn fuentes_de_tesela(&self, indice_id: i64, quadkey: &str) -> Result<Vec<String>> {
         let c = self.0.lock().unwrap();
         let mut q = c.prepare(
             "SELECT DISTINCT l.fuente
                FROM imagenes i JOIN lotes l ON l.id = i.lote_id
               WHERE i.indice_id = ?1 AND i.quadkey = ?2 AND i.saltada_motivo IS NULL
+                AND (i.revision IS NULL OR i.revision <> 'rechazada')
               ORDER BY l.fuente",
         )?;
         let filas = q
             .query_map(params![indice_id, quadkey], |r| r.get(0))?
             .collect::<Result<Vec<String>, _>>()?;
         Ok(filas)
+    }
+
+    // ── Revisión ─────────────────────────────────────────────────────────
+
+    /// `(id, ruta, fuente, licencia)` de las sueltas que esperan revisión.
+    pub fn revision_pendientes(&self, indice_id: i64, limite: u32) -> Result<Vec<(i64, String, String, Option<String>)>> {
+        let c = self.0.lock().unwrap();
+        let mut q = c.prepare(
+            "SELECT i.id, i.ruta, l.fuente, i.licencia
+               FROM imagenes i JOIN lotes l ON l.id = i.lote_id
+              WHERE i.indice_id = ?1 AND i.revision = 'pendiente'
+              ORDER BY i.id LIMIT ?2",
+        )?;
+        let filas = q
+            .query_map(params![indice_id, limite], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(filas)
+    }
+
+    pub fn revision_marcar(&self, ids: &[i64], estado: &str) -> Result<()> {
+        let c = self.0.lock().unwrap();
+        for id in ids {
+            c.execute("UPDATE imagenes SET revision = ?2 WHERE id = ?1", params![id, estado])?;
+        }
+        Ok(())
+    }
+
+    /// Cierra la revisión aceptando todo lo que siga pendiente. NO resucita lo
+    /// ya rechazado: el `WHERE` lo deja fuera a propósito.
+    pub fn revision_aceptar_resto(&self, indice_id: i64) -> Result<u32> {
+        let c = self.0.lock().unwrap();
+        let n = c.execute(
+            "UPDATE imagenes SET revision = 'aceptada'
+              WHERE indice_id = ?1 AND revision = 'pendiente'",
+            params![indice_id],
+        )?;
+        Ok(n as u32)
+    }
+
+    pub fn revision_cuentas(&self, indice_id: i64) -> Result<Cuentas> {
+        let c = self.0.lock().unwrap();
+        let de = |e: &str| -> Result<u32> {
+            Ok(c.query_row(
+                "SELECT COUNT(*) FROM imagenes WHERE indice_id = ?1 AND revision = ?2",
+                params![indice_id, e],
+                |r| r.get(0),
+            )?)
+        };
+        Ok(Cuentas { pendientes: de("pendiente")?, aceptadas: de("aceptada")?, rechazadas: de("rechazada")? })
+    }
+
+    /// Todas las filas de imagen, incluidas las rechazadas y las saltadas. Es
+    /// lo que demuestra que descartar MARCA y no borra.
+    pub fn contar_filas_imagenes(&self, indice_id: i64) -> Result<i64> {
+        let c = self.0.lock().unwrap();
+        Ok(c.query_row(
+            "SELECT COUNT(*) FROM imagenes WHERE indice_id = ?1",
+            params![indice_id],
+            |r| r.get(0),
+        )?)
+    }
+
+    /// Solo para los tests de revisión: una suelta pendiente y nada más.
+    #[cfg(test)]
+    pub fn insertar_imagen_pendiente_de_revision(&self, indice_id: i64, lote_id: i64, nombre: &str) -> Result<i64> {
+        let c = self.0.lock().unwrap();
+        c.execute(
+            "INSERT INTO imagenes (indice_id, lote_id, ruta, sha256, lat, lng, quadkey, revision, creada_en)
+             VALUES (?1, ?2, ?3, ?4, 43.0, -8.0, 'AAA', 'pendiente', ?5)",
+            params![indice_id, lote_id, nombre, nombre, Self::ahora()],
+        )?;
+        Ok(c.last_insert_rowid())
     }
 
     /// Sellar es irreversible: pasa el índice a `sellado`, con su ruta y

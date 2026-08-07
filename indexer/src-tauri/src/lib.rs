@@ -14,6 +14,7 @@ mod package;
 mod probe;
 mod qdrant;
 mod queue;
+mod review;
 mod runtime;
 mod services;
 mod spend;
@@ -295,6 +296,33 @@ async fn descarga_parar(estado: tauri::State<'_, Estado>) -> Result<(), String> 
     Ok(())
 }
 
+#[tauri::command]
+async fn revision_pendientes(
+    estado: tauri::State<'_, Estado>,
+    indice_id: i64,
+) -> Result<Vec<review::Ficha>, String> {
+    // 120 caben en la rejilla sin que el navegador se ahogue decodificando
+    // miniaturas. La paginación real llega si hace falta.
+    review::pendientes(&estado.almacen, indice_id, 120).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn revision_rechazar(
+    estado: tauri::State<'_, Estado>,
+    indice_id: i64,
+    ids: Vec<i64>,
+) -> Result<store::Cuentas, String> {
+    review::rechazar(&estado.almacen, indice_id, &ids).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn revision_aceptar_resto(
+    estado: tauri::State<'_, Estado>,
+    indice_id: i64,
+) -> Result<store::Cuentas, String> {
+    review::aceptar_resto(&estado.almacen, indice_id).map_err(|e| e.to_string())
+}
+
 /// La clave de Mapbox del operador, cifrada con la maestra del equipo. No es
 /// un secreto de servidor: vive local, igual que el resto de `ajustes`.
 #[tauri::command]
@@ -492,6 +520,9 @@ pub fn run() {
             descarga_arrancar,
             descarga_progreso,
             descarga_parar,
+            revision_pendientes,
+            revision_rechazar,
+            revision_aceptar_resto,
             mapbox_clave_guardar,
             mapbox_clave_leer,
             paquete_sellar,
