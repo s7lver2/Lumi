@@ -8,6 +8,7 @@
 pub mod budget;
 pub mod coverage;
 pub mod embed;
+pub mod filter;
 pub mod legacy;
 pub mod manifest;
 pub mod network;
