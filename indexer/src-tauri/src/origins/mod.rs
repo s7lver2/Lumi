@@ -168,7 +168,12 @@ pub fn registro(claves: &Claves, stage: PathBuf) -> Vec<Box<dyn OrigenDeRed>> {
     if let Ok(Some(k)) = claves.leer("mapillary") {
         v.push(Box::new(mapillary::Mapillary::nuevo(k, stage.clone())));
     }
-    // ponytail: los cinco restantes entran en las tareas 8 y 9.
+    // KartaView no necesita clave: entra siempre.
+    v.push(Box::new(kartaview::KartaView::nuevo(stage.clone())));
+    if let Ok(Some(k)) = claves.leer("google") {
+        v.push(Box::new(google::Google::nuevo(k, stage.clone())));
+    }
+    // ponytail: los tres restantes entran en la tarea 9.
     let _ = stage;
     v
 }

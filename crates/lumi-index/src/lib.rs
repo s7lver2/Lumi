@@ -12,5 +12,6 @@ pub mod filter;
 pub mod legacy;
 pub mod manifest;
 pub mod network;
+pub mod streets;
 pub mod tiles;
 pub mod vectors;
