@@ -163,12 +163,14 @@ impl Ctx {
 /// Todos los orígenes con clave configurada. **Uno sin clave no entra en la
 /// lista**: mejor ausente que presente y reventando cuando el gasto ya está
 /// confirmado.
-pub fn registro(_claves: &Claves, stage: PathBuf) -> Vec<Box<dyn OrigenDeRed>> {
-    // ponytail: se va llenando en las tareas 7, 8 y 9. El techo es que hasta
-    // entonces el planificador solo puede correr con `Falso`; la salida, las
-    // propias tareas.
+pub fn registro(claves: &Claves, stage: PathBuf) -> Vec<Box<dyn OrigenDeRed>> {
+    let mut v: Vec<Box<dyn OrigenDeRed>> = Vec::new();
+    if let Ok(Some(k)) = claves.leer("mapillary") {
+        v.push(Box::new(mapillary::Mapillary::nuevo(k, stage.clone())));
+    }
+    // ponytail: los cinco restantes entran en las tareas 8 y 9.
     let _ = stage;
-    Vec::new()
+    v
 }
 
 // ── El origen falso ──────────────────────────────────────────────────────
