@@ -369,8 +369,12 @@ async fn tope_fijar(estado: tauri::State<'_, Estado>, eur: f64) -> Result<(), St
     c.fijar_tope_eur(eur).map_err(|e| e.to_string())
 }
 
+/// `(fuente, unidades, coste)` por origen. Con nombre propio porque el tipo
+/// tuplado anida demasiado para que clippy lo deje pasar sin más.
+type GastoPorOrigen = Vec<(String, u32, f64)>;
+
 #[tauri::command]
-async fn gasto_mes(estado: tauri::State<'_, Estado>) -> Result<(f64, Vec<(String, u32, f64)>), String> {
+async fn gasto_mes(estado: tauri::State<'_, Estado>) -> Result<(f64, GastoPorOrigen), String> {
     let mes = spend::mes_iso();
     let total = estado.almacen.gasto_del_mes(&mes).map_err(|e| e.to_string())?;
     let por = estado.almacen.gasto_del_mes_por_origen(&mes).map_err(|e| e.to_string())?;

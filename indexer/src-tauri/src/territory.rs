@@ -74,7 +74,7 @@ pub fn clasificar_area(
         }
     }
     let mut autores: Vec<(String, u32)> = autores.into_iter().collect();
-    autores.sort_by(|a, b| b.1.cmp(&a.1));
+    autores.sort_by_key(|b| std::cmp::Reverse(b.1));
 
     let detalle = clasificar_por_origen(&pedidas, fuentes, locales, catalogo);
     let por_origen = repartir_por_origen(&detalle)

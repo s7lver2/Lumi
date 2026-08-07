@@ -172,6 +172,11 @@ pub fn que_viaja(filas: &[FilaPublicable]) -> Vec<Publicable> {
 /// deducirá qué NO tiene que volver a indexar. Meter aquí un origen cuyo
 /// material se quedó fuera sería prometerle una cobertura que el paquete no
 /// lleva.
+///
+/// `cobertura.json` sigue siendo el placeholder `{}` del 7a — construir
+/// `TeselaCubierta` de verdad es del subsistema 8 — así que `paquete_sellar`
+/// todavía no llama a esto. Queda lista y probada para cuando lo haga.
+#[allow(dead_code)]
 pub fn fuentes_que_viajan(filas: &[FilaPublicable], quadkey: &str) -> Vec<String> {
     let mut fuera: Vec<String> = filas
         .iter()

@@ -187,6 +187,12 @@ pub fn registro(claves: &Claves, stage: PathBuf) -> Vec<Box<dyn OrigenDeRed>> {
 // ── El origen falso ──────────────────────────────────────────────────────
 
 /// Un origen guionizado. Existe para probar el planificador entero sin red.
+///
+/// Solo lo usan los `#[cfg(test)]` de este módulo, `probe.rs` y `download.rs`:
+/// bajo una build normal (no test) no hay ninguna llamada de producción, y
+/// clippy lo marca como muerto. Es exactamente lo que se pretende — no es
+/// código de producción disfrazado.
+#[allow(dead_code)]
 pub struct Falso {
     id: &'static str,
     tipo: Tipo,
@@ -194,6 +200,7 @@ pub struct Falso {
     guion: std::collections::HashMap<String, u32>,
 }
 
+#[allow(dead_code)]
 impl Falso {
     pub fn nuevo(id: &'static str, tipo: Tipo, tarifa: Tarifa) -> Self {
         Self { id, tipo, tarifa, guion: Default::default() }

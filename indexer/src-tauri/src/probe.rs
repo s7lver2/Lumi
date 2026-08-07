@@ -12,7 +12,7 @@ use lumi_index::budget::{cabe, previsto, LineaPrevista};
 use lumi_index::network::Tarifa;
 use serde::Serialize;
 
-use crate::origins::{self, Origen};
+use crate::origins::Origen;
 use crate::spend;
 use crate::store::Almacen;
 
@@ -178,7 +178,7 @@ mod tests {
     use super::*;
     use lumi_index::manifest::Tipo;
     use lumi_index::network::Tarifa;
-    use origins::Falso;
+    use crate::origins::Falso;
 
     fn temporal() -> (tempfile::TempDir, Almacen) {
         let d = tempfile::tempdir().unwrap();

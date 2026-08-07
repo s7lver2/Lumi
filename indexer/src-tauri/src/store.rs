@@ -206,6 +206,7 @@ impl Almacen {
         Ok(c.last_insert_rowid())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn crear_lote(
         &self,
         indice_id: i64,
@@ -613,6 +614,7 @@ impl Almacen {
     // ── Revisión ─────────────────────────────────────────────────────────
 
     /// `(id, ruta, fuente, licencia)` de las sueltas que esperan revisión.
+    #[allow(clippy::type_complexity)]
     pub fn revision_pendientes(&self, indice_id: i64, limite: u32) -> Result<Vec<(i64, String, String, Option<String>)>> {
         let c = self.0.lock().unwrap();
         let mut q = c.prepare(
