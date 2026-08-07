@@ -18,6 +18,8 @@ mod territory;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use tauri::Manager;
+
 use crypto::Maestra;
 use store::Almacen;
 
@@ -25,7 +27,9 @@ pub struct Estado {
     pub dir: PathBuf,
     pub almacen: Arc<Almacen>,
     pub maestra: Maestra,
-    pub servicios: services::Servicios,
+    /// Detrás de un `Arc` porque el gancho de salida necesita quedárselo para
+    /// pararlos, y en ese punto no se puede seguir prestando el estado.
+    pub servicios: Arc<services::Servicios>,
     pub modelos: Vec<models::Modelo>,
     pub cola: Arc<queue::Cola>,
 }
@@ -54,6 +58,16 @@ fn saludo(estado: tauri::State<'_, Estado>) -> serde_json::Value {
 #[tauri::command]
 async fn servicios_arrancar(estado: tauri::State<'_, Estado>) -> Result<(), String> {
     estado.servicios.arrancar().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn servicios_arrancar_wsl(estado: tauri::State<'_, Estado>) -> Result<(), String> {
+    estado.servicios.arrancar_wsl().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn servicios_parar(estado: tauri::State<'_, Estado>) -> Result<(), String> {
+    estado.servicios.parar().await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -344,7 +358,7 @@ pub fn run() {
     let dir = directorio();
     let almacen = Arc::new(Almacen::abrir(&dir).expect("no se pudo abrir el almacén"));
     let maestra = Maestra::abrir_o_crear(&dir).expect("no se pudo abrir la clave maestra");
-    let servicios = services::Servicios::nuevo(dir.clone());
+    let servicios = Arc::new(services::Servicios::nuevo(dir.clone()));
     let modelos = models::cargar_registro(
         &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../modelos"),
     );
@@ -366,6 +380,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             saludo,
             servicios_arrancar,
+            servicios_arrancar_wsl,
+            servicios_parar,
             servicios_estado,
             servicios_log,
             modelos_lista,
@@ -384,6 +400,18 @@ pub fn run() {
             paquete_sellar,
             paquete_abrir
         ])
-        .run(tauri::generate_context!())
-        .expect("no se pudo arrancar el Lumi Indexer");
+        .build(tauri::generate_context!())
+        .expect("no se pudo arrancar el Lumi Indexer")
+        // `kill_on_drop` solo dispara si el hijo se suelta, y al cerrar la
+        // ventana nadie garantiza que el estado gestionado llegue a soltarse.
+        // Este gancho es lo que de verdad impide dejar un Redis y un Qdrant
+        // huérfanos ocupando sus puertos hasta el siguiente reinicio.
+        .run(|app, evento| {
+            if matches!(evento, tauri::RunEvent::Exit) {
+                let servicios = app.state::<Estado>().servicios.clone();
+                tauri::async_runtime::block_on(async move {
+                    let _ = servicios.parar().await;
+                });
+            }
+        });
 }

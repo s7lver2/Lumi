@@ -4,6 +4,7 @@ import { IndexDetail } from "./catalog/IndexDetail";
 import { IndexList } from "./catalog/IndexList";
 import { IngestView } from "./ingest/IngestView";
 import { api, type Saludo } from "./lib/api";
+import { ServicesPanel } from "./setup/ServicesPanel";
 import { SetupWizard } from "./setup/SetupWizard";
 import { TerritoryView } from "./territory/TerritoryView";
 import { PlanetBackground } from "./ui/PlanetBackground";
@@ -37,11 +38,7 @@ export function App() {
               )}
               {destino === "territorio" && <TerritoryView nombre="nuevo-indice" />}
               {destino === "ingesta" && <IngestView indiceId={indiceAbierto ?? 0} />}
-              {destino === "ajustes" && (
-                <p className="flex h-full items-center justify-center text-[13px] text-muted">
-                  Sin ajustes propios todavía.
-                </p>
-              )}
+              {destino === "ajustes" && saludo && <ServicesPanel so={saludo.so} />}
             </div>
           </div>
         )}

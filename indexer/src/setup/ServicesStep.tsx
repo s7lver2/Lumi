@@ -14,6 +14,7 @@ export function ServicesStep({ saludo, onListo }: { saludo: Saludo; onListo: () 
   const [error, setError] = useState<string | null>(null);
   const [rendido, setRendido] = useState(false);
   const [intento, setIntento] = useState(0);
+  const [enCurso, setEnCurso] = useState(false);
 
   // El sondeo TERMINA: al levantarse los dos, al agotar el tope, o si arrancar
   // ni siquiera pudo empezar. Antes no paraba nunca, así que en un equipo sin
@@ -21,40 +22,66 @@ export function ServicesStep({ saludo, onListo }: { saludo: Saludo; onListo: () 
   // hasta que la cerrabas, y el rótulo decía «arrancando» eternamente sobre
   // algo que ya se sabía que no iba a arrancar.
   useEffect(() => {
-    let sondeos = 0;
     let t: ReturnType<typeof setInterval> | undefined;
     setRendido(false);
     setError(null);
 
-    const sondear = () => api.serviciosEstado().then(setServicios);
-
+    // `arrancar` en Windows se niega si falta alguno, y con razón: levantar
+    // procesos en la distribución de alguien se pide, no se hace al abrir.
+    // Ahí es donde entra el botón.
     void api
       .serviciosArrancar()
-      .then(() => {
-        t = setInterval(() => {
-          void api.serviciosEstado().then((s) => {
-            setServicios(s);
-            sondeos += 1;
-            if (s.length > 0 && s.every((x) => x.vivo)) clearInterval(t);
-            else if (sondeos >= TOPE_SONDEOS) {
-              clearInterval(t);
-              setRendido(true);
-            }
-          });
-        }, 800);
-      })
+      .then(() => { t = sondear(); })
       .catch((e) => {
-        // No hay nada que esperar: se pinta el estado una vez, para que se vea
-        // cuál de los dos falta, y se para.
         setError(String(e));
         setRendido(true);
-        void sondear();
+        void api.serviciosEstado().then(setServicios);
       });
 
     return () => clearInterval(t);
   }, [intento]);
 
+  /// Sondea hasta que los dos estén vivos o se agote el tope. Devuelve el
+  /// intervalo para poder cancelarlo al desmontar.
+  function sondear() {
+    let n = 0;
+    const t = setInterval(() => {
+      void api.serviciosEstado().then((s) => {
+        setServicios(s);
+        n += 1;
+        if (s.length > 0 && s.every((x) => x.vivo)) clearInterval(t);
+        else if (n >= TOPE_SONDEOS) {
+          clearInterval(t);
+          setRendido(true);
+        }
+      });
+    }, 800);
+    return t;
+  }
+
+  function levantarEnWsl() {
+    setEnCurso(true);
+    setError(null);
+    setRendido(false);
+    api
+      .serviciosArrancarWsl()
+      .then(() => {
+        setEnCurso(false);
+        // Se sondea aquí en vez de reiniciar el efecto: los servicios recién
+        // lanzados tardan un par de segundos en escuchar, y volver a llamar a
+        // `arrancar` en ese hueco se encontraría el puerto todavía vacío y
+        // fallaría por una carrera.
+        sondear();
+      })
+      .catch((e) => {
+        setEnCurso(false);
+        setError(String(e));
+        setRendido(true);
+      });
+  }
+
   const todos = servicios.length > 0 && servicios.every((s) => s.vivo);
+  const enWindows = saludo.so === "windows";
 
   return (
     <div className="rounded-card border border-white/[.13] bg-[rgba(16,19,25,.66)] p-[20px_22px] shadow-lg shadow-black/40 backdrop-blur-xl">
@@ -101,12 +128,38 @@ export function ServicesStep({ saludo, onListo }: { saludo: Saludo; onListo: () 
         </span>
       </div>
 
-      {error && <p className="mt-2.5 text-[11px] text-danger-fg">{error}</p>}
+      {/* `whitespace-pre-wrap`: el error de Windows trae los dos comandos de
+          WSL en sus propias líneas, y sin esto se aplastan en un párrafo del
+          que no se puede copiar ninguno. */}
+      {error && (
+        <p className="mt-2.5 whitespace-pre-wrap text-[11px] leading-relaxed text-danger-fg">
+          {error}
+        </p>
+      )}
+
+      {/* La primera vez esto baja paquetes y un binario: puede tardar minutos.
+          Decirlo evita que se lea como colgado y que se cierre a mitad. */}
+      {enCurso && (
+        <p className="mt-2.5 text-[11px] leading-relaxed text-draw-fg">
+          Instalando y levantando dentro de WSL. La primera vez baja Redis de los repositorios de
+          la distribución y el binario oficial de Qdrant, así que puede tardar unos minutos; el
+          detalle va saliendo arriba.
+        </p>
+      )}
 
       <div className="mt-[17px] flex items-center justify-between">
         <span className="font-mono text-[9.5px] text-subtle">puedes cerrar: se retoma solo</span>
         <div className="flex items-center gap-2">
-          {rendido && !todos && (
+          {enWindows && !todos && (
+            <button
+              onClick={levantarEnWsl}
+              disabled={enCurso}
+              className="jg-press rounded-lg border border-border px-3.5 py-2 text-[11.5px] text-fg disabled:opacity-40"
+            >
+              {enCurso ? "Levantando en WSL…" : "Levantar en WSL"}
+            </button>
+          )}
+          {rendido && !todos && !enCurso && (
             <button
               onClick={() => setIntento((n) => n + 1)}
               className="jg-press rounded-lg border border-border px-3.5 py-2 text-[11.5px] text-fg"

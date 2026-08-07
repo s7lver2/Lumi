@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { api } from "../lib/api";
 import { Icon } from "../ui/Icon";
@@ -7,8 +7,15 @@ import { LogBox } from "./LogBox";
 export function RuntimeStep({ onListo }: { onListo: () => void }) {
   const [listo, setListo] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // StrictMode corre este efecto DOS veces en desarrollo. Sin el cerrojo se
+  // lanzaban dos instalaciones a la vez y el segundo `python -m venv` moría
+  // contra el directorio que estaba creando el primero. El daemon también se
+  // defiende de esto, pero pedirlo dos veces no tiene ningún sentido.
+  const pedido = useRef(false);
 
   useEffect(() => {
+    if (pedido.current) return;
+    pedido.current = true;
     void api.runtimeListo().then((l) => {
       if (l) { setListo(true); return; }
       void api.runtimeInstalar().then(() => setListo(true)).catch((e) => setError(String(e)));

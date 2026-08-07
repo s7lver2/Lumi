@@ -22,6 +22,42 @@ Empaquetar un puerto de terceros (como Memurai) metería una dependencia con su
 propia licencia dentro de un proyecto de código abierto; el Indexer prefiere
 pedir WSL antes que eso.
 
+### Los servicios en WSL con la ventana en Windows
+
+Para desarrollar no hace falta meter la aplicación entera en WSL. El paso de
+servicios trae un botón **«Levantar en WSL»** que hace tres cosas: instala lo
+que falte dentro de la distribución, lo arranca ahí, y lo adopta desde el lado
+Windows. El reenvío de `localhost` de WSL2 hace alcanzable un Redis atado a
+`127.0.0.1` dentro de WSL sin exponerlo a la red, que es la parte que importa.
+
+- **Redis** sale de los repositorios de la distribución (`apt-get`, como
+  `root`, porque `sudo` sin terminal se queda esperando una contraseña que no
+  llega).
+- **Qdrant** no está en ningún repositorio: se baja su binario de las
+  publicaciones oficiales del proyecto a `~/.lumi-indexer/bin`, sin tocar nada
+  del sistema fuera del `$HOME`.
+
+Es lo único de todo el módulo de servicios que descarga algo de internet, y por
+eso solo ocurre al pulsar el botón: abrir la aplicación nunca instala nada.
+
+### Adoptar, y no dejar huérfanos
+
+El Indexer **adopta** cualquier servicio que ya esté escuchando en su puerto en
+vez de lanzar un segundo contra él. La contrapartida es que un adoptado no es
+suyo para matarlo, y esa diferencia se ve en **Ajustes → Servicios locales**:
+
+- `propio` — proceso hijo del Indexer. Se para desde el panel y muere al cerrar
+  la aplicación.
+- `adoptado` — ya estaba. Sigue vivo al cerrar y hay que pararlo donde se lanzó.
+
+Nada se lanza nunca con `--daemonize`: un demonio se desengancha y sobrevive a
+la aplicación, que es exactamente el huérfano que esto evita. Al salir, el
+Indexer apaga Redis por su propio protocolo y mata a los hijos que le queden.
+
+Aun así, esto es un atajo para desarrollar en Windows, no la instalación
+soportada: el trabajador de embebido sigue queriendo la GPU y el `venv` del
+lado en que corre. Para indexar de verdad, el Indexer entero va dentro de WSL.
+
 ## Requisitos previos
 
 En el `PATH`:

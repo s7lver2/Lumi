@@ -69,7 +69,17 @@ async fn correr(log: &Arc<Log>, etiqueta: &'static str, exe: &Path, args: &[&str
     Ok(())
 }
 
+/// Solo una instalación a la vez. Dos `python -m venv` simultáneos sobre la
+/// misma ruta se pisan y el segundo muere con «no se puede crear un archivo que
+/// ya existe», y dos `pip install` a la vez sobre el mismo entorno son peores
+/// todavía. Quien llegue segundo espera al primero y se encuentra el trabajo
+/// hecho. Es global porque el runtime también lo es: hay uno por máquina.
+static INSTALANDO: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 pub async fn instalar(dir: &Path, log: Arc<Log>) -> Result<()> {
+    let _turno = INSTALANDO.lock().await;
+    // Se vuelve a comprobar CON el cerrojo cogido: quien esperaba aquí puede
+    // haberse quedado sin nada que hacer justo mientras esperaba.
     if esta_instalado(dir) {
         log.apuntar("runtime: ya instalado, nada que hacer".into());
         return Ok(());
@@ -88,8 +98,18 @@ pub async fn instalar(dir: &Path, log: Arc<Log>) -> Result<()> {
         bail!("no encuentro un intérprete de Python en el PATH");
     };
 
-    correr(&log, "venv", Path::new(py), &["-m", "venv", &venv_de(dir).display().to_string()]).await?;
+    // No se recrea un venv que ya tiene intérprete: llegar aquí con él puesto
+    // significa que lo que falta es torch, y rehacer el entorno solo tiraría
+    // los gigabytes que ya estuvieran bajados. `--clear` es para el otro caso,
+    // el del directorio a medias que dejó un intento anterior al cortarse:
+    // sin él, `python -m venv` choca con lo que ya hay y aborta.
     let vpy = python_del_venv(dir);
+    if vpy.exists() {
+        log.apuntar("venv: ya existe, se reutiliza".into());
+    } else {
+        let destino = venv_de(dir).display().to_string();
+        correr(&log, "venv", Path::new(py), &["-m", "venv", "--clear", &destino]).await?;
+    }
     correr(&log, "pip", &vpy, &["-m", "pip", "install", "--upgrade", "pip"]).await?;
     correr(
         &log,

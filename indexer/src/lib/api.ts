@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export interface Saludo { version: string; so: string; dir: string }
-export interface EstadoServicio { nombre: string; vivo: boolean; detalle: string }
+export interface EstadoServicio { nombre: string; vivo: boolean; detalle: string; propio: boolean }
 export interface Modelo { id: string; nombre: string; base: string; version: string; dims: number; pesos_url: string }
 export interface Resumen { lote_id: number; aceptadas: number; saltadas: number; con_vector: number; motivos: string[] }
 
@@ -41,6 +41,8 @@ export interface Informe { filas: number; por_modelo: [string, number, number][]
 export const api = {
   saludo: () => invoke<Saludo>("saludo"),
   serviciosArrancar: () => invoke<void>("servicios_arrancar"),
+  serviciosArrancarWsl: () => invoke<void>("servicios_arrancar_wsl"),
+  serviciosParar: () => invoke<void>("servicios_parar"),
   serviciosEstado: () => invoke<EstadoServicio[]>("servicios_estado"),
   serviciosLog: (desde: number) => invoke<string[]>("servicios_log", { desde }),
   modelosLista: () => invoke<Modelo[]>("modelos_lista"),
