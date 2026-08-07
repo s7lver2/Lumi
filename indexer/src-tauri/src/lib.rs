@@ -368,10 +368,23 @@ async fn paquete_sellar(
     std::fs::create_dir_all(&raiz).map_err(|e| e.to_string())?;
     let imagenes = estado.almacen.imagenes_de_indice(indice_id).map_err(|e| e.to_string())?;
 
+    // Lo que no redistribuye no sale del paquete: ni la imagen ni su vector.
+    // El motor verifica geométricamente contra la imagen, así que un vector
+    // sin ella le daría al receptor un candidato sin verificar nunca.
+    let publicables = estado.almacen.filas_publicables(indice_id).map_err(|e| e.to_string())?;
+    let viajan: std::collections::HashSet<i64> = publicables
+        .iter()
+        .filter(|f| package::redistribucion_de(&f.fuente).viaja(f.licencia.as_deref()))
+        .map(|f| f.id)
+        .collect();
+
     // Por quadkey: cada uno es un fragmento, y el orden dentro del fragmento
     // es el mismo id ascendente de `indice.db`.
     let mut por_qk: std::collections::BTreeMap<String, Vec<(i64, String)>> = Default::default();
     for (id, ruta, qk) in &imagenes {
+        if !viajan.contains(id) {
+            continue;
+        }
         por_qk.entry(qk.clone()).or_default().push((*id, ruta.clone()));
     }
 
@@ -388,7 +401,10 @@ async fn paquete_sellar(
 
     let imgs_dir = raiz.join("imagenes");
     std::fs::create_dir_all(&imgs_dir).map_err(|e| e.to_string())?;
-    for (_, ruta, _) in &imagenes {
+    for (id, ruta, _) in &imagenes {
+        if !viajan.contains(id) {
+            continue;
+        }
         let origen = std::path::Path::new(ruta);
         if let Some(nombre) = origen.file_name() {
             // Se copia, no se mueve ni se recomprime: el original de una
@@ -422,6 +438,15 @@ async fn paquete_sellar(
     estado.almacen.sellar_indice(indice_id, &destino).map_err(|e| e.to_string())?;
 
     Ok(informe)
+}
+
+#[tauri::command]
+async fn paquete_que_viaja(
+    estado: tauri::State<'_, Estado>,
+    indice_id: i64,
+) -> Result<Vec<package::Publicable>, String> {
+    let filas = estado.almacen.filas_publicables(indice_id).map_err(|e| e.to_string())?;
+    Ok(package::que_viaja(&filas))
 }
 
 /// Nada de "abrir con avisos": si `SHA256SUMS` no cuadra, no se abre.
@@ -526,6 +551,7 @@ pub fn run() {
             mapbox_clave_guardar,
             mapbox_clave_leer,
             paquete_sellar,
+            paquete_que_viaja,
             paquete_abrir
         ])
         .build(tauri::generate_context!())

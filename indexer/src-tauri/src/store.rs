@@ -586,6 +586,30 @@ impl Almacen {
         Ok(filas)
     }
 
+    /// Lo que el sellado necesita para decidir qué sale del paquete. Las
+    /// saltadas y las rechazadas no están: no forman parte del índice.
+    pub fn filas_publicables(&self, indice_id: i64) -> Result<Vec<crate::package::FilaPublicable>> {
+        let c = self.0.lock().unwrap();
+        let mut q = c.prepare(
+            "SELECT i.id, l.fuente, i.licencia, i.quadkey
+               FROM imagenes i JOIN lotes l ON l.id = i.lote_id
+              WHERE i.indice_id = ?1 AND i.saltada_motivo IS NULL
+                AND (i.revision IS NULL OR i.revision <> 'rechazada')
+              ORDER BY i.id",
+        )?;
+        let filas = q
+            .query_map(params![indice_id], |r| {
+                Ok(crate::package::FilaPublicable {
+                    id: r.get(0)?,
+                    fuente: r.get(1)?,
+                    licencia: r.get(2)?,
+                    quadkey: r.get(3)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(filas)
+    }
+
     // ── Revisión ─────────────────────────────────────────────────────────
 
     /// `(id, ruta, fuente, licencia)` de las sueltas que esperan revisión.

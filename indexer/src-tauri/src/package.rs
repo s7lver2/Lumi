@@ -97,3 +97,147 @@ pub fn escribir_fragmento(dir: &Path, modelo: &str, version: &str, vs: &[Vec<f32
     escribir_i8(&mut std::fs::File::create(dir.join(format!("{base}.i8")))?, vs)?;
     Ok(())
 }
+
+use lumi_index::network::Redistribucion;
+
+/// Lo mínimo de una imagen para decidir si sale del paquete.
+#[derive(Debug, Clone)]
+pub struct FilaPublicable {
+    pub id: i64,
+    pub fuente: String,
+    pub licencia: Option<String>,
+    pub quadkey: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Publicable {
+    pub fuente: String,
+    pub en_el_indice: u32,
+    pub viajan: u32,
+    pub licencia: String,
+    pub motivo: String,
+}
+
+/// La redistribución de cada origen. Vive aquí y no en el trait porque sellar
+/// no necesita construir adaptadores —ni claves, ni red— para saber qué puede
+/// publicar: es una propiedad del origen, no de la sesión.
+pub fn redistribucion_de(fuente: &str) -> Redistribucion {
+    match fuente {
+        "google" | "mapbox-satelite" => Redistribucion::SoloLocal,
+        "flickr" => Redistribucion::PorImagen,
+        "mapillary" | "kartaview" => Redistribucion::Libre { licencia: "CC BY-SA 4.0".into() },
+        "commons" => Redistribucion::Libre { licencia: "libre (Commons)".into() },
+        // Todo lo demás es material del propio operador (carpeta local, legacy):
+        // suyo es y suyo sale.
+        _ => Redistribucion::Libre { licencia: "declarada por el operador".into() },
+    }
+}
+
+/// Una fila por origen con cuántas hay y cuántas salen.
+pub fn que_viaja(filas: &[FilaPublicable]) -> Vec<Publicable> {
+    let mut por_fuente: std::collections::BTreeMap<&str, (u32, u32)> = Default::default();
+    for f in filas {
+        let r = redistribucion_de(&f.fuente);
+        let e = por_fuente.entry(f.fuente.as_str()).or_default();
+        e.0 += 1;
+        if r.viaja(f.licencia.as_deref()) {
+            e.1 += 1;
+        }
+    }
+    por_fuente
+        .into_iter()
+        .map(|(fuente, (en_el_indice, viajan))| {
+            let r = redistribucion_de(fuente);
+            let (licencia, motivo) = match &r {
+                Redistribucion::Libre { licencia } => {
+                    (licencia.clone(), "libre, con autor por fichero".to_string())
+                }
+                Redistribucion::SoloLocal => (
+                    "no redistribuible".to_string(),
+                    "no redistribuible: ni imagen ni vector".to_string(),
+                ),
+                Redistribucion::PorImagen => (
+                    "varía por foto".to_string(),
+                    format!("{} con ND o NC se quedan", en_el_indice - viajan),
+                ),
+            };
+            Publicable { fuente: fuente.to_string(), en_el_indice, viajan, licencia, motivo }
+        })
+        .collect()
+}
+
+/// Los orígenes que de verdad viajan en el fragmento de esta tesela.
+///
+/// Es lo que se escribe en `TeselaCubierta::fuentes`, y de lo que otro operador
+/// deducirá qué NO tiene que volver a indexar. Meter aquí un origen cuyo
+/// material se quedó fuera sería prometerle una cobertura que el paquete no
+/// lleva.
+pub fn fuentes_que_viajan(filas: &[FilaPublicable], quadkey: &str) -> Vec<String> {
+    let mut fuera: Vec<String> = filas
+        .iter()
+        .filter(|f| f.quadkey == quadkey)
+        .filter(|f| redistribucion_de(&f.fuente).viaja(f.licencia.as_deref()))
+        .map(|f| f.fuente.clone())
+        .collect();
+    fuera.sort();
+    fuera.dedup();
+    fuera
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fila(fuente: &str, licencia: Option<&str>) -> FilaPublicable {
+        FilaPublicable {
+            id: 1,
+            fuente: fuente.into(),
+            licencia: licencia.map(|s| s.to_string()),
+            quadkey: "AAA".into(),
+        }
+    }
+
+    #[test]
+    fn google_y_mapbox_no_sacan_ni_un_vector() {
+        let filas = vec![fila("google", None), fila("mapbox-satelite", None)];
+        let r = que_viaja(&filas);
+        assert!(r.iter().all(|p| p.viajan == 0), "{r:?}");
+        assert!(r.iter().all(|p| p.motivo.contains("no redistribuible")), "{r:?}");
+    }
+
+    #[test]
+    fn flickr_viaja_foto_a_foto_y_las_nd_o_nc_se_quedan() {
+        let filas = vec![
+            fila("flickr", Some("CC BY 2.0")),
+            fila("flickr", Some("CC BY-SA 2.0")),
+            fila("flickr", Some("CC BY-ND 2.0")),
+            fila("flickr", Some("CC BY-NC 2.0")),
+            fila("flickr", None),
+        ];
+        let r = que_viaja(&filas);
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].en_el_indice, 5);
+        assert_eq!(r[0].viajan, 2, "solo BY y BY-SA");
+    }
+
+    #[test]
+    fn lo_libre_viaja_entero() {
+        let filas = vec![fila("mapillary", None), fila("commons", Some("CC0 1.0"))];
+        let r = que_viaja(&filas);
+        assert!(r.iter().all(|p| p.viajan == p.en_el_indice), "{r:?}");
+    }
+
+    #[test]
+    fn las_fuentes_de_una_tesela_son_solo_las_que_de_verdad_viajan() {
+        // Es lo que va a `cobertura.json`, y de lo que otro operador va a
+        // deducir qué NO tiene que volver a indexar. Meter aquí google sería
+        // prometerle una cobertura que su paquete no lleva.
+        let filas = vec![
+            fila("mapillary", None),
+            fila("google", None),
+            fila("flickr", Some("CC BY-ND 2.0")),
+        ];
+        let f = fuentes_que_viajan(&filas, "AAA");
+        assert_eq!(f, vec!["mapillary".to_string()]);
+    }
+}
