@@ -323,6 +323,18 @@ async fn revision_aceptar_resto(
     review::aceptar_resto(&estado.almacen, indice_id).map_err(|e| e.to_string())
 }
 
+/// La clave de un proveedor, para el NAVEGADOR. Solo se entrega la de
+/// Mapillary y la de Mapbox: son las dos que el mapa necesita pedir directamente
+/// desde el cliente. Ninguna otra sale de aquí.
+#[tauri::command]
+async fn clave_leer(estado: tauri::State<'_, Estado>, proveedor: String) -> Result<Option<String>, String> {
+    if proveedor != "mapillary" && proveedor != "mapbox-satelite" {
+        return Err("esa clave no se entrega al frontend".into());
+    }
+    let c = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
+    c.leer(&proveedor).map_err(|e| e.to_string())
+}
+
 /// La clave de Mapbox del operador, cifrada con la maestra del equipo. No es
 /// un secreto de servidor: vive local, igual que el resto de `ajustes`.
 #[tauri::command]
@@ -548,6 +560,7 @@ pub fn run() {
             revision_pendientes,
             revision_rechazar,
             revision_aceptar_resto,
+            clave_leer,
             mapbox_clave_guardar,
             mapbox_clave_leer,
             paquete_sellar,

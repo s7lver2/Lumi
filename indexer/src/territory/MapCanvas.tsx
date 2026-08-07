@@ -2,7 +2,8 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useEffect, useRef } from "react";
 
-import { api, type Clasificacion, type Punto } from "../lib/api";
+import { api, type Clasificacion, type Punto, type SondeoTesela } from "../lib/api";
+import { color } from "../lib/origenes";
 
 /** Ease-out cúbico, la misma curva que MapCanvas del subsistema 6, para que
  *  los vuelos se sientan igual en las dos aplicaciones. Nunca `essential`:
@@ -57,10 +58,16 @@ export function MapCanvas({
   dibujo,
   clasificacion,
   onPoligonoListo,
+  activos,
+  sondeos,
+  tokenMapillary,
 }: {
   dibujo: Punto[];
   clasificacion: Clasificacion | null;
   onPoligonoListo: (p: Punto[]) => void;
+  activos?: Set<string>;
+  sondeos?: SondeoTesela[];
+  tokenMapillary?: string | null;
 }) {
   const contenedor = useRef<HTMLDivElement>(null);
   const mapa = useRef<mapboxgl.Map | null>(null);
@@ -107,6 +114,44 @@ export function MapCanvas({
           },
         });
 
+        // Mapillary por sus teselas vectoriales oficiales: una petición por
+        // tesela de pantalla, gratis, y ya vienen cacheadas. No pasa por el
+        // backend, así que Rust no tiene que decodificar nada.
+        if (tokenMapillary) {
+          m.addSource("mly", {
+            type: "vector",
+            tiles: [`https://tiles.mapillary.com/maps/vtp/mly1_public/2/{z}/{x}/{y}?access_token=${tokenMapillary}`],
+            minzoom: 6,
+            maxzoom: 14,
+          });
+          m.addLayer({
+            id: "mly-puntos",
+            type: "circle",
+            source: "mly",
+            "source-layer": "image",
+            layout: { visibility: "none" },
+            paint: {
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 1.2, 16, 2.6],
+              "circle-color": "#4ec9a5",
+              "circle-opacity": 0.9,
+            },
+          });
+        }
+
+        // El sombreado de los que solo se pueden sondear por muestreo. Una
+        // sola fuente para todos: el color sale de la propiedad `fuente` de
+        // cada rasgo, así que encender un origen más no añade una capa más.
+        m.addSource("sondeos", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        m.addLayer({
+          id: "sondeos-relleno",
+          type: "fill",
+          source: "sondeos",
+          paint: {
+            "fill-color": ["get", "color"],
+            "fill-opacity": ["match", ["get", "nivel"], "mucho", 0.30, "poco", 0.13, 0],
+          },
+        }, "teselas-borde");
+
         m.on("click", (e) => {
           puntos.current = [...puntos.current, { lat: e.lngLat.lat, lng: e.lngLat.lng }];
           (m.getSource("dibujo") as mapboxgl.GeoJSONSource)?.setData({
@@ -141,6 +186,29 @@ export function MapCanvas({
   useEffect(() => {
     if (dibujo.length === 0) puntos.current = [];
   }, [dibujo]);
+
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !m.isStyleLoaded()) return;
+    if (m.getLayer("mly-puntos")) {
+      m.setLayoutProperty("mly-puntos", "visibility", activos?.has("mapillary") ? "visible" : "none");
+    }
+    const src = m.getSource("sondeos") as mapboxgl.GeoJSONSource | undefined;
+    if (!src) return;
+    // Mapillary ya se pinta como puntos y el cenital no se pinta: los dos
+    // quedan fuera del sombreado, o taparían a los demás con una capa que no
+    // dice nada.
+    src.setData({
+      type: "FeatureCollection",
+      features: (sondeos ?? [])
+        .filter((s) => activos?.has(s.fuente) && s.fuente !== "mapillary" && s.fuente !== "mapbox-satelite")
+        .map((s) => {
+          const f = teselaAPoligono(s.quadkey);
+          f.properties = { nivel: s.nivel, color: color(s.fuente) };
+          return f;
+        }),
+    });
+  }, [activos, sondeos]);
 
   return <div ref={contenedor} className="h-full w-full" />;
 }

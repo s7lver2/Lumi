@@ -27,6 +27,7 @@ export type EstadoTesela =
   | { estado: "local"; indice: string; sha256: string }
   | { estado: "catalogo"; indice: string; sha256: string; bytes: number; atribucion: { autor: string; url: string; licencia: string } }
   | { estado: "nuevo" };
+export interface RepartoOrigen { locales: number; catalogo: number; nuevas: number }
 export interface Clasificacion {
   teselas: [string, EstadoTesela][];
   locales: number;
@@ -34,9 +35,53 @@ export interface Clasificacion {
   nuevas: number;
   bytes_a_descargar: number;
   autores: [string, number][];
+  por_origen: Record<string, RepartoOrigen>;
 }
 
 export interface Informe { filas: number; por_modelo: [string, number, number][]; cuadra: boolean }
+
+export interface FichaOrigen {
+  id: string;
+  tipo: "calle" | "cenital" | "suelta";
+  puntos_exactos: boolean;
+  gratis: boolean;
+  usd_por_mil: number;
+  redistribuye: boolean;
+}
+export interface SondeoTesela {
+  quadkey: string;
+  fuente: string;
+  nivel: "mucho" | "poco" | "nada";
+  estimadas: number;
+  del_cache: boolean;
+}
+export interface LineaPrevista {
+  fuente: string;
+  teselas: number;
+  unidades: number;
+  coste_eur: number;
+}
+export interface Estimacion {
+  lineas: LineaPrevista[];
+  total_eur: number;
+  gastado_eur: number;
+  tope_eur: number;
+  cabe: boolean;
+  exceso_eur: number;
+}
+export interface ProgresoDescarga {
+  trabajando: boolean;
+  teselas_hechas: number;
+  teselas_total: number;
+  imagenes: number;
+  gastado_eur: number;
+  sin_saldo: boolean;
+  por_origen: [string, number, number][];
+  ultimo: string;
+}
+export interface FichaRevision { id: number; ruta: string; fuente: string; licencia: string | null }
+export interface Cuentas { pendientes: number; aceptadas: number; rechazadas: number }
+export interface Publicable { fuente: string; en_el_indice: number; viajan: number; licencia: string; motivo: string }
 
 export const api = {
   saludo: () => invoke<Saludo>("saludo"),
@@ -60,5 +105,28 @@ export const api = {
   mapboxClaveGuardar: (clave: string) => invoke<void>("mapbox_clave_guardar", { clave }),
   mapboxClave: () => invoke<string | null>("mapbox_clave_leer"),
   paqueteSellar: (indiceId: number, destino: string) => invoke<Informe>("paquete_sellar", { indiceId, destino }),
+  paqueteQueViaja: (indiceId: number) => invoke<Publicable[]>("paquete_que_viaja", { indiceId }),
   paqueteAbrir: (ruta: string) => invoke<void>("paquete_abrir", { ruta }),
+
+  origenesLista: () => invoke<FichaOrigen[]>("origenes_lista"),
+  sondearArea: (teselas: string[]) => invoke<SondeoTesela[]>("sondear_area", { teselas }),
+  estimarArea: (nuevas: Record<string, string[]>) =>
+    invoke<Estimacion>("estimar_area", { nuevas }),
+  claveLeer: (proveedor: string) => invoke<string | null>("clave_leer", { proveedor }),
+
+  descargaArrancar: (indiceId: number, nuevas: Record<string, string[]>, presupuestoEur: number) =>
+    invoke<void>("descarga_arrancar", { indiceId, nuevas, presupuestoEur }),
+  descargaProgreso: () => invoke<ProgresoDescarga>("descarga_progreso"),
+  descargaParar: () => invoke<void>("descarga_parar"),
+  revisionPendientes: (indiceId: number) => invoke<FichaRevision[]>("revision_pendientes", { indiceId }),
+  revisionRechazar: (indiceId: number, ids: number[]) =>
+    invoke<Cuentas>("revision_rechazar", { indiceId, ids }),
+  revisionAceptarResto: (indiceId: number) => invoke<Cuentas>("revision_aceptar_resto", { indiceId }),
+
+  claveGuardar: (proveedor: string, clave: string) =>
+    invoke<void>("clave_guardar", { proveedor, clave }),
+  claveHay: (proveedor: string) => invoke<boolean>("clave_hay", { proveedor }),
+  topeLeer: () => invoke<number>("tope_leer"),
+  topeFijar: (eur: number) => invoke<void>("tope_fijar", { eur }),
+  gastoMes: () => invoke<[number, [string, number, number][]]>("gasto_mes"),
 };
