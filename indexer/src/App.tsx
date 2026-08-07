@@ -6,6 +6,7 @@ import { DownloadView } from "./download/DownloadView";
 import { IngestView } from "./ingest/IngestView";
 import { api, type Saludo } from "./lib/api";
 import { ReviewGrid } from "./review/ReviewGrid";
+import { OriginsPanel } from "./settings/OriginsPanel";
 import { ServicesPanel } from "./setup/ServicesPanel";
 import { SetupWizard } from "./setup/SetupWizard";
 import { TerritoryView } from "./territory/TerritoryView";
@@ -18,6 +19,7 @@ export function App() {
   const [dentro, setDentro] = useState(false);
   const [destino, setDestino] = useState<Destino>("indices");
   const [indiceAbierto, setIndiceAbierto] = useState<number | null>(null);
+  const [pestana, setPestana] = useState<"servicios" | "origenes">("servicios");
 
   useEffect(() => { void api.saludo().then(setSaludo); }, []);
 
@@ -59,7 +61,25 @@ export function App() {
               {destino === "revision" && (
                 <ReviewGrid indiceId={indiceAbierto ?? 0} onEmbeber={() => setDestino("indices")} />
               )}
-              {destino === "ajustes" && saludo && <ServicesPanel so={saludo.so} />}
+              {destino === "ajustes" && saludo && (
+                <div className="flex h-full flex-col">
+                  <div className="flex shrink-0 gap-1 border-b border-border px-6 pt-4">
+                    {(["servicios", "origenes"] as const).map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => setPestana(t)}
+                        className={`rounded-t-lg px-3.5 py-2 text-[11.5px] transition-colors
+                          ${pestana === t ? "bg-white/[.07] text-fg" : "text-subtle hover:text-fg"}`}
+                      >
+                        {t === "servicios" ? "Servicios locales" : "Orígenes de red"}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="min-h-0 flex-1">
+                    {pestana === "servicios" ? <ServicesPanel so={saludo.so} /> : <OriginsPanel />}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

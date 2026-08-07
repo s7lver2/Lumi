@@ -335,6 +335,48 @@ async fn clave_leer(estado: tauri::State<'_, Estado>, proveedor: String) -> Resu
     c.leer(&proveedor).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn clave_guardar(
+    estado: tauri::State<'_, Estado>,
+    proveedor: String,
+    clave: String,
+) -> Result<(), String> {
+    let c = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
+    c.guardar(&proveedor, &clave).map_err(|e| e.to_string())
+}
+
+/// Se devuelve SI HAY, nunca la clave. La pantalla no necesita el secreto para
+/// enseñar «configurada», y entregarlo sería regalarlo al portapapeles de
+/// cualquier captura de pantalla.
+#[tauri::command]
+async fn clave_hay(estado: tauri::State<'_, Estado>, proveedor: String) -> Result<bool, String> {
+    let c = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
+    Ok(c.hay(&proveedor))
+}
+
+#[tauri::command]
+async fn tope_leer(estado: tauri::State<'_, Estado>) -> Result<f64, String> {
+    let c = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
+    Ok(c.tope_eur())
+}
+
+#[tauri::command]
+async fn tope_fijar(estado: tauri::State<'_, Estado>, eur: f64) -> Result<(), String> {
+    if !(0.0..=100_000.0).contains(&eur) {
+        return Err("el tope tiene que estar entre 0 y 100 000 €".into());
+    }
+    let c = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
+    c.fijar_tope_eur(eur).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn gasto_mes(estado: tauri::State<'_, Estado>) -> Result<(f64, Vec<(String, u32, f64)>), String> {
+    let mes = spend::mes_iso();
+    let total = estado.almacen.gasto_del_mes(&mes).map_err(|e| e.to_string())?;
+    let por = estado.almacen.gasto_del_mes_por_origen(&mes).map_err(|e| e.to_string())?;
+    Ok((total, por))
+}
+
 /// La clave de Mapbox del operador, cifrada con la maestra del equipo. No es
 /// un secreto de servidor: vive local, igual que el resto de `ajustes`.
 #[tauri::command]
@@ -561,6 +603,11 @@ pub fn run() {
             revision_rechazar,
             revision_aceptar_resto,
             clave_leer,
+            clave_guardar,
+            clave_hay,
+            tope_leer,
+            tope_fijar,
+            gasto_mes,
             mapbox_clave_guardar,
             mapbox_clave_leer,
             paquete_sellar,
