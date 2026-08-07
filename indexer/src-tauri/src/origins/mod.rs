@@ -173,8 +173,14 @@ pub fn registro(claves: &Claves, stage: PathBuf) -> Vec<Box<dyn OrigenDeRed>> {
     if let Ok(Some(k)) = claves.leer("google") {
         v.push(Box::new(google::Google::nuevo(k, stage.clone())));
     }
-    // ponytail: los tres restantes entran en la tarea 9.
-    let _ = stage;
+    if let Ok(Some(k)) = claves.leer("mapbox-satelite") {
+        v.push(Box::new(mapbox::MapboxSatelite::nuevo(k, stage.clone())));
+    }
+    // Commons tampoco necesita clave.
+    v.push(Box::new(commons::Commons::nuevo(stage.clone())));
+    if let Ok(Some(k)) = claves.leer("flickr") {
+        v.push(Box::new(flickr::Flickr::nuevo(k, stage)));
+    }
     v
 }
 
