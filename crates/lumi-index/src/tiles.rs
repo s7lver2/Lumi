@@ -124,6 +124,44 @@ pub fn teselas_de_poligono(poligono: &[Punto]) -> Vec<String> {
     fuera
 }
 
+/// El rectángulo geográfico de una tesela, en grados. El orden de los campos es
+/// el de las APIs que lo consumen (Mapillary y Flickr piden `oeste,sur,este,norte`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Bbox {
+    pub oeste: f64,
+    pub sur: f64,
+    pub este: f64,
+    pub norte: f64,
+}
+
+/// Deshace el entrelazado del quadkey y proyecta las dos esquinas de vuelta a
+/// grados. Es la inversa exacta de `xy` + `quadkey_de`.
+///
+/// Una tesela z14 mide ~0,0005 grados cuadrados, veinte veces menos que el tope
+/// de área de la Graph API de Mapillary: por eso una tesela entera cabe en una
+/// sola consulta y el 7b nunca necesita decodificar teselas vectoriales en Rust.
+pub fn bbox_de_tesela(qk: &str) -> Bbox {
+    let (mut x, mut y) = (0u32, 0u32);
+    for c in qk.chars() {
+        let d = c as u32 - '0' as u32;
+        x = (x << 1) | (d & 1);
+        y = (y << 1) | ((d >> 1) & 1);
+    }
+    let escala = (1u32 << qk.len().min(31)) as f64;
+    let lng_de = |tx: f64| tx / escala * 360.0 - 180.0;
+    let lat_de = |ty: f64| {
+        let n = std::f64::consts::PI * (1.0 - 2.0 * ty / escala);
+        n.sinh().atan().to_degrees()
+    };
+    Bbox {
+        oeste: lng_de(x as f64),
+        // y crece hacia el sur, así que `y` es el norte e `y + 1` el sur.
+        sur: lat_de(y as f64 + 1.0),
+        este: lng_de(x as f64 + 1.0),
+        norte: lat_de(y as f64),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,5 +205,26 @@ mod tests {
 
         // Un punto claramente fuera no aparece.
         assert!(!t.contains(&quadkey(40.4168, -3.7038)));
+    }
+
+    #[test]
+    fn el_bbox_de_una_tesela_la_contiene_y_es_pequeno() {
+        // A Coruña. La tesela que contiene el punto tiene que contener el punto.
+        let (lat, lng) = (43.3623, -8.4115);
+        let qk = quadkey(lat, lng);
+        let b = bbox_de_tesela(&qk);
+        assert!(b.oeste < lng && lng < b.este, "lng fuera: {b:?}");
+        assert!(b.sur < lat && lat < b.norte, "lat fuera: {b:?}");
+
+        // El área en grados cuadrados tiene que quedar MUY por debajo del tope
+        // de 0,01 de la Graph API: es lo que permite una consulta por tesela.
+        let area = (b.este - b.oeste) * (b.norte - b.sur);
+        assert!(area < 0.001, "el bbox mide {area} grados cuadrados, no cabe en una consulta");
+
+        // Y el centro del bbox tiene que devolver la misma tesela: si no, hay
+        // un desfase de medio píxel en la proyección.
+        let centro_lat = (b.sur + b.norte) / 2.0;
+        let centro_lng = (b.oeste + b.este) / 2.0;
+        assert_eq!(quadkey(centro_lat, centro_lng), qk);
     }
 }

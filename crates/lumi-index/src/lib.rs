@@ -9,5 +9,6 @@ pub mod coverage;
 pub mod embed;
 pub mod legacy;
 pub mod manifest;
+pub mod network;
 pub mod tiles;
 pub mod vectors;
