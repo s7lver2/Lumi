@@ -7,6 +7,7 @@ import { BlockedDialog } from "./BlockedDialog";
 import { CoveragePanel } from "./CoveragePanel";
 import { EstimateDialog } from "./EstimateDialog";
 import { MapCanvas } from "./MapCanvas";
+import { MapLegend } from "./MapLegend";
 import { PlanDialog } from "./PlanDialog";
 
 /** Dibujar, clasificar y decidir: el plan si hay algo nuevo, el bloqueo si no
@@ -140,6 +141,8 @@ export function TerritoryView({
       {clasificacion && !mostrarPlan && (
         <CoveragePanel c={clasificacion} onPlanear={() => setMostrarPlan(true)} />
       )}
+
+      {clasificacion && !mostrarPlan && <MapLegend activos={activos} />}
 
       {clasificacion && mostrarPlan && clasificacion.nuevas === 0 && (
         <Overlay>
