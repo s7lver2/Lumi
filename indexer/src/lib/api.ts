@@ -19,7 +19,7 @@ export interface ResumenIndice {
   id: number; nombre: string; slug: string; estado: string;
   imagenes: number; teselas: number; imagenes_pct: PorcentajesImagenes;
 }
-export interface DetalleIndice { imagenes: PorcentajesImagenes; trabajo: [string, number, number][] }
+export interface DetalleIndice { nombre: string; imagenes: PorcentajesImagenes; trabajo: [string, number, number][] }
 export interface LoteResumen { id: number; clase: string; origen: string; estado: string }
 
 export interface Punto { lat: number; lng: number }

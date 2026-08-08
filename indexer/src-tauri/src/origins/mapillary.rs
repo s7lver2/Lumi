@@ -31,20 +31,6 @@ const CAMPOS: &str =
 /// cobertura densa, y la segunda página rinde menos que bajar otra tesela.
 const LIMITE: u32 = 2000;
 
-/// La plantilla de teselas vectoriales que consume el frontend. Vive aquí y no
-/// en el TypeScript para que la URL y la capa estén en el mismo sitio que el
-/// adaptador que las explica.
-///
-/// Ningún comando Tauri las expone todavía —el frontend hoy repite el literal
-/// en `MapCanvas.tsx`—, así que Rust no las lee de vuelta y clippy las ve
-/// muertas. Quedan documentadas aquí a propósito, junto al adaptador que las
-/// explica, para el día en que un comando las sirva en vez de duplicarlas.
-#[allow(dead_code)]
-pub const URL_TESELAS_VECTORIALES: &str =
-    "https://tiles.mapillary.com/maps/vtp/mly1_public/2/{z}/{x}/{y}";
-#[allow(dead_code)]
-pub const CAPA_VECTORIAL: &str = "image";
-
 #[derive(Debug, Deserialize)]
 pub struct Geometria {
     pub coordinates: [f64; 2],

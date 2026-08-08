@@ -123,6 +123,10 @@ export function MapCanvas({
         // Mapillary por sus teselas vectoriales oficiales: una petición por
         // tesela de pantalla, gratis, y ya vienen cacheadas. No pasa por el
         // backend, así que Rust no tiene que decodificar nada.
+        //
+        // La URL vive aquí y solo aquí: estas teselas las pide el navegador
+        // directamente a Mapillary, nunca el backend, así que una constante
+        // en Rust solo sería una segunda copia que se desincroniza.
         if (tokenMapillary) {
           m.addSource("mly", {
             type: "vector",

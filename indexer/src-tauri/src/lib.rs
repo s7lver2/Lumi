@@ -140,6 +140,7 @@ fn ingesta_carpeta(
 
 #[derive(serde::Serialize)]
 struct DetalleIndice {
+    nombre: String,
     imagenes: lumi_index::manifest::PorcentajesImagenes,
     trabajo: Vec<(String, u32, f64)>,
 }
@@ -148,7 +149,16 @@ struct DetalleIndice {
 fn indice_detalle(estado: tauri::State<'_, Estado>, id: i64) -> Result<DetalleIndice, String> {
     let filas = estado.almacen.filas_procedencia(id).map_err(|e| e.to_string())?;
     let teselas = estado.almacen.teselas_trabajo(id).map_err(|e| e.to_string())?;
+    let nombre = estado
+        .almacen
+        .listar_indices()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|(i, ..)| *i == id)
+        .map(|(_, n, ..)| n)
+        .unwrap_or_default();
     Ok(DetalleIndice {
+        nombre,
         imagenes: lumi_index::manifest::porcentajes(&filas),
         trabajo: lumi_index::manifest::porcentajes_trabajo(&teselas),
     })

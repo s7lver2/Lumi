@@ -32,7 +32,7 @@ export function IndexDetail({ id, onVolver }: { id: number; onVolver: () => void
 
       {sellando && (
         <Overlay>
-          <SealDialog indiceId={id} nombre={String(id)} onSellado={() => setSellando(false)} />
+          <SealDialog indiceId={id} nombre={detalle.nombre} onSellado={() => setSellando(false)} />
         </Overlay>
       )}
 
