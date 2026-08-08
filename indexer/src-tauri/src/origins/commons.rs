@@ -15,7 +15,24 @@ use lumi_index::network::{Captura, Disponibilidad, Nivel, Redistribucion, Tarifa
 use lumi_index::tiles::bbox_de_tesela;
 use serde::Deserialize;
 
+use lumi_index::filter::{Candidata, Reglas, Veredicto};
+
 use super::{Ctx, OrigenDeRed};
+
+/// Los metadatos que Commons ya devuelve, en la forma que el filtro entiende.
+/// Aparte para poder probar la decisión sin levantar la red.
+fn candidata_de(ancho: u32, alto: u32, categorias: &[String], licencia: Option<&str>) -> Candidata {
+    Candidata {
+        ancho,
+        alto,
+        // Commons no publica precisión de la geoetiqueta. `None` es «no lo
+        // dijo», que no descarta.
+        precision_metros: None,
+        categorias: categorias.to_vec(),
+        licencia: licencia.map(str::to_string),
+        tipo: Tipo::Suelta,
+    }
+}
 
 const API: &str = "https://commons.wikimedia.org/w/api.php";
 const LIMITE: u32 = 500;
@@ -36,13 +53,16 @@ struct InfoImagen {
     #[serde(rename = "thumburl")]
     thumb: Option<String>,
     url: Option<String>,
+    #[serde(default)]
+    width: u32,
+    #[serde(default)]
+    height: u32,
     #[serde(rename = "extmetadata", default)]
     meta: std::collections::HashMap<String, Campo>,
 }
 
 #[derive(Debug, Deserialize)]
 struct Categoria {
-    #[allow(dead_code)]
     title: String,
 }
 
@@ -85,7 +105,7 @@ impl Commons {
         format!(
             "{API}?action=query&format=json&formatversion=1\
              &generator=geosearch&ggsbbox={}%7C{}%7C{}%7C{}&ggslimit={LIMITE}&ggsnamespace=6\
-             &prop=imageinfo%7Ccoordinates%7Ccategories&iiprop=url%7Cextmetadata&iiurlwidth=2048\
+             &prop=imageinfo%7Ccoordinates%7Ccategories&iiprop=url%7Csize%7Cextmetadata&iiurlwidth=2048\
              &cllimit=20",
             b.norte, b.oeste, b.sur, b.este
         )
@@ -138,6 +158,18 @@ impl OrigenDeRed for Commons {
             if tope.gastar(&self.tarifa(), 1).is_err() {
                 break;
             }
+            // Antes de bajar un solo byte: las reglas baratas deciden con lo
+            // que el proveedor ya nos ha contado. Filtrar después de la
+            // descarga no ahorraría ni ancho de banda ni cuota, que es justo
+            // para lo que existe este módulo.
+            let cats: Vec<String> = p.categories.iter().map(|c| c.title.clone()).collect();
+            let licencia = i.meta.get("LicenseShortName").and_then(|c| c.value.clone());
+            let cand = candidata_de(i.width, i.height, &cats, licencia.as_deref());
+            if let Veredicto::Fuera(motivo) = Reglas::por_defecto().evaluar(&cand) {
+                log::debug!("commons {}: descartada, {motivo}", p.title);
+                continue;
+            }
+
             let ruta = match self.ctx.bajar_imagen(&url, &format!("cmn-{}.jpg", p.pageid)).await {
                 Ok(r) => r,
                 Err(e) => {
@@ -146,10 +178,6 @@ impl OrigenDeRed for Commons {
                 }
             };
             let campo = |k: &str| i.meta.get(k).and_then(|c| c.value.clone());
-            // Las categorías viajan en el `id_origen` no: se guardan para que
-            // la Task 12 pueda pasarles las reglas. Aquí se dejan en la URL de
-            // atribución, que es donde el operador las puede ir a ver.
-            let _ = &p.categories;
             fuera.push(Captura {
                 fuente: "commons",
                 id_origen: p.pageid.to_string(),
@@ -167,5 +195,38 @@ impl OrigenDeRed for Commons {
             });
         }
         Ok(fuera)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Una foto de interior con categoría explícita no llega a descargarse.
+    /// El test mira la decisión, no la red: `candidata_de` es lo que el
+    /// adaptador consulta antes de gastar un byte.
+    #[test]
+    fn una_foto_de_interior_no_pasa_las_reglas() {
+        let c = candidata_de(
+            4000,
+            3000,
+            &["Category:Interior of buildings in Lugo".to_string()],
+            Some("CC BY-SA 4.0"),
+        );
+        assert!(matches!(Reglas::por_defecto().evaluar(&c), Veredicto::Fuera(_)));
+    }
+
+    #[test]
+    fn una_fachada_normal_si_pasa() {
+        let c = candidata_de(2048, 1536, &["Category:Streets in Lugo".to_string()], Some("CC BY-SA 4.0"));
+        assert_eq!(Reglas::por_defecto().evaluar(&c), Veredicto::Pasa);
+    }
+
+    /// Commons no declara precisión de geoetiqueta, y `None` NO es motivo de
+    /// descarte: es «no lo dijo», no «lo dijo mal».
+    #[test]
+    fn sin_precision_declarada_no_se_descarta() {
+        let c = candidata_de(2048, 1536, &[], None);
+        assert_eq!(Reglas::por_defecto().evaluar(&c), Veredicto::Pasa);
     }
 }
