@@ -20,6 +20,8 @@ use lumi_index::network::{Captura, Disponibilidad, Nivel, Redistribucion, Tarifa
 use lumi_index::tiles::bbox_de_tesela;
 use serde::Deserialize;
 
+use lumi_index::filter::{Candidata, Reglas, Veredicto};
+
 use super::{Ctx, OrigenDeRed};
 
 const API: &str = "https://api.flickr.com/services/rest/";
@@ -27,6 +29,33 @@ const API: &str = "https://api.flickr.com/services/rest/";
 /// de EEUU. Se dejan fuera 1, 2, 3 y 6 a propósito: son las NC y las ND.
 const LICENCIAS: &str = "4,5,7,9,10";
 const POR_PAGINA: u32 = 250;
+
+/// La escala 1..16 de Flickr, en metros aproximados. Solo importan los
+/// tramos alrededor del umbral de 100 m del filtro, así que no hace falta
+/// una tabla exacta: 16 es calle, 11 ciudad, y por debajo ya no localiza.
+/// `None` para 0, que en Flickr significa «no lo dijo».
+fn metros_de_accuracy(a: u32) -> Option<f64> {
+    match a {
+        0 => None,
+        16 => Some(30.0),
+        14..=15 => Some(80.0),
+        12..=13 => Some(300.0),
+        _ => Some(5000.0),
+    }
+}
+
+/// Los metadatos que Flickr ya devuelve, en la forma que el filtro entiende.
+fn candidata_de(ancho: u32, alto: u32, tags: &str, licencia: Option<&str>, accuracy: u32) -> Candidata {
+    Candidata {
+        ancho,
+        alto,
+        precision_metros: metros_de_accuracy(accuracy),
+        // Flickr da las etiquetas separadas por espacio, no una lista.
+        categorias: tags.split_whitespace().map(str::to_string).collect(),
+        licencia: licencia.map(str::to_string),
+        tipo: Tipo::Suelta,
+    }
+}
 
 pub fn nombre_licencia(id: &str) -> &'static str {
     match id {
@@ -48,6 +77,17 @@ struct FotoFlickr {
     longitude: Option<String>,
     datetaken: Option<String>,
     url_l: Option<String>,
+    #[serde(default)]
+    tags: String,
+    #[serde(default)]
+    width_l: u32,
+    #[serde(default)]
+    height_l: u32,
+    /// 1..16 según Flickr: 16 es nivel de calle, 1 es nivel de país. Se
+    /// traduce a metros porque el filtro razona en metros, no en la escala
+    /// de un proveedor concreto.
+    #[serde(default)]
+    accuracy: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,7 +115,7 @@ impl Flickr {
         format!(
             "{API}?method=flickr.photos.search&format=json&nojsoncallback=1\
              &bbox={},{},{},{}&license={LICENCIAS}&per_page={POR_PAGINA}\
-             &extras=geo,license,owner_name,date_taken,url_l&api_key={}",
+             &extras=geo,license,owner_name,date_taken,tags,url_l&api_key={}",
             b.oeste,
             b.sur,
             b.este,
@@ -134,6 +174,19 @@ impl OrigenDeRed for Flickr {
             }
             if tope.gastar(&self.tarifa(), 1).is_err() {
                 break;
+            }
+            // Igual que en Commons: se decide con lo que el proveedor ya dijo,
+            // antes de gastar el ancho de banda.
+            let cand = candidata_de(
+                f.width_l,
+                f.height_l,
+                &f.tags,
+                f.license.as_deref().map(nombre_licencia),
+                f.accuracy,
+            );
+            if let Veredicto::Fuera(motivo) = Reglas::por_defecto().evaluar(&cand) {
+                log::debug!("flickr {}: descartada, {motivo}", f.id);
+                continue;
             }
             let ruta = match self.ctx.bajar_imagen(&url, &format!("flk-{}.jpg", f.id)).await {
                 Ok(r) => r,
