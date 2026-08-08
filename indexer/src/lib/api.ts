@@ -87,6 +87,18 @@ export interface FichaRevision { id: number; ruta: string; fuente: string; licen
 export interface Cuentas { pendientes: number; aceptadas: number; rechazadas: number }
 export interface Publicable { fuente: string; en_el_indice: number; viajan: number; licencia: string; motivo: string }
 
+export interface ProgresoCola {
+  trabajando: boolean;
+  pausada: boolean;
+  lote_actual: number | null;
+  hechas: number;
+  total: number;
+  dispositivo: string;
+  modelo: string | null;
+  saltadas: number;
+  reinicios: number;
+}
+
 export const api = {
   saludo: () => invoke<Saludo>("saludo"),
   serviciosArrancar: () => invoke<void>("servicios_arrancar"),
@@ -129,6 +141,8 @@ export const api = {
   revisionRechazar: (indiceId: number, ids: number[]) =>
     invoke<Cuentas>("revision_rechazar", { indiceId, ids }),
   revisionAceptarResto: (indiceId: number) => invoke<Cuentas>("revision_aceptar_resto", { indiceId }),
+  colaProgreso: () => invoke<ProgresoCola>("cola_progreso"),
+  colaPausar: (pausada: boolean) => invoke<void>("cola_pausar", { pausada }),
 
   claveGuardar: (proveedor: string, clave: string) =>
     invoke<void>("clave_guardar", { proveedor, clave }),
