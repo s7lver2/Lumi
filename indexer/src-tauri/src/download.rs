@@ -144,6 +144,13 @@ impl Descarga {
                     let _ = self.almacen.descarga_marcar(
                         self.indice_id, o.id(), &qk, estado, n, unidades, motivo,
                     );
+                    if !sin_saldo {
+                        // La procedencia DEL TRABAJO, que es distinta de la de las
+                        // imágenes: esta suma 100 % porque una tesela la indexó
+                        // exactamente uno. Sin esta línea el manifiesto sale con la
+                        // tabla vacía y nadie sabe quién pagó la GPU.
+                        let _ = self.almacen.anotar_tesela(self.indice_id, &qk, "aqui", None, None);
+                    }
 
                     let mut p = self.progreso.lock().unwrap();
                     p.imagenes += n;

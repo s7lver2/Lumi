@@ -75,6 +75,17 @@ export function TerritoryView({
   // por las mismas teselas sin cobertura local.
   async function alConfirmarPlan() {
     if (!clasificacion) return;
+    // Lo heredado se anota PRIMERO: si el operador cierra a mitad de la
+    // descarga, lo que ya estaba adjuntado sigue dentro del índice.
+    //
+    // `flatMap` y no `filter`+`map`: TypeScript no estrecha la unión de
+    // `EstadoTesela` a través de un `filter`, así que `e.indice` no compilaría.
+    if (indiceId !== undefined) {
+      const heredadas = clasificacion.teselas.flatMap(([qk, e]) =>
+        e.estado === "local" ? [[qk, e.indice, e.sha256] as [string, string, string]] : [],
+      );
+      if (heredadas.length > 0) await api.territorioHeredar(indiceId, heredadas);
+    }
     const nuevas = clasificacion.teselas.filter(([, e]) => e.estado === "nuevo").map(([qk]) => qk);
     const nuevasMap: Record<string, string[]> = {};
     for (const f of activos) nuevasMap[f] = nuevas;

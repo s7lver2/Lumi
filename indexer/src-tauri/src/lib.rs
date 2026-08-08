@@ -248,6 +248,24 @@ async fn territorio_clasificar(
     territory::clasificar_area(&poligono, &fuentes, &locales, &[]).map_err(|e| e.to_string())
 }
 
+/// Anota como heredadas las teselas que el plan confirmó adjuntar. Se llama al
+/// confirmar, no al clasificar: clasificar es mirar, y mirar no cambia de quién
+/// es el trabajo.
+#[tauri::command]
+fn territorio_heredar(
+    estado: tauri::State<'_, Estado>,
+    indice_id: i64,
+    heredadas: Vec<(String, String, String)>,
+) -> Result<(), String> {
+    for (qk, indice_fuente, sha256) in &heredadas {
+        estado
+            .almacen
+            .anotar_tesela(indice_id, qk, "local", Some(indice_fuente), Some(sha256))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// Se reconstruye en cada comando a propósito: así una clave recién guardada
 /// surte efecto sin reiniciar la aplicación.
 fn origenes_de(estado: &Estado) -> Vec<origins::Origen> {
@@ -622,6 +640,7 @@ pub fn run() {
             indice_detalle,
             indice_lotes,
             territorio_clasificar,
+            territorio_heredar,
             origenes_lista,
             sondear_area,
             estimar_area,
