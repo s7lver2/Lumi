@@ -41,20 +41,26 @@ export function DownloadView({ onTerminado }: { onTerminado: () => void }) {
         <p className="mt-[22px] text-[8.5px] uppercase tracking-[.13em] text-subtle">Por origen</p>
         <table className="mt-2 w-full border-collapse text-[11.5px]">
           <tbody>
-            {p.por_origen.map(([f, hechas, total]) => (
-              <tr key={f} className="border-t border-border">
+            {p.por_origen.map((l) => (
+              <tr key={l.fuente} className="border-t border-border">
                 <td className="w-[35%] py-2">
                   <span className="flex items-center gap-2.5">
-                    <span className="h-[9px] w-[9px] rounded-full" style={{ background: color(f) }} />
-                    {nombre(f)}
+                    <span className="h-[9px] w-[9px] rounded-full" style={{ background: color(l.fuente) }} />
+                    {nombre(l.fuente)}
                   </span>
                 </td>
                 <td className="py-2">
                   <span className="block h-[5px] w-[150px] overflow-hidden rounded-[3px] bg-elevated">
-                    <i className="block h-full" style={{ width: `${total ? (hechas / total) * 100 : 0}%`, background: color(f) }} />
+                    <i className="block h-full"
+                      style={{ width: `${l.total ? (l.hechas / l.total) * 100 : 0}%`, background: color(l.fuente) }} />
                   </span>
                 </td>
-                <td className="py-2 text-right font-mono text-muted">{hechas}/{total}</td>
+                <td className="py-2 text-right font-mono text-muted">{l.hechas}/{l.total}</td>
+                {/* En los de pago manda el euro; en los gratuitos el euro es
+                    siempre 0,00 y lo que informa es cuánto material trajeron. */}
+                <td className={`py-2 text-right font-mono ${l.coste_eur > 0 ? "text-warning-fg" : "text-subtle"}`}>
+                  {l.coste_eur > 0 ? eur(l.coste_eur) : `${l.imagenes} fotos`}
+                </td>
               </tr>
             ))}
           </tbody>

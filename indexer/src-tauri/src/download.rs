@@ -37,6 +37,24 @@ fn apuntar_en(p: &mut Progreso, linea: String) {
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
+pub struct LineaOrigen {
+    pub fuente: String,
+    pub hechas: u32,
+    pub total: u32,
+    /// Cuántas imágenes sirvió de verdad. Es lo que se enseña en los gratuitos,
+    /// donde el euro no dice nada.
+    pub imagenes: u32,
+    pub coste_eur: f64,
+}
+
+fn sumar_a_origen(p: &mut Progreso, fuente: &str, imagenes: u32, coste_eur: f64) {
+    if let Some(l) = p.por_origen.iter_mut().find(|l| l.fuente == fuente) {
+        l.imagenes += imagenes;
+        l.coste_eur += coste_eur;
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct Progreso {
     pub trabajando: bool,
     pub teselas_hechas: u32,
@@ -44,8 +62,7 @@ pub struct Progreso {
     pub imagenes: u32,
     pub gastado_eur: f64,
     pub sin_saldo: bool,
-    /// `(fuente, hechas, total)`, para las barras por origen.
-    pub por_origen: Vec<(String, u32, u32)>,
+    pub por_origen: Vec<LineaOrigen>,
     pub ultimo: String,
     pub registro: Vec<String>,
 }
@@ -91,7 +108,13 @@ impl Descarga {
             let mut p = self.progreso.lock().unwrap();
             p.trabajando = true;
             p.teselas_total += pendientes.len() as u32;
-            p.por_origen.push((o.id().to_string(), 0, pendientes.len() as u32));
+            p.por_origen.push(LineaOrigen {
+                fuente: o.id().to_string(),
+                hechas: 0,
+                total: pendientes.len() as u32,
+                imagenes: 0,
+                coste_eur: 0.0,
+            });
         }
 
         // Un lote por origen: la fila padre ES la cadena de custodia, y la
@@ -169,12 +192,13 @@ impl Descarga {
                     let mut p = self.progreso.lock().unwrap();
                     p.imagenes += n;
                     p.gastado_eur = self.tope.gastado_eur();
+                    sumar_a_origen(&mut p, o.id(), n, gastado);
                     if sin_saldo {
                         p.sin_saldo = true;
                     } else {
                         p.teselas_hechas += 1;
-                        if let Some(f) = p.por_origen.iter_mut().find(|(f, _, _)| f == o.id()) {
-                            f.1 += 1;
+                        if let Some(l) = p.por_origen.iter_mut().find(|l| l.fuente == o.id()) {
+                            l.hechas += 1;
                         }
                     }
                     apuntar_en(&mut p, format!("{} {qk} · {n} imágenes", o.id()));

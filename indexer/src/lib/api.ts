@@ -69,6 +69,9 @@ export interface Estimacion {
   cabe: boolean;
   exceso_eur: number;
 }
+export interface LineaOrigen {
+  fuente: string; hechas: number; total: number; imagenes: number; coste_eur: number;
+}
 export interface ProgresoDescarga {
   trabajando: boolean;
   teselas_hechas: number;
@@ -76,7 +79,7 @@ export interface ProgresoDescarga {
   imagenes: number;
   gastado_eur: number;
   sin_saldo: boolean;
-  por_origen: [string, number, number][];
+  por_origen: LineaOrigen[];
   ultimo: string;
   registro: string[];
 }
