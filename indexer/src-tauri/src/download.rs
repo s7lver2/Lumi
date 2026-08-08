@@ -23,6 +23,19 @@ use crate::store::Almacen;
 /// problema no es de suerte.
 pub const REINTENTOS_MAX: u32 = 1;
 
+/// Mismo criterio que el log de servicios: tope en memoria, sin fichero. El
+/// techo es que una descarga patológica pierde el principio; la salida, si
+/// alguna vez duele, es escribirlo a disco como hace el runner del daemon.
+pub const TOPE_REGISTRO: usize = 500;
+
+fn apuntar_en(p: &mut Progreso, linea: String) {
+    if p.registro.len() >= TOPE_REGISTRO {
+        p.registro.remove(0);
+    }
+    p.ultimo = linea.clone();
+    p.registro.push(linea);
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Progreso {
     pub trabajando: bool,
@@ -34,6 +47,7 @@ pub struct Progreso {
     /// `(fuente, hechas, total)`, para las barras por origen.
     pub por_origen: Vec<(String, u32, u32)>,
     pub ultimo: String,
+    pub registro: Vec<String>,
 }
 
 pub struct Descarga {
@@ -163,7 +177,7 @@ impl Descarga {
                             f.1 += 1;
                         }
                     }
-                    p.ultimo = format!("{} {qk} · {n} imágenes", o.id());
+                    apuntar_en(&mut p, format!("{} {qk} · {n} imágenes", o.id()));
                 }
                 Err(e) => {
                     // AVERÍA: vuelve una vez, y el contador impide el bucle.
@@ -191,7 +205,7 @@ impl Descarga {
 
     fn anotar(&self, s: String) {
         log::warn!("{s}");
-        self.progreso.lock().unwrap().ultimo = s;
+        apuntar_en(&mut self.progreso.lock().unwrap(), s);
     }
 }
 

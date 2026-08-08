@@ -78,6 +78,7 @@ export interface ProgresoDescarga {
   sin_saldo: boolean;
   por_origen: [string, number, number][];
   ultimo: string;
+  registro: string[];
 }
 export interface FichaRevision { id: number; ruta: string; fuente: string; licencia: string | null }
 export interface Cuentas { pendientes: number; aceptadas: number; rechazadas: number }

@@ -60,8 +60,16 @@ export function DownloadView({ onTerminado }: { onTerminado: () => void }) {
           </tbody>
         </table>
 
-        {p.ultimo && (
-          <p className="mt-5 font-mono text-[10px] leading-[1.9] text-muted">{p.ultimo}</p>
+        {p.registro.length > 0 && (
+          <>
+            <p className="mt-[22px] text-[8.5px] uppercase tracking-[.13em] text-subtle">Registro</p>
+            <div className="mt-2 h-[180px] overflow-y-auto rounded-lg border border-border bg-[#0b0d0f] px-3 py-2.5">
+              {p.registro.map((l, i) => (
+                <p key={i} className="font-mono text-[10px] leading-[1.9] text-muted">{l}</p>
+              ))}
+              <div ref={(el) => el?.scrollIntoView({ block: "nearest" })} />
+            </div>
+          </>
         )}
         {p.sin_saldo && (
           <p className="mt-2.5 text-[11px] text-warning-fg">
