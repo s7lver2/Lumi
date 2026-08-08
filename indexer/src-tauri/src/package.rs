@@ -98,6 +98,27 @@ pub fn escribir_fragmento(dir: &Path, modelo: &str, version: &str, vs: &[Vec<f32
     Ok(())
 }
 
+/// El tamaño total y el hash de un fragmento entero. El hash es de los bytes
+/// de todos sus ficheros en orden alfabético, para que dos máquinas que sellen
+/// el mismo material saquen el mismo valor.
+pub fn medir_fragmento(dir: &Path) -> Result<(u64, String)> {
+    let mut ficheros: Vec<_> = std::fs::read_dir(dir)?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.is_file())
+        .collect();
+    ficheros.sort();
+
+    let mut bytes = 0u64;
+    let mut h = Sha256::new();
+    for f in &ficheros {
+        let datos = std::fs::read(f)?;
+        bytes += datos.len() as u64;
+        h.update(&datos);
+    }
+    Ok((bytes, format!("{:x}", h.finalize())))
+}
+
 use lumi_index::network::Redistribucion;
 
 /// Lo mínimo de una imagen para decidir si sale del paquete.
@@ -172,11 +193,6 @@ pub fn que_viaja(filas: &[FilaPublicable]) -> Vec<Publicable> {
 /// deducirá qué NO tiene que volver a indexar. Meter aquí un origen cuyo
 /// material se quedó fuera sería prometerle una cobertura que el paquete no
 /// lleva.
-///
-/// `cobertura.json` sigue siendo el placeholder `{}` del 7a — construir
-/// `TeselaCubierta` de verdad es del subsistema 8 — así que `paquete_sellar`
-/// todavía no llama a esto. Queda lista y probada para cuando lo haga.
-#[allow(dead_code)]
 pub fn fuentes_que_viajan(filas: &[FilaPublicable], quadkey: &str) -> Vec<String> {
     let mut fuera: Vec<String> = filas
         .iter()

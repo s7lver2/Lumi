@@ -532,7 +532,39 @@ async fn paquete_sellar(
     )
     .map_err(|e| e.to_string())?;
 
-    std::fs::write(raiz.join("cobertura.json"), b"{}").map_err(|e| e.to_string())?;
+    // Una entrada por quadkey que de verdad viaja. `por_qk` ya está filtrado
+    // por `viajan`, así que aquí no hay que volver a decidir nada: solo contar
+    // y declarar de dónde salió cada tesela.
+    let mut teselas = Vec::with_capacity(por_qk.len());
+    for (qk, filas) in &por_qk {
+        let dir = raiz.join("fragmentos").join(qk);
+        // El tamaño y el hash del fragmento son lo que hace COMPROBABLE la
+        // autoría: quitar la atribución rompería SHA256SUMS.
+        let (bytes, sha256) = package::medir_fragmento(&dir).map_err(|e| e.to_string())?;
+        teselas.push(lumi_index::coverage::TeselaCubierta {
+            quadkey: qk.clone(),
+            sha256,
+            bytes,
+            imagenes: filas.len() as u32,
+            fuentes: package::fuentes_que_viajan(&publicables, qk),
+        });
+    }
+    let cobertura = lumi_index::coverage::Cobertura {
+        version: 1,
+        indice: destino.clone(),
+        sellado_en: chrono_ahora(),
+        atribucion: lumi_index::coverage::Atribucion {
+            autor: String::new(),
+            url: String::new(),
+            licencia: String::new(),
+        },
+        teselas,
+    };
+    std::fs::write(
+        raiz.join("cobertura.json"),
+        serde_json::to_vec_pretty(&cobertura).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
 
     package::firmar(&raiz).map_err(|e| e.to_string())?;
     estado.almacen.sellar_indice(indice_id, &destino).map_err(|e| e.to_string())?;
