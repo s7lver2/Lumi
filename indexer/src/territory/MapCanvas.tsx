@@ -1,6 +1,6 @@
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { api, type Clasificacion, type Punto, type SondeoTesela } from "../lib/api";
 import { color } from "../lib/origenes";
@@ -72,11 +72,17 @@ export function MapCanvas({
   const contenedor = useRef<HTMLDivElement>(null);
   const mapa = useRef<mapboxgl.Map | null>(null);
   const puntos = useRef<Punto[]>([]);
+  // `null` mientras se pregunta, `false` cuando se sabe que no hay clave. Sin
+  // este estado el mapa se quedaba en un `<div>` vacío para siempre y nadie
+  // decía por qué: exactamente el fallo silencioso que PRODUCT.md prohíbe.
+  const [hayClave, setHayClave] = useState<boolean | null>(null);
 
   useEffect(() => {
     let vivo = true;
     void api.mapboxClave().then((clave) => {
-      if (!vivo || !clave || !contenedor.current) return;
+      if (!vivo) return;
+      setHayClave(!!clave);
+      if (!clave || !contenedor.current) return;
       mapboxgl.accessToken = clave;
       const m = new mapboxgl.Map({
         container: contenedor.current,
@@ -209,6 +215,25 @@ export function MapCanvas({
         }),
     });
   }, [activos, sondeos]);
+
+  // El motivo real, no un mapa en blanco: sin clave no hay teselas que pedir,
+  // y quien lo lee tiene que saber exactamente dónde se arregla.
+  if (hayClave === false) {
+    return (
+      <div className="grid h-full w-full place-items-center bg-surface">
+        <div className="max-w-[340px] text-center">
+          <p className="text-[12px] text-fg">El mapa necesita una clave de Mapbox</p>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
+            Sin ella no se pueden pedir las teselas del mapa base, así que no hay dónde dibujar
+            el territorio. Se configura en Ajustes, pestaña «Orígenes de red».
+          </p>
+          <p className="mt-2 font-mono text-[9.5px] text-subtle">
+            la misma clave sirve para el mapa y para el origen cenital
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return <div ref={contenedor} className="h-full w-full" />;
 }

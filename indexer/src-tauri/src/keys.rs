@@ -16,7 +16,11 @@ use crate::store::Almacen;
 /// Tope mensual por defecto, en euros. Se puede cambiar desde ajustes.
 pub const TOPE_MENSUAL_EUR_POR_DEFECTO: f64 = 100.0;
 
-pub const CLAVE_MAPBOX: &str = "mapbox_token";
+// El mismo literal que ya usaban `mapbox_clave_guardar`/`mapbox_clave_leer`
+// (código de la 7a, sin tocar aquí): si no coincide, la clave que se guarda
+// desde "Orígenes de red" no es la que el mapa lee, y el mapa se queda en
+// blanco sin ningún error que lo delate.
+pub const CLAVE_MAPBOX: &str = "mapbox";
 pub const CLAVE_TOPE: &str = "tope_mensual_eur";
 
 /// La clave de ajuste donde vive el secreto de un proveedor.

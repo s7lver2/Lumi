@@ -7,6 +7,7 @@ import { IngestView } from "./ingest/IngestView";
 import { api, type Saludo } from "./lib/api";
 import { ReviewGrid } from "./review/ReviewGrid";
 import { OriginsPanel } from "./settings/OriginsPanel";
+import { Booting } from "./setup/Booting";
 import { ServicesPanel } from "./setup/ServicesPanel";
 import { SetupWizard } from "./setup/SetupWizard";
 import { TerritoryView } from "./territory/TerritoryView";
@@ -37,6 +38,7 @@ export function App() {
       <div className="relative h-full w-full overflow-hidden bg-bg">
         {!dentro && <PlanetBackground />}
         <div className="relative flex h-full items-center justify-center">
+          {!saludo && <Booting />}
           {saludo && !dentro && <SetupWizard saludo={saludo} onListo={() => setDentro(true)} />}
         </div>
 

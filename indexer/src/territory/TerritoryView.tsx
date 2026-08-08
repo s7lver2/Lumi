@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { api, type Clasificacion, type Estimacion, type FichaOrigen, type Punto, type SondeoTesela } from "../lib/api";
+import { Overlay } from "../ui/Overlay";
 import { AvailabilityPanel } from "./AvailabilityPanel";
 import { BlockedDialog } from "./BlockedDialog";
 import { CoveragePanel } from "./CoveragePanel";
@@ -130,30 +131,30 @@ export function TerritoryView({
       )}
 
       {clasificacion && mostrarPlan && clasificacion.nuevas === 0 && (
-        <div className="absolute inset-0 z-40 grid place-items-center bg-black/40">
+        <Overlay>
           <BlockedDialog c={clasificacion} onAjustar={reiniciar} onInstalar={reiniciar} />
-        </div>
+        </Overlay>
       )}
 
       {clasificacion && mostrarPlan && clasificacion.nuevas > 0 && !estimacion && (
-        <div className="absolute inset-0 z-40 grid place-items-center bg-black/40">
+        <Overlay>
           <PlanDialog
             nombre={nombre}
             c={clasificacion}
             onCancelar={() => setMostrarPlan(false)}
             onConfirmar={() => void alConfirmarPlan()}
           />
-        </div>
+        </Overlay>
       )}
 
       {estimacion && (
-        <div className="absolute inset-0 z-40 grid place-items-center bg-black/40">
+        <Overlay>
           <EstimateDialog
             e={estimacion}
             onCancelar={() => setEstimacion(null)}
             onConfirmar={(soloGratis) => void confirmarDescarga(soloGratis)}
           />
-        </div>
+        </Overlay>
       )}
     </div>
   );

@@ -184,6 +184,30 @@ struct ResumenIndice {
     imagenes_pct: lumi_index::manifest::PorcentajesImagenes,
 }
 
+/// Minúsculas, espacios y símbolos colapsados a un solo `-`, sin guiones en
+/// los extremos. Si un nombre no deja nada legible (todo símbolos, o vacío),
+/// `crear_indice` se lo dirá a través del `UNIQUE` de `slug`: dos índices
+/// nunca deberían acabar los dos en la cadena vacía.
+fn slug_de(nombre: &str) -> String {
+    let mut slug = String::with_capacity(nombre.len());
+    let mut ultimo_fue_guion = true; // evita un `-` inicial
+    for c in nombre.to_lowercase().chars() {
+        if c.is_alphanumeric() {
+            slug.push(c);
+            ultimo_fue_guion = false;
+        } else if !ultimo_fue_guion {
+            slug.push('-');
+            ultimo_fue_guion = true;
+        }
+    }
+    slug.trim_end_matches('-').to_string()
+}
+
+#[tauri::command]
+fn indice_crear(estado: tauri::State<'_, Estado>, nombre: String) -> Result<i64, String> {
+    estado.almacen.crear_indice(&nombre, &slug_de(&nombre)).map_err(|e| e.to_string())
+}
+
 /// Por índice, el mismo cálculo que `indice_detalle` pero solo de imágenes:
 /// es lo que pinta la barra de procedencia en la propia fila, sin tener que
 /// abrir el detalle para verla.
@@ -593,6 +617,7 @@ pub fn run() {
             cola_pausar,
             ingesta_carpeta,
             ingesta_legacy,
+            indice_crear,
             indices_lista,
             indice_detalle,
             indice_lotes,
@@ -632,4 +657,20 @@ pub fn run() {
                 });
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::slug_de;
+
+    #[test]
+    fn el_slug_baja_a_minusculas_y_colapsa_separadores() {
+        assert_eq!(slug_de("Lugo Norte"), "lugo-norte");
+        assert_eq!(slug_de("  A Coruña · zona 2  "), "a-coruña-zona-2");
+    }
+
+    #[test]
+    fn el_slug_no_empieza_ni_termina_en_guion() {
+        assert_eq!(slug_de("-- ya --"), "ya");
+    }
 }

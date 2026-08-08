@@ -97,6 +97,7 @@ export const api = {
     invoke<Resumen>("ingesta_carpeta", { indiceId, ruta, tipo, fuente, licencia }),
   ingestaLegacy: (indiceId: number, ruta: string, tipo: string, fuente: string, declarada: boolean) =>
     invoke<Resumen>("ingesta_legacy", { indiceId, ruta, tipo, fuente, declarada }),
+  indiceCrear: (nombre: string) => invoke<number>("indice_crear", { nombre }),
   indicesLista: () => invoke<ResumenIndice[]>("indices_lista"),
   indiceDetalle: (id: number) => invoke<DetalleIndice>("indice_detalle", { id }),
   indiceLotes: (id: number) => invoke<LoteResumen[]>("indice_lotes", { id }),

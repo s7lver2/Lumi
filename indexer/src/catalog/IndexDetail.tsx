@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api, type DetalleIndice, type LoteResumen } from "../lib/api";
 import { SealDialog } from "../seal/SealDialog";
 import { Icon } from "../ui/Icon";
+import { Overlay } from "../ui/Overlay";
 import { ProvenanceTable } from "./ProvenanceTable";
 
 export function IndexDetail({ id, onVolver }: { id: number; onVolver: () => void }) {
@@ -30,9 +31,9 @@ export function IndexDetail({ id, onVolver }: { id: number; onVolver: () => void
       </div>
 
       {sellando && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40">
+        <Overlay>
           <SealDialog indiceId={id} nombre={String(id)} onSellado={() => setSellando(false)} />
-        </div>
+        </Overlay>
       )}
 
       <div className="grid grid-cols-[1fr_260px] gap-6">
