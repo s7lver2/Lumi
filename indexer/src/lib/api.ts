@@ -51,13 +51,15 @@ export interface Punto { lat: number; lng: number }
 export type EstadoTesela =
   | { estado: "local"; indice: string; sha256: string }
   | { estado: "catalogo"; indice: string; sha256: string; bytes: number; atribucion: { autor: string; url: string; licencia: string } }
-  | { estado: "nuevo" };
+  | { estado: "nuevo" }
+  | { estado: "reclamada"; paquete: string; autor: string };
 export interface RepartoOrigen { locales: number; catalogo: number; nuevas: number }
 export interface Clasificacion {
   teselas: [string, EstadoTesela][];
   locales: number;
   catalogo: number;
   nuevas: number;
+  reclamadas: number;
   bytes_a_descargar: number;
   autores: [string, number][];
   por_origen: Record<string, RepartoOrigen>;

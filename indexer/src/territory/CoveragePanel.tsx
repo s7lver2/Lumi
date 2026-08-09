@@ -5,7 +5,7 @@ import { Icon } from "../ui/Icon";
  *  estados, las tres filas con su cuenta, quién publicó lo azul, y el coste
  *  con solo lo punteado (lo nuevo). */
 export function CoveragePanel({ c, onPlanear }: { c: Clasificacion; onPlanear: () => void }) {
-  const total = c.locales + c.catalogo + c.nuevas;
+  const total = c.locales + c.catalogo + c.nuevas + c.reclamadas;
   const pct = (n: number) => (total === 0 ? 0 : (n / total) * 100);
 
   return (
@@ -16,12 +16,14 @@ export function CoveragePanel({ c, onPlanear }: { c: Clasificacion; onPlanear: (
       <div className="mt-3 flex h-[6px] overflow-hidden rounded-[3px] bg-elevated">
         <i className="block bg-fg" style={{ width: `${pct(c.locales)}%` }} />
         <i className="block bg-draw" style={{ width: `${pct(c.catalogo)}%` }} />
+        <i className="block bg-warning" style={{ width: `${pct(c.reclamadas)}%` }} />
         <i className="block bg-white/[.06]" style={{ width: `${pct(c.nuevas)}%` }} />
       </div>
 
       <div className="mt-3 flex flex-col gap-1.5 text-[11px]">
         <Fila etiqueta="Ya en este equipo" n={c.locales} color="bg-fg" />
         <Fila etiqueta="Publicadas por otros" n={c.catalogo} color="bg-draw" />
+        <Fila etiqueta="Reclamadas por otros" n={c.reclamadas} color="bg-warning" />
         <Fila etiqueta="Nuevas · cuestan GPU" n={c.nuevas} color="bg-white/[.2]" />
       </div>
 
@@ -37,6 +39,14 @@ export function CoveragePanel({ c, onPlanear }: { c: Clasificacion; onPlanear: (
             ))}
           </div>
         </div>
+      )}
+
+      {c.reclamadas > 0 && (
+        <p className="mt-3 text-[10.5px] leading-snug text-muted">
+          Ni las descargas del proveedor ni te descargas sus paquetes:{" "}
+          <b className="font-normal text-fg">no entran en tu índice</b>. Tu ficha declara que esa
+          zona la cubren ellos, y quien instale tu índice desde el catálogo se los baja también.
+        </p>
       )}
 
       <p className="mt-[11px] flex items-start gap-[7px] text-[10.5px] leading-snug text-subtle">

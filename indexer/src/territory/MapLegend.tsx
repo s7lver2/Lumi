@@ -19,6 +19,7 @@ export function MapLegend({ activos }: { activos: Set<string> }) {
         <div className="flex flex-col gap-1.5">
           <Marca forma="cuadro" color={c} opacidad={0.13} texto="tesela con poco" />
           <Marca forma="punteado" texto="sin indexar por nadie" />
+          <Marca forma="cuadro" color="#ef9f27" opacidad={0.45} texto="reclamada por otro" />
         </div>
       </div>
     </div>

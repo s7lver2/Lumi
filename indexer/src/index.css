@@ -125,6 +125,18 @@ body { background: #0e0f11; color: #e8e8e6; overflow: hidden; }
 @media (prefers-reduced-motion: reduce) { .jg-stroke-draw { animation: none; stroke-dashoffset: 0; } }
 @media (prefers-reduced-motion: reduce) { .jg-barra-rayada { animation: none; } }
 
+/* Un grupo de teselas reclamadas se abre hacia fuera, no aparece de golpe:
+   el desfase por distancia al centro es lo que hace que se LEA como "esta
+   zona entera", en vez de una fila de rectángulos que parpadean a la vez. */
+@keyframes jg-tile-sweep { from { opacity: 0; } to { opacity: 1; } }
+/* El precio anterior se tacha trazando la línea, no apareciendo ya tachado:
+   es lo que hace visible EL DESCUENTO, no solo el resultado. */
+@keyframes jg-strike { to { transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .jg-tile-sweep { animation: none !important; opacity: 1; }
+  .jg-strike { animation: none !important; transform: scaleX(1); }
+}
+
 /* Un botón que no responde al dedo se siente muerto. Esto es el mismo gesto
    que la v1 aplicaba a mano en cada botón, aquí una sola vez. */
 .jg-press { transition: transform .18s cubic-bezier(.16,1,.3,1), opacity .18s, border-color .3s cubic-bezier(.16,1,.3,1), background-color .3s cubic-bezier(.16,1,.3,1), color .3s cubic-bezier(.16,1,.3,1); }
@@ -132,4 +144,21 @@ body { background: #0e0f11; color: #e8e8e6; overflow: hidden; }
 .jg-press:active:not(:disabled) { transform: scale(.955); }
 @media (prefers-reduced-motion: reduce) {
   .jg-press:hover:not(:disabled), .jg-press:active:not(:disabled) { transform: none; }
+}
+
+/* El barrido de las teselas reclamadas: el desfase lo pone el mapa por
+   distancia al centro del grupo, no por orden en el DOM, para que la zona se
+   abra hacia fuera y se lea como «esta zona entera». */
+@keyframes jg-tile-sweep { from { opacity: 0; } to { opacity: 1; } }
+.jg-tile-sweep { animation: jg-tile-sweep .42s cubic-bezier(.16,1,.3,1) both; }
+/* El precio anterior no aparece tachado: la línea se dibuja. */
+@keyframes jg-strike { to { transform: scaleX(1); } }
+.jg-strike::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px;
+  background: currentColor; transform: scaleX(0); transform-origin: left;
+  animation: jg-strike .38s cubic-bezier(.16,1,.3,1) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .jg-tile-sweep { animation: none; }
+  .jg-strike::after { animation: none; transform: scaleX(1); }
 }

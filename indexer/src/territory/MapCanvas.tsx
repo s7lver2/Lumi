@@ -14,6 +14,13 @@ const EASE_OUT_CUBIC = (t: number) => 1 - Math.pow(1 - t, 3);
 
 const RADIO_TIERRA_M = 6_371_000;
 
+/** Las propiedades de un rasgo del mapa. Los tipos de `mapbox-gl` no exponen
+ *  `properties` en `GeoJSONFeature`, y leerlas es justo lo que hace falta para
+ *  saber en qué estado está la tesela que se acaba de pulsar. */
+function propsDe(f: unknown): Record<string, string> {
+  return ((f as { properties?: Record<string, string> } | undefined)?.properties ?? {});
+}
+
 function poligonoGeoJSON(puntos: Punto[]): Poligono {
   const anillo = puntos.map((p) => [p.lng, p.lat]);
   if (anillo.length > 0) anillo.push(anillo[0]);
@@ -143,6 +150,10 @@ export function MapCanvas({
               "match", ["get", "estado"],
               "local", "rgba(232,232,230,.13)",
               "catalogo", "rgba(55,138,221,.15)",
+              // Reclamada por otro: ámbar tenue. No es una advertencia, es un
+              // "esto ya lo cubre alguien" — por eso el borde marca más que el
+              // relleno.
+              "reclamada", "rgba(239,159,39,.13)",
               "rgba(255,255,255,.015)", // nuevo
             ],
           },
@@ -150,7 +161,11 @@ export function MapCanvas({
         m.addLayer({
           id: "teselas-borde", type: "line", source: "teselas",
           paint: {
-            "line-color": "rgba(255,255,255,.2)",
+            "line-color": [
+              "match", ["get", "estado"],
+              "reclamada", "rgba(239,159,39,.45)",
+              "rgba(255,255,255,.2)",
+            ],
             // El punteado es SOLO para lo nuevo: una tesela sin indexar es
             // una ausencia, no una advertencia. El ámbar queda para el
             // bloqueo, no para esto.
@@ -178,6 +193,61 @@ export function MapCanvas({
             features: pts.length >= 3 ? [poligonoGeoJSON(pts)] : [],
           });
         };
+
+        // Clic con la herramienta "mano" sobre una tesela reclamada: quién la
+        // cubre, cuándo, y NINGÚN botón de instalar — lo reclamado viaja como
+        // dependencia de lo que se publique, no se descarga aquí. Solo con
+        // "mano" activa: con una herramienta de dibujo el clic es para
+        // dibujar, no para mirar.
+        m.on("click", "teselas-relleno", (e) => {
+          if (herramientaRef.current !== "mano") return;
+          const props = propsDe(e.features?.[0]);
+          if (props.estado !== "reclamada") return;
+          new mapboxgl.Popup({ closeButton: true, maxWidth: "260px", className: "lumi-popup-reclamo" })
+            .setLngLat(e.lngLat)
+            .setHTML(
+              `<div style="font:11px/1.5 inherit">` +
+              `<div>Reclamada por <b>${props.autor || "otro operador"}</b></div>` +
+              `<div style="opacity:.6;font-family:monospace;font-size:10px;margin-top:2px">` +
+              `paquete ${props.paquete || "—"}</div>` +
+              `<div style="opacity:.8;margin-top:6px">Viajará como dependencia de tu índice, no en él.</div>` +
+              `</div>`,
+            )
+            .addTo(m);
+        });
+        m.on("mouseenter", "teselas-relleno", (e) => {
+          if (herramientaRef.current === "mano" && propsDe(e.features?.[0]).estado === "reclamada") {
+            m.getCanvas().style.cursor = "pointer";
+          }
+        });
+        m.on("mouseleave", "teselas-relleno", () => { m.getCanvas().style.cursor = ""; });
+
+        // Al pulsar una tesela reclamada: quién la cubre y sus fuentes. NINGÚN
+        // botón de instalar — lo reclamado viaja como dependencia de tu ficha,
+        // no dentro de tu índice.
+        //
+        // ponytail: «Reportar» copia el reporte al portapapeles en vez de
+        // mandarlo. Qué cuenta como baja calidad lo decide el subsistema 9, y
+        // ese endpoint todavía no existe; la salida es cambiar este
+        // `clipboard.writeText` por un POST cuando exista.
+        m.on("click", "teselas-relleno", (e) => {
+          if (herramientaRef.current !== "mano") return;
+          const props = (e.features?.[0] as { properties?: Record<string, unknown> } | undefined)
+            ?.properties;
+          if (!props || props.estado !== "reclamada") return;
+          const paquete = String(props.paquete ?? "");
+          const autor = String(props.autor ?? "");
+          const nodo = document.createElement("div");
+          nodo.className = "font-mono text-[10.5px] leading-relaxed";
+          nodo.innerHTML =
+            `<b>${autor}</b><br/>${paquete}<br/>` +
+            `<span style="opacity:.7">viajará como dependencia de tu índice, no en él</span><br/>` +
+            `<button data-reportar style="text-decoration:underline">Reportar</button>`;
+          nodo.querySelector("[data-reportar]")?.addEventListener("click", () => {
+            void navigator.clipboard.writeText(`desreclamo: ${paquete} (${autor}) — motivo: `);
+          });
+          new mapboxgl.Popup({ closeButton: true }).setLngLat(e.lngLat).setDOMContent(nodo).addTo(m);
+        });
 
         // --- Polígono a mano: clic añade esquina, doble clic cierra. -------
         m.on("click", (e) => {
@@ -287,7 +357,9 @@ export function MapCanvas({
       type: "FeatureCollection",
       features: clasificacion.teselas.map(([qk, e]) => {
         const f = teselaAPoligono(qk);
-        f.properties = { estado: e.estado };
+        f.properties = e.estado === "reclamada"
+          ? { estado: e.estado, paquete: e.paquete, autor: e.autor }
+          : { estado: e.estado };
         return f;
       }),
     });
