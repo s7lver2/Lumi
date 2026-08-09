@@ -1063,14 +1063,25 @@ impl Almacen {
 
     /// Todo el plan, subido o no: es lo que dice si un paquete está
     /// `publicado`, `subiendo n/m` o `incompleto`.
-    pub fn publicacion_plan(&self, indice_id: i64) -> Result<Vec<(String, bool, Option<String>)>> {
+    #[allow(clippy::type_complexity)]
+    pub fn publicacion_plan(
+        &self,
+        indice_id: i64,
+    ) -> Result<Vec<(String, bool, Option<String>, String, u64)>> {
         let c = self.0.lock().unwrap();
         let mut q = c.prepare(
-            "SELECT asset, subido, url FROM publicaciones WHERE indice_id = ?1 ORDER BY asset",
+            "SELECT asset, subido, url, sha256, bytes FROM publicaciones
+              WHERE indice_id = ?1 ORDER BY asset",
         )?;
         let filas = q
             .query_map(params![indice_id], |r| {
-                Ok((r.get(0)?, r.get::<_, i64>(1)? == 1, r.get(2)?))
+                Ok((
+                    r.get(0)?,
+                    r.get::<_, i64>(1)? == 1,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get::<_, i64>(4)? as u64,
+                ))
             })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(filas)

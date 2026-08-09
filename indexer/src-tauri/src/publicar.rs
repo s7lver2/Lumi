@@ -348,6 +348,12 @@ pub async fn publicar(
     for t in &trozos {
         let nombre = format!("cuerpo-{}.lumidx.enc", if t.prefijo.is_empty() { "0" } else { &t.prefijo });
         prog.empezar_asset(&nombre);
+        if let Some((sha, bytes)) = ya_subido(&almacen, indice_id, &nombre) {
+            prog.anotar(format!("{nombre} ya estaba subido"));
+            prog.terminar_asset(bytes);
+            cuerpos.push(Asset { nombre, sha256: sha, bytes, quadkeys: t.quadkeys.clone() });
+            continue;
+        }
         let claro = empaquetar(&raiz, &ficheros_del_trozo(&raiz, t, &por_qk))?;
         let sellado = cifrar_asset(&claro, &clave)?;
         let sha = sha256_hex(&sellado);
@@ -364,6 +370,17 @@ pub async fn publicar(
     for (modelo, version, dims) in modelos_del_paquete(&raiz) {
         let nombre = format!("capa-{modelo}-{version}.enc");
         prog.empezar_asset(&nombre);
+        if let Some((sha, bytes)) = ya_subido(&almacen, indice_id, &nombre) {
+            prog.terminar_asset(bytes);
+            capas.push(Capa {
+                modelo,
+                version,
+                dims,
+                autor: autor.clone(),
+                assets: vec![Asset { nombre, sha256: sha, bytes, quadkeys: vec![] }],
+            });
+            continue;
+        }
         let ficheros = fragmentos_de_modelo(&raiz, &modelo, &version);
         if ficheros.is_empty() {
             prog.anotar(format!("{modelo} no tiene fragmentos en el paquete"));
@@ -423,13 +440,13 @@ pub async fn publicar(
 
 /// Si este asset ya está subido, su URL. Es lo que hace que reanudar no
 /// vuelva a subir cientos de megas que ya están arriba.
-fn ya_subido(almacen: &Almacen, indice_id: i64, asset: &str) -> Option<String> {
+fn ya_subido(almacen: &Almacen, indice_id: i64, asset: &str) -> Option<(String, u64)> {
     almacen
         .publicacion_plan(indice_id)
         .ok()?
         .into_iter()
-        .find(|(a, subido, _)| a == asset && *subido)
-        .and_then(|(_, _, url)| url)
+        .find(|(a, subido, url, ..)| a == asset && *subido && url.is_some())
+        .map(|(_, _, _, sha, bytes)| (sha, bytes))
 }
 
 fn cifrar_asset(claro: &[u8], clave: &[u8; 32]) -> Result<Vec<u8>> {
