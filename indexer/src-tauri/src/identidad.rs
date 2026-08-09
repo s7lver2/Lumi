@@ -17,6 +17,13 @@ use crate::store::Almacen;
 
 /// Aplicación pública registrada para el flujo de dispositivo. No es un
 /// secreto: el flujo existe precisamente para no necesitar ninguno.
+///
+/// OJO: esto es un marcador, no un Client ID real. GitHub responde con un
+/// error de cliente inválido a cualquier device_code pedido con este valor.
+/// Para que el login funcione: crear una OAuth App en
+/// https://github.com/settings/developers → «New OAuth App», activar
+/// «Device Flow» en su configuración, y pegar aquí el Client ID que GitHub
+/// entrega (no hace falta client secret: el flujo de dispositivo no lo usa).
 const CLIENTE_GITHUB: &str = "Iv1.lumi-indexer-device";
 
 pub const AJUSTE_CUENTA: &str = "identidad_cuenta";
@@ -27,6 +34,19 @@ pub const AJUSTE_ARCHIVADAS: &str = "identidad_claves_archivadas";
 /// la clave es imposible, y una copia que solo existe en una pantalla que ya
 /// se cerró no es una copia.
 pub const AJUSTE_RESPALDO: &str = "identidad_respaldo";
+
+/// `.json()` directo, cuando el proveedor responde con un cuerpo de error en
+/// vez del esperado, sale como «error decoding response body» — verdad pero
+/// inútil. Esto lee el texto primero y, si no encaja, cita el cuerpo real
+/// (recortado) para que el fallo se pueda diagnosticar sin adivinar.
+async fn leer_json<T: for<'de> Deserialize<'de>>(resp: reqwest::Response) -> Result<T> {
+    let estado = resp.status();
+    let cuerpo = resp.text().await?;
+    serde_json::from_str(&cuerpo).map_err(|_| {
+        let recorte: String = cuerpo.chars().take(200).collect();
+        anyhow!("el proveedor respondió {estado}: {recorte}")
+    })
+}
 
 #[derive(Serialize, Clone)]
 pub struct CodigoDispositivo {
@@ -136,14 +156,13 @@ pub async fn arrancar(proveedor: &str) -> Result<(CodigoDispositivo, String)> {
         verification_uri: String,
         interval: u64,
     }
-    let r: R = reqwest::Client::new()
+    let resp = reqwest::Client::new()
         .post("https://github.com/login/device/code")
         .header("accept", "application/json")
         .form(&[("client_id", CLIENTE_GITHUB), ("scope", "public_repo")])
         .send()
-        .await?
-        .json()
         .await?;
+    let r: R = leer_json(resp).await?;
     // El device_code vuelve junto al código visible: quien llama lo guarda en
     // el estado en memoria del comando, entre `arrancar` y `sondear`.
     Ok((
@@ -176,7 +195,7 @@ pub const PROVEEDOR_TESTIGO: &str = "identidad_testigo_github";
 /// se lo pidan explícitamente).
 pub async fn sondear(device_code: &str) -> Result<Option<(Sesion, String)>> {
     let cliente = reqwest::Client::new();
-    let r: RespuestaSondeo = cliente
+    let resp = cliente
         .post("https://github.com/login/oauth/access_token")
         .header("accept", "application/json")
         .form(&[
@@ -185,9 +204,8 @@ pub async fn sondear(device_code: &str) -> Result<Option<(Sesion, String)>> {
             ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
         ])
         .send()
-        .await?
-        .json()
         .await?;
+    let r: RespuestaSondeo = leer_json(resp).await?;
     let Some(token) = r.access_token else {
         // "authorization_pending" es el caso esperado; cualquier otro error
         // del proveedor (código expirado, denegado) también vuelve como
@@ -198,14 +216,13 @@ pub async fn sondear(device_code: &str) -> Result<Option<(Sesion, String)>> {
         }
         return Ok(None);
     };
-    let u: Usuario = cliente
+    let resp = cliente
         .get("https://api.github.com/user")
         .bearer_auth(&token)
         .header("user-agent", "lumi-indexer")
         .send()
-        .await?
-        .json()
         .await?;
+    let u: Usuario = leer_json(resp).await?;
     Ok(Some((
         Sesion {
             proveedor: "github".into(),
