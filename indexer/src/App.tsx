@@ -17,6 +17,7 @@ import { ServicesPanel } from "./setup/ServicesPanel";
 import { SetupWizard } from "./setup/SetupWizard";
 import { TerritoryView } from "./territory/TerritoryView";
 import { PlanetBackground } from "./ui/PlanetBackground";
+import { PublishToast } from "./ui/PublishToast";
 import { Rail, type Destino } from "./ui/Rail";
 import { WindowFrame } from "./ui/WindowFrame";
 
@@ -149,7 +150,7 @@ export function App() {
                 {destino === "indices" && (
                   indiceAbierto === null
                     ? <IndexList onAbrir={setIndiceAbierto} />
-                    : <IndexDetail id={indiceAbierto} onVolver={() => setIndiceAbierto(null)} />
+                    : <IndexDetail key={indiceAbierto} id={indiceAbierto} onVolver={() => setIndiceAbierto(null)} />
                 )}
                 {/* Territorio trabaja SIEMPRE sobre un índice: sin esto, el
                     carril deja llegar a la pantalla sin haber elegido uno, y
@@ -245,6 +246,10 @@ export function App() {
               </div>
             </div>
           </div>
+        )}
+
+        {dentro && (
+          <PublishToast onAbrir={(id) => { setDestino("indices"); setIndiceAbierto(id); }} />
         )}
       </div>
     </WindowFrame>

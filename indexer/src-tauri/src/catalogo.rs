@@ -13,6 +13,7 @@ use anyhow::Result;
 use lumi_index::ficha::Ficha;
 use serde::Serialize;
 
+use crate::red::cliente_http;
 use crate::store::Almacen;
 
 /// La etiqueta con la que un repositorio se declara parte del catálogo.
@@ -95,7 +96,7 @@ pub async fn refrescar(almacen: &Almacen) -> Result<u32> {
     struct Repo {
         full_name: String,
     }
-    let cliente = reqwest::Client::new();
+    let cliente = cliente_http();
     let r: Busqueda = cliente
         .get(format!("https://api.github.com/search/repositories?q=topic:{ETIQUETA}&per_page=100"))
         .header("user-agent", "lumi-indexer")
@@ -168,7 +169,7 @@ async fn fichas_de_repo(cliente: &reqwest::Client, repo: &str) -> Vec<(String, S
 /// repositorio borrado, pasado a privado o asset retirado, sin que nadie tenga
 /// que enterarse ni avisar.
 pub async fn comprobar_vivos(almacen: &Almacen) -> Result<Vec<String>> {
-    let cliente = reqwest::Client::new();
+    let cliente = cliente_http();
     let mut caidas = Vec::new();
     for (f, url, _) in fichas(almacen)? {
         let Ok(r) = cliente.head(&url).header("user-agent", "lumi-indexer").send().await else {

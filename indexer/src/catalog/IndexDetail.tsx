@@ -4,6 +4,7 @@ import { FolderImportDialog } from "../ingest/FolderImportDialog";
 import { LegacyImportDialog } from "../ingest/LegacyImportDialog";
 import { api, type DetalleIndice, type LoteResumen, type ProgresoIndiceEmbed, type Sesion } from "../lib/api";
 import { PublishDialog } from "../publish/PublishDialog";
+import { estadoActual } from "../publish/publishTracker";
 import { SealDialog } from "../seal/SealDialog";
 import { EmbedToggle } from "../ui/EmbedToggle";
 import { Icon } from "../ui/Icon";
@@ -27,7 +28,10 @@ export function IndexDetail({ id, onVolver, soloLectura = false }: {
   const [cancelando, setCancelando] = useState<number | null>(null);
   const [importando, setImportando] = useState<"carpeta" | "legacy" | null>(null);
   const [mapaAbierto, setMapaAbierto] = useState(false);
-  const [publicando, setPublicando] = useState(false);
+  // Si ya hay una publicación de este índice corriendo de fondo —por ejemplo,
+  // se volvió aquí pulsando el aviso—, el diálogo se abre directamente en su
+  // paso de subida en vez de forzar a pulsar «Publicar» otra vez.
+  const [publicando, setPublicando] = useState(() => estadoActual()?.indiceId === id);
   const [sesion, setSesion] = useState<Sesion | null>(null);
 
   useEffect(() => { void api.identidadLeer().then(setSesion); }, []);

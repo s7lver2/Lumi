@@ -22,6 +22,7 @@ use lumi_index::troceado::{trocear, Trozo, TOPE_TROZO_BYTES};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+use crate::red::cliente_http;
 use crate::store::Almacen;
 
 /// Un día en segundos, para la vigencia. Sin `chrono`: la marca de tiempo de
@@ -176,7 +177,7 @@ pub async fn repos(testigo: &str) -> Result<Vec<Repo>> {
     struct P {
         push: bool,
     }
-    let r: Vec<R> = reqwest::Client::new()
+    let r: Vec<R> = cliente_http()
         .get("https://api.github.com/user/repos?per_page=100&sort=updated")
         .bearer_auth(testigo)
         .header("user-agent", "lumi-indexer")
@@ -353,7 +354,7 @@ pub async fn publicar(
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| nombre_indice.clone());
 
-    let cliente = reqwest::Client::new();
+    let cliente = cliente_http();
     let release = asegurar_release(&cliente, &testigo, &repo, &paquete).await?;
 
     // Una sola clave para todo el paquete: la ofuscación es del alojamiento,
@@ -567,7 +568,7 @@ pub async fn publicar_capa(
         .find(|(m, _, _)| *m == modelo)
         .ok_or_else(|| anyhow!("el paquete no lleva la capa de {modelo}"))?;
 
-    let cliente = reqwest::Client::new();
+    let cliente = cliente_http();
     let etiqueta = format!("capa-{m}-{version}");
     let release = asegurar_release(&cliente, &testigo, &repo, &etiqueta).await?;
 

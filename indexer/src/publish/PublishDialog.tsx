@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { api, type Previsualizacion, type ProgresoPublicacion, type Repo } from "../lib/api";
+import { api, type Previsualizacion, type Repo } from "../lib/api";
 import { Icon } from "../ui/Icon";
+import { descartar as descartarSeguimiento, estadoActual, iniciar as iniciarSeguimiento, suscribir } from "./publishTracker";
 
 const KB = 1024;
 function tamano(bytes: number): string {
@@ -16,27 +17,35 @@ type Paso = 1 | 2 | 3 | "subiendo";
  *  subir un byte, igual que se ven los euros antes de descargar. El paso 3
  *  —el descargo— solo aparece si el índice usó alguna fuente cuyos términos
  *  no permiten redistribuir; si no, el paso 2 lleva directo a publicar. */
+/** El seguimiento de la subida vive en `publishTracker`, no aquí: el trabajo
+ *  sigue en el backend aunque este diálogo se cierre, así que la barra de
+ *  progreso se limita a mostrar lo que el tracker ya sabe en vez de sondear
+ *  por su cuenta — eso es lo que permite reabrir el diálogo (o un aviso en
+ *  cualquier otra pantalla) a mitad de una subida y verla seguir por donde iba. */
 export function PublishDialog({ indiceId, nombre, onHecho }: {
   indiceId: number; nombre: string; onHecho: () => void;
 }) {
-  const [paso, setPaso] = useState<Paso>(1);
+  const enCurso = estadoActual();
+  const yaSubiendoEsteIndice = enCurso?.indiceId === indiceId;
+  const [paso, setPaso] = useState<Paso>(yaSubiendoEsteIndice ? "subiendo" : 1);
   const [repos, setRepos] = useState<Repo[]>([]);
   const [repo, setRepo] = useState("");
   const [filtro, setFiltro] = useState("");
   const [previa, setPrevia] = useState<Previsualizacion | null>(null);
   const [descargo, setDescargo] = useState(false);
-  const [progreso, setProgreso] = useState<ProgresoPublicacion | null>(null);
+  const [progreso, setProgreso] = useState(yaSubiendoEsteIndice ? enCurso.progreso : null);
   const [error, setError] = useState<string | null>(null);
-  const sondeo = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     void api.publicarRepos().then(setRepos);
     void api.publicarPrevisualizar(indiceId).then(setPrevia);
   }, [indiceId]);
 
-  useEffect(() => {
-    return () => { if (sondeo.current) clearInterval(sondeo.current); };
-  }, []);
+  useEffect(() => suscribir((e) => {
+    if (e?.indiceId !== indiceId) return;
+    setProgreso(e.progreso);
+    if (e.progreso.error) setError(e.progreso.error);
+  }), [indiceId]);
 
   const hayNoRedistribuibles = (previa?.no_redistribuibles.length ?? 0) > 0;
   // Los ya etiquetados primero: son donde ya publicaste algo, y es lo que
@@ -48,7 +57,6 @@ export function PublishDialog({ indiceId, nombre, onHecho }: {
   async function publicar() {
     setError(null);
     setPaso("subiendo");
-    setProgreso({ asset: "", hechos: 0, total: 0, bytes_hechos: 0, bytes_total: previa?.bytes_total ?? 0, terminado: false, error: null, registro: [] });
     try {
       await api.publicarArrancar(indiceId, repo, descargo);
     } catch (e) {
@@ -56,14 +64,10 @@ export function PublishDialog({ indiceId, nombre, onHecho }: {
       setPaso(3);
       return;
     }
-    sondeo.current = setInterval(async () => {
-      const p = await api.publicarProgreso();
-      setProgreso(p);
-      if (p.terminado) {
-        if (sondeo.current) clearInterval(sondeo.current);
-        if (p.error) setError(p.error);
-      }
-    }, 600);
+    // Recién aquí existe de verdad algo que seguir: antes de que
+    // `publicarArrancar` resuelva, el hueco de `Estado` puede seguir vacío o
+    // guardar el resultado de la publicación anterior.
+    iniciarSeguimiento(indiceId, nombre);
   }
 
   function siguienteDesdePaso2() {
@@ -201,7 +205,7 @@ export function PublishDialog({ indiceId, nombre, onHecho }: {
             <p className="mt-2.5 text-[11px] text-fg">Publicado.</p>
           )}
           <div className="mt-4 flex justify-end">
-            <button onClick={onHecho}
+            <button onClick={() => { if (progreso.terminado) descartarSeguimiento(); onHecho(); }}
               className="jg-press rounded-lg border border-border px-3.5 py-2 text-[11.5px] text-fg">
               {progreso.terminado ? "Cerrar" : "Seguir en segundo plano"}
             </button>

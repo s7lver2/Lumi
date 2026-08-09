@@ -18,6 +18,7 @@ mod probe;
 mod publicar;
 mod qdrant;
 mod queue;
+mod red;
 mod review;
 mod runtime;
 mod services;

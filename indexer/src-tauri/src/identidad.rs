@@ -13,6 +13,7 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::{Deserialize, Serialize};
 
 use crate::keys::Claves;
+use crate::red::cliente_http;
 use crate::store::Almacen;
 
 /// Aplicación pública registrada para el flujo de dispositivo. No es un
@@ -165,7 +166,7 @@ pub async fn arrancar(proveedor: &str) -> Result<(CodigoDispositivo, String)> {
         verification_uri: String,
         interval: u64,
     }
-    let resp = reqwest::Client::new()
+    let resp = cliente_http()
         .post("https://github.com/login/device/code")
         .header("accept", "application/json")
         .form(&[("client_id", CLIENTE_GITHUB), ("scope", "public_repo")])
@@ -225,7 +226,7 @@ pub enum Sondeo {
 /// decide dónde guardarlo (y aquí no se guarda porque este módulo no toca
 /// `Claves` sin que se lo pidan explícitamente).
 pub async fn sondear(device_code: &str) -> Result<Sondeo> {
-    let cliente = reqwest::Client::new();
+    let cliente = cliente_http();
     let resp = cliente
         .post("https://github.com/login/oauth/access_token")
         .header("accept", "application/json")
