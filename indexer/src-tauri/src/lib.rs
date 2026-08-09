@@ -14,6 +14,7 @@ mod origins;
 mod package;
 mod perf;
 mod probe;
+mod publicar;
 mod qdrant;
 mod queue;
 mod review;
@@ -59,6 +60,8 @@ pub struct Estado {
     /// memoria y no en disco: si la aplicación se cierra a mitad, el código
     /// caduca solo y volver a empezar cuesta un clic.
     pub identidad_en_curso: std::sync::Mutex<Option<(String, String)>>, // (proveedor, device_code)
+    /// La publicación en curso, si hay alguna. Mismo patrón que `descarga`.
+    pub publicacion: std::sync::Mutex<Option<Arc<publicar::Publicacion>>>,
 }
 
 /// Dónde vive todo. `LUMI_INDEXER_DATA` existe para poder correr una instancia
@@ -938,6 +941,84 @@ async fn identidad_rotar(estado: tauri::State<'_, Estado>) -> Result<Vec<String>
     identidad::rotar(&claves).map_err(|e| e.to_string())
 }
 
+// --- Publicar --------------------------------------------------------------
+
+#[tauri::command]
+async fn publicar_repos(estado: tauri::State<'_, Estado>) -> Result<Vec<publicar::Repo>, String> {
+    let claves = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
+    let testigo = identidad::leer_testigo(&claves).map_err(|e| e.to_string())?;
+    publicar::repos(&testigo).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn publicar_previsualizar(
+    estado: tauri::State<'_, Estado>,
+    indice_id: i64,
+) -> Result<publicar::Previsualizacion, String> {
+    publicar::previsualizar(&estado.almacen, indice_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn publicar_arrancar(
+    estado: tauri::State<'_, Estado>,
+    indice_id: i64,
+    repo: String,
+    descargo: bool,
+) -> Result<(), String> {
+    // Publicar un indice abierto no tiene sentido: el contenido cambiaria
+    // bajo los pies del hash que se acaba de firmar.
+    if !estado.almacen.indice_sellado(indice_id).map_err(|e| e.to_string())? {
+        return Err("solo se puede publicar un índice sellado".into());
+    }
+    let previa = publicar::previsualizar(&estado.almacen, indice_id).map_err(|e| e.to_string())?;
+    if !previa.no_redistribuibles.is_empty() && !descargo {
+        return Err("faltan por aceptar los términos de las fuentes no redistribuibles".into());
+    }
+
+    let claves = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
+    let testigo = identidad::leer_testigo(&claves).map_err(|e| e.to_string())?;
+    let secreta = identidad::leer_clave(&claves).map_err(|e| e.to_string())?;
+    let autor = identidad::leer_sesion(&estado.almacen)
+        .map_err(|e| e.to_string())?
+        .map(|s| s.cuenta)
+        .unwrap_or_default();
+
+    let total = previa.trozos.len() as u32 + 2; // cuerpos, capas y la ficha
+    let prog = Arc::new(publicar::Publicacion::nueva(total, previa.bytes_total));
+    *estado.publicacion.lock().unwrap() = Some(prog.clone());
+
+    let almacen = estado.almacen.clone();
+    tauri::async_runtime::spawn(async move {
+        let r = publicar::publicar(almacen, prog.clone(), indice_id, repo, testigo, autor, secreta, Vec::new())
+            .await;
+        prog.terminar(r.map_err(|e| e.to_string()));
+    });
+    Ok(())
+}
+
+#[tauri::command]
+async fn publicar_progreso(
+    estado: tauri::State<'_, Estado>,
+) -> Result<publicar::ProgresoPublicacion, String> {
+    Ok(estado.publicacion.lock().unwrap().as_ref().map(|p| p.progreso()).unwrap_or_default())
+}
+
+/// Reanudar es lo mismo que publicar: lo ya subido está apuntado en
+/// `publicaciones` y no se vuelve a subir.
+#[tauri::command]
+async fn publicar_continuar(
+    estado: tauri::State<'_, Estado>,
+    indice_id: i64,
+) -> Result<Vec<String>, String> {
+    Ok(estado
+        .almacen
+        .publicacion_pendientes(indice_id)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(a, _, _)| a)
+        .collect())
+}
+
 pub(crate) fn chrono_ahora() -> String {
     // ponytail: sin dependencia de `chrono` por una sola marca de tiempo; el
     // formato exacto no lo consume nada todavía (el 8 aún no existe), así que
@@ -1112,6 +1193,7 @@ pub fn run() {
             sondeo: std::sync::Mutex::new(None),
             sellado: std::sync::Mutex::new(None),
             identidad_en_curso: std::sync::Mutex::new(None),
+            publicacion: std::sync::Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             saludo,
@@ -1173,7 +1255,12 @@ pub fn run() {
             identidad_leer,
             identidad_cerrar,
             identidad_respaldo,
-            identidad_rotar
+            identidad_rotar,
+            publicar_repos,
+            publicar_previsualizar,
+            publicar_arrancar,
+            publicar_progreso,
+            publicar_continuar
         ])
         .build(tauri::generate_context!())
         .expect("no se pudo arrancar el Lumi Indexer")

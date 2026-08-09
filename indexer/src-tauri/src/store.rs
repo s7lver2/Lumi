@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS lotes (
     -- Si la procedencia la dijo el material o la declaró el operador. Un
     -- paquete legacy no la trae, así que la diferencia importa.
     declarada_por_operador INTEGER NOT NULL DEFAULT 0,
-    estado     TEXT NOT NULL CHECK (estado IN ('pendiente','en_curso','hecho','error')),
+    estado     TEXT NOT NULL CHECK (estado IN ('pendiente','en_curso','hecho','error','cancelado')),
     error      TEXT,
     reintentos INTEGER NOT NULL DEFAULT 0,
     version_indexer TEXT NOT NULL,
@@ -123,6 +123,19 @@ CREATE TABLE IF NOT EXISTS descargas (
     PRIMARY KEY (indice_id, fuente, quadkey)
 );
 
+-- Un asset por fila. Que esto sea una tabla es lo que hace que una subida
+-- cortada a la mitad se pueda retomar sin volver a subir lo que ya está: un
+-- trozo son cientos de megas, y resubirlos por un corte de red es una hora.
+CREATE TABLE IF NOT EXISTS publicaciones (
+  indice_id INTEGER NOT NULL,
+  asset     TEXT    NOT NULL,
+  sha256    TEXT    NOT NULL,
+  bytes     INTEGER NOT NULL,
+  subido    INTEGER NOT NULL DEFAULT 0,
+  url       TEXT,
+  PRIMARY KEY (indice_id, asset)
+);
+
 CREATE INDEX IF NOT EXISTS imagenes_por_indice ON imagenes(indice_id);
 CREATE INDEX IF NOT EXISTS imagenes_por_quadkey ON imagenes(indice_id, quadkey);
 CREATE INDEX IF NOT EXISTS lotes_por_indice ON lotes(indice_id);
@@ -135,6 +148,22 @@ pub struct Cuentas {
     pub pendientes: u32,
     pub aceptadas: u32,
     pub rechazadas: u32,
+}
+
+/// Una fila del visor de mapa/galería: el punto, la miniatura y los metadatos
+/// que ya se conocían al ingerir la imagen.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FilaMapa {
+    pub id: i64,
+    pub ruta: String,
+    pub lat: f64,
+    pub lng: f64,
+    pub fuente: String,
+    pub capturada_en: Option<String>,
+    pub ancho: Option<u32>,
+    pub alto: Option<u32>,
+    pub licencia: Option<String>,
+    pub rumbo: Option<f64>,
 }
 
 pub struct Almacen(Mutex<Connection>);
@@ -172,15 +201,18 @@ impl Almacen {
         // `clase` gana 'red'. En SQLite un CHECK no se altera, así que en una
         // base del 7a se recrea la tabla con el CHECK nuevo. Es barato:
         // `lotes` tiene una fila por tanda de material, no por imagen.
-        let hay_red: bool = c
+        let sql_lotes: Option<String> = c
             .query_row(
                 "SELECT sql FROM sqlite_master WHERE type='table' AND name='lotes'",
                 [],
                 |r| r.get::<_, String>(0),
             )
-            .map(|sql| sql.contains("'red'"))
-            .unwrap_or(true);
-        if !hay_red {
+            .ok();
+        let necesita_recrear = match &sql_lotes {
+            Some(sql) => !sql.contains("'red'") || !sql.contains("'cancelado'"),
+            None => false,
+        };
+        if necesita_recrear {
             c.execute_batch("ALTER TABLE lotes RENAME TO lotes_viejos")?;
             c.execute_batch(ESQUEMA)?; // recrea `lotes` con el CHECK nuevo
             c.execute_batch(
@@ -197,6 +229,20 @@ impl Almacen {
             .unwrap_or(0)
     }
 
+    /// `true` si el índice está sellado (o si ya no existe — negarse a
+    /// escribir es la respuesta segura en los dos casos). «Sellar es
+    /// irreversible: un paquete sellado no se sigue llenando» (DESIGN.md) era
+    /// hasta ahora solo la promesa de la interfaz; nada en el backend
+    /// impedía de verdad que una ingesta, una herencia de territorio o una
+    /// descarga siguieran escribiendo filas contra un índice ya sellado.
+    pub fn indice_sellado(&self, indice_id: i64) -> Result<bool> {
+        let c = self.0.lock().unwrap();
+        let estado: Option<String> = c
+            .query_row("SELECT estado FROM indices WHERE id = ?1", params![indice_id], |r| r.get(0))
+            .ok();
+        Ok(estado.as_deref() != Some("abierto"))
+    }
+
     pub fn crear_indice(&self, nombre: &str, slug: &str) -> Result<i64> {
         let c = self.0.lock().unwrap();
         c.execute(
@@ -204,6 +250,13 @@ impl Almacen {
             params![nombre, slug, Self::ahora()],
         )?;
         Ok(c.last_insert_rowid())
+    }
+
+    /// `None` si el índice ya no existe — por ejemplo, un plan de descarga
+    /// pendiente que apunta a un índice que se borró entretanto.
+    pub fn nombre_de_indice(&self, indice_id: i64) -> Result<Option<String>> {
+        let c = self.0.lock().unwrap();
+        Ok(c.query_row("SELECT nombre FROM indices WHERE id = ?1", params![indice_id], |r| r.get(0)).ok())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -394,6 +447,38 @@ impl Almacen {
         Ok(())
     }
 
+    /// `(modelo, imagen_id)` de todo lo que este índice ya subió a Qdrant.
+    /// Se lee ANTES de `borrar_indice`: una vez borradas las filas de SQLite
+    /// no hay otra forma de saber qué puntos hay que limpiar también allí.
+    pub fn vectores_hechos_de_indice(&self, indice_id: i64) -> Result<Vec<(String, i64)>> {
+        let c = self.0.lock().unwrap();
+        let mut q = c.prepare(
+            "SELECT v.modelo, v.imagen_id FROM vectores v JOIN imagenes i ON i.id = v.imagen_id
+              WHERE i.indice_id = ?1 AND v.estado = 'hecho'",
+        )?;
+        let filas = q
+            .query_map(params![indice_id], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(filas)
+    }
+
+    /// Borra un índice entero: sus imágenes, sus vectores, sus lotes y la
+    /// procedencia del trabajo por tesela. Los ficheros de imagen en disco y
+    /// los puntos ya subidos a Qdrant se limpian aparte, porque viven fuera
+    /// de esta base de datos.
+    pub fn borrar_indice(&self, indice_id: i64) -> Result<()> {
+        let c = self.0.lock().unwrap();
+        c.execute(
+            "DELETE FROM vectores WHERE imagen_id IN (SELECT id FROM imagenes WHERE indice_id = ?1)",
+            params![indice_id],
+        )?;
+        c.execute("DELETE FROM imagenes WHERE indice_id = ?1", params![indice_id])?;
+        c.execute("DELETE FROM lotes WHERE indice_id = ?1", params![indice_id])?;
+        c.execute("DELETE FROM teselas WHERE indice_id = ?1", params![indice_id])?;
+        c.execute("DELETE FROM indices WHERE id = ?1", params![indice_id])?;
+        Ok(())
+    }
+
     /// Cuántas imágenes de este índice siguen sin vector de este modelo. Es lo
     /// que reconstruye la cola cuando Redis se ha vaciado, y lo que impide
     /// sellar un paquete a medias.
@@ -421,10 +506,13 @@ impl Almacen {
     ) -> Result<Vec<(i64, String)>> {
         let c = self.0.lock().unwrap();
         let mut q = c.prepare(
-            "SELECT i.id, i.ruta FROM imagenes i JOIN vectores v ON v.imagen_id = i.id
+            "SELECT i.id, i.ruta FROM imagenes i
+               JOIN vectores v ON v.imagen_id = i.id
+               JOIN lotes l ON l.id = i.lote_id
               WHERE i.indice_id = ?1 AND v.modelo = ?2 AND v.estado = 'pendiente'
                 AND i.saltada_motivo IS NULL
                 AND (i.revision IS NULL OR i.revision <> 'rechazada')
+                AND l.estado <> 'cancelado'
               ORDER BY i.id LIMIT ?3",
         )?;
         let filas = q
@@ -433,10 +521,64 @@ impl Almacen {
         Ok(filas)
     }
 
+    /// Índices con al menos una imagen sin vector de ESTE modelo. Es lo que
+    /// arranca cada bucle de la cola: independiente de `lotes.estado`, que es
+    /// una sola columna compartida entre todos los modelos y por eso nunca
+    /// pudo decir "a lumi-preview le queda trabajo" sin mentir sobre lumi-2.
+    pub fn indices_con_pendientes(&self, modelo: &str) -> Result<Vec<i64>> {
+        let c = self.0.lock().unwrap();
+        let mut q = c.prepare(
+            "SELECT DISTINCT i.indice_id FROM imagenes i
+               JOIN vectores v ON v.imagen_id = i.id
+               JOIN lotes l ON l.id = i.lote_id
+              WHERE v.modelo = ?1 AND v.estado = 'pendiente'
+                AND i.saltada_motivo IS NULL
+                AND (i.revision IS NULL OR i.revision <> 'rechazada')
+                AND l.estado <> 'cancelado'
+              ORDER BY i.indice_id",
+        )?;
+        let filas = q.query_map(params![modelo], |r| r.get(0))?.collect::<Result<Vec<_>, _>>()?;
+        Ok(filas)
+    }
+
+    /// `(hechas, total)` de ESTE índice para ESTE modelo — el índice entero,
+    /// no el lote de 32 que la cola tiene entre manos ahora mismo. Es lo que
+    /// hace que la barra diga "1023 de 3224" en vez de reiniciar a "32/32"
+    /// cada vez que empieza un lote nuevo, que no cuenta nada sobre cuánto
+    /// queda de verdad.
+    pub fn progreso_indice(&self, indice_id: i64, modelo: &str) -> Result<(u32, u32)> {
+        let c = self.0.lock().unwrap();
+        let hechas: u32 = c.query_row(
+            "SELECT COUNT(*) FROM imagenes i JOIN vectores v ON v.imagen_id = i.id
+              WHERE i.indice_id = ?1 AND v.modelo = ?2 AND v.estado = 'hecho'",
+            params![indice_id, modelo],
+            |r| r.get(0),
+        )?;
+        let total: u32 = c.query_row(
+            "SELECT COUNT(*) FROM imagenes i
+               JOIN vectores v ON v.imagen_id = i.id
+               JOIN lotes l ON l.id = i.lote_id
+              WHERE i.indice_id = ?1 AND v.modelo = ?2
+                AND i.saltada_motivo IS NULL
+                AND (i.revision IS NULL OR i.revision <> 'rechazada')
+                AND l.estado <> 'cancelado'",
+            params![indice_id, modelo],
+            |r| r.get(0),
+        )?;
+        Ok((hechas, total))
+    }
+
+    /// Upsert, no `UPDATE`: la cola de embebido marca una fila que
+    /// `insertar_imagen` ya creó como `pendiente`, pero la ingesta legacy
+    /// llama a esto para un modelo que trae el vector DESDE FUERA y por eso
+    /// nunca pasó por `pendientes_de` — no hay fila que actualizar. Con solo
+    /// `UPDATE`, ese caso afectaba a cero filas en silencio: el vector que
+    /// venía dentro del paquete se perdía sin ningún error que lo delatara.
     pub fn marcar_vector(&self, imagen_id: i64, modelo: &str, estado: &str) -> Result<()> {
         let c = self.0.lock().unwrap();
         c.execute(
-            "UPDATE vectores SET estado = ?3 WHERE imagen_id = ?1 AND modelo = ?2",
+            "INSERT INTO vectores (imagen_id, modelo, estado) VALUES (?1, ?2, ?3)
+             ON CONFLICT (imagen_id, modelo) DO UPDATE SET estado = excluded.estado",
             params![imagen_id, modelo, estado],
         )?;
         Ok(())
@@ -451,34 +593,45 @@ impl Almacen {
         Ok(())
     }
 
-    /// Devuelve el número de reintentos DESPUÉS de sumar uno. Es el contador
-    /// que impide el bucle infinito cuando el proceso se muere una y otra vez.
-    pub fn sumar_reintento(&self, lote_id: i64) -> Result<u32> {
+    /// Solo cancela si sigue `pendiente`: un lote `en_curso` ya tiene un
+    /// trabajador consumiéndolo, y pararlo a mitad dejaría el vector a medio
+    /// escribir. El `WHERE` es la guarda contra la carrera entre que la
+    /// interfaz pinta el botón y que la cola lo coge justo antes del click.
+    pub fn cancelar_lote(&self, lote_id: i64) -> Result<bool> {
         let c = self.0.lock().unwrap();
-        c.execute("UPDATE lotes SET reintentos = reintentos + 1 WHERE id = ?1", params![lote_id])?;
-        let n: u32 =
-            c.query_row("SELECT reintentos FROM lotes WHERE id = ?1", params![lote_id], |r| r.get(0))?;
-        Ok(n)
-    }
-
-    pub fn lotes_sin_terminar(&self) -> Result<Vec<(i64, i64)>> {
-        let c = self.0.lock().unwrap();
-        let mut q = c.prepare(
-            "SELECT id, indice_id FROM lotes WHERE estado IN ('pendiente','en_curso') ORDER BY id",
+        let n = c.execute(
+            "UPDATE lotes SET estado = 'cancelado' WHERE id = ?1 AND estado = 'pendiente'",
+            params![lote_id],
         )?;
-        let filas = q
-            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(filas)
+        Ok(n > 0)
     }
 
     /// `(id, clase, origen, estado)` de los lotes de un índice, más nuevo
     /// primero. Es lo que enseña el detalle junto a las dos tablas de
     /// procedencia: de dónde vino cada tanda de material.
+    ///
+    /// El `estado` se calcula contra `vectores`, no se lee de `lotes.estado`:
+    /// con varios modelos activos, "hecho" para lumi-2 no significa "hecho"
+    /// para lumi-preview, y una sola columna compartida no puede decir las
+    /// dos cosas a la vez. La única excepción es `cancelado`, que sí es una
+    /// decisión del operador y no algo que los vectores puedan derivar.
     pub fn listar_lotes(&self, indice_id: i64) -> Result<Vec<(i64, String, String, String)>> {
         let c = self.0.lock().unwrap();
         let mut q = c.prepare(
-            "SELECT id, clase, origen, estado FROM lotes WHERE indice_id = ?1 ORDER BY creado_en DESC",
+            "SELECT l.id, l.clase, l.origen,
+                CASE
+                    WHEN l.estado = 'cancelado' THEN 'cancelado'
+                    WHEN EXISTS (
+                        SELECT 1 FROM imagenes im JOIN vectores v ON v.imagen_id = im.id
+                        WHERE im.lote_id = l.id AND v.estado = 'error'
+                    ) THEN 'error'
+                    WHEN EXISTS (
+                        SELECT 1 FROM imagenes im JOIN vectores v ON v.imagen_id = im.id
+                        WHERE im.lote_id = l.id AND v.estado = 'pendiente'
+                    ) THEN 'pendiente'
+                    ELSE 'hecho'
+                END
+             FROM lotes l WHERE l.indice_id = ?1 ORDER BY l.creado_en DESC",
         )?;
         let filas = q
             .query_map(params![indice_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
@@ -535,6 +688,39 @@ impl Almacen {
         )?;
         let filas = q
             .query_map(params![indice_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(filas)
+    }
+
+    /// Todo lo que el visor de mapa/galería necesita de cada imagen de un
+    /// índice: coordenadas para el punto, ruta para la miniatura, y los
+    /// metadatos que ya guardamos (fecha, tamaño, procedencia). Las saltadas y
+    /// las rechazadas no salen: no forman parte del índice.
+    pub fn imagenes_mapa(&self, indice_id: i64) -> Result<Vec<FilaMapa>> {
+        let c = self.0.lock().unwrap();
+        let mut q = c.prepare(
+            "SELECT i.id, i.ruta, i.lat, i.lng, l.fuente, i.capturada_en, i.ancho, i.alto,
+                    i.licencia, i.rumbo
+               FROM imagenes i JOIN lotes l ON l.id = i.lote_id
+              WHERE i.indice_id = ?1 AND i.saltada_motivo IS NULL
+                AND (i.revision IS NULL OR i.revision <> 'rechazada')
+              ORDER BY i.id",
+        )?;
+        let filas = q
+            .query_map(params![indice_id], |r| {
+                Ok(FilaMapa {
+                    id: r.get(0)?,
+                    ruta: r.get(1)?,
+                    lat: r.get(2)?,
+                    lng: r.get(3)?,
+                    fuente: r.get(4)?,
+                    capturada_en: r.get(5)?,
+                    ancho: r.get(6)?,
+                    alto: r.get(7)?,
+                    licencia: r.get(8)?,
+                    rumbo: r.get(9)?,
+                })
+            })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(filas)
     }
@@ -818,6 +1004,78 @@ impl Almacen {
         Ok(pedidas.iter().filter(|q| !hechas.contains(*q)).cloned().collect())
     }
 
+    // ── Publicación ──────────────────────────────────────────────────────
+
+    /// Dónde quedó el `.lumidx` al sellar. `None` mientras el índice siga
+    /// abierto: no hay nada que publicar de un índice que aún cambia.
+    pub fn ruta_de_indice(&self, indice_id: i64) -> Result<Option<String>> {
+        let c = self.0.lock().unwrap();
+        Ok(c.query_row("SELECT ruta FROM indices WHERE id = ?1", params![indice_id], |r| r.get(0))
+            .ok()
+            .flatten())
+    }
+
+    /// Apunta un asset del plan de subida. Mismo `ON CONFLICT` que
+    /// `descarga_marcar`: volver a previsualizar no pierde lo ya subido.
+    pub fn publicacion_apuntar(
+        &self,
+        indice_id: i64,
+        asset: &str,
+        sha256: &str,
+        bytes: u64,
+    ) -> Result<()> {
+        let c = self.0.lock().unwrap();
+        c.execute(
+            "INSERT INTO publicaciones (indice_id, asset, sha256, bytes)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(indice_id, asset) DO UPDATE SET
+               sha256 = excluded.sha256, bytes = excluded.bytes",
+            params![indice_id, asset, sha256, bytes as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn publicacion_marcar_subido(&self, indice_id: i64, asset: &str, url: &str) -> Result<()> {
+        let c = self.0.lock().unwrap();
+        c.execute(
+            "UPDATE publicaciones SET subido = 1, url = ?3
+              WHERE indice_id = ?1 AND asset = ?2",
+            params![indice_id, asset, url],
+        )?;
+        Ok(())
+    }
+
+    /// Los assets que faltan por subir. Igual que `descargas_pendientes`:
+    /// solo `subido = 1` excluye.
+    pub fn publicacion_pendientes(&self, indice_id: i64) -> Result<Vec<(String, String, u64)>> {
+        let c = self.0.lock().unwrap();
+        let mut q = c.prepare(
+            "SELECT asset, sha256, bytes FROM publicaciones
+              WHERE indice_id = ?1 AND subido = 0 ORDER BY asset",
+        )?;
+        let filas = q
+            .query_map(params![indice_id], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get::<_, i64>(2)? as u64))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(filas)
+    }
+
+    /// Todo el plan, subido o no: es lo que dice si un paquete está
+    /// `publicado`, `subiendo n/m` o `incompleto`.
+    pub fn publicacion_plan(&self, indice_id: i64) -> Result<Vec<(String, bool, Option<String>)>> {
+        let c = self.0.lock().unwrap();
+        let mut q = c.prepare(
+            "SELECT asset, subido, url FROM publicaciones WHERE indice_id = ?1 ORDER BY asset",
+        )?;
+        let filas = q
+            .query_map(params![indice_id], |r| {
+                Ok((r.get(0)?, r.get::<_, i64>(1)? == 1, r.get(2)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(filas)
+    }
+
     pub fn descarga_sumar_reintento(&self, indice_id: i64, fuente: &str, quadkey: &str) -> Result<u32> {
         let c = self.0.lock().unwrap();
         c.execute(
@@ -851,6 +1109,12 @@ impl Almacen {
         Ok(c.query_row("SELECT valor FROM ajustes WHERE clave = ?1", params![clave], |r| r.get(0))
             .ok()
             .flatten())
+    }
+
+    pub fn borrar_ajuste(&self, clave: &str) -> Result<()> {
+        let c = self.0.lock().unwrap();
+        c.execute("DELETE FROM ajustes WHERE clave = ?1", params![clave])?;
+        Ok(())
     }
 }
 
@@ -915,5 +1179,54 @@ mod tests {
         // Y el contador de reintentos es lo que impide el bucle infinito.
         assert_eq!(a.descarga_sumar_reintento(i, "google", "BBB").unwrap(), 1);
         assert_eq!(a.descarga_sumar_reintento(i, "google", "BBB").unwrap(), 2);
+    }
+
+    #[test]
+    fn cancelar_un_lote_pendiente_lo_saca_de_la_cola() {
+        let (_d, a) = temporal();
+        let i = a.crear_indice("tokio", "tokio").unwrap();
+        let lote = a.crear_lote(i, "red", "mapillary", Some("calle"), "mapillary", None, None, false).unwrap();
+        a.insertar_imagen(i, lote, "a.jpg", "sha-a", 43.36, -8.41, "0311", &["lumi-2".into()]).unwrap();
+
+        assert!(a.indices_con_pendientes("lumi-2").unwrap().contains(&i));
+        assert!(a.cancelar_lote(lote).unwrap(), "debe reportar que sí canceló algo");
+        assert!(!a.indices_con_pendientes("lumi-2").unwrap().contains(&i), "ya no está en cola");
+        assert!(a.pendientes_de(i, "lumi-2", 32).unwrap().is_empty(), "sus imágenes tampoco se ofrecen sueltas");
+
+        let (_, _, _, estado) = a.listar_lotes(i).unwrap().into_iter().find(|(id, ..)| *id == lote).unwrap();
+        assert_eq!(estado, "cancelado");
+    }
+
+    /// `progreso_indice` cuenta el ÍNDICE entero, no el lote de 32 que la
+    /// cola tiene entre manos: es la diferencia entre "32/32" (que no dice
+    /// nada de cuánto falta) y "1 de 3" (que sí).
+    #[test]
+    fn progreso_indice_cuenta_el_indice_entero_no_el_lote() {
+        let (_d, a) = temporal();
+        let i = a.crear_indice("tokio", "tokio").unwrap();
+        let lote = a.crear_lote(i, "red", "mapillary", Some("calle"), "mapillary", None, None, false).unwrap();
+        a.insertar_imagen(i, lote, "a.jpg", "sha-a", 43.36, -8.41, "0311", &["lumi-2".into()]).unwrap();
+        let b = a.insertar_imagen(i, lote, "b.jpg", "sha-b", 43.36, -8.41, "0311", &["lumi-2".into()]).unwrap();
+        a.insertar_imagen(i, lote, "c.jpg", "sha-c", 43.36, -8.41, "0311", &["lumi-2".into()]).unwrap();
+
+        assert_eq!(a.progreso_indice(i, "lumi-2").unwrap(), (0, 3));
+        a.marcar_vector(b, "lumi-2", "hecho").unwrap();
+        assert_eq!(a.progreso_indice(i, "lumi-2").unwrap(), (1, 3));
+    }
+
+    /// Un lote ya `en_curso` no se puede cancelar: pararlo a mitad dejaría el
+    /// vector a medio escribir. El `WHERE` de `cancelar_lote` es la guarda.
+    #[test]
+    fn un_lote_en_curso_no_se_cancela() {
+        let (_d, a) = temporal();
+        let i = a.crear_indice("tokio", "tokio").unwrap();
+        let lote = a.crear_lote(i, "red", "mapillary", Some("calle"), "mapillary", None, None, false).unwrap();
+        a.estado_lote(lote, "en_curso", None).unwrap();
+
+        assert!(!a.cancelar_lote(lote).unwrap(), "no debe reportar cancelación");
+        // La guarda es lo que importa: sigue sin ser 'cancelado'. El resto del
+        // estado ahora se deriva de los vectores, no de esta columna.
+        let (_, _, _, estado) = a.listar_lotes(i).unwrap().into_iter().find(|(id, ..)| *id == lote).unwrap();
+        assert_ne!(estado, "cancelado");
     }
 }
