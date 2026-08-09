@@ -1008,6 +1008,17 @@ async fn catalogo_reclamos(
     catalogo::reclamos(&estado.almacen, &quadkeys).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn catalogo_dependencias_rotas(
+    estado: tauri::State<'_, Estado>,
+) -> Result<Vec<catalogo::DependenciaRota>, String> {
+    let cuenta = identidad::leer_sesion(&estado.almacen)
+        .map_err(|e| e.to_string())?
+        .map(|s| s.cuenta)
+        .unwrap_or_default();
+    catalogo::dependencias_rotas(&estado.almacen, &cuenta).map_err(|e| e.to_string())
+}
+
 // --- Publicar --------------------------------------------------------------
 
 #[tauri::command]
@@ -1054,9 +1065,15 @@ async fn publicar_arrancar(
     let prog = Arc::new(publicar::Publicacion::nueva(total, previa.bytes_total));
     *estado.publicacion.lock().unwrap() = Some(prog.clone());
 
+    // Lo que no indexó porque ya lo cubría otro se declara: no entra en el
+    // índice, entra en la ficha. Se calcula aquí, con el catálogo delante, y
+    // no dentro de `publicar`, que no conoce el almacén de fichas remotas.
+    let dependencias =
+        publicar::dependencias_de(&estado.almacen, indice_id).map_err(|e| e.to_string())?;
+
     let almacen = estado.almacen.clone();
     tauri::async_runtime::spawn(async move {
-        let r = publicar::publicar(almacen, prog.clone(), indice_id, repo, testigo, autor, secreta, Vec::new())
+        let r = publicar::publicar(almacen, prog.clone(), indice_id, repo, testigo, autor, secreta, dependencias)
             .await;
         prog.terminar(r.map_err(|e| e.to_string()));
     });
@@ -1332,7 +1349,8 @@ pub fn run() {
             catalogo_buscar,
             catalogo_perfil,
             catalogo_mios,
-            catalogo_reclamos
+            catalogo_reclamos,
+            catalogo_dependencias_rotas
         ])
         .build(tauri::generate_context!())
         .expect("no se pudo arrancar el Lumi Indexer")

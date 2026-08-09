@@ -284,6 +284,47 @@ pub fn mios(almacen: &Almacen, cuenta: &str) -> Result<Vec<RepoRemoto>> {
     Ok(por_repo.into_iter().map(|(repo, paquetes)| RepoRemoto { repo, paquetes }).collect())
 }
 
+// Cableado por un comando Tauri en la Task 13 (avisar de una dependencia
+// caída); hasta entonces no tiene quien lo llame.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize)]
+pub struct DependenciaRota {
+    pub indice_id: i64,
+    pub indice: String,
+    pub paquete: String,
+    pub autor: String,
+    pub quadkeys: usize,
+    pub dias_caida: i64,
+}
+
+/// Las dependencias de lo publicado desde aquí que han dejado de existir.
+/// Sale gratis porque el refresco ya está pasando por las fichas: cruzar las
+/// propias con las marcadas `viva = 0` no cuesta ni una petición más.
+pub fn dependencias_rotas(almacen: &Almacen, cuenta: &str) -> Result<Vec<DependenciaRota>> {
+    let todas = fichas(almacen)?;
+    let muertas: std::collections::HashSet<String> = todas
+        .iter()
+        .filter(|(_, _, viva)| !viva)
+        .map(|(f, _, _)| f.paquete.clone())
+        .collect();
+    let mut fuera = Vec::new();
+    for (f, _, _) in todas.iter().filter(|(f, _, _)| f.autor == cuenta) {
+        for d in f.dependencias.iter().filter(|d| muertas.contains(&d.paquete)) {
+            fuera.push(DependenciaRota {
+                // El índice local del que salió esto ya no tiene por qué
+                // existir: lo que importa es el paquete publicado.
+                indice_id: 0,
+                indice: f.nombre.clone(),
+                paquete: d.paquete.clone(),
+                autor: d.autor.clone(),
+                quadkeys: d.quadkeys.len(),
+                dias_caida: 0,
+            });
+        }
+    }
+    Ok(fuera)
+}
+
 pub async fn refrescar_desreclamos(almacen: &Almacen) -> Result<()> {
     let Ok(r) = reqwest::get(URL_DESRECLAMOS).await else { return Ok(()) };
     let lista: Vec<(String, String)> = r.json().await.unwrap_or_default();

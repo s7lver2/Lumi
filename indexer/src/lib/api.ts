@@ -170,6 +170,10 @@ export interface FichaResumen {
 export interface Resultados { indices: FichaResumen[]; cuentas: string[] }
 export interface Perfil { cuenta: string; publicaciones: FichaResumen[]; teselas: number }
 export interface RepoRemoto { repo: string; paquetes: FichaResumen[] }
+export interface DependenciaRota {
+  indice_id: number; indice: string; paquete: string;
+  autor: string; quadkeys: number; dias_caida: number;
+}
 
 export interface Repo { nombre: string; privado: boolean }
 export interface TrozoPrevisto { zona: string; quadkeys: number; bytes: number }
@@ -278,6 +282,7 @@ export const api = {
   catalogoRefrescar: () => invoke<number>("catalogo_refrescar"),
   catalogoBuscar: (texto: string) => invoke<Resultados>("catalogo_buscar", { texto }),
   catalogoPerfil: (cuenta: string) => invoke<Perfil>("catalogo_perfil", { cuenta }),
+  catalogoDependenciasRotas: () => invoke<DependenciaRota[]>("catalogo_dependencias_rotas"),
   catalogoMios: () => invoke<RepoRemoto[]>("catalogo_mios"),
   catalogoReclamos: (quadkeys: string[]) => invoke<unknown[]>("catalogo_reclamos", { quadkeys }),
   publicarRepos: () => invoke<Repo[]>("publicar_repos"),

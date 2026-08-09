@@ -120,6 +120,44 @@ fn pesos_por_quadkey(almacen: &Almacen, indice_id: i64) -> Result<Vec<(String, u
     Ok(pesos.into_iter().collect())
 }
 
+/// Lo que este índice NO cubre porque ya lo cubría otro. No se descarga nada:
+/// se declara. Agrupadas por paquete, que es como se instalan.
+///
+/// ponytail: el área del índice se lee de `teselas` —las que el plan anotó al
+/// confirmar—, no de un polígono guardado, porque el polígono no se persiste
+/// en ningún sitio. La salida, si algún día hace falta más precisión, es
+/// guardar el polígono del plan junto al índice.
+pub fn dependencias_de(
+    almacen: &Almacen,
+    indice_id: i64,
+) -> Result<Vec<lumi_index::ficha::Dependencia>> {
+    let del_area: Vec<String> =
+        almacen.teselas_trabajo(indice_id)?.into_iter().map(|(q, _)| q).collect();
+    let propias: std::collections::HashSet<String> =
+        almacen.imagenes_de_indice(indice_id)?.into_iter().map(|(_, _, q)| q).collect();
+    let ajenas: Vec<String> =
+        del_area.into_iter().filter(|q| !propias.contains(q)).collect();
+    if ajenas.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut por_paquete: BTreeMap<String, lumi_index::ficha::Dependencia> = BTreeMap::new();
+    for r in crate::catalogo::reclamos(almacen, &ajenas)? {
+        por_paquete
+            .entry(r.paquete.clone())
+            .or_insert(lumi_index::ficha::Dependencia {
+                quadkeys: Vec::new(),
+                paquete: r.paquete,
+                autor: r.autor,
+                url: r.url,
+                sha256: r.sha256,
+            })
+            .quadkeys
+            .push(r.quadkey);
+    }
+    Ok(por_paquete.into_values().collect())
+}
+
 /// Los repositorios donde se puede publicar. Solo los que la cuenta puede
 /// escribir: ofrecer uno donde la subida va a fallar es peor que no listarlo.
 pub async fn repos(testigo: &str) -> Result<Vec<Repo>> {

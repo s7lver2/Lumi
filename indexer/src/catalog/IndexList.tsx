@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { api, type ResumenIndice } from "../lib/api";
+import { api, type DependenciaRota, type ResumenIndice } from "../lib/api";
 import { Overlay } from "../ui/Overlay";
 import { CatalogSearch } from "./CatalogSearch";
 import { EmptyIndices } from "./EmptyIndices";
@@ -13,12 +13,14 @@ export function IndexList({ onAbrir }: { onAbrir: (id: number) => void }) {
   const [indices, setIndices] = useState<ResumenIndice[]>([]);
   const [creando, setCreando] = useState(false);
   const [cuenta, setCuenta] = useState<string | null>(null);
+  const [rotas, setRotas] = useState<DependenciaRota[]>([]);
   // Qué índices tienen un modelo embebiendo AHORA MISMO, para la insignia de
   // la fila. Se sondea aparte de `indicesLista` porque cambia cada segundo y
   // la lista de índices no.
   const [embebiendo, setEmbebiendo] = useState<Set<number>>(new Set());
 
   useEffect(() => { void api.indicesLista().then(setIndices); }, []);
+  useEffect(() => { void api.catalogoDependenciasRotas().then(setRotas, () => {}); }, []);
   useEffect(() => {
     const tick = () =>
       void api.colaProgreso().then((cola) => {
@@ -49,6 +51,29 @@ export function IndexList({ onAbrir }: { onAbrir: (id: number) => void }) {
         : indices.map((r) => (
             <IndexRow key={r.id} r={r} embebiendo={embebiendo.has(r.id)} onAbrir={() => onAbrir(r.id)} />
           ))}
+
+      {rotas.length > 0 && (
+        <div className="rounded-card border border-warning/40 bg-warning/[.07] p-3.5">
+          <p className="text-[11.5px] text-warning-fg">
+            {rotas.length === 1 ? "Una dependencia" : `${rotas.length} dependencias`} de lo que
+            publicaste ha desaparecido
+          </p>
+          <div className="mt-1.5 flex flex-col gap-1">
+            {rotas.map((r) => (
+              <div key={r.paquete} className="flex items-center justify-between text-[11px]">
+                <span className="text-muted">
+                  «{r.indice}» dependía de <span className="font-mono text-fg">{r.paquete}</span> de{" "}
+                  <span className="font-mono">{r.autor}</span>
+                </span>
+                <span className="font-mono text-[10px] text-subtle">{r.quadkeys} teselas</span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[10.5px] leading-relaxed text-muted">
+            Esas teselas están libres otra vez: el reclamo se cayó con el paquete.
+          </p>
+        </div>
+      )}
 
       <RemoteRepos />
 
