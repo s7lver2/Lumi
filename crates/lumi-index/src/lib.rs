@@ -6,6 +6,7 @@
 //! paquetes y deben depender de este crate en vez de copiar el formato.
 
 pub mod budget;
+pub mod cifrado;
 pub mod coverage;
 pub mod embed;
 pub mod filter;
