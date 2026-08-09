@@ -1019,6 +1019,13 @@ async fn catalogo_dependencias_rotas(
     catalogo::dependencias_rotas(&estado.almacen, &cuenta).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn catalogo_capas(
+    estado: tauri::State<'_, Estado>,
+) -> Result<Vec<catalogo::CapaRemota>, String> {
+    catalogo::capas(&estado.almacen).map_err(|e| e.to_string())
+}
+
 // --- Publicar --------------------------------------------------------------
 
 #[tauri::command]
@@ -1101,6 +1108,43 @@ async fn publicar_continuar(
         .into_iter()
         .map(|(a, _, _)| a)
         .collect())
+}
+
+/// Publicar una capa sobre un cuerpo que no se toca — incluso el de otra
+/// persona, porque en ese caso la capa va a un repositorio propio.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+async fn publicar_capa_arrancar(
+    estado: tauri::State<'_, Estado>,
+    indice_id: i64,
+    cuerpo_sha256: String,
+    cuerpo_paquete: String,
+    cuerpo_autor: String,
+    cuerpo_url: String,
+    modelo: String,
+    repo: String,
+) -> Result<(), String> {
+    let claves = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
+    let testigo = identidad::leer_testigo(&claves).map_err(|e| e.to_string())?;
+    let secreta = identidad::leer_clave(&claves).map_err(|e| e.to_string())?;
+    let autor = identidad::leer_sesion(&estado.almacen)
+        .map_err(|e| e.to_string())?
+        .map(|s| s.cuenta)
+        .unwrap_or_default();
+
+    // Dos pasos: la capa y la ficha. Ni un byte de imagen.
+    let prog = Arc::new(publicar::Publicacion::nueva(2, 0));
+    *estado.publicacion.lock().unwrap() = Some(prog.clone());
+    let almacen = estado.almacen.clone();
+    tauri::async_runtime::spawn(async move {
+        let r = publicar::publicar_capa(
+            almacen, prog.clone(), indice_id, cuerpo_sha256, cuerpo_paquete, cuerpo_autor,
+            cuerpo_url, modelo, repo, testigo, autor, secreta,
+        )
+        .await;
+        prog.terminar(r.map_err(|e| e.to_string()));
+    });
+    Ok(())
 }
 
 pub(crate) fn chrono_ahora() -> String {
@@ -1350,7 +1394,9 @@ pub fn run() {
             catalogo_perfil,
             catalogo_mios,
             catalogo_reclamos,
-            catalogo_dependencias_rotas
+            catalogo_dependencias_rotas,
+            catalogo_capas,
+            publicar_capa_arrancar
         ])
         .build(tauri::generate_context!())
         .expect("no se pudo arrancar el Lumi Indexer")

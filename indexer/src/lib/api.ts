@@ -170,6 +170,10 @@ export interface FichaResumen {
 export interface Resultados { indices: FichaResumen[]; cuentas: string[] }
 export interface Perfil { cuenta: string; publicaciones: FichaResumen[]; teselas: number }
 export interface RepoRemoto { repo: string; paquetes: FichaResumen[] }
+export interface CapaRemota {
+  modelo: string; version: string; dims: number;
+  autor: string; paquete: string; del_autor_del_cuerpo: boolean;
+}
 export interface DependenciaRota {
   indice_id: number; indice: string; paquete: string;
   autor: string; quadkeys: number; dias_caida: number;
@@ -283,6 +287,13 @@ export const api = {
   catalogoBuscar: (texto: string) => invoke<Resultados>("catalogo_buscar", { texto }),
   catalogoPerfil: (cuenta: string) => invoke<Perfil>("catalogo_perfil", { cuenta }),
   catalogoDependenciasRotas: () => invoke<DependenciaRota[]>("catalogo_dependencias_rotas"),
+  catalogoCapas: () => invoke<CapaRemota[]>("catalogo_capas"),
+  publicarCapaArrancar: (
+    indiceId: number, cuerpoSha256: string, cuerpoPaquete: string, cuerpoAutor: string,
+    cuerpoUrl: string, modelo: string, repo: string,
+  ) => invoke<void>("publicar_capa_arrancar", {
+    indiceId, cuerpoSha256, cuerpoPaquete, cuerpoAutor, cuerpoUrl, modelo, repo,
+  }),
   catalogoMios: () => invoke<RepoRemoto[]>("catalogo_mios"),
   catalogoReclamos: (quadkeys: string[]) => invoke<unknown[]>("catalogo_reclamos", { quadkeys }),
   publicarRepos: () => invoke<Repo[]>("publicar_repos"),

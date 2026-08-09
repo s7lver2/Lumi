@@ -284,9 +284,6 @@ pub fn mios(almacen: &Almacen, cuenta: &str) -> Result<Vec<RepoRemoto>> {
     Ok(por_repo.into_iter().map(|(repo, paquetes)| RepoRemoto { repo, paquetes }).collect())
 }
 
-// Cableado por un comando Tauri en la Task 13 (avisar de una dependencia
-// caída); hasta entonces no tiene quien lo llame.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 pub struct DependenciaRota {
     pub indice_id: i64,
@@ -319,6 +316,54 @@ pub fn dependencias_rotas(almacen: &Almacen, cuenta: &str) -> Result<Vec<Depende
                 autor: d.autor.clone(),
                 quadkeys: d.quadkeys.len(),
                 dias_caida: 0,
+            });
+        }
+    }
+    Ok(fuera)
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CapaRemota {
+    pub modelo: String,
+    pub version: String,
+    pub dims: u32,
+    pub autor: String,
+    pub paquete: String,
+    /// Si quien firmó la capa es también quien publicó el cuerpo. Cuando dos
+    /// capas del mismo modelo pasan el muestreo, gana esta.
+    pub del_autor_del_cuerpo: bool,
+}
+
+/// Todas las capas conocidas, incluidas las dos del mismo modelo firmadas por
+/// personas distintas. Conviven a propósito: no se borra ninguna porque no hay
+/// autoridad que pueda decidir eso.
+pub fn capas(almacen: &Almacen) -> Result<Vec<CapaRemota>> {
+    let todas = fichas(almacen)?;
+    // Quién publicó cada cuerpo, para saber cuál de dos capas empatadas gana.
+    let autor_del_cuerpo: std::collections::HashMap<String, String> = todas
+        .iter()
+        .filter(|(f, _, _)| !f.cuerpos.is_empty())
+        .map(|(f, _, _)| (f.paquete.clone(), f.autor.clone()))
+        .collect();
+    let mut fuera = Vec::new();
+    for (f, _, viva) in &todas {
+        if !viva {
+            continue;
+        }
+        // Una ficha de capa suelta apunta a su cuerpo por dependencia.
+        let cuerpo = f
+            .dependencias
+            .first()
+            .map(|d| d.paquete.clone())
+            .unwrap_or_else(|| f.paquete.clone());
+        for c in &f.capas {
+            fuera.push(CapaRemota {
+                modelo: c.modelo.clone(),
+                version: c.version.clone(),
+                dims: c.dims,
+                autor: c.autor.clone(),
+                paquete: f.paquete.clone(),
+                del_autor_del_cuerpo: autor_del_cuerpo.get(&cuerpo) == Some(&c.autor),
             });
         }
     }

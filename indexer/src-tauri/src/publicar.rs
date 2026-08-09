@@ -487,6 +487,138 @@ fn ya_subido(almacen: &Almacen, indice_id: i64, asset: &str) -> Option<(String, 
         .map(|(_, _, _, sha, bytes)| (sha, bytes))
 }
 
+// --- Capas de modelo -------------------------------------------------------
+//
+// Un vector ES el modelo: no hay conversión entre `lumi-2 2.1` y `2.2`. Lo que
+// sí se evita para siempre es volver a comprarle píxeles al proveedor —
+// publicar una capa nueva no resube ni un byte de imagen.
+//
+// Como quien no es el autor del cuerpo no tiene permiso de escritura en su
+// release, una capa ajena se publica en un repositorio propio y su ficha
+// apunta al cuerpo original por hash.
+
+// Lo consume el motor de inferencia (subsistema 5), que todavía no existe:
+// es quien tiene el trabajador de embebido delante para producir las 50
+// muestras locales con las que se compara la capa.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize)]
+pub struct Muestreo {
+    pub comprobadas: u32,
+    pub coinciden: u32,
+    /// El modelo es determinista: o casan o no casan. No hay umbral que
+    /// ajustar, y por eso esto no es configurable.
+    pub casan: bool,
+}
+
+/// Cuántas imágenes se muestrean. Es lo único de todo el subsistema que mira
+/// dentro del contenido en vez del envoltorio, y no es opcional: un vector
+/// envenenado sitúa una foto en el lugar equivocado con confianza alta, que es
+/// el peor fallo posible del producto.
+#[allow(dead_code)]
+pub const MUESTRAS: usize = 50;
+
+/// Compara los vectores de una capa con los que produce el modelo en local.
+///
+/// ponytail: recibe ya calculados los dos lados en vez de embeber aquí. Este
+/// módulo no tiene el trabajador de embebido delante —vive en `queue.rs`— y
+/// pasarlo entero por aquí solo para 50 imágenes sería arrastrar media
+/// aplicación. La salida, cuando el 5 exista, es que quien llame le pida al
+/// trabajador esas 50 y le entregue el resultado a esta función.
+#[allow(dead_code)]
+pub fn comprobar_capa(locales: &[Vec<u8>], de_la_capa: &[Vec<u8>]) -> Muestreo {
+    let n = locales.len().min(de_la_capa.len()).min(MUESTRAS);
+    let coinciden = (0..n).filter(|i| locales[*i] == de_la_capa[*i]).count() as u32;
+    Muestreo { comprobadas: n as u32, coinciden, casan: n > 0 && coinciden as usize == n }
+}
+
+/// Publica una capa suelta sobre un cuerpo que no se toca —ni siquiera si es
+/// de otra persona—. La ficha lleva `cuerpos: []` y una referencia al cuerpo
+/// ajeno por hash.
+#[allow(clippy::too_many_arguments)]
+pub async fn publicar_capa(
+    almacen: Arc<Almacen>,
+    prog: Arc<Publicacion>,
+    indice_id: i64,
+    cuerpo_sha256: String,
+    cuerpo_paquete: String,
+    cuerpo_autor: String,
+    cuerpo_url: String,
+    modelo: String,
+    repo: String,
+    testigo: String,
+    autor: String,
+    secreta: [u8; 32],
+) -> Result<()> {
+    let ruta = almacen
+        .ruta_de_indice(indice_id)?
+        .ok_or_else(|| anyhow!("ese índice no está sellado"))?;
+    let raiz = PathBuf::from(&ruta);
+    let (m, version, dims) = modelos_del_paquete(&raiz)
+        .into_iter()
+        .find(|(m, _, _)| *m == modelo)
+        .ok_or_else(|| anyhow!("el paquete no lleva la capa de {modelo}"))?;
+
+    let cliente = reqwest::Client::new();
+    let etiqueta = format!("capa-{m}-{version}");
+    let release = asegurar_release(&cliente, &testigo, &repo, &etiqueta).await?;
+
+    let mut semilla = [0u8; 32];
+    {
+        use rand::RngCore;
+        rand::thread_rng().fill_bytes(&mut semilla);
+    }
+    let clave = cifrado::clave_nueva(semilla);
+
+    let nombre = format!("{etiqueta}.enc");
+    prog.empezar_asset(&nombre);
+    let sellado = cifrar_asset(&empaquetar(&raiz, &fragmentos_de_modelo(&raiz, &m, &version))?, &clave)?;
+    let sha = sha256_hex(&sellado);
+    let bytes = sellado.len() as u64;
+    almacen.publicacion_apuntar(indice_id, &nombre, &sha, bytes)?;
+    subir_asset(&cliente, &testigo, &repo, release, &nombre, sellado).await?;
+    almacen.publicacion_marcar_subido(indice_id, &nombre, "")?;
+    prog.terminar_asset(bytes);
+
+    let ahora: i64 = crate::chrono_ahora().parse().unwrap_or(0);
+    let mut ficha = Ficha {
+        version: 1,
+        paquete: format!("{cuerpo_paquete}+{m}-{version}"),
+        nombre: format!("{m} {version} sobre {cuerpo_paquete}"),
+        autor: autor.clone(),
+        alojamiento: "github".into(),
+        clave_publica: String::new(),
+        publicada_en: ahora.to_string(),
+        vigente_hasta: (ahora + VIGENCIA_DIAS * DIA).to_string(),
+        cifrado: STANDARD.encode(clave),
+        no_redistribuible: vec![],
+        fuentes_por_quadkey: vec![],
+        // Sin cuerpos: esta ficha no publica ni un byte de imagen. El cuerpo
+        // es el de otro y se referencia por hash.
+        cuerpos: vec![],
+        capas: vec![Capa {
+            modelo: m,
+            version,
+            dims,
+            autor,
+            assets: vec![Asset { nombre, sha256: sha, bytes, quadkeys: vec![] }],
+        }],
+        dependencias: vec![lumi_index::ficha::Dependencia {
+            quadkeys: vec![],
+            paquete: cuerpo_paquete,
+            autor: cuerpo_autor,
+            url: cuerpo_url,
+            sha256: cuerpo_sha256,
+        }],
+        firma: String::new(),
+    };
+    ficha.firmar(&secreta)?;
+    let json = serde_json::to_vec_pretty(&ficha)?;
+    prog.empezar_asset("ficha.json");
+    subir_asset(&cliente, &testigo, &repo, release, "ficha.json", json.clone()).await?;
+    prog.terminar_asset(json.len() as u64);
+    Ok(())
+}
+
 fn cifrar_asset(claro: &[u8], clave: &[u8; 32]) -> Result<Vec<u8>> {
     let mut nonce = [0u8; 12];
     use rand::RngCore;
@@ -514,4 +646,31 @@ fn fragmentos_de_modelo(raiz: &Path, modelo: &str, version: &str) -> Vec<PathBuf
         }
     }
     fuera
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // El modelo es determinista: o casan o no casan. Sin esta comprobación,
+    // una capa envenenada sitúa una foto en el lugar equivocado con confianza
+    // alta, que es el peor fallo posible del producto.
+    #[test]
+    fn una_capa_que_no_reproduce_el_modelo_no_pasa() {
+        let locales = vec![vec![1u8, 2, 3], vec![4, 5, 6]];
+        let buena = locales.clone();
+        assert!(comprobar_capa(&locales, &buena).casan);
+
+        let envenenada = vec![vec![1u8, 2, 3], vec![9, 9, 9]];
+        let m = comprobar_capa(&locales, &envenenada);
+        assert!(!m.casan);
+        assert_eq!(m.coinciden, 1);
+    }
+
+    // Sin muestras no se puede afirmar nada, y "no se pudo comprobar" no puede
+    // significar "pasa".
+    #[test]
+    fn sin_muestras_no_pasa() {
+        assert!(!comprobar_capa(&[], &[]).casan);
+    }
 }
