@@ -136,11 +136,38 @@ CREATE TABLE IF NOT EXISTS publicaciones (
   PRIMARY KEY (indice_id, asset)
 );
 
+-- Una ficha remota por paquete. `json` es la ficha entera tal como llegó —
+-- viaja en claro, así que guardarla íntegra no cuesta nada y evita tener que
+-- reconstruirla campo a campo cada vez que hace falta un dato que hoy no se
+-- usa. `vista` es cuándo se comprobó por última vez si sigue viva.
+CREATE TABLE IF NOT EXISTS fichas_remotas (
+  paquete TEXT PRIMARY KEY,
+  autor   TEXT NOT NULL,
+  url     TEXT NOT NULL,
+  json    TEXT NOT NULL,
+  vista   TEXT NOT NULL,
+  viva    INTEGER NOT NULL DEFAULT 1
+);
+-- Caché derivada de `fichas_remotas`, reconstruida entera en cada refresco.
+-- La verdad es la ficha; esto solo existe para que el reclamo de un polígono
+-- no tenga que reparsear el JSON de todas las fichas conocidas cada vez.
+CREATE TABLE IF NOT EXISTS cobertura_remota (
+  quadkey TEXT NOT NULL,
+  fuente  TEXT NOT NULL,
+  paquete TEXT NOT NULL,
+  PRIMARY KEY (quadkey, fuente, paquete)
+);
+-- La única vía de la web (subsistema 9) hacia el catálogo local, y solo puede
+-- QUITAR reclamos: un paquete en esta lista deja de reclamar aunque su ficha
+-- siga viva y vigente.
+CREATE TABLE IF NOT EXISTS desreclamos (paquete TEXT PRIMARY KEY, motivo TEXT);
+
 CREATE INDEX IF NOT EXISTS imagenes_por_indice ON imagenes(indice_id);
 CREATE INDEX IF NOT EXISTS imagenes_por_quadkey ON imagenes(indice_id, quadkey);
 CREATE INDEX IF NOT EXISTS lotes_por_indice ON lotes(indice_id);
 CREATE INDEX IF NOT EXISTS vectores_pendientes ON vectores(modelo) WHERE estado = 'pendiente';
 CREATE INDEX IF NOT EXISTS gasto_por_mes ON gasto(dia);
+CREATE INDEX IF NOT EXISTS cobertura_remota_por_quadkey ON cobertura_remota(quadkey);
 ";
 
 #[derive(Debug, Clone, Default, serde::Serialize)]
@@ -165,6 +192,11 @@ pub struct FilaMapa {
     pub licencia: Option<String>,
     pub rumbo: Option<f64>,
 }
+
+/// `(paquete, autor, url, json, viva)`.
+pub type FilaFichaRemota = (String, String, String, String, bool);
+/// `(quadkey, fuente, paquete, autor, url)`.
+pub type FilaReclamo = (String, String, String, String, String);
 
 pub struct Almacen(Mutex<Connection>);
 
@@ -1002,6 +1034,104 @@ impl Almacen {
             .query_map(params![indice_id, fuente], |r| r.get(0))?
             .collect::<Result<_, _>>()?;
         Ok(pedidas.iter().filter(|q| !hechas.contains(*q)).cloned().collect())
+    }
+
+    // ── Catálogo remoto ──────────────────────────────────────────────────
+
+    pub fn ficha_remota_guardar(
+        &self,
+        paquete: &str,
+        autor: &str,
+        url: &str,
+        json: &str,
+    ) -> Result<()> {
+        let c = self.0.lock().unwrap();
+        c.execute(
+            "INSERT INTO fichas_remotas (paquete, autor, url, json, vista, viva)
+             VALUES (?1, ?2, ?3, ?4, ?5, 1)
+             ON CONFLICT(paquete) DO UPDATE SET
+               autor = excluded.autor, url = excluded.url, json = excluded.json,
+               vista = excluded.vista, viva = 1",
+            params![paquete, autor, url, json, Self::ahora()],
+        )?;
+        Ok(())
+    }
+
+    /// `(paquete, autor, url, json, viva)`.
+    pub fn fichas_remotas(&self) -> Result<Vec<FilaFichaRemota>> {
+        let c = self.0.lock().unwrap();
+        let mut q =
+            c.prepare("SELECT paquete, autor, url, json, viva FROM fichas_remotas ORDER BY paquete")?;
+        let filas = q
+            .query_map([], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get::<_, i64>(4)? == 1))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(filas)
+    }
+
+    /// Un 404 en cualquiera de sus assets. Deja de reclamar sin borrarse: se
+    /// sigue sabiendo que existió, y qué zona dejó libre al caerse.
+    pub fn ficha_remota_marcar_muerta(&self, paquete: &str) -> Result<()> {
+        let c = self.0.lock().unwrap();
+        c.execute("UPDATE fichas_remotas SET viva = 0 WHERE paquete = ?1", params![paquete])?;
+        Ok(())
+    }
+
+    /// Se reconstruye entera: es caché derivada, no verdad.
+    pub fn cobertura_remota_rehacer(&self, filas: &[(String, String, String)]) -> Result<()> {
+        let mut c = self.0.lock().unwrap();
+        let tx = c.transaction()?;
+        tx.execute("DELETE FROM cobertura_remota", [])?;
+        for (quadkey, fuente, paquete) in filas {
+            tx.execute(
+                "INSERT OR IGNORE INTO cobertura_remota (quadkey, fuente, paquete)
+                 VALUES (?1, ?2, ?3)",
+                params![quadkey, fuente, paquete],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Quién reclama cada una de estas quadkeys. Solo fichas vivas, y nunca
+    /// las que la web ha desreclamado.
+    /// `(quadkey, fuente, paquete, autor, url)`.
+    pub fn reclamos_de(&self, quadkeys: &[String]) -> Result<Vec<FilaReclamo>> {
+        let c = self.0.lock().unwrap();
+        let mut q = c.prepare(
+            "SELECT r.quadkey, r.fuente, r.paquete, f.autor, f.url
+               FROM cobertura_remota r JOIN fichas_remotas f ON f.paquete = r.paquete
+              WHERE f.viva = 1
+                AND r.paquete NOT IN (SELECT paquete FROM desreclamos)",
+        )?;
+        let pedidas: std::collections::HashSet<&str> = quadkeys.iter().map(|s| s.as_str()).collect();
+        let filas = q
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, String>(4)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(filas.into_iter().filter(|(q, ..)| pedidas.contains(q.as_str())).collect())
+    }
+
+    pub fn desreclamos_fijar(&self, lista: &[(String, String)]) -> Result<()> {
+        let mut c = self.0.lock().unwrap();
+        let tx = c.transaction()?;
+        tx.execute("DELETE FROM desreclamos", [])?;
+        for (paquete, motivo) in lista {
+            tx.execute(
+                "INSERT OR REPLACE INTO desreclamos (paquete, motivo) VALUES (?1, ?2)",
+                params![paquete, motivo],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
     }
 
     // ── Publicación ──────────────────────────────────────────────────────

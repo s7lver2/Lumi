@@ -4,6 +4,7 @@
 //! cuentas ni sesiones: es una herramienta de un solo operador sobre su propia
 //! máquina. Lo que produce son paquetes `.lumidx` sellados.
 
+mod catalogo;
 mod crypto;
 mod download;
 mod identidad;
@@ -941,6 +942,52 @@ async fn identidad_rotar(estado: tauri::State<'_, Estado>) -> Result<Vec<String>
     identidad::rotar(&claves).map_err(|e| e.to_string())
 }
 
+// --- Catálogo remoto -------------------------------------------------------
+
+#[tauri::command]
+async fn catalogo_refrescar(estado: tauri::State<'_, Estado>) -> Result<u32, String> {
+    let n = catalogo::refrescar(&estado.almacen).await.map_err(|e| e.to_string())?;
+    // Un fallo de la web no es un error: se sigue con la última lista.
+    let _ = catalogo::refrescar_desreclamos(&estado.almacen).await;
+    let _ = catalogo::comprobar_vivos(&estado.almacen).await;
+    Ok(n)
+}
+
+#[tauri::command]
+async fn catalogo_buscar(
+    estado: tauri::State<'_, Estado>,
+    texto: String,
+) -> Result<catalogo::Resultados, String> {
+    catalogo::buscar(&estado.almacen, &texto).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn catalogo_perfil(
+    estado: tauri::State<'_, Estado>,
+    cuenta: String,
+) -> Result<catalogo::Perfil, String> {
+    catalogo::perfil(&estado.almacen, &cuenta).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn catalogo_mios(
+    estado: tauri::State<'_, Estado>,
+) -> Result<Vec<catalogo::RepoRemoto>, String> {
+    let cuenta = identidad::leer_sesion(&estado.almacen)
+        .map_err(|e| e.to_string())?
+        .map(|s| s.cuenta)
+        .unwrap_or_default();
+    catalogo::mios(&estado.almacen, &cuenta).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn catalogo_reclamos(
+    estado: tauri::State<'_, Estado>,
+    quadkeys: Vec<String>,
+) -> Result<Vec<catalogo::Reclamo>, String> {
+    catalogo::reclamos(&estado.almacen, &quadkeys).map_err(|e| e.to_string())
+}
+
 // --- Publicar --------------------------------------------------------------
 
 #[tauri::command]
@@ -1260,7 +1307,12 @@ pub fn run() {
             publicar_previsualizar,
             publicar_arrancar,
             publicar_progreso,
-            publicar_continuar
+            publicar_continuar,
+            catalogo_refrescar,
+            catalogo_buscar,
+            catalogo_perfil,
+            catalogo_mios,
+            catalogo_reclamos
         ])
         .build(tauri::generate_context!())
         .expect("no se pudo arrancar el Lumi Indexer")
