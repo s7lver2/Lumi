@@ -432,9 +432,29 @@ async fn territorio_clasificar(
     fuentes: Vec<String>,
 ) -> Result<territory::Clasificacion, String> {
     let locales = territory::coberturas_locales(&estado.dir.join("paquetes"));
-    // ponytail: el catálogo remoto es del subsistema 8. Hasta entonces solo hay
-    // lo instalado, y la salida es pasar aquí lo que el 8 tenga descargado.
-    territory::clasificar_area(&poligono, &fuentes, &locales, &[]).map_err(|e| e.to_string())
+    let mut c =
+        territory::clasificar_area(&poligono, &fuentes, &locales, &[]).map_err(|e| e.to_string())?;
+
+    // El descuento se aplica ANTES de devolver, para que el coste en euros que
+    // el operador ve ya lleve descontado lo que cubre otro. Ese es el punto
+    // entero del reclamo: si el descuento llegara después, ya habría decidido.
+    let quadkeys: Vec<String> = c.teselas.iter().map(|(q, _)| q.clone()).collect();
+    let reclamos = catalogo::reclamos(&estado.almacen, &quadkeys).map_err(|e| e.to_string())?;
+    let pares: Vec<(String, String)> =
+        reclamos.iter().map(|r| (r.quadkey.clone(), r.fuente.clone())).collect();
+    lumi_index::coverage::descontar_reclamadas(&mut c.teselas, &pares);
+    for (qk, e) in c.teselas.iter_mut() {
+        if let lumi_index::coverage::Estado::Reclamada { paquete, autor } = e {
+            if let Some(r) = reclamos.iter().find(|r| &r.quadkey == qk) {
+                *paquete = r.paquete.clone();
+                *autor = r.autor.clone();
+            }
+        }
+    }
+    let reparto = lumi_index::coverage::repartir(&c.teselas);
+    c.nuevas = reparto.nuevas;
+    c.reclamadas = reparto.reclamadas;
+    Ok(c)
 }
 
 /// Anota como heredadas las teselas que el plan confirmó adjuntar. Se llama al

@@ -26,6 +26,11 @@ pub struct Clasificacion {
     pub locales: usize,
     pub catalogo: usize,
     pub nuevas: usize,
+    /// Las que cubre el paquete de otro operador: no se descargan ni se
+    /// pagan, viajan como dependencia de lo que se publique desde aquí.
+    /// Se rellena en `lib.rs`, que es quien tiene acceso al catálogo remoto
+    /// — `clasificar_area` es lógica pura sin `Almacen`.
+    pub reclamadas: usize,
     pub bytes_a_descargar: u64,
     /// Quién publicó lo que se va a heredar, para poder atribuirlo antes de
     /// empezar y no después.
@@ -65,7 +70,7 @@ pub fn clasificar_area(
 ) -> Result<Clasificacion> {
     let pedidas = teselas_de_poligono(poligono);
     let teselas = clasificar(&pedidas, locales, catalogo);
-    let Reparto { locales: l, catalogo: c, nuevas, bytes_a_descargar } = repartir(&teselas);
+    let Reparto { locales: l, catalogo: c, nuevas, reclamadas, bytes_a_descargar } = repartir(&teselas);
 
     let mut autores: std::collections::BTreeMap<String, u32> = Default::default();
     for (_, e) in &teselas {
@@ -87,6 +92,7 @@ pub fn clasificar_area(
         locales: l,
         catalogo: c,
         nuevas,
+        reclamadas,
         bytes_a_descargar,
         autores,
         por_origen,

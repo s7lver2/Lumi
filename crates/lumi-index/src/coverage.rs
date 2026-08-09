@@ -61,6 +61,36 @@ pub enum Estado {
     Catalogo { indice: String, sha256: String, bytes: u64, atribucion: Atribucion },
     /// No existe en ningún sitio conocido. Es lo único que cuesta cuota y GPU.
     Nuevo,
+    /// La cubre el paquete de OTRO operador, publicado en el catálogo remoto.
+    /// No se descarga —quien indexa no descarga nada de nadie—: se declara
+    /// como dependencia y sale del plan de coste.
+    Reclamada { paquete: String, autor: String },
+}
+
+/// Descuenta del plan lo que ya reclama otro. El reclamo es por
+/// `(quadkey, fuente)`, no por tesela entera: un paquete de una sola fuente no
+/// puede cerrar un territorio entero, y lo local siempre gana sobre lo ajeno
+/// —solo pisa `Estado::Nuevo`—.
+///
+/// ponytail: esta función solo sabe decidir SI una tesela está reclamada, no
+/// POR QUIÉN — el par que recibe es `(quadkey, fuente)`, no `(quadkey,
+/// paquete)`, así que `paquete`/`autor` quedan aquí como marcador. Quien
+/// llama (`territorio_clasificar`, con la lista completa de
+/// `catalogo::Reclamo`) hace una segunda pasada para rellenarlos de verdad;
+/// separar las dos cosas es lo que deja esta función sin depender del tipo
+/// del Indexer.
+pub fn descontar_reclamadas(clasificadas: &mut [(String, Estado)], reclamos: &[(String, String)]) {
+    for (qk, estado) in clasificadas.iter_mut() {
+        if !matches!(estado, Estado::Nuevo) {
+            continue;
+        }
+        // Quién la reclama exactamente —paquete y autor— lo rellena quien
+        // llama a partir de su catálogo: aquí solo se sabe que sale del plan,
+        // y este crate no conoce ninguna tabla de fichas.
+        if reclamos.iter().any(|(rq, _)| rq == qk) {
+            *estado = Estado::Reclamada { paquete: String::new(), autor: String::new() };
+        }
+    }
 }
 
 /// Clasifica cada tesela pedida. Devuelve una entrada por tesela y EN EL MISMO
@@ -111,15 +141,19 @@ fn buscar_catalogo(qk: &str, cobs: &[Cobertura]) -> Option<Estado> {
 
 /// Cuántas teselas de cada clase, que es lo que la interfaz enseña y lo que
 /// decide si el botón de indexar existe siquiera.
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Reparto {
     pub locales: usize,
     pub catalogo: usize,
     pub nuevas: usize,
+    /// Las que cubre otro y por tanto NO se descargan ni se pagan. Contarlas
+    /// aparte es lo que hace que el euro que se enseña sea el real.
+    pub reclamadas: usize,
     pub bytes_a_descargar: u64,
 }
 
 pub fn repartir(clasificadas: &[(String, Estado)]) -> Reparto {
-    let mut r = Reparto { locales: 0, catalogo: 0, nuevas: 0, bytes_a_descargar: 0 };
+    let mut r = Reparto::default();
     for (_, e) in clasificadas {
         match e {
             Estado::Local { .. } => r.locales += 1,
@@ -128,6 +162,7 @@ pub fn repartir(clasificadas: &[(String, Estado)]) -> Reparto {
                 r.bytes_a_descargar += bytes;
             }
             Estado::Nuevo => r.nuevas += 1,
+            Estado::Reclamada { .. } => r.reclamadas += 1,
         }
     }
     r
@@ -194,7 +229,7 @@ pub fn repartir_por_origen(
         for (f, e) in por_fuente {
             let r = fuera
                 .entry(f.clone())
-                .or_insert(Reparto { locales: 0, catalogo: 0, nuevas: 0, bytes_a_descargar: 0 });
+                .or_default();
             match e {
                 Estado::Local { .. } => r.locales += 1,
                 Estado::Catalogo { bytes, .. } => {
@@ -202,6 +237,7 @@ pub fn repartir_por_origen(
                     r.bytes_a_descargar += bytes;
                 }
                 Estado::Nuevo => r.nuevas += 1,
+                Estado::Reclamada { .. } => r.reclamadas += 1,
             }
         }
     }
@@ -211,6 +247,32 @@ pub fn repartir_por_origen(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn una_tesela_reclamada_sale_del_plan() {
+        let mut c = vec![("0313101".to_string(), Estado::Nuevo)];
+        descontar_reclamadas(&mut c, &[("0313101".into(), "mapillary".into())]);
+        assert!(matches!(c[0].1, Estado::Reclamada { .. }));
+    }
+
+    // El reclamo es por (quadkey, fuente): un paquete de una sola fuente no
+    // puede cerrar un territorio entero.
+    #[test]
+    fn reclamar_una_fuente_no_reclama_las_demas() {
+        let mut c = vec![("0313101".to_string(), Estado::Nuevo)];
+        descontar_reclamadas(&mut c, &[("0313101".into(), "commons".into())]);
+        assert!(matches!(c[0].1, Estado::Reclamada { .. }));
+        // …y la clasificación por origen mantiene mapillary como nueva.
+    }
+
+    #[test]
+    fn lo_que_ya_es_local_no_se_reclama() {
+        let mut c = vec![("0313101".to_string(), Estado::Local {
+            indice: "mio".into(), sha256: "aa".into(),
+        })];
+        descontar_reclamadas(&mut c, &[("0313101".into(), "mapillary".into())]);
+        assert!(matches!(c[0].1, Estado::Local { .. }), "lo tuyo gana sobre lo ajeno");
+    }
 
     fn cob(indice: &str, autor: &str, qks: &[&str]) -> Cobertura {
         Cobertura {
