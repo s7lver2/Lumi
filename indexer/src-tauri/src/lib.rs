@@ -976,6 +976,11 @@ async fn identidad_rotar(estado: tauri::State<'_, Estado>) -> Result<Vec<String>
     identidad::rotar(&claves).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn identidad_respaldo_guardar(ruta: String, palabras: Vec<String>) -> Result<(), String> {
+    std::fs::write(&ruta, identidad::respaldo_como_texto(&palabras)).map_err(|e| e.to_string())
+}
+
 // --- Catálogo remoto -------------------------------------------------------
 
 #[tauri::command]
@@ -1397,6 +1402,7 @@ pub fn run() {
             identidad_leer,
             identidad_cerrar,
             identidad_respaldo,
+            identidad_respaldo_guardar,
             identidad_rotar,
             publicar_repos,
             publicar_previsualizar,

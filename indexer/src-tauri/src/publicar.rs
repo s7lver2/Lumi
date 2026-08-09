@@ -32,6 +32,9 @@ const DIA: i64 = 86_400;
 pub struct Repo {
     pub nombre: String,
     pub privado: bool,
+    /// Ya lleva la etiqueta `lumi-index`: es donde ya publicaste algo antes,
+    /// y por eso encabeza la lista en vez de mezclarse con el resto.
+    pub tiene_etiqueta: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -166,6 +169,8 @@ pub async fn repos(testigo: &str) -> Result<Vec<Repo>> {
         full_name: String,
         private: bool,
         permissions: Option<P>,
+        #[serde(default)]
+        topics: Vec<String>,
     }
     #[derive(serde::Deserialize)]
     struct P {
@@ -181,7 +186,11 @@ pub async fn repos(testigo: &str) -> Result<Vec<Repo>> {
         .await?;
     Ok(r.into_iter()
         .filter(|r| r.permissions.as_ref().map(|p| p.push).unwrap_or(false))
-        .map(|r| Repo { nombre: r.full_name, privado: r.private })
+        .map(|r| Repo {
+            nombre: r.full_name,
+            privado: r.private,
+            tiene_etiqueta: r.topics.iter().any(|t| t == "lumi-index"),
+        })
         .collect())
 }
 

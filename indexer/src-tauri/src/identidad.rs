@@ -106,6 +106,22 @@ pub fn respaldo(claves: &Claves<'_>) -> Result<Vec<String>> {
     }
 }
 
+/// El fichero que se guarda en disco al pedir «guardar en un fichero»: las
+/// palabras numeradas, para que copiarlas a mano no dependa de contarlas.
+pub fn respaldo_como_texto(palabras: &[String]) -> String {
+    let cuerpo: String = palabras
+        .iter()
+        .enumerate()
+        .map(|(i, p)| format!("{}. {p}", i + 1))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "Frase de respaldo de Lumi Indexer\n\
+         Es la única copia: sin ella no se puede recuperar la clave de firma.\n\n\
+         {cuerpo}\n"
+    )
+}
+
 /// La huella de la clave guardada, si la hay. La interfaz la enseña tal cual.
 pub fn huella_actual(claves: &Claves<'_>) -> Option<String> {
     let secreta = leer_clave(claves).ok()?;

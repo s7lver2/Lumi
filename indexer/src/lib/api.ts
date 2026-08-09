@@ -180,7 +180,7 @@ export interface DependenciaRota {
   autor: string; quadkeys: number; dias_caida: number;
 }
 
-export interface Repo { nombre: string; privado: boolean }
+export interface Repo { nombre: string; privado: boolean; tiene_etiqueta: boolean }
 export interface TrozoPrevisto { zona: string; quadkeys: number; bytes: number }
 export interface Previsualizacion {
   trozos: TrozoPrevisto[];
@@ -282,6 +282,8 @@ export const api = {
   identidadCerrar: () => invoke<void>("identidad_cerrar"),
   identidadRespaldo: () => invoke<string[]>("identidad_respaldo"),
   identidadRotar: () => invoke<string[]>("identidad_rotar"),
+  identidadRespaldoGuardar: (ruta: string, palabras: string[]) =>
+    invoke<void>("identidad_respaldo_guardar", { ruta, palabras }),
   gastoMes: () => invoke<[number, [string, number, number][]]>("gasto_mes"),
 
   catalogoRefrescar: () => invoke<number>("catalogo_refrescar"),

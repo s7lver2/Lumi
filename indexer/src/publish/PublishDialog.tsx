@@ -22,6 +22,7 @@ export function PublishDialog({ indiceId, nombre, onHecho }: {
   const [paso, setPaso] = useState<Paso>(1);
   const [repos, setRepos] = useState<Repo[]>([]);
   const [repo, setRepo] = useState("");
+  const [filtro, setFiltro] = useState("");
   const [previa, setPrevia] = useState<Previsualizacion | null>(null);
   const [descargo, setDescargo] = useState(false);
   const [progreso, setProgreso] = useState<ProgresoPublicacion | null>(null);
@@ -38,6 +39,11 @@ export function PublishDialog({ indiceId, nombre, onHecho }: {
   }, []);
 
   const hayNoRedistribuibles = (previa?.no_redistribuibles.length ?? 0) > 0;
+  // Los ya etiquetados primero: son donde ya publicaste algo, y es lo que
+  // vas a querer casi siempre en vez de bucear entre repos sin relación.
+  const reposOrdenados = [...repos]
+    .filter((r) => r.nombre.toLowerCase().includes(filtro.trim().toLowerCase()))
+    .sort((a, b) => Number(b.tiene_etiqueta) - Number(a.tiene_etiqueta));
 
   async function publicar() {
     setError(null);
@@ -71,18 +77,47 @@ export function PublishDialog({ indiceId, nombre, onHecho }: {
 
       {paso === 1 && (
         <div className="mt-4">
-          <p className="text-[11px] leading-relaxed text-muted">Elige el repositorio de destino.</p>
-          <div className="mt-2.5 flex flex-col gap-1.5">
-            {repos.map((r) => (
+          <p className="text-[11px] leading-relaxed text-muted">
+            Elige dónde vive. El repositorio recibe la etiqueta <span className="font-mono text-fg">lumi-index</span>,
+            que es como te encuentran los demás.
+          </p>
+
+          {repos.length > 6 && (
+            <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-border bg-panel px-2.5 py-1.5">
+              <Icon name="search" size={12} className="shrink-0 text-subtle" />
+              <input
+                value={filtro}
+                onChange={(e) => setFiltro(e.target.value)}
+                placeholder="Filtrar tus repositorios…"
+                className="w-full bg-transparent text-[11.5px] text-fg outline-none placeholder:text-subtle"
+              />
+            </div>
+          )}
+
+          <div className="mt-2.5 flex max-h-[260px] flex-col gap-1.5 overflow-y-auto">
+            {reposOrdenados.map((r) => (
               <button key={r.nombre} onClick={() => setRepo(r.nombre)}
-                className={`jg-press flex items-center justify-between rounded-lg border px-3 py-2 text-left font-mono text-[11px] ${
-                  repo === r.nombre ? "border-fg/40 bg-white/[.05] text-fg" : "border-border text-muted"}`}>
-                {r.nombre}
-                {r.privado && <span className="text-[10px] text-subtle">privado</span>}
+                className={`jg-press flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left ${
+                  repo === r.nombre ? "border-fg/40 bg-white/[.05]" : "border-border"}`}>
+                <span className={`grid h-3 w-3 shrink-0 place-items-center rounded-full border ${
+                  repo === r.nombre ? "border-fg" : "border-subtle"}`}>
+                  {repo === r.nombre && <span className="h-1.5 w-1.5 rounded-full bg-fg" />}
+                </span>
+                <span className="flex-1 truncate font-mono text-[11px] text-fg">{r.nombre}</span>
+                {r.tiene_etiqueta && (
+                  <span className="rounded-full border border-border px-1.5 py-px text-[9px] text-subtle">
+                    ya tiene la etiqueta
+                  </span>
+                )}
+                {r.privado && <span className="text-[9.5px] text-subtle">privado</span>}
               </button>
             ))}
+            {repos.length > 0 && reposOrdenados.length === 0 && (
+              <p className="text-[11px] text-subtle">Nada con «{filtro.trim()}».</p>
+            )}
             {repos.length === 0 && <p className="text-[11px] text-subtle">Sin repositorios propios todavía.</p>}
           </div>
+
           <div className="mt-4 flex justify-end">
             <button onClick={() => setPaso(2)} disabled={!repo}
               className="jg-press rounded-lg bg-accent px-3.5 py-2 text-[11.5px] font-medium text-black disabled:opacity-40">
