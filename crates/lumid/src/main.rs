@@ -69,6 +69,7 @@ async fn main() -> anyhow::Result<()> {
     use axum::routing::post;
     let router = Router::new()
         .route("/v1/hello", get(routes::hello::get))
+        .route("/v1/catalogo/grafo", get(routes::catalogo::resolver_grafo))
         .route("/v1/claim", post(routes::claim::claim))
         .route("/v1/admin", post(routes::claim::create_admin))
         .route("/v1/auth/login", post(routes::auth::login))

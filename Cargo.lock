@@ -1510,6 +1510,7 @@ dependencies = [
  "futures",
  "image",
  "kamadak-exif",
+ "lumi-index",
  "lumi-proto",
  "nvml-wrapper",
  "rand 0.8.7",

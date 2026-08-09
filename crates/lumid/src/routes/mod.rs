@@ -3,6 +3,7 @@ pub mod admin;
 pub mod analyses;
 pub mod auth;
 pub mod cases;
+pub mod catalogo;
 pub mod claim;
 pub mod hello;
 pub mod images;
