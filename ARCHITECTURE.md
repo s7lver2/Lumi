@@ -135,7 +135,7 @@ spec → plan → implementación, y cada una debe producir software que funcion
 | **6** | **Cliente y proyectos** | Workspaces tipo Burp/Caido, imágenes, historial, mapa | Esqueleto terminado |
 | **7a** | **Lumi Indexer · cimientos** | App Tauri aparte; las tres bases; el paquete de índice troceado; procedencia de imágenes y de trabajo; mapa, territorio y la regla de no indexar dos veces; orígenes locales | Terminado |
 | **7b** | **Lumi Indexer · orígenes de red** | Seis adaptadores tras un contrato por tesela (Mapillary, KartaView, Google, Mapbox Satellite, Commons, Flickr); disponibilidad en el mapa; estimar, confirmar y tope de gasto; descarga reanudable con atribución; qué se puede republicar | Con spec |
-| **8** | **Catálogo de índices** | Publicar e instalar índices cifrados, buscar en el catálogo, ver de qué procedencias está hecho cada uno y en qué proporción | Sin spec |
+| **8** | **Catálogo de índices** | Publicar (trocear, cifrar, firmar, subir) e instalar índices desde repositorios etiquetados `lumi-index`; identidad de firma Ed25519 aparte de la cuenta; reclamo por `(quadkey, fuente)` para no indexar dos veces lo que ya publicó otro; grafo de dependencias transitivas al instalar | **Terminado** |
 | **9** | **Página web del proyecto** | El sitio público, a partir de mockups que aporta el owner | Sin spec |
 
 **Orden acordado:** `1 → 2 → 6 (esqueleto) → 4 → 7a → 7b → 8 → 5 → 3 → 9`. El razonamiento: el
@@ -175,7 +175,12 @@ spec → plan cuando le toque, y el owner aportará el detalle entonces.
   respuesta es parte de poder defenderla. El segundo: el formato de publicación pasa a estar
   **troceado por tesela y direccionado por contenido**, con cifrado por fragmento, para que
   se pueda descargar una parte, republicar solo lo que cambió y heredar el trabajo de otro
-  de forma comprobable.
+  de forma comprobable. Implementado según
+  [`specs/2026-08-09-lumi-indexer-8-design.md`](docs/superpowers/specs/2026-08-09-lumi-indexer-8-design.md):
+  identidad de firma Ed25519 separada de la cuenta (un repositorio transferido no cambia de
+  autor), descubrimiento sin servidor por etiqueta de repositorio, reclamo `(quadkey, fuente)`
+  que descuenta del coste antes de estimar, y un grafo de dependencias que es también el árbol
+  de con quién se hizo cada índice.
 - **9 · Página web.** A partir de mockups que aportará el owner; hay que revisarlos y
   detallarlos antes de escribir la spec.
 

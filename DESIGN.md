@@ -107,6 +107,12 @@ lumi-tumble-fall  restos cayendo en estado degradado
 Añadidos de la v2: `jg-alert-pulse` (opacidad .5→1, 2.2s, solo el `!` del triángulo),
 `jg-scan` (arcos de señal en secuencia, desfase 0.18s).
 
+Añadidos del subsistema 8: `jg-tile-sweep` (opacidad 0→1, .42s, un grupo de teselas
+reclamadas se abre hacia fuera con desfase por distancia al centro del grupo, no por orden
+en el DOM), `jg-stroke-draw` (`stroke-dashoffset`, el check de un asset publicado se dibuja
+en vez de aparecer), `jg-strike` (`scaleX` 0→1 sobre una línea, el precio anterior se tacha
+trazando en vez de apareciendo ya tachado).
+
 Apertura del candado: el arco sube 2.2px y gira −17° sobre su base izquierda en 0.75s
 `ease-out-expo`, deja de respirar y su color transiciona de `warning` a `fg` en 0.5s.
 

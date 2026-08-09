@@ -15,7 +15,10 @@
 - **No hay verde** en la paleta. "Completado" se representa en blanco (`fg`). Colores solo de la tabla de `DESIGN.md`.
 - Todo dato producido por una máquina (quadkeys, bytes, euros, timestamps, hashes, rutas) va en `font-mono`.
 - **Solo se apunta en el libro de gasto lo que el proveedor sirvió de verdad.** Una petición fallida no se cobra ni se cuenta.
-- **Lo no redistribuible no se publica en absoluto**, ni imagen ni vector.
+- **Lo no redistribuible viaja con advertencia y descargo** (regla revisada en el subsistema 8): nunca a escondidas, y siempre imagen y vector juntos — un vector sin su imagen no se puede verificar. *(Corregido por el
+  subsistema 8: el contenido sigue sin viajar tal cual, pero la ficha ya no queda muda sobre su
+  uso — declara qué fuentes se usaron y publicar exige un descargo explícito del operador. Ver
+  `specs/2026-08-07-lumi-indexer-7b-design.md`.)*
 - El filtro barato se evalúa **antes de descargar el píxel**. Ese es el motivo de que exista: descartar sin gastar.
 - Los tests existentes no se rompen: 26 en `lumi-index`, 33 en `indexer/src-tauri`. Cada tarea los deja en verde o más.
 - Comandos de verificación: `cargo test -p lumi-index`, `cargo test` en `indexer/src-tauri`, `cargo clippy -- -D warnings`, y en `indexer/`: `npx tsc -b --noEmit && npm run lint && npm run build`.

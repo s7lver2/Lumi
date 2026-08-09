@@ -306,10 +306,23 @@ Lo tentador es publicar el vector de una imagen no redistribuible aunque no viaj
 vector sin su imagen le da al receptor un candidato que no puede verificar nunca. Es peso y
 ruido a cambio de nada.
 
-**Decisión: lo no redistribuible no se publica, ni su imagen ni su vector.** El índice local
+**Decisión (revisada en el subsistema 8): lo no redistribuible viaja con advertencia y
+descargo, no «en absoluto».** Publicarlo queda tras una casilla obligatoria que deja claro que
+la responsabilidad y cualquier reclamación de retirada son de quien publica, no de Lumi, y que
+si el asset se retira las teselas que reclama vuelven a quedar libres. Lo que no cambia es el
+razonamiento de arriba: un vector sin su imagen no se puede verificar, así que o viajan los
+dos o no viaja ninguno. El índice local
 lo guarda todo y lo usa todo; publicar es un filtro sobre la copia que sale, no un borrado.
 El manifiesto lo dice con números en vez de con una nota —«esta tesela se indexó con 340
 imágenes, de las que viajan 210»— reutilizando la maquinaria de porcentajes del 7a.
+
+**Corregido por el subsistema 8:** el filtro de qué sale del paquete no cambia —lo no
+redistribuible sigue sin viajar, ni imagen ni vector—, pero antes esa exclusión quedaba
+muda. Ahora la ficha declara qué fuentes se usaron para indexar aunque no viajen
+(`Ficha::no_redistribuible`), y publicar exige un descargo explícito del operador cuando esa
+lista no está vacía: **«no viaja en absoluto»** sigue siendo cierto sobre el contenido, pero
+deja de ser **silencioso** sobre su uso. Quien instale sigue sin heredar esa cobertura, tal
+como describe la sección siguiente.
 
 ### La consecuencia sobre la regla de no indexar dos veces
 

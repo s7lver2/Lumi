@@ -158,6 +158,32 @@ que pasa las reglas resulta insoportable en la práctica.
 
 ---
 
+## Catálogo de índices (subsistema 8)
+
+### El árbol de dependencias dibujado
+
+`InstallDialog` (Lumi Station) resuelve el grafo y suma el peso, pero lo enseña como una
+lista, no como un árbol con sus conectores. El grafo (`lumi_index::grafo::resolver`) ya trae
+la profundidad de cada nodo; falta solo el dibujo. Se aparcó porque la lista ya deja decidir
+—peso total, cobertura, quién falta— y un árbol visual es una mejora de lectura, no de
+información.
+
+### Perfiles ricos de publicador
+
+`ProfileDialog` hoy es estadística que sale de sumar las fichas conocidas: publicaciones,
+teselas cubiertas. Lo que falta es lo que no se puede calcular sin un servidor: reputación,
+avales de otros operadores, historial de desreclamos por baja calidad. Es contenido del
+subsistema 9, no de este.
+
+### El criterio de calidad para desreclamar
+
+`catalogo::refrescar_desreclamos` ya trae la lista y la aplica —solo puede quitar reclamos,
+nunca añadirlos—, pero **qué cuenta como motivo válido para desreclamar** (calidad, DMCA,
+abuso) lo decide la web del subsistema 9, que todavía no existe. Hasta entonces la lista
+vive vacía y todo reclamo válido se mantiene.
+
+---
+
 ## Transversales
 
 ### Panel de administración real
@@ -206,3 +232,16 @@ Con un único dispositivo y dos personas alternando modelos, cargar pesos puede 
 tiempo total. Con varias GPUs no pasa, porque preferir al que ya tiene el modelo cargado las
 especializa solas. La salida, si duele, es agrupar los candidatos por modelo antes de
 repartir: un cambio dentro de `plan.rs`.
+
+### Lo que el subsistema 8 deja a propósito para el 9
+
+- **El árbol dibujado.** `InstallDialog` pinta el grafo con sangría y conectores de texto; el
+  árbol como pieza gráfica —el «hecho con la colaboración de» que se enseña fuera de la
+  aplicación— es de la web.
+- **Los perfiles ricos.** `catalogo::perfil` sale de las fichas y no de ningún servicio:
+  publicaciones, teselas y poco más. Biografía, avatares y estadísticas de verdad necesitan un
+  sitio donde vivir, y ese sitio es el 9.
+- **El criterio de calidad para desreclamar.** El Indexer solo manda paquete y motivo escrito
+  por el operador; qué cuenta como baja calidad lo decide el 9. La asimetría es deliberada: la
+  web puede QUITAR reclamos, nunca añadirlos, y por eso el producto sigue funcionando entero
+  si la web no responde.
