@@ -6,11 +6,13 @@
 
 mod crypto;
 mod download;
+mod identidad;
 mod ingest;
 mod keys;
 mod models;
 mod origins;
 mod package;
+mod perf;
 mod probe;
 mod qdrant;
 mod queue;
@@ -41,6 +43,22 @@ pub struct Estado {
     /// La descarga de red en curso, si hay alguna. Se reemplaza entera al
     /// arrancar una nueva: solo hay una a la vez.
     pub descarga: std::sync::Mutex<Option<Arc<download::Descarga>>>,
+    /// La importación legacy en curso, si hay alguna. Mismo patrón que
+    /// `descarga`: un paquete real tarda segundos en descifrarse y parsear, y
+    /// sin este estado el comando de progreso no tiene nada que leer.
+    pub ingesta: std::sync::Mutex<Option<Arc<ingest::Ingesta>>>,
+    /// El sondeo de disponibilidad en curso, si hay alguno. Mismo patrón:
+    /// un área grande sondea muchas teselas contra varios orígenes a la vez,
+    /// y sin este estado no hay dónde leer lo que ya ha llegado.
+    pub sondeo: std::sync::Mutex<Option<Arc<probe::Sondeo>>>,
+    /// El sellado en curso, si hay alguno. Mismo patrón que `descarga` e
+    /// `ingesta`: sellar miles de imágenes tarda, y sin este estado el
+    /// comando de progreso no tiene nada que leer.
+    pub sellado: std::sync::Mutex<Option<Arc<package::Sellado>>>,
+    /// El código de dispositivo en vuelo entre `arrancar` y `sondear`. En
+    /// memoria y no en disco: si la aplicación se cierra a mitad, el código
+    /// caduca solo y volver a empezar cuesta un clic.
+    pub identidad_en_curso: std::sync::Mutex<Option<(String, String)>>, // (proveedor, device_code)
 }
 
 /// Dónde vive todo. `LUMI_INDEXER_DATA` existe para poder correr una instancia
@@ -62,6 +80,11 @@ fn saludo(estado: tauri::State<'_, Estado>) -> serde_json::Value {
         "so": std::env::consts::OS,
         "dir": estado.dir.display().to_string(),
     })
+}
+
+#[tauri::command]
+async fn rendimiento_leer() -> Result<perf::Rendimiento, String> {
+    tokio::task::spawn_blocking(perf::leer).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -92,6 +115,54 @@ fn servicios_log(estado: tauri::State<'_, Estado>, desde: usize) -> Vec<String> 
 }
 
 #[tauri::command]
+async fn servicios_diagnostico(estado: tauri::State<'_, Estado>) -> Result<services::Diagnostico, String> {
+    Ok(estado.servicios.diagnostico().await)
+}
+
+/// Cuánto del fichero de log se enseña y se copia. No todo: con TRACE de
+/// reqwest de por medio, un fichero de 8 MB no cabe cómodo en una caja de
+/// texto ni en un mensaje. La cola es lo que importa cuando algo acaba de
+/// pasar, que es para lo que existe esta pestaña.
+const DEBUG_LOG_TOPE_BYTES: usize = 300_000;
+
+#[tauri::command]
+fn debug_log_leer(app: tauri::AppHandle) -> Result<String, String> {
+    let ruta = app.path().app_log_dir().map_err(|e| e.to_string())?.join("indexer.log");
+    let bytes = std::fs::read(&ruta).map_err(|e| format!("{}: {e}", ruta.display()))?;
+    let desde = bytes.len().saturating_sub(DEBUG_LOG_TOPE_BYTES);
+    // Cortar en un byte cualquiera puede caer en mitad de un carácter UTF-8;
+    // se avanza hasta el siguiente arranque de carácter válido en vez de
+    // fallar la lectura entera por un corte a ciegas.
+    let desde = desde + bytes[desde..].iter().take_while(|b| (**b & 0b1100_0000) == 0b1000_0000).count();
+    Ok(String::from_utf8_lossy(&bytes[desde..]).into_owned())
+}
+
+/// La clave en `ajustes` que dice si el asistente inicial ya se completó una
+/// vez. Sin esto, cada arranque volvía a enseñar "Servicios / Runtime /
+/// Modelos" aunque todo siguiera instalado — tres clics de "Continuar" para
+/// no decidir nada, cada vez que se abre la app.
+const CLAVE_SETUP_COMPLETO: &str = "setup_completo";
+
+#[tauri::command]
+fn setup_completo(estado: tauri::State<'_, Estado>) -> bool {
+    estado.almacen.leer_ajuste(CLAVE_SETUP_COMPLETO).ok().flatten().as_deref() == Some("1")
+}
+
+#[tauri::command]
+fn setup_marcar_completo(estado: tauri::State<'_, Estado>) -> Result<(), String> {
+    estado.almacen.guardar_ajuste(CLAVE_SETUP_COMPLETO, "1").map_err(|e| e.to_string())
+}
+
+/// Repetir el asistente no es un reseteo de nada: solo hace que el próximo
+/// arranque (o la vuelta desde Ajustes, sin ni reabrir la app) vuelva a
+/// enseñarlo. Lo instalado —runtime, modelos, servicios— sigue exactamente
+/// como estaba.
+#[tauri::command]
+fn setup_reiniciar(estado: tauri::State<'_, Estado>) -> Result<(), String> {
+    estado.almacen.borrar_ajuste(CLAVE_SETUP_COMPLETO).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn modelos_lista(estado: tauri::State<'_, Estado>) -> Vec<models::Modelo> {
     estado.modelos.clone()
 }
@@ -107,13 +178,71 @@ async fn runtime_instalar(estado: tauri::State<'_, Estado>) -> Result<(), String
 }
 
 #[tauri::command]
-fn cola_progreso(estado: tauri::State<'_, Estado>) -> queue::Progreso {
+fn cola_progreso(estado: tauri::State<'_, Estado>) -> Vec<queue::Progreso> {
     estado.cola.progreso()
+}
+
+#[derive(serde::Serialize)]
+struct ProgresoIndiceEmbed {
+    modelo_id: String,
+    hechas: u32,
+    total: u32,
+    /// Si el trabajador de este modelo está en ESTE índice ahora mismo, o
+    /// está ocupado con otro y este se queda esperando su turno. Sin esto,
+    /// dos índices con trabajo pendiente a la vez se veían idénticos aunque
+    /// uno estuviera avanzando y el otro ni hubiera empezado.
+    activo: bool,
+    lote_hechas: u32,
+    lote_total: u32,
+    pausada: bool,
+    guardado_fallos: u32,
+}
+
+/// El progreso de embebido de ESTE índice, por modelo — no el de cualquiera
+/// que la cola tenga entre manos ahora mismo. `cola_progreso` refleja el
+/// trabajador entero, que procesa los índices con pendientes en orden y por
+/// turnos: con dos índices a la vez, la fila de un modelo podía enseñar el
+/// total de UNO mientras se miraba el detalle del OTRO, y los dos números no
+/// tenían nada que ver entre sí.
+#[tauri::command]
+fn indice_progreso_embebido(
+    estado: tauri::State<'_, Estado>,
+    id: i64,
+) -> Result<Vec<ProgresoIndiceEmbed>, String> {
+    let cola = estado.cola.progreso();
+    estado
+        .modelos
+        .iter()
+        .map(|m| {
+            let (hechas, total) = estado.almacen.progreso_indice(id, &m.id).map_err(|e| e.to_string())?;
+            let fila = cola.iter().find(|p| p.modelo_id == m.id);
+            let activo = fila.is_some_and(|p| p.indice_actual == Some(id));
+            Ok(ProgresoIndiceEmbed {
+                modelo_id: m.id.clone(),
+                hechas,
+                total,
+                activo,
+                lote_hechas: if activo { fila.map(|p| p.hechas).unwrap_or(0) } else { 0 },
+                lote_total: if activo { fila.map(|p| p.total).unwrap_or(0) } else { 0 },
+                pausada: fila.is_some_and(|p| p.pausada),
+                guardado_fallos: if activo { fila.map(|p| p.guardado_fallos).unwrap_or(0) } else { 0 },
+            })
+        })
+        .collect()
 }
 
 #[tauri::command]
 fn cola_pausar(estado: tauri::State<'_, Estado>, pausada: bool) {
     estado.cola.pausar(pausada);
+}
+
+/// La guarda de «sellar es irreversible»: se llama al principio de todo
+/// comando que escribe contra un `indice_id` ya elegido, antes de tocar nada.
+fn exige_abierto(estado: &Estado, indice_id: i64) -> Result<(), String> {
+    if estado.almacen.indice_sellado(indice_id).map_err(|e| e.to_string())? {
+        return Err("este índice está sellado: un paquete sellado no se sigue llenando".into());
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -125,6 +254,7 @@ fn ingesta_carpeta(
     fuente: String,
     licencia: Option<String>,
 ) -> Result<ingest::Resumen, String> {
+    exige_abierto(&estado, indice_id)?;
     let modelos: Vec<String> = estado.modelos.iter().map(|m| m.id.clone()).collect();
     ingest::desde_carpeta(
         &estado.almacen,
@@ -141,6 +271,8 @@ fn ingesta_carpeta(
 #[derive(serde::Serialize)]
 struct DetalleIndice {
     nombre: String,
+    slug: String,
+    estado: String,
     imagenes: lumi_index::manifest::PorcentajesImagenes,
     trabajo: Vec<(String, u32, f64)>,
 }
@@ -149,16 +281,18 @@ struct DetalleIndice {
 fn indice_detalle(estado: tauri::State<'_, Estado>, id: i64) -> Result<DetalleIndice, String> {
     let filas = estado.almacen.filas_procedencia(id).map_err(|e| e.to_string())?;
     let teselas = estado.almacen.teselas_trabajo(id).map_err(|e| e.to_string())?;
-    let nombre = estado
+    let (nombre, slug, estado_str) = estado
         .almacen
         .listar_indices()
         .map_err(|e| e.to_string())?
         .into_iter()
         .find(|(i, ..)| *i == id)
-        .map(|(_, n, ..)| n)
+        .map(|(_, n, s, e)| (n, s, e))
         .unwrap_or_default();
     Ok(DetalleIndice {
         nombre,
+        slug,
+        estado: estado_str,
         imagenes: lumi_index::manifest::porcentajes(&filas),
         trabajo: lumi_index::manifest::porcentajes_trabajo(&teselas),
     })
@@ -181,6 +315,40 @@ fn indice_lotes(estado: tauri::State<'_, Estado>, id: i64) -> Result<Vec<LoteRes
         .into_iter()
         .map(|(id, clase, origen, estado)| LoteResumen { id, clase, origen, estado })
         .collect())
+}
+
+#[tauri::command]
+fn lote_cancelar(estado: tauri::State<'_, Estado>, id: i64) -> Result<bool, String> {
+    estado.almacen.cancelar_lote(id).map_err(|e| e.to_string())
+}
+
+/// Borra un índice entero. Los ficheros de imagen en disco y los puntos ya
+/// subidos a Qdrant se limpian aparte, no por SQLite; lo de Qdrant es
+/// best-effort a propósito — un punto huérfano ahí no hace daño, pero
+/// bloquear el borrado porque Qdrant no respondió sí lo haría.
+#[tauri::command]
+async fn indice_borrar(estado: tauri::State<'_, Estado>, id: i64) -> Result<(), String> {
+    let hechos = estado.almacen.vectores_hechos_de_indice(id).map_err(|e| e.to_string())?;
+    estado.almacen.borrar_indice(id).map_err(|e| e.to_string())?;
+
+    let dir = estado.dir.join("imagenes").join(id.to_string());
+    let _ = std::fs::remove_dir_all(&dir);
+
+    if !hechos.is_empty() {
+        let mut por_modelo: std::collections::BTreeMap<String, Vec<i64>> = Default::default();
+        for (modelo, imagen_id) in hechos {
+            por_modelo.entry(modelo).or_default().push(imagen_id);
+        }
+        let cliente = qdrant::Cliente::nuevo();
+        for (modelo_id, ids) in por_modelo {
+            let Some(m) = estado.modelos.iter().find(|m| m.id == modelo_id) else { continue };
+            let coleccion = qdrant::coleccion_de(&m.id, &m.version);
+            if let Err(e) = cliente.borrar(&coleccion, &ids).await {
+                log::warn!("indice {id}: no se pudieron borrar {} puntos de {coleccion}: {e}", ids.len());
+            }
+        }
+    }
+    Ok(())
 }
 
 #[derive(serde::Serialize)]
@@ -243,6 +411,13 @@ fn indices_lista(estado: tauri::State<'_, Estado>) -> Result<Vec<ResumenIndice>,
         .collect()
 }
 
+/// Los puntos y metadatos de un índice, para el visor de mapa/galería que se
+/// abre desde «Abrir en mapa» en el detalle del índice.
+#[tauri::command]
+fn indice_imagenes(estado: tauri::State<'_, Estado>, id: i64) -> Result<Vec<store::FilaMapa>, String> {
+    estado.almacen.imagenes_mapa(id).map_err(|e| e.to_string())
+}
+
 /// El polígono dibujado, ya clasificado tesela a tesela contra lo local y lo
 /// publicado. Sin catálogo remoto todavía (el 8), así que por ahora solo mira
 /// lo local — el mismo camino de código que usará el 8 cuando exista.
@@ -267,6 +442,7 @@ fn territorio_heredar(
     indice_id: i64,
     heredadas: Vec<(String, String, String)>,
 ) -> Result<(), String> {
+    exige_abierto(&estado, indice_id)?;
     for (qk, indice_fuente, sha256) in &heredadas {
         estado
             .almacen
@@ -291,13 +467,32 @@ async fn origenes_lista(estado: tauri::State<'_, Estado>) -> Result<Vec<probe::F
     Ok(probe::fichas(&origenes_de(&estado)))
 }
 
+/// Arranca el sondeo en segundo plano y vuelve enseguida: todas las
+/// combinaciones origen×tesela salen a la vez, y esperar aquí a que
+/// terminaran todas era exactamente lo que dejaba el mapa entero en gris
+/// hasta el final en vez de ir coloreándose. El progreso se lee aparte, con
+/// `sondear_area_progreso`.
 #[tauri::command]
-async fn sondear_area(
+async fn sondear_area_arrancar(
     estado: tauri::State<'_, Estado>,
     teselas: Vec<String>,
-) -> Result<Vec<probe::SondeoTesela>, String> {
-    let o = origenes_de(&estado);
-    Ok(probe::sondear_area(&estado.almacen, &o, &teselas).await)
+) -> Result<(), String> {
+    let origenes = origenes_de(&estado);
+    let almacen = estado.almacen.clone();
+    let total = (origenes.len() * teselas.len()) as u32;
+    let s = Arc::new(probe::Sondeo::nuevo(total));
+    *estado.sondeo.lock().unwrap() = Some(s.clone());
+    tauri::async_runtime::spawn(async move {
+        probe::sondear_area(almacen, origenes, teselas, s).await;
+    });
+    Ok(())
+}
+
+#[tauri::command]
+async fn sondear_area_progreso(
+    estado: tauri::State<'_, Estado>,
+) -> Result<probe::ProgresoSondeo, String> {
+    Ok(estado.sondeo.lock().unwrap().as_ref().map(|s| s.progreso()).unwrap_or_default())
 }
 
 #[tauri::command]
@@ -316,7 +511,15 @@ async fn descarga_arrancar(
     indice_id: i64,
     nuevas: std::collections::BTreeMap<String, Vec<String>>,
     presupuesto_eur: f64,
+    imagenes_estimadas: u32,
 ) -> Result<(), String> {
+    exige_abierto(&estado, indice_id)?;
+    // Se escribe ANTES de arrancar: si la app se cierra en el segundo entre
+    // esto y el primer progreso, el plan ya quedó anotado y es reanudable.
+    let plan = download::PlanDescarga { indice_id, nuevas: nuevas.clone(), presupuesto_eur, imagenes_estimadas };
+    if let Ok(json) = serde_json::to_string(&plan) {
+        let _ = estado.almacen.guardar_ajuste(download::CLAVE_PLAN_PENDIENTE, &json);
+    }
     let origenes = origenes_de(&estado);
     let modelos: Vec<String> = estado.modelos.iter().map(|m| m.id.clone()).collect();
     let d = std::sync::Arc::new(download::Descarga::nueva(
@@ -327,10 +530,7 @@ async fn descarga_arrancar(
     ));
     *estado.descarga.lock().unwrap() = Some(d.clone());
     tauri::async_runtime::spawn(async move {
-        for o in &origenes {
-            let Some(teselas) = nuevas.get(o.id()) else { continue };
-            d.un_origen(o, teselas).await;
-        }
+        d.correr(&origenes, &nuevas).await;
     });
     Ok(())
 }
@@ -346,6 +546,38 @@ async fn descarga_parar(estado: tauri::State<'_, Estado>) -> Result<(), String> 
         d.parar();
     }
     Ok(())
+}
+
+#[derive(serde::Serialize)]
+struct PlanPendiente {
+    plan: download::PlanDescarga,
+    nombre_indice: String,
+}
+
+/// Lo que quedó anotado si la app se cerró a mitad de una descarga. `None` en
+/// el caso normal (nunca hubo una, o la última terminó bien). Si el índice ya
+/// no existe —se borró entretanto— el plan es basura y se limpia solo.
+#[tauri::command]
+fn descarga_pendiente(estado: tauri::State<'_, Estado>) -> Result<Option<PlanPendiente>, String> {
+    let Some(json) = estado.almacen.leer_ajuste(download::CLAVE_PLAN_PENDIENTE).map_err(|e| e.to_string())? else {
+        return Ok(None);
+    };
+    let Ok(plan) = serde_json::from_str::<download::PlanDescarga>(&json) else {
+        let _ = estado.almacen.borrar_ajuste(download::CLAVE_PLAN_PENDIENTE);
+        return Ok(None);
+    };
+    match estado.almacen.nombre_de_indice(plan.indice_id) {
+        Ok(Some(nombre_indice)) => Ok(Some(PlanPendiente { nombre_indice, plan })),
+        _ => {
+            let _ = estado.almacen.borrar_ajuste(download::CLAVE_PLAN_PENDIENTE);
+            Ok(None)
+        }
+    }
+}
+
+#[tauri::command]
+fn descarga_pendiente_descartar(estado: tauri::State<'_, Estado>) -> Result<(), String> {
+    estado.almacen.borrar_ajuste(download::CLAVE_PLAN_PENDIENTE).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -438,34 +670,59 @@ async fn gasto_mes(estado: tauri::State<'_, Estado>) -> Result<(f64, GastoPorOri
 #[tauri::command]
 fn mapbox_clave_guardar(estado: tauri::State<'_, Estado>, clave: String) -> Result<(), String> {
     let sellado = estado.maestra.sellar(clave.as_bytes()).map_err(|e| e.to_string())?;
-    estado.almacen.guardar_ajuste_sellado("mapbox", &sellado).map_err(|e| e.to_string())
+    estado.almacen.guardar_ajuste_sellado(keys::CLAVE_MAPBOX, &sellado).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn mapbox_clave_leer(estado: tauri::State<'_, Estado>) -> Result<Option<String>, String> {
-    let Some(sellado) = estado.almacen.leer_ajuste_sellado("mapbox").map_err(|e| e.to_string())? else {
+    let Some(sellado) = estado.almacen.leer_ajuste_sellado(keys::CLAVE_MAPBOX).map_err(|e| e.to_string())? else {
         return Ok(None);
     };
     let claro = estado.maestra.abrir(&sellado).map_err(|e| e.to_string())?;
     String::from_utf8(claro).map(Some).map_err(|e| e.to_string())
 }
 
-/// Sella un índice: cuenta filas contra vectores, se niega si no cuadran, y
-/// solo entonces escribe un solo byte. El paquete resultante lleva binario e
-/// int8 de cada modelo, las imágenes, el manifiesto, la cobertura y
-/// SHA256SUMS.
+/// Arranca el sellado en segundo plano y vuelve enseguida: cuenta filas
+/// contra vectores, se niega si no cuadran, y solo entonces escribe un solo
+/// byte. El progreso se lee aparte, con `paquete_sellar_progreso`.
 #[tauri::command]
-async fn paquete_sellar(
+async fn paquete_sellar_arrancar(
     estado: tauri::State<'_, Estado>,
     indice_id: i64,
     destino: String,
+) -> Result<(), String> {
+    exige_abierto(&estado, indice_id)?;
+    let almacen = estado.almacen.clone();
+    let modelos = estado.modelos.clone();
+    let s = Arc::new(package::Sellado::nuevo(0));
+    *estado.sellado.lock().unwrap() = Some(s.clone());
+    tauri::async_runtime::spawn(async move {
+        let r = sellar(&almacen, &modelos, indice_id, &destino, &s).await;
+        s.terminar(r);
+    });
+    Ok(())
+}
+
+#[tauri::command]
+fn paquete_sellar_progreso(estado: tauri::State<'_, Estado>) -> package::ProgresoSellado {
+    estado.sellado.lock().unwrap().as_ref().map(|s| s.progreso()).unwrap_or_default()
+}
+
+/// El sellado de verdad. El paquete resultante lleva binario e int8 de cada
+/// modelo, las imágenes, el manifiesto, la cobertura y SHA256SUMS.
+async fn sellar(
+    almacen: &store::Almacen,
+    modelos: &[models::Modelo],
+    indice_id: i64,
+    destino: &str,
+    prog: &package::Sellado,
 ) -> Result<package::Informe, String> {
-    let modelos: Vec<&models::Modelo> = estado.modelos.iter().collect();
-    let esperadas = estado.almacen.total_imagenes(indice_id).map_err(|e| e.to_string())?;
+    prog.etapa("comprobando");
+    let esperadas = almacen.total_imagenes(indice_id).map_err(|e| e.to_string())?;
 
     let mut por_modelo = Vec::new();
-    for m in &modelos {
-        let hechos = estado.almacen.vectores_hechos(indice_id, &m.id).map_err(|e| e.to_string())?;
+    for m in modelos {
+        let hechos = almacen.vectores_hechos(indice_id, &m.id).map_err(|e| e.to_string())?;
         por_modelo.push((m.id.clone(), esperadas, hechos));
     }
     let cuadra = por_modelo.iter().all(|(_, e, v)| e == v);
@@ -474,14 +731,14 @@ async fn paquete_sellar(
     // Se aborta ANTES de escribir un solo byte si las cuentas no cuadran.
     package::comprobar(&informe).map_err(|e| e.to_string())?;
 
-    let raiz = std::path::PathBuf::from(&destino);
+    let raiz = std::path::PathBuf::from(destino);
     std::fs::create_dir_all(&raiz).map_err(|e| e.to_string())?;
-    let imagenes = estado.almacen.imagenes_de_indice(indice_id).map_err(|e| e.to_string())?;
+    let imagenes = almacen.imagenes_de_indice(indice_id).map_err(|e| e.to_string())?;
 
     // Lo que no redistribuye no sale del paquete: ni la imagen ni su vector.
     // El motor verifica geométricamente contra la imagen, así que un vector
     // sin ella le daría al receptor un candidato sin verificar nunca.
-    let publicables = estado.almacen.filas_publicables(indice_id).map_err(|e| e.to_string())?;
+    let publicables = almacen.filas_publicables(indice_id).map_err(|e| e.to_string())?;
     let viajan: std::collections::HashSet<i64> = publicables
         .iter()
         .filter(|f| package::redistribucion_de(&f.fuente).viaja(f.licencia.as_deref()))
@@ -498,17 +755,26 @@ async fn paquete_sellar(
         por_qk.entry(qk.clone()).or_default().push((*id, ruta.clone()));
     }
 
+    // El total real: un paso por fragmento (modelo × quadkey publicable) y
+    // uno por imagen que viaja. Se fija aquí, justo antes del primer avance,
+    // porque hasta ahora no se conocía cuánto de verdad viaja.
+    let imagenes_que_viajan = imagenes.iter().filter(|(id, ..)| viajan.contains(id)).count();
+    prog.fijar_total((por_qk.len() * modelos.len() + imagenes_que_viajan) as u32);
+    prog.etapa("vectores");
+
     let qdrant = qdrant::Cliente::nuevo();
-    for m in &modelos {
+    for m in modelos {
         let coleccion = qdrant::coleccion_de(&m.id, &m.version);
         for (qk, filas) in &por_qk {
             let ids: Vec<i64> = filas.iter().map(|(id, _)| *id).collect();
             let vectores = qdrant.leer(&coleccion, &ids).await.map_err(|e| e.to_string())?;
             let dir = raiz.join("fragmentos").join(qk);
             package::escribir_fragmento(&dir, &m.id, &m.version, &vectores).map_err(|e| e.to_string())?;
+            prog.avanzar();
         }
     }
 
+    prog.etapa("imágenes");
     let imgs_dir = raiz.join("imagenes");
     std::fs::create_dir_all(&imgs_dir).map_err(|e| e.to_string())?;
     for (id, ruta, _) in &imagenes {
@@ -521,14 +787,16 @@ async fn paquete_sellar(
             // carpeta local nunca se toca.
             let _ = std::fs::copy(origen, imgs_dir.join(nombre));
         }
+        prog.avanzar();
     }
 
-    let filas_proc = estado.almacen.filas_procedencia(indice_id).map_err(|e| e.to_string())?;
-    let teselas_trab = estado.almacen.teselas_trabajo(indice_id).map_err(|e| e.to_string())?;
+    prog.etapa("manifiesto");
+    let filas_proc = almacen.filas_procedencia(indice_id).map_err(|e| e.to_string())?;
+    let teselas_trab = almacen.teselas_trabajo(indice_id).map_err(|e| e.to_string())?;
     let manifiesto = lumi_index::manifest::Manifiesto {
         version: 1,
-        nombre: destino.clone(),
-        slug: destino.clone(),
+        nombre: destino.to_string(),
+        slug: destino.to_string(),
         sellado_en: chrono_ahora(),
         version_indexer: env!("CARGO_PKG_VERSION").to_string(),
         modelos: modelos.iter().map(|m| (m.id.clone(), m.version.clone(), m.dims)).collect(),
@@ -561,7 +829,7 @@ async fn paquete_sellar(
     }
     let cobertura = lumi_index::coverage::Cobertura {
         version: 1,
-        indice: destino.clone(),
+        indice: destino.to_string(),
         sellado_en: chrono_ahora(),
         atribucion: lumi_index::coverage::Atribucion {
             autor: String::new(),
@@ -576,8 +844,9 @@ async fn paquete_sellar(
     )
     .map_err(|e| e.to_string())?;
 
+    prog.etapa("firmando");
     package::firmar(&raiz).map_err(|e| e.to_string())?;
-    estado.almacen.sellar_indice(indice_id, &destino).map_err(|e| e.to_string())?;
+    almacen.sellar_indice(indice_id, destino).map_err(|e| e.to_string())?;
 
     Ok(informe)
 }
@@ -597,7 +866,79 @@ fn paquete_abrir(ruta: String) -> Result<(), String> {
     package::verificar(std::path::Path::new(&ruta)).map_err(|e| e.to_string())
 }
 
-fn chrono_ahora() -> String {
+// --- Identidad -------------------------------------------------------------
+//
+// La identidad es opcional: sin ella la aplicación funciona entera menos
+// publicar. Por eso ningún otro comando la consulta.
+
+#[tauri::command]
+async fn identidad_arrancar(
+    estado: tauri::State<'_, Estado>,
+    proveedor: String,
+) -> Result<identidad::CodigoDispositivo, String> {
+    let (codigo, device_code) =
+        identidad::arrancar(&proveedor).await.map_err(|e| e.to_string())?;
+    *estado.identidad_en_curso.lock().unwrap() = Some((proveedor, device_code));
+    Ok(codigo)
+}
+
+#[tauri::command]
+async fn identidad_sondear(
+    estado: tauri::State<'_, Estado>,
+) -> Result<Option<identidad::Sesion>, String> {
+    // El candado se suelta antes del `await`: un guard vivo cruzando un punto
+    // de espera no es `Send` y el comando no compilaría.
+    let en_curso = estado.identidad_en_curso.lock().unwrap().clone();
+    let Some((_, device_code)) = en_curso else { return Ok(None) };
+    let Some((mut sesion, testigo)) =
+        identidad::sondear(&device_code).await.map_err(|e| e.to_string())?
+    else {
+        return Ok(None);
+    };
+
+    let claves = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
+    // Entrar por primera vez es también el momento de tener clave de firma:
+    // sin ella la sesión no sirve para publicar, que es lo único para lo que
+    // la sesión existe.
+    if identidad::leer_clave(&claves).is_err() {
+        identidad::crear_clave(&claves).map_err(|e| e.to_string())?;
+    }
+    sesion.huella = identidad::huella_actual(&claves).unwrap_or_default();
+    identidad::guardar_sesion(&estado.almacen, &claves, &sesion, &testigo)
+        .map_err(|e| e.to_string())?;
+    *estado.identidad_en_curso.lock().unwrap() = None;
+    Ok(Some(sesion))
+}
+
+#[tauri::command]
+async fn identidad_leer(
+    estado: tauri::State<'_, Estado>,
+) -> Result<Option<identidad::Sesion>, String> {
+    identidad::leer_sesion(&estado.almacen).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn identidad_cerrar(estado: tauri::State<'_, Estado>) -> Result<(), String> {
+    let claves = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
+    // La clave de firma NO se borra al cerrar sesión: lo ya publicado tiene
+    // que poder seguir comprobándose, y volver a entrar con otra cuenta no
+    // cambia quién hizo los paquetes.
+    identidad::cerrar_sesion(&estado.almacen, &claves).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn identidad_respaldo(estado: tauri::State<'_, Estado>) -> Result<Vec<String>, String> {
+    let claves = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
+    identidad::respaldo(&claves).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn identidad_rotar(estado: tauri::State<'_, Estado>) -> Result<Vec<String>, String> {
+    let claves = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
+    identidad::rotar(&claves).map_err(|e| e.to_string())
+}
+
+pub(crate) fn chrono_ahora() -> String {
     // ponytail: sin dependencia de `chrono` por una sola marca de tiempo; el
     // formato exacto no lo consume nada todavía (el 8 aún no existe), así que
     // basta con segundos desde época en un texto legible.
@@ -608,28 +949,118 @@ fn chrono_ahora() -> String {
     format!("{s}")
 }
 
+/// Arranca la importación en un hilo aparte y vuelve enseguida: un paquete
+/// real descifra y parsea durante varios segundos, y bloquear el comando
+/// hasta el final es exactamente lo que dejaba a la interfaz sin nada que
+/// enseñar mientras tanto. El progreso se lee aparte, con `ingesta_legacy_progreso`.
 #[tauri::command]
-fn ingesta_legacy(
+async fn ingesta_legacy_arrancar(
     estado: tauri::State<'_, Estado>,
     indice_id: i64,
     ruta: String,
     tipo: Option<String>,
     fuente: String,
     declarada: bool,
-) -> Result<ingest::Resumen, String> {
-    let modelos: Vec<String> = estado.modelos.iter().map(|m| m.id.clone()).collect();
+) -> Result<(), String> {
+    exige_abierto(&estado, indice_id)?;
+    let modelos_registro = estado.modelos.clone();
+    let modelos: Vec<String> = modelos_registro.iter().map(|m| m.id.clone()).collect();
     let destino = estado.dir.join("imagenes").join(indice_id.to_string());
-    ingest::desde_legacy(
-        &estado.almacen,
-        indice_id,
-        std::path::Path::new(&ruta),
-        tipo.as_deref(),
-        &fuente,
-        declarada,
-        &modelos,
-        &destino,
-    )
-    .map_err(|e| e.to_string())
+    let almacen = estado.almacen.clone();
+    let ing = Arc::new(ingest::Ingesta::nueva());
+    *estado.ingesta.lock().unwrap() = Some(ing.clone());
+
+    let paquete = PathBuf::from(ruta);
+    tauri::async_runtime::spawn(async move {
+        let almacen2 = almacen.clone();
+        let ing2 = ing.clone();
+        let salida = tokio::task::spawn_blocking(move || {
+            ingest::desde_legacy(
+                &almacen2,
+                indice_id,
+                &paquete,
+                tipo.as_deref(),
+                &fuente,
+                declarada,
+                &modelos,
+                &destino,
+                &ing2,
+            )
+        })
+        .await;
+
+        let r = match salida {
+            Ok(r) => r,
+            Err(e) => Err(anyhow::anyhow!("la importación se cayó: {e}")),
+        };
+
+        // El vector viene dentro del paquete, pero está en memoria, no en
+        // Qdrant: subirlo es lo que hace real la promesa de "no se gasta
+        // GPU". `desde_legacy` es síncrona a propósito (decodifica imágenes,
+        // calcula sha256) y Qdrant se habla por HTTP async, así que la subida
+        // pasa aquí, después de que el hilo bloqueante ya terminó.
+        let r = match r {
+            Ok((resumen, vectores)) if !vectores.is_empty() => {
+                match subir_vectores_legacy(&almacen, &modelos_registro, vectores).await {
+                    Ok(()) => Ok(resumen),
+                    Err(e) => Err(anyhow::anyhow!(
+                        "{} imágenes traían vector pero no se pudieron subir a Qdrant: {e}",
+                        resumen.con_vector
+                    )),
+                }
+            }
+            Ok((resumen, _)) => Ok(resumen),
+            Err(e) => Err(e),
+        };
+        ing.terminar(r);
+    });
+    Ok(())
+}
+
+/// Sube a Qdrant los vectores que un paquete legacy traía dentro, agrupados
+/// por modelo (la v1 solo trae uno, pero agrupar es gratis y no asume nada),
+/// y solo entonces marca cada fila como `hecho`. Antes de esto,
+/// `Almacen::marcar_vector` hacía un `UPDATE` a secas contra una fila que
+/// `insertar_imagen` nunca creaba para estos vectores —los que SÍ vienen
+/// dentro—, así que la marca no tocaba ninguna fila y el vector importado se
+/// perdía en silencio: la fila se quedaba sin `vectores` en absoluto, ni
+/// pendiente ni hecha.
+async fn subir_vectores_legacy(
+    almacen: &Almacen,
+    modelos: &[models::Modelo],
+    vectores: Vec<ingest::VectorTraido>,
+) -> anyhow::Result<()> {
+    let mut por_modelo: std::collections::BTreeMap<String, Vec<ingest::VectorTraido>> =
+        std::collections::BTreeMap::new();
+    for v in vectores {
+        por_modelo.entry(v.modelo.clone()).or_default().push(v);
+    }
+
+    let cliente = qdrant::Cliente::nuevo();
+    for (modelo_id, filas) in por_modelo {
+        let Some(modelo) = modelos.iter().find(|m| m.id == modelo_id) else {
+            anyhow::bail!("el modelo {modelo_id} ya no está registrado");
+        };
+        let coleccion = qdrant::coleccion_de(&modelo.id, &modelo.version);
+        cliente.asegurar_coleccion(&coleccion, modelo.dims).await?;
+
+        let ids: Vec<i64> = filas.iter().map(|f| f.imagen_id).collect();
+        let vecs: Vec<Vec<f32>> = filas.iter().map(|f| f.vector.clone()).collect();
+        let quadkeys: Vec<String> = filas.iter().map(|f| f.quadkey.clone()).collect();
+        cliente.subir(&coleccion, &ids, &vecs, &quadkeys).await?;
+
+        for id in &ids {
+            almacen.marcar_vector(*id, &modelo_id, "hecho")?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn ingesta_legacy_progreso(
+    estado: tauri::State<'_, Estado>,
+) -> Result<ingest::ProgresoIngesta, String> {
+    Ok(estado.ingesta.lock().unwrap().as_ref().map(|i| i.progreso()).unwrap_or_default())
 }
 
 pub fn run() {
@@ -641,18 +1072,33 @@ pub fn run() {
         &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../modelos"),
     );
     let cola = queue::Cola::nueva(dir.clone(), almacen.clone(), servicios.log.clone());
-    // ponytail: la tarea 12 no dice cómo se elige el modelo cuando hay varios
-    // registrados a la vez (eso es orquestación de territorio/ingesta, fuera
-    // de esta tarea). El techo es un solo bucle de cola, contra el primer
-    // modelo del registro; la salida, si hiciera falta, es un bucle por
-    // modelo — pero eso exige separar el estado "hecho" de un lote por
-    // modelo, que hoy es una sola columna compartida en `lotes`.
-    if let Some(m) = modelos.first() {
+    // Un bucle por modelo registrado, no solo el primero: con lumi-2 y
+    // lumi-preview activos a la vez, quedarse en `modelos.first()` significaba
+    // que el segundo modelo nunca tenía quien le bajara los vectores — sus
+    // filas se quedaban en `pendiente` para siempre, y el sellado se negaba
+    // eternamente con "0 de N" sin que nada estuviera realmente roto.
+    for m in &modelos {
         cola.clone().arrancar_bucle(m.id.clone(), m.dims, m.version.clone());
     }
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_log::Builder::default().build())
+        .plugin(
+            tauri_plugin_log::Builder::default()
+                // Mismo `Stdout` de siempre, más un fichero de nombre fijo en
+                // vez del que el plugin elige solo — así el comando de debug
+                // sabe exactamente qué leer. 8 MB porque una sola descarga
+                // densa (el caso de Tokio) ya deja cientos de líneas TRACE de
+                // reqwest; con el tope por defecto (40 KB) se rotaba solo con
+                // arrancar la app.
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("indexer".into()),
+                    }),
+                ])
+                .max_file_size(8_000_000)
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .manage(Estado {
             dir,
@@ -662,33 +1108,51 @@ pub fn run() {
             modelos,
             cola,
             descarga: std::sync::Mutex::new(None),
+            ingesta: std::sync::Mutex::new(None),
+            sondeo: std::sync::Mutex::new(None),
+            sellado: std::sync::Mutex::new(None),
+            identidad_en_curso: std::sync::Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             saludo,
+            rendimiento_leer,
             servicios_arrancar,
             servicios_arrancar_wsl,
             servicios_parar,
             servicios_estado,
             servicios_log,
+            servicios_diagnostico,
+            debug_log_leer,
+            setup_completo,
+            setup_marcar_completo,
+            setup_reiniciar,
             modelos_lista,
             runtime_listo,
             runtime_instalar,
             cola_progreso,
             cola_pausar,
+            indice_progreso_embebido,
             ingesta_carpeta,
-            ingesta_legacy,
+            ingesta_legacy_arrancar,
+            ingesta_legacy_progreso,
             indice_crear,
             indices_lista,
             indice_detalle,
             indice_lotes,
+            lote_cancelar,
+            indice_borrar,
+            indice_imagenes,
             territorio_clasificar,
             territorio_heredar,
             origenes_lista,
-            sondear_area,
+            sondear_area_arrancar,
+            sondear_area_progreso,
             estimar_area,
             descarga_arrancar,
             descarga_progreso,
             descarga_parar,
+            descarga_pendiente,
+            descarga_pendiente_descartar,
             revision_pendientes,
             revision_rechazar,
             revision_aceptar_resto,
@@ -700,9 +1164,16 @@ pub fn run() {
             gasto_mes,
             mapbox_clave_guardar,
             mapbox_clave_leer,
-            paquete_sellar,
+            paquete_sellar_arrancar,
+            paquete_sellar_progreso,
             paquete_que_viaja,
-            paquete_abrir
+            paquete_abrir,
+            identidad_arrancar,
+            identidad_sondear,
+            identidad_leer,
+            identidad_cerrar,
+            identidad_respaldo,
+            identidad_rotar
         ])
         .build(tauri::generate_context!())
         .expect("no se pudo arrancar el Lumi Indexer")

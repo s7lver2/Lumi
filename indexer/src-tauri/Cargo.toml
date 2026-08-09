@@ -16,7 +16,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
-tauri = { version = "2.11.3", features = [] }
+tauri = { version = "2.11.3", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-log = "2"
 serde = { version = "1", features = ["derive"] }
@@ -37,3 +37,6 @@ tempfile = "3"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 async-trait = "0.1"
 urlencoding = "2"
+ed25519-dalek = { version = "2", default-features = false, features = ["std", "rand_core"] }
+bip39 = { version = "2", features = ["spanish"] }
+base64 = "0.22"
