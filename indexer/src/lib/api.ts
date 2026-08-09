@@ -163,11 +163,13 @@ export interface ProgresoCola {
   reinicios: number;
   guardado_fallos: number;
 }
-export interface CodigoDispositivo { codigo: string; url: string; intervalo: number }
-export interface Sesion {
-  proveedor: string; cuenta: string; avatar: string;
-  desde: string; huella: string; permisos: string[];
+export interface FichaResumen {
+  paquete: string; nombre: string; autor: string; url: string;
+  teselas: number; viva: boolean;
 }
+export interface Resultados { indices: FichaResumen[]; cuentas: string[] }
+export interface Perfil { cuenta: string; publicaciones: FichaResumen[]; teselas: number }
+export interface RepoRemoto { repo: string; paquetes: FichaResumen[] }
 
 export interface Repo { nombre: string; privado: boolean }
 export interface TrozoPrevisto { zona: string; quadkeys: number; bytes: number }
@@ -273,6 +275,11 @@ export const api = {
   identidadRotar: () => invoke<string[]>("identidad_rotar"),
   gastoMes: () => invoke<[number, [string, number, number][]]>("gasto_mes"),
 
+  catalogoRefrescar: () => invoke<number>("catalogo_refrescar"),
+  catalogoBuscar: (texto: string) => invoke<Resultados>("catalogo_buscar", { texto }),
+  catalogoPerfil: (cuenta: string) => invoke<Perfil>("catalogo_perfil", { cuenta }),
+  catalogoMios: () => invoke<RepoRemoto[]>("catalogo_mios"),
+  catalogoReclamos: (quadkeys: string[]) => invoke<unknown[]>("catalogo_reclamos", { quadkeys }),
   publicarRepos: () => invoke<Repo[]>("publicar_repos"),
   publicarPrevisualizar: (indiceId: number) => invoke<Previsualizacion>("publicar_previsualizar", { indiceId }),
   publicarArrancar: (indiceId: number, repo: string, descargo: boolean) =>

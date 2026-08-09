@@ -12,7 +12,12 @@ import { Overlay } from "../ui/Overlay";
 import { IndexMapDialog } from "./IndexMapDialog";
 import { ProvenanceTable } from "./ProvenanceTable";
 
-export function IndexDetail({ id, onVolver }: { id: number; onVolver: () => void }) {
+/** `soloLectura` esconde todo lo que escribe, exactamente el mismo mecanismo
+ *  que ya usa con un índice sellado: mirar el índice de otra persona no
+ *  necesita una pantalla paralela que mantener. */
+export function IndexDetail({ id, onVolver, soloLectura = false }: {
+  id: number; onVolver: () => void; soloLectura?: boolean;
+}) {
   const [detalle, setDetalle] = useState<DetalleIndice | null>(null);
   const [lotes, setLotes] = useState<LoteResumen[]>([]);
   const [embed, setEmbed] = useState<ProgresoIndiceEmbed[]>([]);
@@ -89,7 +94,7 @@ export function IndexDetail({ id, onVolver }: { id: number; onVolver: () => void
             <Icon name="back" size={11} /> Índices
           </button>
           <div className="flex items-center gap-2">
-            <button
+            {!soloLectura && <button
               onClick={() => void borrar()}
               onBlur={() => setConfirmarBorrado(false)}
               disabled={borrando}
@@ -99,8 +104,8 @@ export function IndexDetail({ id, onVolver }: { id: number; onVolver: () => void
                   : "border-border text-subtle hover:text-danger-fg"}`}
             >
               {borrando ? "Borrando…" : confirmarBorrado ? "¿Seguro? Borrar del todo" : "Borrar índice"}
-            </button>
-            {!sellado && (
+            </button>}
+            {!sellado && !soloLectura && (
               <button
                 onClick={() => setSellando(true)}
                 disabled={vacio || !embebidoCompleto}
@@ -110,7 +115,7 @@ export function IndexDetail({ id, onVolver }: { id: number; onVolver: () => void
                 Sellar
               </button>
             )}
-            {sellado && (
+            {sellado && !soloLectura && (
               <button onClick={() => setPublicando(true)} disabled={!sesion}
                 title={sesion ? undefined : "conecta una cuenta en Ajustes para publicar"}
                 className="jg-press rounded-lg border border-border px-3 py-1.5 text-[11px] text-fg disabled:opacity-40">
@@ -171,7 +176,7 @@ export function IndexDetail({ id, onVolver }: { id: number; onVolver: () => void
           )}
         </div>
 
-        {!sellado && (
+        {!sellado && !soloLectura && (
           <div className="flex items-center gap-2">
             <button onClick={() => setImportando("carpeta")}
               className="jg-press rounded-lg border border-border px-3 py-1.5 text-[11px] text-fg">
