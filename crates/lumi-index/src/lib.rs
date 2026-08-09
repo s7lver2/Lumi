@@ -11,6 +11,7 @@ pub mod coverage;
 pub mod embed;
 pub mod ficha;
 pub mod filter;
+pub mod grafo;
 pub mod legacy;
 pub mod manifest;
 pub mod network;
