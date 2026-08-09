@@ -194,12 +194,21 @@ fn mensaje_error_dispositivo(codigo: &str) -> String {
 /// cualquier otro origen a efectos de dónde vive.
 pub const PROVEEDOR_TESTIGO: &str = "identidad_testigo_github";
 
-/// Sondea una vez. `Ok(None)` significa «todavía no», que es el caso normal
-/// mientras el usuario no ha pulsado nada en el navegador — no es un error.
-/// Cuando hay sesión, vuelve también el testigo: quien llama decide dónde
-/// guardarlo (y aquí no se guarda porque este módulo no toca `Claves` sin que
-/// se lo pidan explícitamente).
-pub async fn sondear(device_code: &str) -> Result<Option<(Sesion, String)>> {
+/// `slow_down` no es un error ni un "todavía no" cualquiera: el protocolo
+/// exige que quien sondea sume 5 segundos a su intervalo y siga desde ahí.
+/// Ignorarlo dejaba la pantalla en «esperando…» para siempre, incluso después
+/// de autorizar: si el primer sondeo llega un pelín pronto, GitHub responde
+/// `slow_down` a partir de ahí sin parar y nunca llega a soltar el testigo.
+pub enum Sondeo {
+    Pendiente,
+    MasDespacio,
+    Lista(Sesion, String),
+}
+
+/// Sondea una vez. Cuando hay sesión, vuelve también el testigo: quien llama
+/// decide dónde guardarlo (y aquí no se guarda porque este módulo no toca
+/// `Claves` sin que se lo pidan explícitamente).
+pub async fn sondear(device_code: &str) -> Result<Sondeo> {
     let cliente = reqwest::Client::new();
     let resp = cliente
         .post("https://github.com/login/oauth/access_token")
@@ -219,12 +228,11 @@ pub async fn sondear(device_code: &str) -> Result<Option<(Sesion, String)>> {
     );
     let Some(token) = r.access_token else {
         return match r.error.as_deref() {
-            // Los dos únicos casos en los que "todavía no" es la lectura
-            // correcta: el usuario no ha terminado, o hay que sondear más
-            // despacio. Cualquier otro código es definitivo — seguir
-            // sondeando dejaría la pantalla en «esperando…» para siempre en
-            // vez de decir que hay que reintentar desde el principio.
-            None | Some("authorization_pending") | Some("slow_down") => Ok(None),
+            None | Some("authorization_pending") => Ok(Sondeo::Pendiente),
+            Some("slow_down") => Ok(Sondeo::MasDespacio),
+            // Cualquier otro código es definitivo — seguir sondeando dejaría
+            // la pantalla en «esperando…» para siempre en vez de decir que
+            // hay que reintentar desde el principio.
             Some(e) => Err(anyhow!("{}", mensaje_error_dispositivo(e))),
         };
     };
@@ -235,7 +243,7 @@ pub async fn sondear(device_code: &str) -> Result<Option<(Sesion, String)>> {
         .send()
         .await?;
     let u: Usuario = leer_json(resp).await?;
-    Ok(Some((
+    Ok(Sondeo::Lista(
         Sesion {
             proveedor: "github".into(),
             cuenta: u.login,
@@ -245,7 +253,7 @@ pub async fn sondear(device_code: &str) -> Result<Option<(Sesion, String)>> {
             permisos: vec!["public_repo".into()],
         },
         token,
-    )))
+    ))
 }
 
 /// Segundos desde época en texto, igual que `chrono_ahora()` en `lib.rs`:

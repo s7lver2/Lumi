@@ -17,11 +17,15 @@ export function IdentityPanel() {
     if (!codigo) return;
     let vivo = true;
     const t = setInterval(() => {
-      void api.identidadSondear().then((s) => {
-        if (!vivo || !s) return;
-        setSesion(s);
+      void api.identidadSondear().then((r) => {
+        if (!vivo) return;
+        // Mismo protocolo que en el setup: "más despacio" suma 5 s al
+        // intervalo en vez de tratarse como un "todavía no" cualquiera.
+        if (r.mas_despacio) { setCodigo((c) => (c ? { ...c, intervalo: c.intervalo + 5 } : c)); return; }
+        if (!r.sesion) return;
+        setSesion(r.sesion);
         setCodigo(null);
-      }, (e) => { if (vivo) setError(String(e)); });
+      }, (e) => { if (vivo) { setError(String(e)); setCodigo(null); } });
     }, codigo.intervalo * 1000);
     return () => { vivo = false; clearInterval(t); };
   }, [codigo]);

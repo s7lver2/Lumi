@@ -911,18 +911,27 @@ async fn identidad_arrancar(
     Ok(codigo)
 }
 
+#[derive(serde::Serialize)]
+struct RespuestaSondeo {
+    sesion: Option<identidad::Sesion>,
+    /// Cuando GitHub pide ir más despacio: quien llama suma 5 segundos a su
+    /// intervalo de sondeo y sigue desde ahí. Ignorarlo deja la pantalla en
+    /// «esperando…» para siempre, incluso después de autorizar.
+    mas_despacio: bool,
+}
+
 #[tauri::command]
-async fn identidad_sondear(
-    estado: tauri::State<'_, Estado>,
-) -> Result<Option<identidad::Sesion>, String> {
+async fn identidad_sondear(estado: tauri::State<'_, Estado>) -> Result<RespuestaSondeo, String> {
     // El candado se suelta antes del `await`: un guard vivo cruzando un punto
     // de espera no es `Send` y el comando no compilaría.
     let en_curso = estado.identidad_en_curso.lock().unwrap().clone();
-    let Some((_, device_code)) = en_curso else { return Ok(None) };
-    let Some((mut sesion, testigo)) =
-        identidad::sondear(&device_code).await.map_err(|e| e.to_string())?
-    else {
-        return Ok(None);
+    let Some((_, device_code)) = en_curso else {
+        return Ok(RespuestaSondeo { sesion: None, mas_despacio: false });
+    };
+    let (mut sesion, testigo) = match identidad::sondear(&device_code).await.map_err(|e| e.to_string())? {
+        identidad::Sondeo::Pendiente => return Ok(RespuestaSondeo { sesion: None, mas_despacio: false }),
+        identidad::Sondeo::MasDespacio => return Ok(RespuestaSondeo { sesion: None, mas_despacio: true }),
+        identidad::Sondeo::Lista(sesion, testigo) => (sesion, testigo),
     };
 
     let claves = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
@@ -936,7 +945,7 @@ async fn identidad_sondear(
     identidad::guardar_sesion(&estado.almacen, &claves, &sesion, &testigo)
         .map_err(|e| e.to_string())?;
     *estado.identidad_en_curso.lock().unwrap() = None;
-    Ok(Some(sesion))
+    Ok(RespuestaSondeo { sesion: Some(sesion), mas_despacio: false })
 }
 
 #[tauri::command]

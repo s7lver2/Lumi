@@ -46,6 +46,7 @@ export interface Sesion {
   proveedor: string; cuenta: string; avatar: string;
   desde: string; huella: string; permisos: string[];
 }
+export interface RespuestaSondeo { sesion: Sesion | null; mas_despacio: boolean }
 
 export interface Punto { lat: number; lng: number }
 export type EstadoTesela =
@@ -276,7 +277,7 @@ export const api = {
   topeLeer: () => invoke<number>("tope_leer"),
   topeFijar: (eur: number) => invoke<void>("tope_fijar", { eur }),
   identidadArrancar: (proveedor: string) => invoke<CodigoDispositivo>("identidad_arrancar", { proveedor }),
-  identidadSondear: () => invoke<Sesion | null>("identidad_sondear"),
+  identidadSondear: () => invoke<RespuestaSondeo>("identidad_sondear"),
   identidadLeer: () => invoke<Sesion | null>("identidad_leer"),
   identidadCerrar: () => invoke<void>("identidad_cerrar"),
   identidadRespaldo: () => invoke<string[]>("identidad_respaldo"),

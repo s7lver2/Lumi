@@ -21,12 +21,17 @@ export function IdentityStep({ onHecho, onSaltar }: { onHecho: () => void; onSal
     let vivo = true;
     const t = setInterval(() => {
       void api.identidadSondear().then(
-        (s) => {
-          if (!vivo || !s) return;
-          setSesion(s);
+        (r) => {
+          if (!vivo) return;
+          // GitHub pide ir más despacio: sumar 5 s y reiniciar el intervalo
+          // desde ese valor es parte del protocolo, no un reintento cualquiera
+          // — ignorarlo deja esta pantalla esperando para siempre.
+          if (r.mas_despacio) { setCodigo((c) => (c ? { ...c, intervalo: c.intervalo + 5 } : c)); return; }
+          if (!r.sesion) return;
+          setSesion(r.sesion);
           void api.identidadRespaldo().then(setPalabras);
         },
-        (e) => { if (vivo) setError(String(e)); },
+        (e) => { if (vivo) { setError(String(e)); setCodigo(null); } },
       );
     }, codigo.intervalo * 1000);
     return () => { vivo = false; clearInterval(t); };
