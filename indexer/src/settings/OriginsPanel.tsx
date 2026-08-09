@@ -8,6 +8,7 @@ const PRECIO: Record<string, string> = { google: "7,00 $/1000", "mapbox-satelite
 
 export function OriginsPanel() {
   const [hay, setHay] = useState<Record<string, boolean>>({});
+  const [hayMapa, setHayMapa] = useState(false);
   const [editando, setEditando] = useState<string | null>(null);
   const [valor, setValor] = useState("");
   const [tope, setTope] = useState(0);
@@ -20,6 +21,7 @@ export function OriginsPanel() {
       ORDEN.filter((o) => !SIN_CLAVE.has(o)).map(async (o) => [o, await api.claveHay(o)] as const),
     );
     setHay(Object.fromEntries(pares));
+    setHayMapa(!!(await api.mapboxClave()));
     const t = await api.topeLeer();
     setTope(t);
     setTopeTexto(String(t));
@@ -33,6 +35,16 @@ export function OriginsPanel() {
     setError(null);
     try {
       await api.claveGuardar(o, valor.trim());
+      setEditando(null);
+      setValor("");
+      await refrescar();
+    } catch (e) { setError(String(e)); }
+  }
+
+  async function guardarMapa() {
+    setError(null);
+    try {
+      await api.mapboxClaveGuardar(valor.trim());
       setEditando(null);
       setValor("");
       await refrescar();
@@ -55,7 +67,46 @@ export function OriginsPanel() {
           viajan dentro de ningún paquete.
         </p>
 
-        <table className="mt-5 w-full border-collapse text-[11.5px]">
+        <p className="mt-6 text-[8px] uppercase tracking-[.11em] text-subtle">Mapa base</p>
+        <div className={`mt-2 flex items-center gap-3 rounded-lg border border-border px-3 py-2.5
+          ${hayMapa ? "" : "opacity-90"}`}>
+          <span className="h-[9px] w-[9px] shrink-0 rounded-full bg-[#85b7eb]" />
+          <span className="w-[150px] shrink-0 text-[11.5px] text-fg">Mapbox (mapa)</span>
+          {editando === "__mapa" ? (
+            <input
+              type="password"
+              autoComplete="off"
+              autoFocus
+              value={valor}
+              onChange={(e) => setValor(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") void guardarMapa(); }}
+              placeholder="pega la clave y pulsa Intro"
+              className="flex-1 rounded border border-border bg-black/30 px-2 py-1
+                font-mono text-[10.5px] text-fg outline-none focus:border-white/30"
+            />
+          ) : (
+            <span className={`flex-1 rounded border px-1.5 py-px text-[8.5px] ${
+              hayMapa ? "border-white/[.28] text-fg" : "border-warning/40 text-warning-fg"}`}>
+              {hayMapa ? "configurada" : "sin configurar — el mapa no puede dibujarse sin ella"}
+            </span>
+          )}
+          {editando !== "__mapa" && (
+            <button
+              onClick={() => { setEditando("__mapa"); setValor(""); }}
+              className="jg-press shrink-0 rounded-lg border border-white/15 px-[11px] py-[5px] text-[10.5px] text-fg"
+            >
+              {hayMapa ? "Cambiar" : "Añadir"}
+            </button>
+          )}
+        </div>
+        <p className="mt-1.5 text-[10.5px] leading-relaxed text-subtle">
+          Esta es la clave del mapa que se dibuja para elegir territorio. Es una cuenta
+          distinta de <b className="font-normal text-fg">Mapbox Satellite</b>, listado abajo entre
+          los orígenes de red — pueden ser la misma clave de Mapbox o dos separadas.
+        </p>
+
+        <p className="mt-6 text-[8px] uppercase tracking-[.11em] text-subtle">Orígenes de indexado</p>
+        <table className="mt-2 w-full border-collapse text-[11.5px]">
           <thead>
             <tr className="text-[8px] uppercase tracking-[.11em] text-subtle">
               <th className="w-[30%] pb-2 text-left font-normal">Origen</th>
@@ -77,6 +128,12 @@ export function OriginsPanel() {
                       <span className="h-[9px] w-[9px] rounded-full" style={{ background: color(o) }} />
                       {nombre(o)}
                     </span>
+                    {o === "flickr" && (
+                      <span className="mt-1 block max-w-[220px] text-[9.5px] leading-snug text-warning-fg">
+                        Flickr desactivó su API para cuentas gratuitas: hace falta una cuenta
+                        Pro para que esta clave funcione.
+                      </span>
+                    )}
                   </td>
                   <td className="py-2">
                     {editando === o ? (

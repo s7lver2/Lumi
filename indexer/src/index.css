@@ -87,7 +87,32 @@ body { background: #0e0f11; color: #e8e8e6; overflow: hidden; }
   from { box-shadow: 0 0 0 0 rgba(242,243,245,.5) }
   to   { box-shadow: 0 0 0 9px rgba(242,243,245,0) }
 }
+/* El punto que marca dónde aterrizó la búsqueda de destino: entra, y el
+   anillo se expande mientras todo se apaga. Una vez, no en bucle — es un
+   "aquí" puntual, no un latido permanente. */
+@keyframes jg-destino-pulso {
+  0%   { transform: scale(.4); opacity: 0; box-shadow: 0 0 0 0 rgba(133,183,235,.55) }
+  28%  { transform: scale(1);  opacity: 1 }
+  100% { transform: scale(1);  opacity: 0; box-shadow: 0 0 0 20px rgba(133,183,235,0) }
+}
 @media (prefers-reduced-motion: reduce) { .lumi-anim { animation: none !important; } }
+
+/* La franja de la tesela en curso: no hay total que enseñar hasta que
+   termina, así que en vez de una barra que "avanza" hacia ningún sitio, esto
+   dice "sigue viva" con un rayado que se mueve, como un progreso indefinido. */
+@keyframes jg-rayas {
+  from { background-position: 0 0; }
+  to   { background-position: 28px 0; }
+}
+.jg-barra-rayada {
+  background-image: repeating-linear-gradient(
+    45deg, currentColor 0, currentColor 6px, transparent 6px, transparent 14px
+  );
+  background-size: 28px 100%;
+  opacity: .55;
+  animation: jg-rayas 1s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) { .jg-barra-rayada { animation: none; } }
 
 /* Un botón que no responde al dedo se siente muerto. Esto es el mismo gesto
    que la v1 aplicaba a mano en cada botón, aquí una sola vez. */

@@ -74,6 +74,18 @@ const PATHS: Record<string, React.JSX.Element> = {
   lock: <><rect x="5" y="11" width="14" height="9" rx="1.5" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></>,
   cloud: <path d="M6 16a4 4 0 0 1 .8-7.9 5.5 5.5 0 0 1 10.6 1.4A3.5 3.5 0 0 1 17 16z" />,
   boxes: <><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></>,
+  // Tres deslizadores con su mando en alturas distintas: el gesto universal de
+  // «ajustes», que `boxes` (dos cajas apiladas) no comunicaba en absoluto.
+  ajustes: (
+    <>
+      <path d="M4 7h6M16 7h4" />
+      <circle cx="12" cy="7" r="2.2" />
+      <path d="M4 12h2M12 12h8" />
+      <circle cx="8.5" cy="12" r="2.2" />
+      <path d="M4 17h10M18 17h2" />
+      <circle cx="16" cy="17" r="2.2" />
+    </>
+  ),
   territorio: (
     <>
       <path d="M9 3 3 5.5v15L9 18l6 3 6-2.5v-15L15 6z" />
@@ -97,6 +109,15 @@ const PATHS: Record<string, React.JSX.Element> = {
   // CoveragePanel y BlockedDialog (tarea 15) piden `name="info"` — sin ella
   // esas pantallas no compilan. Un icono más, mismo patrón que los otros tres.
   info: <><circle cx="12" cy="12" r="9" /><path d="M12 8h.01M11 12h1v5h1" /></>,
+  poligono: <><path d="M4 4h7l9 9-7 7-9-9z" /><circle cx="8.5" cy="8.5" r=".6" fill="currentColor" stroke="none" /></>,
+  rectangulo: <rect x="4" y="4" width="16" height="16" rx="2" />,
+  circulo: <circle cx="12" cy="12" r="8" />,
+  mano: (
+    <>
+      <path d="M12 2v20M2 12h20" />
+      <path d="M5 9 2 12l3 3M19 9l3 3-3 3M9 5l3-3 3 3M9 19l3 3 3-3" />
+    </>
+  ),
 };
 
 /** El candado es aparte: su arco se anima al abrirse. */

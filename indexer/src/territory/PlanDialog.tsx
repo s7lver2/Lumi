@@ -5,11 +5,13 @@ import type { Clasificacion } from "../lib/api";
 export function PlanDialog({
   nombre,
   c,
+  cargando,
   onCancelar,
   onConfirmar,
 }: {
   nombre: string;
   c: Clasificacion;
+  cargando: boolean;
   onCancelar: () => void;
   onConfirmar: () => void;
 }) {
@@ -59,11 +61,25 @@ export function PlanDialog({
       </div>
 
       <div className="mt-4 flex justify-end gap-2">
-        <button onClick={onCancelar} className="jg-press rounded-lg border border-border px-4 py-2 text-[11.5px] text-fg">
+        <button
+          onClick={onCancelar}
+          disabled={cargando}
+          className="jg-press rounded-lg border border-border px-4 py-2 text-[11.5px] text-fg disabled:opacity-40"
+        >
           Cancelar
         </button>
-        <button onClick={onConfirmar} className="jg-press rounded-lg bg-accent px-4 py-2 text-[11.5px] font-medium text-black">
-          Confirmar
+        {/* Clasificar contra la red (`estimar_area`) puede tardar unos
+            segundos; sin este cambio de texto, ese hueco se lee como que el
+            botón no ha hecho nada. */}
+        <button
+          onClick={onConfirmar}
+          disabled={cargando}
+          className="jg-press flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-[11.5px] font-medium text-black disabled:opacity-70"
+        >
+          {cargando && (
+            <span className="h-3 w-3 animate-spin rounded-full border-[1.5px] border-black/30 border-t-black" />
+          )}
+          {cargando ? "Calculando…" : "Confirmar"}
         </button>
       </div>
     </div>

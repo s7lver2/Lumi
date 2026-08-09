@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { api, type Clasificacion, type Estimacion, type FichaOrigen, type Punto, type SondeoTesela } from "../lib/api";
 import { Overlay } from "../ui/Overlay";
@@ -20,7 +20,7 @@ export function TerritoryView({
 }: {
   nombre: string;
   indiceId?: number;
-  onDescargando?: () => void;
+  onDescargando?: (imagenesEstimadas: number) => void;
 }) {
   const [dibujo, setDibujo] = useState<Punto[]>([]);
   const [clasificacion, setClasificacion] = useState<Clasificacion | null>(null);
@@ -30,9 +30,13 @@ export function TerritoryView({
   const [activos, setActivos] = useState<Set<string>>(new Set());
   const [sondeos, setSondeos] = useState<SondeoTesela[]>([]);
   const [sondeando, setSondeando] = useState(false);
+  const [sondeoProgreso, setSondeoProgreso] = useState<{ hechos: number; total: number } | null>(null);
+  const sondeoTick = useRef<ReturnType<typeof setInterval> | null>(null);
   const [tokenMapillary, setTokenMapillary] = useState<string | null>(null);
   const [estimacion, setEstimacion] = useState<Estimacion | null>(null);
   const [nuevasPorOrigen, setNuevasPorOrigen] = useState<Record<string, string[]>>({});
+  const [confirmandoPlan, setConfirmandoPlan] = useState(false);
+  const [confirmandoDescarga, setConfirmandoDescarga] = useState(false);
 
   useEffect(() => { void api.origenesLista().then(setFichas); }, []);
   useEffect(() => { void api.claveLeer("mapillary").then(setTokenMapillary); }, []);
@@ -51,21 +55,40 @@ export function TerritoryView({
     setActivos(nuevos);
   }
 
+  // Sondea en segundo plano y sondea el progreso cada 300 ms: cada origen
+  // avanza a su propio ritmo (Mapillary en segundos, Google/KartaView más
+  // despacio porque comparten el limitador de Overpass), así que esperar al
+  // final para pintar algo dejaba el mapa entero gris durante todo ese rato.
+  // Con esto, cada resultado que llega se pinta en cuanto llega.
   async function sondear() {
     if (!clasificacion) return;
     setSondeando(true);
-    try {
-      setSondeos(await api.sondearArea(clasificacion.teselas.map(([qk]) => qk)));
-    } finally {
-      setSondeando(false);
-    }
+    setSondeos([]);
+    setSondeoProgreso(null);
+    await api.sondearAreaArrancar(clasificacion.teselas.map(([qk]) => qk));
+    sondeoTick.current = setInterval(async () => {
+      const p = await api.sondearAreaProgreso();
+      setSondeos(p.resultados);
+      setSondeoProgreso({ hechos: p.hechos, total: p.total });
+      if (p.terminado) {
+        if (sondeoTick.current) clearInterval(sondeoTick.current);
+        setSondeando(false);
+      }
+    }, 300);
   }
 
+  useEffect(() => {
+    return () => { if (sondeoTick.current) clearInterval(sondeoTick.current); };
+  }, []);
+
   function reiniciar() {
+    if (sondeoTick.current) clearInterval(sondeoTick.current);
     setDibujo([]);
     setClasificacion(null);
     setMostrarPlan(false);
     setSondeos([]);
+    setSondeando(false);
+    setSondeoProgreso(null);
     setEstimacion(null);
     setNuevasPorOrigen({});
   }
@@ -76,22 +99,27 @@ export function TerritoryView({
   // por las mismas teselas sin cobertura local.
   async function alConfirmarPlan() {
     if (!clasificacion) return;
-    // Lo heredado se anota PRIMERO: si el operador cierra a mitad de la
-    // descarga, lo que ya estaba adjuntado sigue dentro del índice.
-    //
-    // `flatMap` y no `filter`+`map`: TypeScript no estrecha la unión de
-    // `EstadoTesela` a través de un `filter`, así que `e.indice` no compilaría.
-    if (indiceId !== undefined) {
-      const heredadas = clasificacion.teselas.flatMap(([qk, e]) =>
-        e.estado === "local" ? [[qk, e.indice, e.sha256] as [string, string, string]] : [],
-      );
-      if (heredadas.length > 0) await api.territorioHeredar(indiceId, heredadas);
+    setConfirmandoPlan(true);
+    try {
+      // Lo heredado se anota PRIMERO: si el operador cierra a mitad de la
+      // descarga, lo que ya estaba adjuntado sigue dentro del índice.
+      //
+      // `flatMap` y no `filter`+`map`: TypeScript no estrecha la unión de
+      // `EstadoTesela` a través de un `filter`, así que `e.indice` no compilaría.
+      if (indiceId !== undefined) {
+        const heredadas = clasificacion.teselas.flatMap(([qk, e]) =>
+          e.estado === "local" ? [[qk, e.indice, e.sha256] as [string, string, string]] : [],
+        );
+        if (heredadas.length > 0) await api.territorioHeredar(indiceId, heredadas);
+      }
+      const nuevas = clasificacion.teselas.filter(([, e]) => e.estado === "nuevo").map(([qk]) => qk);
+      const nuevasMap: Record<string, string[]> = {};
+      for (const f of activos) nuevasMap[f] = nuevas;
+      setNuevasPorOrigen(nuevasMap);
+      setEstimacion(await api.estimarArea(nuevasMap));
+    } finally {
+      setConfirmandoPlan(false);
     }
-    const nuevas = clasificacion.teselas.filter(([, e]) => e.estado === "nuevo").map(([qk]) => qk);
-    const nuevasMap: Record<string, string[]> = {};
-    for (const f of activos) nuevasMap[f] = nuevas;
-    setNuevasPorOrigen(nuevasMap);
-    setEstimacion(await api.estimarArea(nuevasMap));
   }
 
   async function confirmarDescarga(soloGratis: boolean) {
@@ -99,6 +127,7 @@ export function TerritoryView({
       reiniciar();
       return;
     }
+    setConfirmandoDescarga(true);
     const activas = soloGratis
       ? new Set(estimacion.lineas.filter((l) => l.coste_eur === 0).map((l) => l.fuente))
       : new Set(estimacion.lineas.map((l) => l.fuente));
@@ -109,9 +138,18 @@ export function TerritoryView({
     // del mes: así un origen que se desmadre se queda sin saldo en su propio
     // trabajo en vez de comerse el tope entero.
     const presupuesto = soloGratis ? 0 : estimacion.total_eur;
-    await api.descargaArrancar(indiceId, nuevas, presupuesto);
+    // Lo único que se sabe de antemano sobre cuántas imágenes van a caer: la
+    // estimación del sondeo, sumada solo entre los orígenes que de verdad
+    // entran en esta descarga. Sin esto, el ETA de la descarga no tiene con
+    // qué medir "cuánto falta" mientras una sola tesela tarda minutos.
+    const imagenesEstimadas = estimacion.lineas
+      .filter((l) => activas.has(l.fuente))
+      .reduce((s, l) => s + l.unidades, 0);
+    await api.descargaArrancar(indiceId, nuevas, presupuesto, imagenesEstimadas);
+    // Sin `setConfirmandoDescarga(false)`: `reiniciar()` desmonta el diálogo
+    // entero, así que dejarlo en `true` no se llega a ver.
     reiniciar();
-    onDescargando?.();
+    onDescargando?.(imagenesEstimadas);
   }
 
   return (
@@ -127,12 +165,28 @@ export function TerritoryView({
         />
       </div>
 
+      {/* Sin esto no hay ninguna pista de que hay una barra de herramientas de
+          dibujo abajo: la capa de disponibilidad, la cobertura y el plan solo
+          aparecen DESPUÉS de cerrar una forma, y hasta entonces el mapa vacío
+          no dice cómo se empieza. Encima de la barra, no al lado: ahí es
+          donde está la herramienta que resuelve la pista. */}
+      {!clasificacion && (
+        <div className="pointer-events-none absolute bottom-[62px] left-1/2 z-20 -translate-x-1/2
+          whitespace-nowrap rounded-card border border-white/[.13] bg-[rgba(16,19,25,.72)]
+          px-3.5 py-2 shadow-lg shadow-black/40 backdrop-blur-xl">
+          <p className="text-[11px] text-fg">
+            Elige una herramienta y dibuja el área a indexar sobre el mapa.
+          </p>
+        </div>
+      )}
+
       {clasificacion && !mostrarPlan && (
         <AvailabilityPanel
           fichas={fichas}
           activos={activos}
           sondeos={sondeos}
           sondeando={sondeando}
+          progreso={sondeoProgreso}
           onCambiar={cambiarActivo}
           onSondear={() => void sondear()}
         />
@@ -155,6 +209,7 @@ export function TerritoryView({
           <PlanDialog
             nombre={nombre}
             c={clasificacion}
+            cargando={confirmandoPlan}
             onCancelar={() => setMostrarPlan(false)}
             onConfirmar={() => void alConfirmarPlan()}
           />
@@ -165,6 +220,7 @@ export function TerritoryView({
         <Overlay>
           <EstimateDialog
             e={estimacion}
+            cargando={confirmandoDescarga}
             onCancelar={() => setEstimacion(null)}
             onConfirmar={(soloGratis) => void confirmarDescarga(soloGratis)}
           />

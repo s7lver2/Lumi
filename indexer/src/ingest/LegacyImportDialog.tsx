@@ -1,7 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { api, type Resumen } from "../lib/api";
+import { api, type ProgresoIngesta, type Resumen } from "../lib/api";
 import { Icon } from "../ui/Icon";
 
 const TIPOS = ["calle", "cenital", "suelta"] as const;
@@ -12,6 +12,15 @@ export function LegacyImportDialog({ indiceId, onHecho }: { indiceId: number; on
   const [fuente, setFuente] = useState("desconocida");
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progreso, setProgreso] = useState<ProgresoIngesta | null>(null);
+  const sondeo = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // El descifrado y el parseo del manifiesto de un paquete real tardan varios
+  // segundos: sin sondeo la interfaz no tiene nada que enseñar mientras tanto,
+  // que es justo lo que hacía que pareciera colgada.
+  useEffect(() => {
+    return () => { if (sondeo.current) clearInterval(sondeo.current); };
+  }, []);
 
   async function elegir() {
     const r = await open({ multiple: false, filters: [{ name: "Paquete de la v1", extensions: ["enc"] }] });
@@ -21,10 +30,24 @@ export function LegacyImportDialog({ indiceId, onHecho }: { indiceId: number; on
   async function importar() {
     if (!ruta) return;
     setError(null);
+    setResumen(null);
+    setProgreso({ trabajando: true, etapa: "arrancando", hechas: 0, total: 0, terminado: false, error: null, resumen: null });
     try {
-      setResumen(await api.ingestaLegacy(indiceId, ruta, tipo, fuente, fuente !== "desconocida"));
-      onHecho();
-    } catch (e) { setError(String(e)); }
+      await api.ingestaLegacyArrancar(indiceId, ruta, tipo, fuente, fuente !== "desconocida");
+    } catch (e) {
+      setError(String(e));
+      setProgreso(null);
+      return;
+    }
+    sondeo.current = setInterval(async () => {
+      const p = await api.ingestaLegacyProgreso();
+      setProgreso(p);
+      if (p.terminado) {
+        if (sondeo.current) clearInterval(sondeo.current);
+        if (p.error) setError(p.error);
+        else { setResumen(p.resumen); onHecho(); }
+      }
+    }, 400);
   }
 
   return (
@@ -73,6 +96,23 @@ export function LegacyImportDialog({ indiceId, onHecho }: { indiceId: number; on
         </div>
       </div>
 
+      {progreso && !progreso.terminado && (
+        <div className="mt-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[10.5px] text-muted">{progreso.etapa}…</span>
+            {progreso.total > 0 && (
+              <span className="font-mono text-[10px] text-subtle">{progreso.hechas}/{progreso.total}</span>
+            )}
+          </div>
+          <span className="mt-1.5 block h-1 overflow-hidden rounded-[2px] bg-elevated">
+            <i
+              className={`block h-full bg-fg ${progreso.total > 0 ? "transition-[width] duration-300" : "animate-pulse"}`}
+              style={{ width: progreso.total > 0 ? `${(progreso.hechas / progreso.total) * 100}%` : "100%" }}
+            />
+          </span>
+        </div>
+      )}
+
       {resumen && (
         <p className="mt-3 font-mono text-[10px] text-muted">
           {resumen.aceptadas} aceptadas · {resumen.con_vector} ya traían vector · {resumen.saltadas} saltadas
@@ -82,9 +122,9 @@ export function LegacyImportDialog({ indiceId, onHecho }: { indiceId: number; on
 
       <div className="mt-4 flex items-center justify-between">
         <span className="font-mono text-[9.5px] text-subtle">los vectores vienen dentro · no se gasta GPU</span>
-        <button onClick={() => void importar()} disabled={!ruta}
+        <button onClick={() => void importar()} disabled={!ruta || (progreso !== null && !progreso.terminado)}
           className="jg-press rounded-lg bg-accent px-4 py-2 text-[11.5px] font-medium text-black disabled:opacity-40">
-          Importar
+          {progreso && !progreso.terminado ? "Importando…" : "Importar"}
         </button>
       </div>
     </div>

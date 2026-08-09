@@ -12,6 +12,7 @@ export function AvailabilityPanel({
   activos,
   sondeos,
   sondeando,
+  progreso,
   onCambiar,
   onSondear,
 }: {
@@ -19,13 +20,14 @@ export function AvailabilityPanel({
   activos: Set<string>;
   sondeos: SondeoTesela[];
   sondeando: boolean;
+  progreso?: { hechos: number; total: number } | null;
   onCambiar: (id: string, on: boolean) => void;
   onSondear: () => void;
 }) {
   const delCache = sondeos.length > 0 && sondeos.every((s) => s.del_cache);
 
   return (
-    <aside className="absolute left-3 top-3 z-20 w-[286px] rounded-card border border-white/[.13]
+    <aside className="absolute left-3 top-[68px] z-20 w-[286px] rounded-card border border-white/[.13]
       bg-[rgba(16,19,25,.72)] p-[15px_15px_13px] shadow-lg shadow-black/40 backdrop-blur-xl">
       <div className="flex items-center gap-2">
         <span className="flex-1 text-[8.5px] uppercase tracking-[.13em] text-subtle">
@@ -45,7 +47,8 @@ export function AvailabilityPanel({
           // informa de nada. Se lista para poder incluirlo en la descarga.
           const pintable = f.tipo !== "cenital";
           return (
-            <div key={f.id} className={`flex items-center gap-2.5 ${on ? "" : "opacity-50"}`}>
+            <div key={f.id} className={`flex items-center gap-2.5 ${on ? "" : "opacity-50"}`}
+              title={f.id === "flickr" ? "Flickr desactivó su API para cuentas gratuitas: hace falta una cuenta Pro" : undefined}>
               <button
                 onClick={() => onCambiar(f.id, !on)}
                 aria-label={`${on ? "Apagar" : "Encender"} ${nombre(f.id)}`}
@@ -86,7 +89,9 @@ export function AvailabilityPanel({
         disabled={sondeando || activos.size === 0}
         className="jg-press mt-3 w-full rounded-lg border border-border py-[7px] text-[11.5px] text-fg disabled:opacity-40"
       >
-        {sondeando ? "Sondeando…" : sondeos.length > 0 ? "Volver a sondear" : "Sondear el área"}
+        {sondeando
+          ? `Sondeando… ${progreso ? `${progreso.hechos}/${progreso.total}` : ""}`
+          : sondeos.length > 0 ? "Volver a sondear" : "Sondear el área"}
       </button>
 
       <div className="mt-3 flex items-start gap-2">

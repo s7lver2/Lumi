@@ -5,7 +5,7 @@ import { ProvenanceBar } from "./ProvenanceBar";
 /** La fila del catálogo: nombre, insignia de estado, insignia ámbar de
  *  procedencia desconocida cuando pasa del 0 %, las cuatro cifras en mono, y
  *  la barra de procedencia — todo visible sin abrir el detalle. */
-export function IndexRow({ r, onAbrir }: { r: ResumenIndice; onAbrir: () => void }) {
+export function IndexRow({ r, embebiendo, onAbrir }: { r: ResumenIndice; embebiendo: boolean; onAbrir: () => void }) {
   const desconocida = r.imagenes_pct.por_fuente.find((f) => f.fuente === "desconocida");
   const desconocidaPct = desconocida?.imagenes_pct ?? 0;
 
@@ -23,6 +23,13 @@ export function IndexRow({ r, onAbrir }: { r: ResumenIndice; onAbrir: () => void
           <span className="flex items-center gap-1 rounded-full border border-warning/[.35] px-1.5 py-px text-[9px] text-warning-fg">
             <Icon name="alert" size={9} />
             procedencia desconocida
+          </span>
+        )}
+        {embebiendo && (
+          <span className="flex items-center gap-1.5 rounded-full border border-draw-fg/40 px-1.5 py-px text-[9px] text-draw-fg">
+            <span className="h-[6px] w-[6px] rounded-full bg-draw-fg"
+              style={{ animation: "jg-core-pulse 2.6s ease-in-out infinite" }} />
+            embebiendo
           </span>
         )}
         <span className="flex-1" />

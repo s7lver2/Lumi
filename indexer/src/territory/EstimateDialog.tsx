@@ -10,10 +10,12 @@ const eur = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
  *  agujeros que nadie sabe dónde están. */
 export function EstimateDialog({
   e,
+  cargando,
   onCancelar,
   onConfirmar,
 }: {
   e: Estimacion;
+  cargando: boolean;
   onCancelar: () => void;
   onConfirmar: (soloGratis: boolean) => void;
 }) {
@@ -109,23 +111,28 @@ export function EstimateDialog({
       </p>
 
       <div className="mt-[18px] flex justify-end gap-2.5">
-        <button onClick={onCancelar} className="jg-press rounded-lg border border-white/15 px-4 py-2 text-[11.5px] text-fg">
+        <button onClick={onCancelar} disabled={cargando}
+          className="jg-press rounded-lg border border-white/15 px-4 py-2 text-[11.5px] text-fg disabled:opacity-40">
           Cancelar
         </button>
         {hayGratis && (
           <button
             onClick={() => onConfirmar(true)}
-            className="jg-press rounded-lg border border-white/15 px-4 py-2 text-[11.5px] text-fg"
+            disabled={cargando}
+            className="jg-press rounded-lg border border-white/15 px-4 py-2 text-[11.5px] text-fg disabled:opacity-40"
           >
             Solo los gratuitos · 0,00 €
           </button>
         )}
         <button
           onClick={() => onConfirmar(false)}
-          disabled={!e.cabe}
-          className="jg-press rounded-lg bg-accent px-4 py-2 text-[11.5px] font-medium text-black disabled:opacity-40"
+          disabled={!e.cabe || cargando}
+          className="jg-press flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-[11.5px] font-medium text-black disabled:opacity-40"
         >
-          Confirmar y descargar · {eur(e.total_eur)}
+          {cargando && (
+            <span className="h-3 w-3 animate-spin rounded-full border-[1.5px] border-black/30 border-t-black" />
+          )}
+          {cargando ? "Arrancando…" : `Confirmar y descargar · ${eur(e.total_eur)}`}
         </button>
       </div>
     </div>

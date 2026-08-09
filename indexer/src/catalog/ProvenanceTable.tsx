@@ -1,4 +1,5 @@
 import type { PorcentajesImagenes } from "../lib/api";
+import { color, nombre } from "../lib/origenes";
 
 /** Las DOS procedencias, en dos tablas lado a lado. Son dos preguntas
  *  distintas — de dónde salió el píxel, quién pagó por indexarlo — y por eso
@@ -36,6 +37,26 @@ export function ProvenanceTable({
         <p className="mt-[9px] font-mono text-[9.5px] text-subtle">
           territorio suma {p.territorio_suma.toFixed(0)} % · dos orígenes pueden cubrir la misma tesela
         </p>
+
+        {p.por_fuente.length > 0 && (
+          <>
+            <p className="mb-2 mt-5 text-[10.5px] uppercase tracking-[.08em] text-subtle">Por fuente</p>
+            <div className="flex flex-col gap-1.5">
+              {p.por_fuente.map((f) => (
+                <div key={f.fuente} className="flex items-center gap-2">
+                  <span className="h-[9px] w-[9px] shrink-0 rounded-full" style={{ background: color(f.fuente) }} />
+                  <span className="w-[120px] shrink-0 text-[11px] text-fg">{nombre(f.fuente)}</span>
+                  <span className="h-1 flex-1 overflow-hidden rounded-[2px] bg-elevated">
+                    <i className="block h-full" style={{ width: `${f.imagenes_pct}%`, background: color(f.fuente) }} />
+                  </span>
+                  <span className="w-10 shrink-0 text-right font-mono text-[10px] text-muted">
+                    {f.imagenes_pct.toFixed(0)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       <div>

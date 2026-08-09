@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { Icon } from "./Icon";
+import { PerfPill } from "./PerfPill";
 
 /** Botones de ventana propios. La ventana va sin decoración del sistema
  *  (`decorations: false`), así que minimizar, maximizar y cerrar los tiene que
@@ -114,6 +115,7 @@ export function WindowFrame({ children }: { children: React.ReactNode }) {
         </span>
         <span data-tauri-drag-region className="text-[11.5px] text-fg">Lumi Indexer</span>
         <span data-tauri-drag-region className="h-full flex-1" />
+        <PerfPill />
         <WindowControls />
       </header>
       <div className="relative min-h-0 flex-1">{children}</div>

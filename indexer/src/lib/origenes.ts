@@ -35,8 +35,10 @@ export const LIMITES: Record<string, string> = {
 /** Los dos que funcionan sin credencial. No se les pide una que no existe. */
 export const SIN_CLAVE = new Set(["kartaview", "commons"]);
 
-/** Mapbox no tiene fila propia: comparte la clave con el mapa. */
-export const COMPARTE_CLAVE = new Set(["mapbox-satelite"]);
+/** Ninguno comparte clave con otro: cada proveedor tiene su propia fila,
+ *  incluido Mapbox Satellite frente al mapa base (que no es un "origen" de
+ *  indexado y por eso no está en `ORDEN` — vive aparte en `OriginsPanel`). */
+export const COMPARTE_CLAVE = new Set<string>();
 
 export const ORDEN = [
   "mapillary", "kartaview", "google", "mapbox-satelite", "commons", "flickr",
