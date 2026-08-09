@@ -17,14 +17,7 @@ use crate::store::Almacen;
 
 /// Aplicación pública registrada para el flujo de dispositivo. No es un
 /// secreto: el flujo existe precisamente para no necesitar ninguno.
-///
-/// OJO: esto es un marcador, no un Client ID real. GitHub responde con un
-/// error de cliente inválido a cualquier device_code pedido con este valor.
-/// Para que el login funcione: crear una OAuth App en
-/// https://github.com/settings/developers → «New OAuth App», activar
-/// «Device Flow» en su configuración, y pegar aquí el Client ID que GitHub
-/// entrega (no hace falta client secret: el flujo de dispositivo no lo usa).
-const CLIENTE_GITHUB: &str = "Iv1.lumi-indexer-device";
+const CLIENTE_GITHUB: &str = "Ov23lifjQZpSg7TObgKV";
 
 pub const AJUSTE_CUENTA: &str = "identidad_cuenta";
 pub const AJUSTE_SECRETA: &str = "identidad_clave_secreta";
