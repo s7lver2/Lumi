@@ -194,29 +194,12 @@ export function MapCanvas({
           });
         };
 
-        // Clic con la herramienta "mano" sobre una tesela reclamada: quién la
-        // cubre, cuándo, y NINGÚN botón de instalar — lo reclamado viaja como
-        // dependencia de lo que se publique, no se descarga aquí. Solo con
-        // "mano" activa: con una herramienta de dibujo el clic es para
-        // dibujar, no para mirar.
-        m.on("click", "teselas-relleno", (e) => {
-          if (herramientaRef.current !== "mano") return;
-          const props = propsDe(e.features?.[0]);
-          if (props.estado !== "reclamada") return;
-          new mapboxgl.Popup({ closeButton: true, maxWidth: "260px", className: "lumi-popup-reclamo" })
-            .setLngLat(e.lngLat)
-            .setHTML(
-              `<div style="font:11px/1.5 inherit">` +
-              `<div>Reclamada por <b>${props.autor || "otro operador"}</b></div>` +
-              `<div style="opacity:.6;font-family:monospace;font-size:10px;margin-top:2px">` +
-              `paquete ${props.paquete || "—"}</div>` +
-              `<div style="opacity:.8;margin-top:6px">Viajará como dependencia de tu índice, no en él.</div>` +
-              `</div>`,
-            )
-            .addTo(m);
-        });
+        // El cursor cambia sobre una tesela reclamada, con la herramienta
+        // "mano": es la única pista de que ahí hay algo que mirar antes de
+        // hacer clic.
         m.on("mouseenter", "teselas-relleno", (e) => {
-          if (herramientaRef.current === "mano" && propsDe(e.features?.[0]).estado === "reclamada") {
+          const props = propsDe(e.features?.[0]);
+          if (herramientaRef.current === "mano" && props.estado === "reclamada") {
             m.getCanvas().style.cursor = "pointer";
           }
         });
@@ -232,9 +215,8 @@ export function MapCanvas({
         // `clipboard.writeText` por un POST cuando exista.
         m.on("click", "teselas-relleno", (e) => {
           if (herramientaRef.current !== "mano") return;
-          const props = (e.features?.[0] as { properties?: Record<string, unknown> } | undefined)
-            ?.properties;
-          if (!props || props.estado !== "reclamada") return;
+          const props = propsDe(e.features?.[0]);
+          if (props.estado !== "reclamada") return;
           const paquete = String(props.paquete ?? "");
           const autor = String(props.autor ?? "");
           const nodo = document.createElement("div");

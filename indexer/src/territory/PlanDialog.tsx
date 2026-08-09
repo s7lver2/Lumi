@@ -15,9 +15,16 @@ export function PlanDialog({
   onCancelar: () => void;
   onConfirmar: () => void;
 }) {
-  const total = c.locales + c.catalogo + c.nuevas;
-  const heredado = c.locales + c.catalogo;
+  const total = c.locales + c.catalogo + c.nuevas + c.reclamadas;
+  const heredado = c.locales + c.catalogo + c.reclamadas;
   const heredadoPct = total === 0 ? 0 : Math.round((heredado / total) * 100);
+
+  // Por autor, para el desglose — no viene calculado del backend porque es
+  // solo para esta pantalla informativa, no para ninguna decisión de coste.
+  const autoresReclamo = new Map<string, number>();
+  for (const [, e] of c.teselas) {
+    if (e.estado === "reclamada") autoresReclamo.set(e.autor, (autoresReclamo.get(e.autor) ?? 0) + 1);
+  }
 
   return (
     <div className="w-[480px] rounded-card border border-white/[.13] bg-[rgba(16,19,25,.66)] p-[20px_22px] backdrop-blur-xl">
@@ -39,6 +46,22 @@ export function PlanDialog({
             {c.autores.map(([autor]) => (
               <p key={autor} className="mt-0.5 font-mono text-[10px] text-subtle">de {autor}, con su licencia y atribución</p>
             ))}
+          </div>
+        )}
+        {c.reclamadas > 0 && (
+          <div className="rounded-lg border border-warning/[.35] bg-warning/[.05] px-3 py-2">
+            <p className="text-fg">Reclamadas por otros</p>
+            <p className="mt-0.5 font-mono text-[10px] text-subtle">
+              {c.reclamadas} teselas · no se descargan ni se pagan
+            </p>
+            {[...autoresReclamo.entries()].map(([autor, n]) => (
+              <p key={autor} className="mt-0.5 font-mono text-[10px] text-subtle">{n} de {autor}</p>
+            ))}
+            <p className="mt-1.5 text-[10.5px] leading-relaxed text-subtle">
+              Ni las descargas del proveedor ni te descargas sus paquetes: no entran en tu índice. Tu
+              ficha declara que esa zona la cubren ellos, y quien instale tu índice desde el catálogo
+              se los baja también.
+            </p>
           </div>
         )}
         {c.nuevas > 0 && (
