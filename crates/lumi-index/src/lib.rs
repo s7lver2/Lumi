@@ -9,6 +9,7 @@ pub mod budget;
 pub mod cifrado;
 pub mod coverage;
 pub mod embed;
+pub mod ficha;
 pub mod filter;
 pub mod legacy;
 pub mod manifest;
