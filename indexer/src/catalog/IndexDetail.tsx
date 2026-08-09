@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 
 import { FolderImportDialog } from "../ingest/FolderImportDialog";
 import { LegacyImportDialog } from "../ingest/LegacyImportDialog";
-import { api, type DetalleIndice, type LoteResumen, type ProgresoIndiceEmbed } from "../lib/api";
+import { api, type DetalleIndice, type LoteResumen, type ProgresoIndiceEmbed, type Sesion } from "../lib/api";
+import { PublishDialog } from "../publish/PublishDialog";
 import { SealDialog } from "../seal/SealDialog";
 import { EmbedToggle } from "../ui/EmbedToggle";
 import { Icon } from "../ui/Icon";
@@ -21,6 +22,10 @@ export function IndexDetail({ id, onVolver }: { id: number; onVolver: () => void
   const [cancelando, setCancelando] = useState<number | null>(null);
   const [importando, setImportando] = useState<"carpeta" | "legacy" | null>(null);
   const [mapaAbierto, setMapaAbierto] = useState(false);
+  const [publicando, setPublicando] = useState(false);
+  const [sesion, setSesion] = useState<Sesion | null>(null);
+
+  useEffect(() => { void api.identidadLeer().then(setSesion); }, []);
 
   const refrescar = () => {
     void api.indiceDetalle(id).then(setDetalle);
@@ -105,6 +110,13 @@ export function IndexDetail({ id, onVolver }: { id: number; onVolver: () => void
                 Sellar
               </button>
             )}
+            {sellado && (
+              <button onClick={() => setPublicando(true)} disabled={!sesion}
+                title={sesion ? undefined : "conecta una cuenta en Ajustes para publicar"}
+                className="jg-press rounded-lg border border-border px-3 py-1.5 text-[11px] text-fg disabled:opacity-40">
+                Publicar
+              </button>
+            )}
           </div>
         </div>
 
@@ -123,6 +135,11 @@ export function IndexDetail({ id, onVolver }: { id: number; onVolver: () => void
         {mapaAbierto && (
           <Overlay>
             <IndexMapDialog indiceId={id} nombreIndice={detalle.nombre} onCerrar={() => setMapaAbierto(false)} />
+          </Overlay>
+        )}
+        {publicando && (
+          <Overlay>
+            <PublishDialog indiceId={id} nombre={detalle.nombre} onHecho={() => setPublicando(false)} />
           </Overlay>
         )}
 

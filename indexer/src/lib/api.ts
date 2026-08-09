@@ -166,6 +166,25 @@ export interface Sesion {
   proveedor: string; cuenta: string; avatar: string;
   desde: string; huella: string; permisos: string[];
 }
+
+export interface Repo { nombre: string; privado: boolean }
+export interface TrozoPrevisto { zona: string; quadkeys: number; bytes: number }
+export interface Previsualizacion {
+  trozos: TrozoPrevisto[];
+  bytes_total: number;
+  no_redistribuibles: string[];
+}
+export interface ProgresoPublicacion {
+  asset: string;
+  hechos: number;
+  total: number;
+  bytes_hechos: number;
+  bytes_total: number;
+  terminado: boolean;
+  error: string | null;
+  registro: string[];
+}
+
 export interface ProgresoIndiceEmbed {
   modelo_id: string;
   hechas: number;
@@ -252,4 +271,10 @@ export const api = {
   identidadRotar: () => invoke<string[]>("identidad_rotar"),
   gastoMes: () => invoke<[number, [string, number, number][]]>("gasto_mes"),
 
+  publicarRepos: () => invoke<Repo[]>("publicar_repos"),
+  publicarPrevisualizar: (indiceId: number) => invoke<Previsualizacion>("publicar_previsualizar", { indiceId }),
+  publicarArrancar: (indiceId: number, repo: string, descargo: boolean) =>
+    invoke<void>("publicar_arrancar", { indiceId, repo, descargo }),
+  publicarProgreso: () => invoke<ProgresoPublicacion>("publicar_progreso"),
+  publicarContinuar: (indiceId: number) => invoke<void>("publicar_continuar", { indiceId }),
 };
