@@ -902,6 +902,11 @@ async fn identidad_arrancar(
 ) -> Result<identidad::CodigoDispositivo, String> {
     let (codigo, device_code) =
         identidad::arrancar(&proveedor).await.map_err(|e| e.to_string())?;
+    log::info!(
+        "codigo de dispositivo pedido: {} (device_code {}…)",
+        codigo.codigo,
+        &device_code[..device_code.len().min(8)],
+    );
     *estado.identidad_en_curso.lock().unwrap() = Some((proveedor, device_code));
     Ok(codigo)
 }

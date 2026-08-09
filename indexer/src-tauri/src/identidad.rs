@@ -176,6 +176,19 @@ struct Usuario {
     avatar_url: String,
 }
 
+/// Códigos documentados por GitHub para el flujo de dispositivo, en un
+/// mensaje que dice qué hacer, no solo cómo se llama el error.
+fn mensaje_error_dispositivo(codigo: &str) -> String {
+    match codigo {
+        "expired_token" => "el código caducó antes de terminar en el navegador: pide uno nuevo".into(),
+        "access_denied" => "se canceló el acceso desde el navegador".into(),
+        "incorrect_client_credentials" | "unauthorized_client" =>
+            "GitHub no reconoce esta aplicación: revisa el Client ID en Ajustes".into(),
+        "incorrect_device_code" => "el código de dispositivo no es válido".into(),
+        _ => format!("GitHub rechazó el inicio de sesión: {codigo}"),
+    }
+}
+
 /// El proveedor del testigo de acceso en `Claves`, que ya cifra con la
 /// maestra local — el testigo de GitHub no es distinto de una clave de API de
 /// cualquier otro origen a efectos de dónde vive.
@@ -199,15 +212,21 @@ pub async fn sondear(device_code: &str) -> Result<Option<(Sesion, String)>> {
         .send()
         .await?;
     let r: RespuestaSondeo = leer_json(resp).await?;
+    log::info!(
+        "sondeo de dispositivo ({}…): {}",
+        &device_code[..device_code.len().min(8)],
+        r.error.as_deref().unwrap_or("token recibido"),
+    );
     let Some(token) = r.access_token else {
-        // "authorization_pending" es el caso esperado; cualquier otro error
-        // del proveedor (código expirado, denegado) también vuelve como
-        // "todavía no" — quien llama decide cuándo rendirse por timeout. Se
-        // registra porque un código expirado, si no, es un bucle mudo.
-        if let Some(e) = r.error.filter(|e| e != "authorization_pending") {
-            log::debug!("el flujo de dispositivo sigue esperando: {e}");
-        }
-        return Ok(None);
+        return match r.error.as_deref() {
+            // Los dos únicos casos en los que "todavía no" es la lectura
+            // correcta: el usuario no ha terminado, o hay que sondear más
+            // despacio. Cualquier otro código es definitivo — seguir
+            // sondeando dejaría la pantalla en «esperando…» para siempre en
+            // vez de decir que hay que reintentar desde el principio.
+            None | Some("authorization_pending") | Some("slow_down") => Ok(None),
+            Some(e) => Err(anyhow!("{}", mensaje_error_dispositivo(e))),
+        };
     };
     let resp = cliente
         .get("https://api.github.com/user")
