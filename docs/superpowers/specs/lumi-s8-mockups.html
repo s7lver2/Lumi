@@ -1,0 +1,1712 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Lumi Indexer · publicación y descubrimiento</title>
+<style>
+:root{
+  --bg:#0e0f11; --surface:#15171a; --panel:#1a1b1e; --elevated:#202226;
+  --border:#26282c; --muted:#9a9a95; --subtle:#6a6c70; --fg:#e8e8e6;
+  --accent:#f2f3f5; --warning:#ef9f27; --warning-fg:#efb968;
+  --danger:#a33; --danger-fg:#e88f8f; --draw:#378add; --draw-fg:#85b7eb;
+  --expo:cubic-bezier(.16,1,.3,1);
+  /* Paleta de proveedores: heredada del 7b. Sigue siendo el único sitio de la
+     aplicación donde el color codifica una categoría. */
+  --p-mly:#4ec9a5; --p-kv:#a78bfa; --p-goo:#e8b04b; --p-com:#6ea8fe; --p-flk:#f472a6;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#08090a;color:var(--fg);font-family:Inter,system-ui,'Segoe UI',sans-serif;
+  -webkit-font-smoothing:antialiased;padding:34px 26px 90px}
+.mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+h1{font-size:17px;font-weight:500;letter-spacing:-.01em}
+h2{font-size:12px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--subtle);margin:56px 0 -10px}
+.lede{color:var(--muted);font-size:12px;margin-top:6px;max-width:820px;line-height:1.65}
+.lede b{font-weight:400;color:var(--fg)}
+.k{font-size:8px;letter-spacing:.11em;text-transform:uppercase;color:var(--subtle)}
+.v{font-size:11.5px;color:var(--fg);margin-top:3px}
+.v.dim{color:var(--subtle)}
+
+.shot{margin-top:34px}
+.shot > .cap{display:flex;align-items:baseline;gap:10px;margin-bottom:9px}
+.shot > .cap b{font-size:12.5px;font-weight:500;white-space:nowrap}
+.shot > .cap span{font-size:11px;color:var(--subtle);max-width:880px;line-height:1.55}
+.frame{width:1280px;height:800px;background:var(--bg);border:1px solid #202226;
+  border-radius:10px;overflow:hidden;position:relative;
+  box-shadow:0 24px 60px rgba(0,0,0,.55);transform-origin:top left}
+@media (max-width:1360px){.frame{transform:scale(.78)}.shot .frame{margin-bottom:-176px}}
+
+/* Mando de estados: esto es un mockup, no la aplicación — los botones de
+   arriba existen para recorrer estados que en producción los provoca el
+   usuario o la red. Van fuera del marco a propósito. */
+.tabs{display:flex;gap:6px;margin:0 0 10px;align-items:center;flex-wrap:wrap}
+.tabs .lb{font-size:8.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--subtle);margin-right:4px}
+.tabs button{font-family:inherit;font-size:10.5px;color:var(--muted);background:var(--panel);
+  border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;
+  transition:.16s var(--expo)}
+.tabs button:hover{color:var(--fg);border-color:#33363b}
+.tabs button.on{background:var(--elevated);color:var(--fg);border-color:rgba(255,255,255,.22)}
+[data-state]{display:none}
+[data-state].on{display:block}
+
+.glass{background:rgba(16,19,25,.72);border:1px solid rgba(255,255,255,.13);
+  border-radius:12px;box-shadow:0 18px 40px rgba(0,0,0,.4);backdrop-filter:blur(18px)}
+.btn{border-radius:8px;font-size:11.5px;padding:8px 16px;border:0;display:inline-block;
+  font-family:inherit;cursor:default}
+.btn.pri{background:var(--accent);color:#000;font-weight:500}
+.btn.gho{background:transparent;color:var(--fg);border:1px solid rgba(255,255,255,.15)}
+.btn.sm{font-size:10.5px;padding:5px 11px;border-radius:6px}
+.btn.dis{opacity:.38}
+.chip{border:1px solid var(--border);border-radius:5px;padding:1px 6px;
+  font-size:8.5px;color:var(--subtle);letter-spacing:.04em;white-space:nowrap;
+  display:inline-flex;align-items:center;gap:4px}
+.chip.on{border-color:rgba(255,255,255,.28);color:var(--fg)}
+.chip.amber{border-color:rgba(239,159,39,.42);color:var(--warning-fg)}
+.chip.blue{border-color:rgba(133,183,235,.42);color:var(--draw-fg)}
+.chip.red{border-color:rgba(163,51,51,.55);color:var(--danger-fg)}
+
+.rail{position:absolute;inset:0 auto 0 0;width:44px;z-index:30;display:flex;
+  flex-direction:column;align-items:center;gap:3px;padding:10px 0;
+  background:rgba(13,15,17,.9);border-right:1px solid var(--border);backdrop-filter:blur(8px)}
+.rail .ri{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;
+  color:var(--subtle);position:relative}
+.rail .ri.on{background:rgba(255,255,255,.07);color:var(--fg)}
+.rail .ri.on::before{content:"";position:absolute;left:-10px;top:7px;bottom:7px;width:2px;
+  border-radius:0 2px 2px 0;background:var(--fg)}
+.rail .sp{flex:1}
+.rail .av{width:22px;height:22px;border-radius:50%;overflow:hidden;
+  border:1px solid rgba(255,255,255,.18);margin-bottom:4px}
+.top{position:absolute;top:0;left:44px;right:0;height:38px;z-index:25;display:flex;
+  align-items:center;gap:9px;padding:0 12px;background:rgba(13,15,17,.78);
+  border-bottom:1px solid var(--border);backdrop-filter:blur(10px)}
+.crumb{font-size:11.5px;color:var(--subtle);display:flex;align-items:center;gap:7px}
+.crumb b{font-weight:400;color:var(--fg)}
+.crumb .sep{color:#3a3e44}
+.body{position:absolute;inset:38px 0 0 44px;overflow:hidden}
+.pad{padding:26px 30px}
+.col{max-width:980px;margin:0 auto}
+
+.map{position:absolute;inset:0;background:
+  radial-gradient(120% 90% at 50% 30%, #1d2126 0%, #14171a 42%, #0d0f11 100%)}
+.map svg{position:absolute;inset:0;width:100%;height:100%}
+.map .grid line{stroke:rgba(255,255,255,.03);stroke-width:1}
+.map .road{stroke:rgba(255,255,255,.075);fill:none;stroke-linecap:round}
+.map .road.big{stroke:rgba(255,255,255,.13);stroke-width:2.4}
+.map .water{fill:rgba(55,138,221,.10)}
+
+/* Teselas z14. Cuatro estados y ni uno más: el cuarto —reclamada— es lo
+   único que añade el subsistema 10 al mapa que ya existía. */
+.t{position:absolute;width:44px;height:44px;border-radius:2px}
+.t.nueva{background:rgba(255,255,255,.015);border:1px dashed rgba(154,154,149,.32)}
+.t.local{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.20)}
+.t.cat{background:rgba(55,138,221,.16);border:1px solid rgba(133,183,235,.40)}
+.t.recl{background:rgba(239,159,39,.13);border:1px solid rgba(239,159,39,.45)}
+.t.recl::after{content:"";position:absolute;inset:0;border-radius:2px;
+  background:repeating-linear-gradient(45deg,transparent 0 5px,rgba(239,159,39,.16) 5px 10px)}
+
+.row{display:flex;align-items:center;gap:9px}
+.sw{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.sq{width:11px;height:11px;border-radius:2px;flex-shrink:0;display:block}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px}
+.hair{height:1px;background:var(--border)}
+.bar{height:5px;border-radius:3px;background:var(--elevated);overflow:hidden;display:flex}
+.bar i{display:block;height:100%;background:var(--fg)}
+.bar i.amber{background:var(--warning)}
+
+table.t2{width:100%;border-collapse:collapse;font-size:11.5px}
+table.t2 th{text-align:left;font-size:8px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--subtle);font-weight:400;padding:0 0 8px}
+table.t2 td{padding:8px 0;border-top:1px solid var(--border);vertical-align:middle}
+table.t2 td.n{text-align:right;font-family:ui-monospace,Menlo,Consolas,monospace}
+table.t2 tr.tot td{border-top:1px solid rgba(255,255,255,.2);padding-top:11px}
+
+.ph{aspect-ratio:4/3;border-radius:6px;position:relative;overflow:hidden;
+  border:1px solid var(--border)}
+.logline{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;line-height:1.95;color:var(--muted)}
+.logline em{font-style:normal;color:var(--subtle)}
+.logline b{font-weight:400;color:var(--fg)}
+svg.i{display:block}
+.note{font-size:10.5px;line-height:1.62;color:var(--subtle)}
+.note b{font-weight:400;color:var(--fg)}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--draw-fg);display:inline-block;
+  animation:pulse 2.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+.spin{animation:spin 1.1s linear infinite;transform-origin:50% 50%}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Movimiento ─────────────────────────────────────────────────────────
+   Solo ease-out exponencial, sin rebote, y nada que anime propiedades de
+   layout: opacidad y transform. Cada animación de aquí existe porque
+   explica algo que si no habría que leer — el barrido de teselas enseña de
+   dónde sale el descuento, el trazo que se dibuja marca el momento exacto
+   en que algo pasó a estar hecho. */
+@keyframes jg-fade-rise{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes jg-tile-sweep{from{opacity:0}to{opacity:1}}
+@keyframes jg-strike{to{transform:scaleX(1)}}
+@keyframes jg-stroke-draw{to{stroke-dashoffset:0}}
+.t.recl{animation:jg-tile-sweep .40s var(--expo) both}
+.rise{animation:jg-fade-rise .38s var(--expo) both}
+.tach{position:relative;display:inline-block}
+.tach::after{content:"";position:absolute;left:0;right:0;top:52%;height:1px;background:var(--subtle);
+  transform:scaleX(0);transform-origin:left;animation:jg-strike .35s var(--expo) .30s forwards}
+.draw path{stroke-dasharray:26;stroke-dashoffset:26;animation:jg-stroke-draw .32s var(--expo) .08s forwards}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.001s!important}
+  .spin{animation-duration:1.1s!important} .dot{animation-duration:2.6s!important}
+}
+
+.avatar{border-radius:50%;background:linear-gradient(150deg,#3a4048,#22262b);
+  display:grid;place-items:center;color:var(--muted);font-size:12px;flex-shrink:0;
+  border:1px solid rgba(255,255,255,.10)}
+.sk{background:linear-gradient(150deg,#2a3038,#1a1e22)}
+.field{background:#0b0d0f;border:1px solid var(--border);border-radius:8px;
+  padding:9px 11px;font-size:11.5px;color:var(--muted)}
+.legend{position:absolute;left:14px;bottom:14px;z-index:20;padding:10px 12px}
+</style>
+</head>
+<body>
+
+<h1>Lumi Indexer · catálogo de índices <span class="mono" style="font-size:11px;color:var(--subtle)">subsistema 8</span></h1>
+<p class="lede">Diez pantallas. El subsistema 7 sabe construir un paquete y sellarlo; a partir de ahí el paquete se
+queda en un disco duro y no lo ve nadie. Esto es lo que falta: <b>publicarlo, encontrar el de otro, y no volver a
+pagar por un territorio que ya está cubierto</b>. Tres ideas gobiernan todas las pantallas.
+<b>La ficha viaja en claro y el paquete cifrado</b> —buscar, dibujar y reclamar se hacen leyendo kilobytes, nunca
+gigas—. <b>Publicar no es un botón, es un trabajo de fondo</b>, con el mismo patrón reanudable que descargar y
+sellar. Y <b>el reclamo bloquea de verdad</b>: una tesela cubierta por otro sale del presupuesto antes de que
+veas el primer euro, y quien indexa no se descarga nada de nadie — esa zona pasa a ser una
+<b>dependencia declarada</b> que resuelve quien instala.</p>
+<p class="lede" style="margin-top:12px">Los botones grises sobre cada marco son del mockup, no del producto:
+recorren estados que en la aplicación real provocan el usuario o la red.</p>
+
+<!-- ══════════════════════════ A · IDENTIDAD ══════════════════════════ -->
+<h2>A · Identidad</h2>
+
+<section class="shot">
+  <div class="cap"><b>1 · Setup, paso «Identidad»</b>
+    <span>después de los servicios, antes de entrar. Se puede saltar: sin identidad la aplicación funciona entera
+    menos publicar, y bloquear el arranque por un login que quizá no necesites hoy sería un mal cambio. El código de
+    dispositivo evita el navegador embebido y el secreto de cliente dentro del binario. La clave de firma se genera
+    aquí, y su respaldo se enseña <b>una sola vez</b>.</span></div>
+  <div class="tabs" data-tabs="s1">
+    <span class="lb">estado</span>
+    <button data-go="s1a" class="on">sin sesión</button>
+    <button data-go="s1b">esperando al navegador</button>
+    <button data-go="s1c">conectado · clave nueva</button>
+    <button data-go="s1d">error de red</button>
+  </div>
+  <div class="frame">
+    <div style="position:absolute;inset:0;background:radial-gradient(120% 80% at 50% 0%,#171a1e 0%,#0e0f11 60%)"></div>
+
+    <!-- pasos del setup, comunes -->
+    <div style="position:absolute;top:26px;left:0;right:0;display:flex;justify-content:center;gap:0;align-items:center">
+      <span class="mono" style="font-size:9.5px;color:var(--subtle)">servicios</span>
+      <span style="width:44px;height:1px;background:var(--border);margin:0 10px"></span>
+      <span class="mono" style="font-size:9.5px;color:var(--subtle)">modelos</span>
+      <span style="width:44px;height:1px;background:var(--border);margin:0 10px"></span>
+      <span class="mono" style="font-size:9.5px;color:var(--fg)">identidad</span>
+      <span style="width:44px;height:1px;background:var(--border);margin:0 10px"></span>
+      <span class="mono" style="font-size:9.5px;color:#3a3e44">listo</span>
+    </div>
+
+    <div data-state id="s1a" class="on">
+      <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:470px;text-align:center">
+        <div style="width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.05);margin:0 auto;display:grid;place-items:center">
+          <svg class="i" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#e8e8e6" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3.5c-4.6 0-8 3.5-8 7.9 0 3.5 2.2 6.5 5.4 7.5.4.1.5-.2.5-.4v-1.4c-2.2.5-2.7-1-2.7-1-.4-1-.9-1.2-.9-1.2-.7-.5.1-.5.1-.5.8.1 1.2.8 1.2.8.7 1.2 1.9.9 2.4.7.1-.5.3-.9.5-1.1-1.8-.2-3.7-.9-3.7-4 0-.9.3-1.6.8-2.2-.1-.2-.4-1 .1-2.1 0 0 .7-.2 2.2.8a7.4 7.4 0 0 1 4 0c1.5-1 2.2-.8 2.2-.8.5 1.1.2 1.9.1 2.1.5.6.8 1.3.8 2.2 0 3.1-1.9 3.8-3.7 4 .3.3.6.8.6 1.6v2.4c0 .2.1.5.5.4A8.1 8.1 0 0 0 20 11.4c0-4.4-3.4-7.9-8-7.9Z"/>
+          </svg>
+        </div>
+        <p style="font-size:14px;margin-top:14px">Conecta tu cuenta</p>
+        <p class="note" style="margin-top:7px;max-width:390px;margin-left:auto;margin-right:auto">
+          Hace falta para <b>publicar</b> índices y para que otros sepan quién los firmó. Buscar, descargar e indexar
+          funcionan sin ella.</p>
+        <div style="display:flex;gap:10px;margin-top:22px">
+          <button class="btn gho" style="flex:1;display:flex;align-items:center;justify-content:center;gap:9px">
+            <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3.5c-4.6 0-8 3.5-8 7.9 0 3.5 2.2 6.5 5.4 7.5.4.1.5-.2.5-.4v-1.4c-2.2.5-2.7-1-2.7-1-.4-1-.9-1.2-.9-1.2-.7-.5.1-.5.1-.5.8.1 1.2.8 1.2.8.7 1.2 1.9.9 2.4.7.1-.5.3-.9.5-1.1-1.8-.2-3.7-.9-3.7-4 0-.9.3-1.6.8-2.2-.1-.2-.4-1 .1-2.1 0 0 .7-.2 2.2.8a7.4 7.4 0 0 1 4 0c1.5-1 2.2-.8 2.2-.8.5 1.1.2 1.9.1 2.1.5.6.8 1.3.8 2.2 0 3.1-1.9 3.8-3.7 4 .3.3.6.8.6 1.6v2.4c0 .2.1.5.5.4A8.1 8.1 0 0 0 20 11.4c0-4.4-3.4-7.9-8-7.9Z"/>
+            </svg>GitHub</button>
+          <button class="btn gho" style="flex:1;display:flex;align-items:center;justify-content:center;gap:9px">
+            <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="11" r="7.3"/><path d="M9 9.6h.01M15 9.6h.01"/><path d="M8.8 13.4c.7 1.5 1.9 2.3 3.2 2.3s2.5-.8 3.2-2.3"/>
+            </svg>HuggingFace</button>
+        </div>
+        <p style="margin-top:16px;font-size:10.5px;color:var(--subtle);text-decoration:underline;text-underline-offset:3px">
+          continuar sin cuenta</p>
+      </div>
+    </div>
+
+    <div data-state id="s1b">
+      <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:470px;text-align:center">
+        <p class="k">paso 1 de 2</p>
+        <p style="font-size:14px;margin-top:10px">Escribe este código en GitHub</p>
+        <div class="card" style="margin-top:16px;padding:20px;background:#0b0d0f">
+          <p class="mono" style="font-size:30px;letter-spacing:.22em;color:var(--fg)">7B4C-2XQP</p>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+          <div class="field mono" style="flex:1;text-align:left;font-size:10.5px">github.com/login/device</div>
+          <button class="btn gho sm" style="padding:9px 12px">copiar</button>
+          <button class="btn gho sm" style="padding:9px 12px">abrir</button>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:9px;margin-top:22px">
+          <svg class="i spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--subtle)" stroke-width="1.6" stroke-linecap="round">
+            <path d="M12 3.5a8.5 8.5 0 1 1-8.5 8.5" />
+          </svg>
+          <span style="font-size:11px;color:var(--muted)">esperando a que lo autorices…</span>
+        </div>
+        <p class="note" style="margin-top:20px;max-width:400px;margin-left:auto;margin-right:auto">
+          Se piden dos permisos: <b>leer tu perfil</b> y <b>escribir releases</b> en los repositorios que elijas al
+          publicar. Nada más, y se ven luego en Ajustes.</p>
+        <p style="margin-top:18px;font-size:10.5px;color:var(--subtle)">cancelar</p>
+      </div>
+    </div>
+
+    <div data-state id="s1c">
+      <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:520px">
+        <div style="display:flex;align-items:center;gap:14px">
+          <div class="avatar sk" style="width:46px;height:46px"></div>
+          <div style="flex:1">
+            <p style="font-size:13.5px">nickespro130</p>
+            <p class="mono" style="font-size:10px;color:var(--subtle);margin-top:2px">github · inigo@fablableon.org</p>
+          </div>
+          <span class="chip on"><svg class="i" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg>conectado</span>
+        </div>
+
+        <div class="card" style="margin-top:20px;padding:16px 17px">
+          <div class="row" style="gap:10px">
+            <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--warning-fg)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="8" cy="12" r="3.6"/><path d="M11.6 12H20M17 12v3.2M14.4 12v2.4"/>
+            </svg>
+            <p style="font-size:12px;flex:1">Tu clave de firma</p>
+            <span class="chip">recién creada</span>
+          </div>
+          <p class="note" style="margin-top:9px">Firma cada cosa que publiques. Vive cifrada en este equipo y
+            <b>no se puede recuperar</b>: si pierdes el respaldo, pierdes la identidad de tus publicaciones y hay que
+            empezar con una clave nueva.</p>
+          <div style="margin-top:12px;background:#0b0d0f;border:1px solid var(--border);border-radius:8px;padding:13px 14px">
+            <p class="k">huella pública</p>
+            <p class="mono" style="font-size:11px;margin-top:5px;color:var(--fg);letter-spacing:.02em">7dQm·4Kx9·PL2v·8Wnc</p>
+            <div class="hair" style="margin:12px 0"></div>
+            <p class="k">frase de respaldo · 12 palabras</p>
+            <p class="mono" style="font-size:11px;margin-top:6px;line-height:1.9;color:var(--muted)">
+              rambla · sextante · nublar · fresno · adobe · tinta<br>
+              cobalto · ladera · murmullo · yunque · pizarra · cauce</p>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button class="btn gho sm">copiar</button>
+            <button class="btn gho sm">guardar en un fichero</button>
+            <span style="flex:1"></span>
+            <label style="display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--muted)">
+              <span style="width:13px;height:13px;border:1px solid rgba(255,255,255,.28);border-radius:3px;display:grid;place-items:center">
+                <svg class="i" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg>
+              </span>la he guardado</label>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:9px;margin-top:20px">
+          <button class="btn gho">usar otra cuenta</button>
+          <button class="btn pri">Continuar</button>
+        </div>
+      </div>
+    </div>
+
+    <div data-state id="s1d">
+      <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:440px;text-align:center">
+        <div style="width:52px;height:52px;border-radius:50%;background:rgba(163,51,51,.10);margin:0 auto;display:grid;place-items:center">
+          <svg class="i" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--danger-fg)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 4.5 21 19.5H3L12 4.5Z"/><path d="M12 10v4M12 16.8h.01"/>
+          </svg>
+        </div>
+        <p style="font-size:13.5px;margin-top:14px">No se pudo hablar con GitHub</p>
+        <div class="card mono" style="margin-top:14px;padding:11px 13px;text-align:left;font-size:10px;
+             color:var(--muted);background:#0b0d0f;line-height:1.85">
+          POST api.github.com/login/device/code<br>
+          <span style="color:var(--danger-fg)">error de red: no se pudo resolver el nombre</span>
+        </div>
+        <p class="note" style="margin-top:14px;max-width:370px;margin-left:auto;margin-right:auto">
+          El resto de la aplicación no necesita conexión con GitHub. Puedes seguir y conectar la cuenta más tarde
+          desde <b>Ajustes</b>.</p>
+        <div style="display:flex;gap:9px;justify-content:center;margin-top:20px">
+          <button class="btn gho">Reintentar</button>
+          <button class="btn pri">Continuar sin cuenta</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="shot">
+  <div class="cap"><b>2 · Ajustes · Identidad</b>
+    <span>el único sitio de la aplicación donde la identidad se toca. Todo lo demás la lee. Los permisos concedidos
+    se enseñan tal cual son, no como una promesa genérica: si un día publicar necesita uno más, se ve aquí.</span></div>
+  <div class="frame">
+    <div class="rail">
+      <div class="ri"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 9.5h17M9 5v14"/></svg></div>
+      <div class="ri"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 6.8 5.6-2.3 5.8 2.4 5.6-2.3v13.6l-5.6 2.3-5.8-2.4-5.6 2.3z"/><path d="M9.1 4.5v15.2M14.9 6.9v15.1"/></svg></div>
+      <div class="ri"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.6" y="5.2" width="16.8" height="13.6" rx="2"/><path d="m3.6 15 4.2-4 3.4 3.2 4-4.4 5.2 5.4"/></svg></div>
+      <div class="sp"></div>
+      <div class="ri"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.5v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="M12 4v10M8.2 10.4 12 14.2l3.8-3.8"/></svg></div>
+      <div class="ri on"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7.5h16M4 12h16M4 16.5h16"/><circle cx="9" cy="7.5" r="2.1" fill="var(--bg)"/><circle cx="15.5" cy="12" r="2.1" fill="var(--bg)"/><circle cx="7.5" cy="16.5" r="2.1" fill="var(--bg)"/></svg></div>
+      <div class="av sk"></div>
+    </div>
+    <div class="top"><div class="crumb"><b>Ajustes</b></div></div>
+    <div class="body">
+      <div class="pad"><div class="col">
+        <p class="k">Identidad</p>
+        <div class="card" style="margin-top:11px;padding:18px 19px">
+          <div style="display:flex;align-items:center;gap:14px">
+            <div class="avatar sk" style="width:44px;height:44px"></div>
+            <div style="flex:1">
+              <div class="row" style="gap:8px"><p style="font-size:13px">nickespro130</p>
+                <span class="chip"><svg class="i" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3.5c-4.6 0-8 3.5-8 7.9 0 3.5 2.2 6.5 5.4 7.5.4.1.5-.2.5-.4v-1.4c-2.2.5-2.7-1-2.7-1-.4-1-.9-1.2-.9-1.2-.7-.5.1-.5.1-.5.8.1 1.2.8 1.2.8.7 1.2 1.9.9 2.4.7.1-.5.3-.9.5-1.1-1.8-.2-3.7-.9-3.7-4 0-.9.3-1.6.8-2.2-.1-.2-.4-1 .1-2.1 0 0 .7-.2 2.2.8a7.4 7.4 0 0 1 4 0c1.5-1 2.2-.8 2.2-.8.5 1.1.2 1.9.1 2.1.5.6.8 1.3.8 2.2 0 3.1-1.9 3.8-3.7 4 .3.3.6.8.6 1.6v2.4c0 .2.1.5.5.4A8.1 8.1 0 0 0 20 11.4c0-4.4-3.4-7.9-8-7.9Z"/></svg>github</span>
+              </div>
+              <p class="mono" style="font-size:10px;color:var(--subtle);margin-top:3px">sesión iniciada el 09/08/2026 · 18:12</p>
+            </div>
+            <button class="btn gho sm">Cambiar de cuenta</button>
+            <button class="btn gho sm" style="color:var(--danger-fg);border-color:rgba(163,51,51,.45)">Cerrar sesión</button>
+          </div>
+          <div class="hair" style="margin:16px 0"></div>
+          <p class="k">permisos concedidos</p>
+          <div style="display:flex;gap:20px;margin-top:9px">
+            <div class="row" style="gap:7px"><svg class="i" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg><span style="font-size:11px">leer tu perfil público</span></div>
+            <div class="row" style="gap:7px"><svg class="i" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg><span style="font-size:11px">crear releases en tus repositorios</span></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:14px;padding:18px 19px">
+          <div class="row" style="gap:10px">
+            <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--warning-fg)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="8" cy="12" r="3.6"/><path d="M11.6 12H20M17 12v3.2M14.4 12v2.4"/></svg>
+            <p style="font-size:12px;flex:1">Clave de firma</p>
+            <span class="chip">creada el 09/08/2026</span>
+          </div>
+          <div style="display:flex;gap:26px;margin-top:13px;align-items:flex-end">
+            <div><p class="k">huella pública</p><p class="mono v">7dQm·4Kx9·PL2v·8Wnc</p></div>
+            <div><p class="k">publicaciones firmadas</p><p class="mono v">3</p></div>
+            <span style="flex:1"></span>
+            <button class="btn gho sm">Ver frase de respaldo</button>
+            <button class="btn gho sm">Rotar</button>
+          </div>
+          <p class="note" style="margin-top:13px">Rotar crea una clave nueva y firma con ella lo que publiques a
+            partir de ahora. <b>Lo ya publicado conserva la firma vieja</b> y sigue siendo válido: la clave antigua
+            queda archivada aquí para que quien lo instale pueda seguir comprobándolo.</p>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ B · DESCUBRIMIENTO ══════════════════════════ -->
+<h2>B · Descubrimiento</h2>
+
+<section class="shot">
+  <div class="cap"><b>3 · Índices · buscador y repositorios remotos</b>
+    <span>la sección nueva va debajo de los índices locales y se agrupa <b>por repositorio</b>, no por índice: es el
+    reflejo de dónde vive cada cosa. El buscador de arriba resuelve contra el mapa de cobertura local —instantáneo,
+    sin red— y va completando con la API por detrás.</span></div>
+  <div class="tabs" data-tabs="s3">
+    <span class="lb">estado</span>
+    <button data-go="s3a" class="on">reposo</button>
+    <button data-go="s3b">buscando «sevilla»</button>
+    <button data-go="s3c">un release incompleto</button>
+  </div>
+  <div class="frame">
+    <div class="rail">
+      <div class="ri on"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 9.5h17M9 5v14"/></svg></div>
+      <div class="ri"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 6.8 5.6-2.3 5.8 2.4 5.6-2.3v13.6l-5.6 2.3-5.8-2.4-5.6 2.3z"/><path d="M9.1 4.5v15.2M14.9 6.9v15.1"/></svg></div>
+      <div class="ri"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.6" y="5.2" width="16.8" height="13.6" rx="2"/><path d="m3.6 15 4.2-4 3.4 3.2 4-4.4 5.2 5.4"/></svg></div>
+      <div class="sp"></div>
+      <div class="ri"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.5v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="M12 4v10M8.2 10.4 12 14.2l3.8-3.8"/></svg></div>
+      <div class="ri"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7.5h16M4 12h16M4 16.5h16"/><circle cx="9" cy="7.5" r="2.1" fill="var(--bg)"/><circle cx="15.5" cy="12" r="2.1" fill="var(--bg)"/><circle cx="7.5" cy="16.5" r="2.1" fill="var(--bg)"/></svg></div>
+      <div class="av sk"></div>
+    </div>
+    <div class="top"><div class="crumb"><b>Índices</b></div></div>
+    <div class="body">
+      <div class="pad"><div class="col">
+
+        <!-- buscador -->
+        <div style="position:relative">
+          <div class="field" style="display:flex;align-items:center;gap:10px;padding:10px 13px">
+            <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--subtle)" stroke-width="1.5" stroke-linecap="round"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m15.4 15.4 4.1 4.1"/></svg>
+            <span data-state id="s3a-q" class="on" style="color:var(--subtle)">buscar índices o cuentas publicadas…</span>
+            <span data-state id="s3b-q" style="color:var(--fg)">sevilla<i style="display:inline-block;width:1px;height:13px;background:var(--fg);vertical-align:-2px;margin-left:1px"></i></span>
+            <span style="flex:1"></span>
+            <span class="chip mono">4 812 fichas en local · hace 6 min</span>
+          </div>
+
+          <div data-state id="s3b" >
+            <div class="glass" style="position:absolute;top:44px;left:0;right:0;z-index:20;padding:9px 0;max-height:430px">
+              <p class="k" style="padding:4px 14px 8px">Índices · 3</p>
+              <div style="padding:9px 14px;background:rgba(255,255,255,.045)">
+                <div class="row" style="gap:10px">
+                  <div class="avatar sk" style="width:22px;height:22px"></div>
+                  <div style="flex:1">
+                    <div class="row" style="gap:7px"><span style="font-size:11.5px">Sevilla casco antiguo</span>
+                      <span class="mono" style="font-size:9.5px;color:var(--subtle)">@mmartin/lumi-andalucia</span></div>
+                    <p class="mono" style="font-size:9.5px;color:var(--subtle);margin-top:2px">
+                      612 teselas z14 · 18,4 GiB · 11 assets · lumi-2 1.0, lumi-preview 3.1</p>
+                  </div>
+                  <span class="chip blue">cubre tu área</span>
+                  <button class="btn gho sm">Instalar</button>
+                </div>
+              </div>
+              <div style="padding:9px 14px">
+                <div class="row" style="gap:10px">
+                  <div class="avatar sk" style="width:22px;height:22px"></div>
+                  <div style="flex:1">
+                    <div class="row" style="gap:7px"><span style="font-size:11.5px">Sevilla · cenital 2025</span>
+                      <span class="mono" style="font-size:9.5px;color:var(--subtle)">@aicaza/lumi-cenital</span></div>
+                    <p class="mono" style="font-size:9.5px;color:var(--subtle);margin-top:2px">
+                      344 teselas z14 · 6,1 GiB · 4 assets · lumi-2 1.0</p>
+                  </div>
+                  <span class="chip amber">material no redistribuible</span>
+                </div>
+              </div>
+              <div style="padding:9px 14px">
+                <div class="row" style="gap:10px">
+                  <div class="avatar sk" style="width:22px;height:22px"></div>
+                  <div style="flex:1">
+                    <div class="row" style="gap:7px"><span style="font-size:11.5px">Aljarafe</span>
+                      <span class="mono" style="font-size:9.5px;color:var(--subtle)">@mmartin/lumi-andalucia</span></div>
+                    <p class="mono" style="font-size:9.5px;color:var(--subtle);margin-top:2px">
+                      201 teselas z14 · 4,4 GiB · 3 assets · lumi-2 1.0</p>
+                  </div>
+                  <span class="chip red">no disponible · 404</span>
+                </div>
+              </div>
+              <div class="hair" style="margin:7px 0"></div>
+              <p class="k" style="padding:4px 14px 8px">Cuentas · 2</p>
+              <div style="padding:8px 14px">
+                <div class="row" style="gap:10px">
+                  <div class="avatar sk" style="width:22px;height:22px"></div>
+                  <span style="font-size:11.5px;flex:1">mmartin <span class="mono" style="font-size:9.5px;color:var(--subtle)">· 9 índices · 3 214 teselas</span></span>
+                </div>
+              </div>
+              <div style="padding:8px 14px">
+                <div class="row" style="gap:10px">
+                  <div class="avatar sk" style="width:22px;height:22px"></div>
+                  <span style="font-size:11.5px;flex:1">sevillamapping <span class="mono" style="font-size:9.5px;color:var(--subtle)">· sin publicaciones</span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- índices locales -->
+        <p class="k" style="margin-top:24px">Índices locales · 3</p>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+          <div class="card" style="padding:12px 14px">
+            <div class="row" style="gap:9px">
+              <span style="font-size:12px;flex:1">lumi-2 pruebas</span>
+              <span class="chip">abierto</span>
+              <span class="mono" style="font-size:10px;color:var(--subtle);width:96px;text-align:right">5 173 imágenes</span>
+            </div>
+          </div>
+          <div class="card" style="padding:12px 14px">
+            <div class="row" style="gap:9px">
+              <span style="font-size:12px;flex:1">Sevilla norte</span>
+              <span class="chip on">sellado</span>
+              <span class="chip"><svg class="i" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg>embebido completo</span>
+              <span class="mono" style="font-size:10px;color:var(--subtle);width:96px;text-align:right">3 224 imágenes</span>
+            </div>
+          </div>
+          <div class="card" style="padding:12px 14px">
+            <div class="row" style="gap:9px">
+              <span style="font-size:12px;flex:1">tokyo</span>
+              <span class="chip">abierto</span>
+              <span class="mono" style="font-size:10px;color:var(--subtle);width:96px;text-align:right">3 224 imágenes</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- repositorios remotos -->
+        <div class="row" style="margin-top:26px;gap:9px">
+          <p class="k" style="flex:1">Repositorios remotos · 2</p>
+          <span class="mono" style="font-size:9.5px;color:var(--subtle)">sincronizado hace 6 min</span>
+          <button class="btn gho sm" style="padding:3px 9px;font-size:9.5px">Actualizar</button>
+        </div>
+
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:10px">
+          <div class="card" style="padding:0;overflow:hidden">
+            <div class="row" style="gap:9px;padding:11px 14px;background:rgba(255,255,255,.022)">
+              <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3.5 7.2a2 2 0 0 1 2-2h4l2 2.4h7a2 2 0 0 1 2 2v8.6a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>
+              <span class="mono" style="font-size:11px;flex:1">nickespro130/lumi-andalucia</span>
+              <span class="chip">público</span>
+              <span class="mono" style="font-size:9.5px;color:var(--subtle)">2 índices · 22,8 GiB</span>
+            </div>
+            <div class="row" style="gap:9px;padding:11px 14px;border-top:1px solid var(--border)">
+              <span style="font-size:11.5px;flex:1">Sevilla norte</span>
+              <span class="mono" style="font-size:9.5px;color:var(--subtle)">612 teselas · 8 assets · 18,4 GiB</span>
+              <span class="chip on">publicado</span>
+              <button class="btn gho sm" style="padding:3px 9px;font-size:9.5px">Abrir</button>
+            </div>
+            <div data-state id="s3c" class="row" style="gap:9px;padding:11px 14px;border-top:1px solid var(--border)">
+              <span style="font-size:11.5px;flex:1">Huelva costa</span>
+              <span class="mono" style="font-size:9.5px;color:var(--subtle)">190 teselas · 3 de 6 assets</span>
+              <span class="chip amber">incompleto</span>
+              <button class="btn gho sm" style="padding:3px 9px;font-size:9.5px">Continuar subida</button>
+            </div>
+            <div class="row" style="gap:9px;padding:11px 14px;border-top:1px solid var(--border)">
+              <span style="font-size:11.5px;flex:1">Cádiz bahía</span>
+              <span class="mono" style="font-size:9.5px;color:var(--subtle)">208 teselas · 4 assets · 4,4 GiB</span>
+              <span class="chip on">publicado</span>
+              <button class="btn gho sm" style="padding:3px 9px;font-size:9.5px">Abrir</button>
+            </div>
+          </div>
+
+          <div class="card" style="padding:0;overflow:hidden">
+            <div class="row" style="gap:9px;padding:11px 14px;background:rgba(255,255,255,.022)">
+              <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3.5 7.2a2 2 0 0 1 2-2h4l2 2.4h7a2 2 0 0 1 2 2v8.6a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>
+              <span class="mono" style="font-size:11px;flex:1">nickespro130/lumi-capas</span>
+              <span class="chip">público</span>
+              <span class="mono" style="font-size:9.5px;color:var(--subtle)">1 capa · 84 MiB</span>
+            </div>
+            <div class="row" style="gap:9px;padding:11px 14px;border-top:1px solid var(--border)">
+              <span style="font-size:11.5px;flex:1">Capa lumi-2 2.2 sobre <span class="mono" style="font-size:10px;color:var(--subtle)">@mmartin/Sevilla casco antiguo</span></span>
+              <span class="mono" style="font-size:9.5px;color:var(--subtle)">612 teselas · 84 MiB</span>
+              <span class="chip on">publicado</span>
+            </div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<section class="shot">
+  <div class="cap"><b>4 · Perfil de una cuenta</b>
+    <span>lo que se puede decir de alguien leyendo solo fichas. Sin la web del subsistema 9 no hay estadísticas
+    ricas ni árbol de colaboración, y el popup no finge que las hay. Una cuenta sin publicaciones no es un error:
+    es una cuenta de GitHub normal que no usa Lumi.</span></div>
+  <div class="tabs" data-tabs="s4">
+    <span class="lb">estado</span>
+    <button data-go="s4a" class="on">con publicaciones</button>
+    <button data-go="s4b">sin publicaciones</button>
+  </div>
+  <div class="frame">
+    <div class="rail"><div class="ri on"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 9.5h17M9 5v14"/></svg></div><div class="sp"></div><div class="av sk"></div></div>
+    <div class="top"><div class="crumb"><b>Índices</b></div></div>
+    <div style="position:absolute;inset:0;background:rgba(6,7,8,.62);backdrop-filter:blur(2px);z-index:40"></div>
+
+    <div data-state id="s4a" class="on">
+      <div class="glass" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+           width:600px;z-index:50;padding:22px 24px">
+        <div class="row" style="gap:14px">
+          <div class="avatar sk" style="width:52px;height:52px"></div>
+          <div style="flex:1">
+            <div class="row" style="gap:8px"><p style="font-size:14px">mmartin</p>
+              <span class="chip">github</span></div>
+            <p class="mono" style="font-size:10px;color:var(--subtle);margin-top:3px">
+              huella 4Rk2·9Xpv·Ld7m·3Qwe</p>
+          </div>
+          <button class="btn gho sm">Ver en GitHub</button>
+        </div>
+
+        <div style="display:flex;gap:28px;margin-top:20px">
+          <div><p class="k">índices publicados</p><p class="mono" style="font-size:16px;margin-top:4px">9</p></div>
+          <div><p class="k">teselas z14 cubiertas</p><p class="mono" style="font-size:16px;margin-top:4px">3 214</p></div>
+          <div><p class="k">capas de modelo</p><p class="mono" style="font-size:16px;margin-top:4px">2</p></div>
+          <div><p class="k">primera publicación</p><p class="mono" style="font-size:16px;margin-top:4px">02/2026</p></div>
+        </div>
+
+        <div class="hair" style="margin:18px 0 14px"></div>
+        <p class="k">cobertura</p>
+        <div style="margin-top:9px;height:150px;border-radius:8px;overflow:hidden;position:relative;
+             background:radial-gradient(120% 90% at 50% 30%,#1d2126 0%,#14171a 45%,#0d0f11 100%)">
+          <svg style="position:absolute;inset:0;width:100%;height:100%">
+            <g class="grid">
+              <line x1="0" y1="38" x2="600" y2="38"/><line x1="0" y1="76" x2="600" y2="76"/><line x1="0" y1="114" x2="600" y2="114"/>
+              <line x1="140" y1="0" x2="140" y2="150"/><line x1="280" y1="0" x2="280" y2="150"/><line x1="420" y1="0" x2="420" y2="150"/>
+            </g>
+            <path class="water" d="M0 108 Q120 92 240 104 T520 96 L520 150 L0 150Z"/>
+          </svg>
+          <div style="position:absolute;left:96px;top:34px;display:grid;grid-template-columns:repeat(6,15px);gap:2px">
+            <i style="width:15px;height:15px;background:rgba(133,183,235,.4);border-radius:2px"></i>
+            <i style="width:15px;height:15px;background:rgba(133,183,235,.55);border-radius:2px"></i>
+            <i style="width:15px;height:15px;background:rgba(133,183,235,.3);border-radius:2px"></i>
+            <i style="width:15px;height:15px;background:rgba(133,183,235,.5);border-radius:2px"></i>
+            <i style="width:15px;height:15px;background:rgba(133,183,235,.2);border-radius:2px"></i>
+            <i style="width:15px;height:15px;background:rgba(133,183,235,.45);border-radius:2px"></i>
+            <i style="width:15px;height:15px;background:rgba(133,183,235,.3);border-radius:2px"></i>
+            <i style="width:15px;height:15px;background:rgba(133,183,235,.6);border-radius:2px"></i>
+            <i style="width:15px;height:15px;background:rgba(133,183,235,.35);border-radius:2px"></i>
+            <i style="width:15px;height:15px;background:rgba(133,183,235,.25);border-radius:2px"></i>
+            <i style="width:15px;height:15px;background:rgba(133,183,235,.5);border-radius:2px"></i>
+            <i style="width:15px;height:15px;background:rgba(133,183,235,.15);border-radius:2px"></i>
+          </div>
+          <div style="position:absolute;left:330px;top:70px;display:grid;grid-template-columns:repeat(4,15px);gap:2px">
+            <i style="width:15px;height:15px;background:rgba(133,183,235,.35);border-radius:2px"></i>
+            <i style="width:15px;height:15px;background:rgba(133,183,235,.5);border-radius:2px"></i>
+            <i style="width:15px;height:15px;background:rgba(133,183,235,.2);border-radius:2px"></i>
+            <i style="width:15px;height:15px;background:rgba(133,183,235,.4);border-radius:2px"></i>
+          </div>
+        </div>
+
+        <p class="k" style="margin-top:16px">publicaciones recientes</p>
+        <div style="margin-top:9px;display:flex;flex-direction:column;gap:1px">
+          <div class="row" style="gap:9px;padding:7px 0">
+            <span style="font-size:11.5px;flex:1">Sevilla casco antiguo</span>
+            <span class="mono" style="font-size:9.5px;color:var(--subtle)">612 teselas · 18,4 GiB · 04/08/2026</span>
+            <button class="btn gho sm" style="padding:3px 9px;font-size:9.5px">Abrir</button>
+          </div>
+          <div class="row" style="gap:9px;padding:7px 0;border-top:1px solid var(--border)">
+            <span style="font-size:11.5px;flex:1">Aljarafe</span>
+            <span class="mono" style="font-size:9.5px;color:var(--subtle)">201 teselas · 4,4 GiB · 28/07/2026</span>
+            <span class="chip red">404</span>
+          </div>
+          <div class="row" style="gap:9px;padding:7px 0;border-top:1px solid var(--border)">
+            <span style="font-size:11.5px;flex:1">Córdoba centro</span>
+            <span class="mono" style="font-size:9.5px;color:var(--subtle)">288 teselas · 9,2 GiB · 21/07/2026</span>
+            <button class="btn gho sm" style="padding:3px 9px;font-size:9.5px">Abrir</button>
+          </div>
+        </div>
+        <p class="note" style="margin-top:14px">El árbol de colaboración y las estadísticas de calidad llegan con la
+          web. Aquí solo hay lo que se puede leer de las fichas publicadas.</p>
+      </div>
+    </div>
+
+    <div data-state id="s4b">
+      <div class="glass" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+           width:440px;z-index:50;padding:26px 24px;text-align:center">
+        <div class="avatar sk" style="width:52px;height:52px;margin:0 auto"></div>
+        <p style="font-size:14px;margin-top:13px">sevillamapping</p>
+        <p class="mono" style="font-size:10px;color:var(--subtle);margin-top:3px">github</p>
+        <div class="hair" style="margin:18px 0"></div>
+        <p style="font-size:12px;color:var(--muted)">Esta cuenta no ha publicado nada para Lumi</p>
+        <p class="note" style="margin-top:8px;max-width:320px;margin-left:auto;margin-right:auto">
+          Existe en GitHub, pero ninguno de sus repositorios lleva la etiqueta <span class="mono">lumi-index</span>.</p>
+        <button class="btn gho sm" style="margin-top:18px">Ver en GitHub</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="shot">
+  <div class="cap"><b>5 · Un índice remoto, en solo lectura</b>
+    <span>es <b>la misma ficha de detalle que ya existe</b> con una marca de solo lectura — mismo mapa, mismo visor,
+    mismas estadísticas — igual que hace hoy un índice sellado. No hay pantalla paralela que mantener. Lo único que
+    se añade arriba es de quién es, con qué se firmó y qué hay que descargar para tenerlo.</span></div>
+  <div class="frame">
+    <div class="rail"><div class="ri on"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 9.5h17M9 5v14"/></svg></div><div class="sp"></div><div class="av sk"></div></div>
+    <div class="top"><div class="crumb">Índices <span class="sep">/</span> <span class="mono" style="font-size:10.5px">@mmartin/lumi-andalucia</span> <span class="sep">/</span> <b>Sevilla casco antiguo</b></div></div>
+    <div class="body"><div class="pad"><div class="col">
+
+      <div class="row" style="gap:9px">
+        <p style="font-size:15px">Sevilla casco antiguo</p>
+        <span class="mono" style="font-size:10.5px;color:var(--subtle)">sevilla-casco-antiguo</span>
+        <span class="chip">remoto · solo lectura</span>
+        <span class="chip on"><svg class="i" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg>firma verificada</span>
+        <span style="flex:1"></span>
+        <button class="btn gho sm">Abrir en mapa</button>
+        <button class="btn pri sm">Instalar</button>
+      </div>
+
+      <div class="card" style="margin-top:16px;padding:14px 16px">
+        <div style="display:flex;gap:30px;align-items:flex-start">
+          <div class="row" style="gap:10px">
+            <div class="avatar sk" style="width:30px;height:30px"></div>
+            <div><p class="k">publicado por</p><p class="v">mmartin</p></div>
+          </div>
+          <div><p class="k">huella de la firma</p><p class="mono v">4Rk2·9Xpv·Ld7m·3Qwe</p></div>
+          <div><p class="k">publicado</p><p class="mono v">04/08/2026</p></div>
+          <div><p class="k">vigencia de la ficha</p><p class="mono v">hasta 04/11/2026</p></div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:26px;margin-top:18px">
+        <div><p class="k">Imágenes</p><p class="mono" style="font-size:15px;margin-top:4px">41 902</p></div>
+        <div><p class="k">Teselas z14</p><p class="mono" style="font-size:15px;margin-top:4px">612</p></div>
+        <div><p class="k">Assets</p><p class="mono" style="font-size:15px;margin-top:4px">11</p></div>
+        <div><p class="k">Peso total</p><p class="mono" style="font-size:15px;margin-top:4px">18,4 GiB</p></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 300px;gap:22px;margin-top:20px">
+        <div>
+          <p class="k">Procedencia</p>
+          <table class="t2" style="margin-top:9px">
+            <tr><th>Fuente</th><th style="text-align:right">Imágenes</th><th style="text-align:right">%</th><th>Viaja</th></tr>
+            <tr><td><span class="row" style="gap:7px"><i class="sq" style="background:var(--p-mly)"></i>Mapillary</span></td><td class="n">28 410</td><td class="n">67,8</td><td><span class="chip on">sí</span></td></tr>
+            <tr><td><span class="row" style="gap:7px"><i class="sq" style="background:var(--p-kv)"></i>KartaView</span></td><td class="n">7 120</td><td class="n">17,0</td><td><span class="chip on">sí</span></td></tr>
+            <tr><td><span class="row" style="gap:7px"><i class="sq" style="background:var(--p-com)"></i>Commons</span></td><td class="n">4 002</td><td class="n">9,6</td><td><span class="chip on">sí</span></td></tr>
+            <tr><td><span class="row" style="gap:7px"><i class="sq" style="background:var(--p-goo)"></i>Google</span></td><td class="n">2 370</td><td class="n">5,6</td><td><span class="chip amber">con descargo</span></td></tr>
+            <tr class="tot"><td>Total</td><td class="n">41 902</td><td class="n">100</td><td></td></tr>
+          </table>
+
+          <p class="k" style="margin-top:22px">Capas de modelo disponibles</p>
+          <div style="margin-top:9px;display:flex;flex-direction:column;gap:7px">
+            <div class="card" style="padding:10px 12px">
+              <div class="row" style="gap:9px">
+                <span class="mono" style="font-size:11px;flex:1">lumi-2 · 1.0</span>
+                <span class="mono" style="font-size:9.5px;color:var(--subtle)">612 teselas · 8 448 dims · 74 MiB</span>
+                <span class="chip">por mmartin</span>
+              </div>
+            </div>
+            <div class="card" style="padding:10px 12px">
+              <div class="row" style="gap:9px">
+                <span class="mono" style="font-size:11px;flex:1">lumi-2 · 2.2</span>
+                <span class="mono" style="font-size:9.5px;color:var(--subtle)">612 teselas · 8 448 dims · 84 MiB</span>
+                <span class="chip">por nickespro130</span>
+                <span class="chip on"><svg class="i" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg>tuya</span>
+              </div>
+            </div>
+            <div class="card" style="padding:10px 12px;border-style:dashed">
+              <div class="row" style="gap:9px">
+                <span class="mono" style="font-size:11px;flex:1;color:var(--subtle)">lumi-preview · 3.1</span>
+                <span style="font-size:10.5px;color:var(--subtle);flex:1">no publicada por nadie</span>
+                <button class="btn gho sm" style="padding:3px 9px;font-size:9.5px">Embeber en local</button>
+              </div>
+            </div>
+          </div>
+          <p class="note" style="margin-top:10px">Una capa ajena se comprueba antes de usarla: 50 imágenes al azar
+            se embeben aquí y se comparan con lo que dice la capa. <b>O casan o no casan</b> — el modelo es
+            determinista.</p>
+
+          <p class="k" style="margin-top:22px">Dependencias · 2</p>
+          <p class="note" style="margin-top:6px">Zonas que este índice no cubre porque ya las cubría otro. Van
+            declaradas en su ficha; quien lo instale se las lleva también.</p>
+          <div style="margin-top:10px;display:flex;flex-direction:column;gap:7px">
+            <div class="card" style="padding:10px 12px">
+              <div class="row" style="gap:9px">
+                <div class="avatar sk" style="width:22px;height:22px"></div>
+                <div style="flex:1">
+                  <p style="font-size:11px">Aljarafe <span class="mono" style="font-size:9.5px;color:var(--subtle)">· @aicaza</span></p>
+                  <p class="mono" style="font-size:9px;color:var(--subtle);margin-top:2px">sha256 3b71…c904</p>
+                </div>
+                <span class="mono" style="font-size:9.5px;color:var(--subtle)">96 teselas · 2,1 GiB</span>
+                <span class="chip on">disponible</span>
+              </div>
+            </div>
+            <div class="card" style="padding:10px 12px;border-color:rgba(163,51,51,.35)">
+              <div class="row" style="gap:9px">
+                <div class="avatar sk" style="width:22px;height:22px"></div>
+                <div style="flex:1">
+                  <p style="font-size:11px">Sevilla este <span class="mono" style="font-size:9.5px;color:var(--subtle)">· @osm-andalucia</span></p>
+                  <p class="mono" style="font-size:9px;color:var(--subtle);margin-top:2px">sha256 7e02…11af</p>
+                </div>
+                <span class="mono" style="font-size:9.5px;color:var(--subtle)">32 teselas</span>
+                <span class="chip red">404</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <p class="k">Assets del release</p>
+          <div style="margin-top:9px;display:flex;flex-direction:column;gap:6px">
+            <div class="card" style="padding:8px 10px">
+              <p class="mono" style="font-size:10px">ficha.json</p>
+              <p class="mono" style="font-size:9px;color:var(--subtle);margin-top:2px">en claro · 41 KiB</p>
+            </div>
+            <div class="card" style="padding:8px 10px">
+              <p class="mono" style="font-size:10px">cuerpo-0203212.enc</p>
+              <p class="mono" style="font-size:9px;color:var(--subtle);margin-top:2px">148 teselas · 1,82 GiB</p>
+            </div>
+            <div class="card" style="padding:8px 10px">
+              <p class="mono" style="font-size:10px">cuerpo-0203213.enc</p>
+              <p class="mono" style="font-size:9px;color:var(--subtle);margin-top:2px">160 teselas · 1,91 GiB</p>
+            </div>
+            <div class="card" style="padding:8px 10px;opacity:.55">
+              <p class="mono" style="font-size:10px">… 6 cuerpos más</p>
+            </div>
+            <div class="card" style="padding:8px 10px">
+              <p class="mono" style="font-size:10px">capa-lumi-2-1.0-*.enc</p>
+              <p class="mono" style="font-size:9px;color:var(--subtle);margin-top:2px">8 trozos · 74 MiB</p>
+            </div>
+          </div>
+          <p class="note" style="margin-top:12px">Troceado <b>por geografía</b>, no por bytes: puedes instalar solo
+            las teselas que te interesan y dejar el resto sin descargar.</p>
+        </div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ C · PUBLICAR ══════════════════════════ -->
+<h2>C · Publicar</h2>
+
+<section class="shot">
+  <div class="cap"><b>6 · El diálogo de publicar</b>
+    <span>solo existe en índices <b>sellados</b>: publicar uno abierto no tiene sentido porque el contenido cambiaría
+    bajo los pies del hash. Tres pasos y ninguna sorpresa — se ve el troceado exacto y el peso antes de subir un
+    byte, igual que se ven los euros antes de descargar. El descargo aparece solo si hay material que lo necesita, y
+    hay que marcarlo a mano.</span></div>
+  <div class="tabs" data-tabs="s6">
+    <span class="lb">paso</span>
+    <button data-go="s6a" class="on">1 · repositorio</button>
+    <button data-go="s6b">2 · troceado</button>
+    <button data-go="s6c">3 · descargo</button>
+    <button data-go="s6d">subiendo</button>
+    <button data-go="s6e">cortado a mitad</button>
+  </div>
+  <div class="frame">
+    <div class="rail"><div class="ri on"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 9.5h17M9 5v14"/></svg></div><div class="sp"></div><div class="av sk"></div></div>
+    <div class="top"><div class="crumb">Índices <span class="sep">/</span> <b>Sevilla norte</b></div></div>
+    <div class="body"><div class="pad"><div class="col" style="opacity:.5">
+      <div class="row" style="gap:9px">
+        <p style="font-size:15px">Sevilla norte</p>
+        <span class="chip on">sellado</span>
+        <span class="chip"><svg class="i" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg>embebido completo</span>
+      </div>
+      <div style="display:flex;gap:26px;margin-top:18px">
+        <div><p class="k">Imágenes</p><p class="mono" style="font-size:15px;margin-top:4px">3 224</p></div>
+        <div><p class="k">Teselas z14</p><p class="mono" style="font-size:15px;margin-top:4px">612</p></div>
+      </div>
+    </div></div></div>
+    <div style="position:absolute;inset:0;background:rgba(6,7,8,.62);backdrop-filter:blur(2px);z-index:40"></div>
+
+    <!-- paso 1 -->
+    <div data-state id="s6a" class="on">
+      <div class="glass" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:560px;z-index:50;padding:22px 24px">
+        <div class="row" style="gap:10px">
+          <svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 14.5v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="M12 15.5V4M8.2 7.8 12 4l3.8 3.8"/></svg>
+          <p style="font-size:13.5px;flex:1">Publicar «Sevilla norte»</p>
+          <span class="mono" style="font-size:10px;color:var(--subtle)">paso 1 de 3</span>
+        </div>
+        <p class="note" style="margin-top:9px">Elige dónde vive. El repositorio recibe la etiqueta
+          <span class="mono">lumi-index</span>, que es como te encuentran los demás.</p>
+
+        <div style="margin-top:16px;display:flex;flex-direction:column;gap:7px">
+          <div class="card" style="padding:11px 13px;background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.22)">
+            <div class="row" style="gap:9px">
+              <span style="width:12px;height:12px;border-radius:50%;border:1px solid var(--fg);display:grid;place-items:center">
+                <i style="width:6px;height:6px;border-radius:50%;background:var(--fg);display:block"></i></span>
+              <span class="mono" style="font-size:11px;flex:1">nickespro130/lumi-andalucia</span>
+              <span class="chip on">ya tiene la etiqueta</span>
+              <span class="mono" style="font-size:9.5px;color:var(--subtle)">2 índices</span>
+            </div>
+          </div>
+          <div class="card" style="padding:11px 13px">
+            <div class="row" style="gap:9px">
+              <span style="width:12px;height:12px;border-radius:50%;border:1px solid var(--subtle)"></span>
+              <span class="mono" style="font-size:11px;flex:1">nickespro130/lumi-capas</span>
+              <span class="chip on">ya tiene la etiqueta</span>
+              <span class="mono" style="font-size:9.5px;color:var(--subtle)">1 capa</span>
+            </div>
+          </div>
+          <div class="card" style="padding:11px 13px;border-style:dashed">
+            <div class="row" style="gap:9px">
+              <span style="width:12px;height:12px;border-radius:50%;border:1px solid var(--subtle)"></span>
+              <span style="font-size:11.5px;flex:1;color:var(--muted)">Crear un repositorio nuevo</span>
+              <div class="field mono" style="width:250px;padding:5px 9px;font-size:10px">lumi-sevilla-norte</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hair" style="margin:16px 0"></div>
+        <div class="row" style="gap:10px">
+          <span class="k" style="flex:1">visibilidad del repositorio</span>
+          <span class="chip on">público</span>
+          <span class="chip">privado</span>
+        </div>
+        <p class="note" style="margin-top:8px">Un repositorio privado se publica igual, pero <b>no reclama
+          territorio ni aparece en las búsquedas</b>: nadie puede leer su ficha.</p>
+
+        <div style="display:flex;justify-content:flex-end;gap:9px;margin-top:20px">
+          <button class="btn gho">Cancelar</button>
+          <button class="btn pri">Siguiente</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- paso 2 -->
+    <div data-state id="s6b">
+      <div class="glass" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:640px;z-index:50;padding:22px 24px">
+        <div class="row" style="gap:10px">
+          <p style="font-size:13.5px;flex:1">Esto es lo que se va a subir</p>
+          <span class="mono" style="font-size:10px;color:var(--subtle)">paso 2 de 3</span>
+        </div>
+        <p class="note" style="margin-top:9px">El paquete se parte <b>por geografía</b> para no pasar el límite de
+          2 GiB por asset de GitHub. Cada trozo es autocontenido: quien lo instale puede quedarse solo con las zonas
+          que le sirvan.</p>
+
+        <div style="display:flex;gap:26px;margin-top:18px">
+          <div><p class="k">assets</p><p class="mono" style="font-size:16px;margin-top:4px">6</p></div>
+          <div><p class="k">peso total</p><p class="mono" style="font-size:16px;margin-top:4px">9,7 GiB</p></div>
+          <div><p class="k">teselas</p><p class="mono" style="font-size:16px;margin-top:4px">612</p></div>
+          <div><p class="k">modelos</p><p class="mono" style="font-size:16px;margin-top:4px">2</p></div>
+        </div>
+
+        <div style="margin-top:16px;max-height:200px;overflow:hidden">
+          <table class="t2">
+            <tr><th>Asset</th><th>Zona</th><th style="text-align:right">Teselas</th><th style="text-align:right">Peso</th></tr>
+            <tr><td class="mono" style="font-size:10.5px">ficha.json</td><td style="color:var(--subtle)">toda</td><td class="n">612</td><td class="n">38 KiB</td></tr>
+            <tr><td class="mono" style="font-size:10.5px">cuerpo-0313101.enc</td><td class="mono" style="font-size:10px;color:var(--subtle)">norte</td><td class="n">168</td><td class="n">1,88 GiB</td></tr>
+            <tr><td class="mono" style="font-size:10.5px">cuerpo-0313103.enc</td><td class="mono" style="font-size:10px;color:var(--subtle)">centro</td><td class="n">204</td><td class="n">1,94 GiB</td></tr>
+            <tr><td class="mono" style="font-size:10.5px">cuerpo-0313112.enc</td><td class="mono" style="font-size:10px;color:var(--subtle)">este</td><td class="n">142</td><td class="n">1,79 GiB</td></tr>
+            <tr><td class="mono" style="font-size:10.5px">cuerpo-0313121.enc</td><td class="mono" style="font-size:10px;color:var(--subtle)">sur</td><td class="n">98</td><td class="n">1,62 GiB</td></tr>
+            <tr><td class="mono" style="font-size:10.5px">capa-lumi-2-1.0.enc</td><td style="color:var(--subtle)">toda</td><td class="n">612</td><td class="n">74 MiB</td></tr>
+          </table>
+        </div>
+
+        <div class="hair" style="margin:14px 0"></div>
+        <div class="row" style="gap:10px">
+          <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="10.5" width="14" height="9" rx="1.8"/><path d="M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5"/></svg>
+          <span style="font-size:11px;color:var(--muted);flex:1">Todo menos la ficha va cifrado. La clave viaja
+            <b style="color:var(--fg);font-weight:400">dentro de la ficha</b>: cualquiera con Lumi lo abre, un
+            rastreador que pase por GitHub no.</span>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:9px;margin-top:18px">
+          <button class="btn gho">Atrás</button>
+          <button class="btn pri">Siguiente</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- paso 3 -->
+    <div data-state id="s6c">
+      <div class="glass" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:560px;z-index:50;padding:22px 24px">
+        <div class="row" style="gap:10px">
+          <p style="font-size:13.5px;flex:1">Antes de publicar</p>
+          <span class="mono" style="font-size:10px;color:var(--subtle)">paso 3 de 3</span>
+        </div>
+
+        <div style="margin-top:16px;border:1px solid rgba(239,159,39,.34);background:rgba(239,159,39,.06);
+             border-radius:10px;padding:15px 16px">
+          <div class="row" style="gap:10px;align-items:flex-start">
+            <svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--warning-fg)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="margin-top:1px">
+              <path d="M12 4.5 21 19.5H3L12 4.5Z"/><path d="M12 10v4M12 16.8h.01"/></svg>
+            <div style="flex:1">
+              <p style="font-size:12px;color:var(--warning-fg)">Este índice contiene material no redistribuible</p>
+              <table class="t2" style="margin-top:11px">
+                <tr><td style="border:0;padding:3px 0"><span class="row" style="gap:7px"><i class="sq" style="background:var(--p-goo)"></i>Google Street View</span></td><td class="n" style="border:0;padding:3px 0">2 370 imágenes</td></tr>
+              </table>
+              <p class="note" style="margin-top:10px;color:var(--muted)">
+                Sus términos no permiten redistribuirlas. Al publicar, esas imágenes quedan accesibles en un
+                repositorio a tu nombre: <b>la responsabilidad y cualquier reclamación de retirada son tuyas</b>,
+                no de Lumi. Si el asset se retira, las teselas que reclama vuelven a quedar libres para todos.</p>
+            </div>
+          </div>
+        </div>
+
+        <label style="display:flex;align-items:flex-start;gap:9px;margin-top:15px">
+          <span style="width:14px;height:14px;border:1px solid rgba(255,255,255,.30);border-radius:3px;
+                display:grid;place-items:center;flex-shrink:0;margin-top:1px">
+            <svg class="i" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg>
+          </span>
+          <span style="font-size:11px;color:var(--muted);line-height:1.6">Lo entiendo y publico bajo mi
+            responsabilidad. La ficha lo dirá, para que quien lo instale sepa lo que se lleva.</span>
+        </label>
+
+        <div class="hair" style="margin:16px 0"></div>
+        <div class="row" style="gap:10px">
+          <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--warning-fg)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="8" cy="12" r="3.6"/><path d="M11.6 12H20M17 12v3.2M14.4 12v2.4"/></svg>
+          <span style="font-size:11px;color:var(--muted);flex:1">Se firmará con
+            <span class="mono" style="color:var(--fg)">7dQm·4Kx9·PL2v·8Wnc</span></span>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:9px;margin-top:18px">
+          <button class="btn gho">Atrás</button>
+          <button class="btn pri">Publicar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- subiendo -->
+    <div data-state id="s6d">
+      <div class="glass" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:560px;z-index:50;padding:22px 24px">
+        <div class="row" style="gap:10px">
+          <span class="dot"></span>
+          <p style="font-size:13.5px;flex:1">Subiendo «Sevilla norte»</p>
+          <span class="mono" style="font-size:10px;color:var(--subtle)">3 de 6 assets</span>
+        </div>
+
+        <div style="margin-top:16px;display:flex;flex-direction:column;gap:9px">
+          <div>
+            <div class="row" style="gap:9px"><span class="mono" style="font-size:10.5px;flex:1">ficha.json</span>
+              <svg class="i" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg></div>
+          </div>
+          <div>
+            <div class="row" style="gap:9px"><span class="mono" style="font-size:10.5px;flex:1">cuerpo-0313101.enc</span>
+              <span class="mono" style="font-size:9.5px;color:var(--subtle)">1,88 GiB</span>
+              <svg class="i" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg></div>
+          </div>
+          <div>
+            <div class="row" style="gap:9px"><span class="mono" style="font-size:10.5px;flex:1">cuerpo-0313103.enc</span>
+              <span class="mono" style="font-size:9.5px;color:var(--subtle)">1,12 / 1,94 GiB · 8,4 MiB/s</span></div>
+            <span class="bar" style="margin-top:6px"><i style="width:58%"></i></span>
+          </div>
+          <div class="row" style="gap:9px;opacity:.45"><span class="mono" style="font-size:10.5px;flex:1">cuerpo-0313112.enc</span><span class="mono" style="font-size:9.5px;color:var(--subtle)">en cola</span></div>
+          <div class="row" style="gap:9px;opacity:.45"><span class="mono" style="font-size:10.5px;flex:1">cuerpo-0313121.enc</span><span class="mono" style="font-size:9.5px;color:var(--subtle)">en cola</span></div>
+          <div class="row" style="gap:9px;opacity:.45"><span class="mono" style="font-size:10.5px;flex:1">capa-lumi-2-1.0.enc</span><span class="mono" style="font-size:9.5px;color:var(--subtle)">en cola</span></div>
+        </div>
+
+        <div class="hair" style="margin:16px 0"></div>
+        <p class="logline">
+          <em>19:04:11</em> cifrando <b>cuerpo-0313103</b> · 204 teselas<br>
+          <em>19:06:02</em> subiendo a <b>nickespro130/lumi-andalucia</b> release <b>sevilla-norte-v1</b><br>
+          <em>19:09:47</em> <b>cuerpo-0313101.enc</b> subido · sha256 verificado contra el remoto
+        </p>
+        <p class="note" style="margin-top:13px">Puedes cerrar esto y seguir trabajando: la subida corre de fondo,
+          como una descarga. Si se corta, se retoma por el asset que faltaba — <b>no se resube lo que ya está</b>.</p>
+
+        <div style="display:flex;justify-content:flex-end;gap:9px;margin-top:16px">
+          <button class="btn gho">Pausar</button>
+          <button class="btn gho">Cerrar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- cortado -->
+    <div data-state id="s6e">
+      <div class="glass" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:560px;z-index:50;padding:22px 24px">
+        <div class="row" style="gap:10px">
+          <svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--warning-fg)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 4.5 21 19.5H3L12 4.5Z"/><path d="M12 10v4M12 16.8h.01"/></svg>
+          <p style="font-size:13.5px;flex:1">La subida se cortó</p>
+          <span class="chip amber">incompleto</span>
+        </div>
+        <p class="note" style="margin-top:10px">3 de 6 assets están arriba. <b>Mientras falte uno, la ficha no se
+          publica</b>: sin ficha el paquete no aparece en ninguna búsqueda y no reclama ninguna tesela, así que
+          nadie se encuentra un índice a medias.</p>
+
+        <div class="card mono" style="margin-top:14px;padding:11px 13px;background:#0b0d0f;font-size:10px;line-height:1.9;color:var(--muted)">
+          <span style="color:var(--danger-fg)">PUT uploads.github.com/… → 502 bad gateway</span><br>
+          reintento 3 de 3 · abandonado a las 19:41:08
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:9px;margin-top:18px">
+          <button class="btn gho" style="color:var(--danger-fg);border-color:rgba(163,51,51,.45)">Descartar el release</button>
+          <button class="btn pri">Continuar subida</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ D · RECLAMO ══════════════════════════ -->
+<h2>D · Territorio reclamado</h2>
+
+<section class="shot">
+  <div class="cap"><b>7 · Dibujar sobre territorio de otro</b>
+    <span>el cuarto estado de tesela. El reclamo es <b>duro</b>: esas teselas salen del presupuesto antes de que
+    veas el primer euro, así que el número que lees ya lleva el descuento. Y no es un callejón sin salida — lo que
+    hay al otro lado es instalable, y si el paquete desaparece la tesela se libera sola.</span></div>
+  <div class="tabs" data-tabs="s7">
+    <span class="lb">estado</span>
+    <button data-go="s7a" class="on">capa de reclamos apagada</button>
+    <button data-go="s7b">encendida</button>
+    <button data-go="s7c">tesela reclamada, en detalle</button>
+  </div>
+  <div class="frame">
+    <div class="rail">
+      <div class="ri"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 9.5h17M9 5v14"/></svg></div>
+      <div class="ri on"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 6.8 5.6-2.3 5.8 2.4 5.6-2.3v13.6l-5.6 2.3-5.8-2.4-5.6 2.3z"/><path d="M9.1 4.5v15.2M14.9 6.9v15.1"/></svg></div>
+      <div class="ri"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.6" y="5.2" width="16.8" height="13.6" rx="2"/><path d="m3.6 15 4.2-4 3.4 3.2 4-4.4 5.2 5.4"/></svg></div>
+      <div class="sp"></div>
+      <div class="ri"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.5v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="M12 4v10M8.2 10.4 12 14.2l3.8-3.8"/></svg></div>
+      <div class="ri"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7.5h16M4 12h16M4 16.5h16"/><circle cx="9" cy="7.5" r="2.1" fill="var(--bg)"/><circle cx="15.5" cy="12" r="2.1" fill="var(--bg)"/><circle cx="7.5" cy="16.5" r="2.1" fill="var(--bg)"/></svg></div>
+      <div class="av sk"></div>
+    </div>
+    <div class="top"><div class="crumb"><b>Territorio</b> <span class="sep">/</span> área dibujada <span class="mono" style="font-size:10.5px">· 812 teselas z14</span></div></div>
+    <div class="body">
+      <div class="map">
+        <svg>
+          <g class="grid">
+            <line x1="0" y1="90" x2="1240" y2="90"/><line x1="0" y1="200" x2="1240" y2="200"/>
+            <line x1="0" y1="310" x2="1240" y2="310"/><line x1="0" y1="420" x2="1240" y2="420"/>
+            <line x1="0" y1="530" x2="1240" y2="530"/><line x1="0" y1="640" x2="1240" y2="640"/>
+            <line x1="180" y1="0" x2="180" y2="762"/><line x1="380" y1="0" x2="380" y2="762"/>
+            <line x1="580" y1="0" x2="580" y2="762"/><line x1="780" y1="0" x2="780" y2="762"/>
+            <line x1="980" y1="0" x2="980" y2="762"/>
+          </g>
+          <path class="water" d="M0 470 Q180 430 360 466 T720 442 T1100 470 L1240 452 L1240 762 L0 762Z"/>
+          <path class="road big" d="M60 700 C 260 620 300 420 520 330 S 860 260 1180 150"/>
+          <path class="road" d="M120 120 C 340 200 380 380 620 430 S 900 520 1160 620" stroke-width="1.6"/>
+          <path class="road" d="M700 60 C 660 240 720 400 660 600 S 700 720 720 762" stroke-width="1.4"/>
+          <path d="M300 160 L900 140 L980 520 L640 640 L280 540 Z" fill="rgba(55,138,221,.055)"
+                stroke="var(--draw)" stroke-width="1.6" stroke-dasharray="5 4"/>
+        </svg>
+
+        <!-- teselas base -->
+        <div style="position:absolute;left:340px;top:190px;display:grid;grid-template-columns:repeat(11,46px);gap:2px">
+          <i class="t nueva" style="position:relative"></i><i class="t nueva" style="position:relative"></i>
+          <i class="t local" style="position:relative"></i><i class="t local" style="position:relative"></i>
+          <i class="t cat" style="position:relative"></i><i class="t nueva" style="position:relative"></i>
+          <i class="t nueva" style="position:relative"></i><i class="t nueva" style="position:relative"></i>
+          <i class="t cat" style="position:relative"></i><i class="t nueva" style="position:relative"></i>
+          <i class="t nueva" style="position:relative"></i>
+
+          <i class="t local" style="position:relative"></i><i class="t local" style="position:relative"></i>
+          <i class="t nueva" style="position:relative"></i>
+          <i class="t nueva rec" style="position:relative"></i><i class="t nueva rec" style="position:relative"></i>
+          <i class="t nueva rec" style="position:relative"></i><i class="t nueva rec" style="position:relative"></i>
+          <i class="t nueva" style="position:relative"></i><i class="t cat" style="position:relative"></i>
+          <i class="t nueva" style="position:relative"></i><i class="t nueva" style="position:relative"></i>
+
+          <i class="t nueva" style="position:relative"></i><i class="t nueva" style="position:relative"></i>
+          <i class="t nueva rec" style="position:relative"></i><i class="t nueva rec" style="position:relative"></i>
+          <i class="t nueva rec" style="position:relative"></i><i class="t nueva rec" style="position:relative"></i>
+          <i class="t nueva rec" style="position:relative"></i><i class="t nueva rec" style="position:relative"></i>
+          <i class="t nueva" style="position:relative"></i><i class="t nueva" style="position:relative"></i>
+          <i class="t nueva" style="position:relative"></i>
+
+          <i class="t nueva" style="position:relative"></i><i class="t nueva" style="position:relative"></i>
+          <i class="t nueva rec" style="position:relative"></i><i class="t nueva rec" style="position:relative"></i>
+          <i class="t nueva rec" style="position:relative"></i><i class="t nueva rec" style="position:relative"></i>
+          <i class="t nueva rec" style="position:relative"></i><i class="t nueva" style="position:relative"></i>
+          <i class="t nueva" style="position:relative"></i><i class="t local" style="position:relative"></i>
+          <i class="t nueva" style="position:relative"></i>
+
+          <i class="t nueva" style="position:relative"></i><i class="t cat" style="position:relative"></i>
+          <i class="t nueva" style="position:relative"></i><i class="t nueva rec" style="position:relative"></i>
+          <i class="t nueva rec" style="position:relative"></i><i class="t nueva" style="position:relative"></i>
+          <i class="t nueva" style="position:relative"></i><i class="t nueva" style="position:relative"></i>
+          <i class="t nueva" style="position:relative"></i><i class="t nueva" style="position:relative"></i>
+          <i class="t nueva" style="position:relative"></i>
+        </div>
+
+        <!-- leyenda -->
+        <div class="glass legend">
+          <p class="k" style="margin-bottom:8px">teselas z14</p>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div class="row" style="gap:8px"><i class="sq" style="background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28)"></i><span style="font-size:10.5px;color:var(--muted)">en tus índices</span></div>
+            <div class="row" style="gap:8px"><i class="sq" style="background:rgba(55,138,221,.22);border:1px solid rgba(133,183,235,.5)"></i><span style="font-size:10.5px;color:var(--muted)">en tu catálogo local</span></div>
+            <div class="row" style="gap:8px" data-state id="s7b-lg"><i class="sq" style="background:rgba(239,159,39,.2);border:1px solid rgba(239,159,39,.55)"></i><span style="font-size:10.5px;color:var(--warning-fg)">reclamada por otro</span></div>
+            <div class="row" style="gap:8px"><i class="sq" style="background:transparent;border:1px dashed rgba(154,154,149,.5)"></i><span style="font-size:10.5px;color:var(--muted)">sin indexar</span></div>
+          </div>
+          <div class="hair" style="margin:9px 0"></div>
+          <div class="row" style="gap:8px">
+            <span style="font-size:10px;color:var(--subtle);flex:1">capa de reclamos</span>
+            <span data-state id="s7a-tg" class="on" style="width:26px;height:15px;border-radius:8px;background:#2a2d32;position:relative;display:block">
+              <i style="position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;background:#6a6c70;display:block"></i></span>
+            <span data-state id="s7b-tg" style="width:26px;height:15px;border-radius:8px;background:rgba(255,255,255,.22);position:relative;display:block">
+              <i style="position:absolute;top:2px;left:13px;width:11px;height:11px;border-radius:50%;background:var(--fg);display:block"></i></span>
+          </div>
+        </div>
+
+        <!-- panel de disponibilidad -->
+        <div class="glass" style="position:absolute;right:14px;top:14px;bottom:14px;width:330px;z-index:20;padding:16px 17px;overflow:hidden">
+          <p class="k">Disponibilidad del área</p>
+
+          <div data-state id="s7a-p" class="on">
+            <table class="t2" style="margin-top:12px">
+              <tr><td>Ya en tus índices</td><td class="n">128</td></tr>
+              <tr><td>En tu catálogo local</td><td class="n">64</td></tr>
+              <tr><td>Nuevas</td><td class="n">620</td></tr>
+              <tr class="tot"><td>Total</td><td class="n">812</td></tr>
+            </table>
+            <div class="hair" style="margin:16px 0"></div>
+            <div class="row"><span style="font-size:11.5px;flex:1">Coste estimado</span>
+              <span class="mono" style="font-size:15px">148,20 €</span></div>
+            <p class="note" style="margin-top:7px">620 teselas nuevas · 5 orígenes</p>
+            <button class="btn pri" style="width:100%;margin-top:16px">Estimar y planificar</button>
+          </div>
+
+          <div data-state id="s7b-p">
+            <table class="t2" style="margin-top:12px">
+              <tr><td>Ya en tus índices</td><td class="n">128</td></tr>
+              <tr><td>En tu catálogo local</td><td class="n">64</td></tr>
+              <tr><td><span class="row" style="gap:7px;color:var(--warning-fg)"><i class="sq" style="background:rgba(239,159,39,.2);border:1px solid rgba(239,159,39,.55)"></i>Reclamadas por otros</span></td><td class="n" style="color:var(--warning-fg)" id="s7-nrec">412</td></tr>
+              <tr><td>Nuevas</td><td class="n" id="s7-nnew">208</td></tr>
+              <tr class="tot"><td>Total</td><td class="n">812</td></tr>
+            </table>
+
+            <div style="margin-top:14px;border:1px solid rgba(239,159,39,.30);background:rgba(239,159,39,.05);
+                 border-radius:9px;padding:12px 13px">
+              <p style="font-size:11px;color:var(--warning-fg)">412 teselas las aporta otro</p>
+              <p class="note" style="margin-top:7px">Ni las descargas del proveedor ni te descargas sus paquetes:
+                <b>no entran en tu índice</b>. Tu ficha declara que esa zona la cubren ellos, y quien instale tu
+                índice desde el catálogo se los baja también.</p>
+              <div style="margin-top:11px;display:flex;flex-direction:column;gap:8px">
+                <div class="row" style="gap:8px">
+                  <div class="avatar sk" style="width:20px;height:20px"></div>
+                  <span style="font-size:11px;flex:1">mmartin</span>
+                  <span class="mono" style="font-size:9.5px;color:var(--subtle)">284</span>
+                </div>
+                <div class="row" style="gap:8px">
+                  <div class="avatar sk" style="width:20px;height:20px"></div>
+                  <span style="font-size:11px;flex:1">aicaza</span>
+                  <span class="mono" style="font-size:9.5px;color:var(--subtle)">96</span>
+                </div>
+                <div class="row" style="gap:8px">
+                  <div class="avatar sk" style="width:20px;height:20px"></div>
+                  <span style="font-size:11px;flex:1">osm-andalucia</span>
+                  <span class="mono" style="font-size:9.5px;color:var(--subtle)">32</span>
+                </div>
+              </div>
+              <div class="row" style="gap:8px;margin-top:11px;padding-top:10px;border-top:1px solid rgba(239,159,39,.22)">
+                <span class="k" style="flex:1">quedarán como dependencia</span>
+                <span class="mono" style="font-size:10px;color:var(--warning-fg)">3 paquetes</span>
+              </div>
+            </div>
+
+            <div class="hair" style="margin:14px 0"></div>
+            <div class="row"><span style="font-size:11.5px;flex:1">Coste estimado</span>
+              <div style="text-align:right">
+                <span class="mono" style="font-size:15px" id="s7-precio">49,60 €</span>
+                <p class="mono tach" style="font-size:9.5px;color:var(--subtle)">148,20 €</p>
+              </div></div>
+            <p class="note" style="margin-top:7px">208 teselas nuevas · el reclamo ya está descontado</p>
+            <button class="btn pri" style="width:100%;margin-top:14px">Estimar y planificar</button>
+          </div>
+        </div>
+
+        <!-- popup de tesela -->
+        <div data-state id="s7c-pop">
+          <div class="glass" style="position:absolute;left:392px;top:300px;width:290px;z-index:30;padding:14px 15px">
+            <div class="row" style="gap:8px">
+              <span class="mono" style="font-size:11px;flex:1">0313103312</span>
+              <span class="chip amber">reclamada</span>
+            </div>
+            <div class="hair" style="margin:11px 0"></div>
+            <div class="row" style="gap:9px">
+              <div class="avatar sk" style="width:26px;height:26px"></div>
+              <div style="flex:1">
+                <p style="font-size:11.5px">mmartin</p>
+                <p class="mono" style="font-size:9.5px;color:var(--subtle);margin-top:2px">Sevilla casco antiguo</p>
+              </div>
+            </div>
+            <table class="t2" style="margin-top:12px">
+              <tr><td style="border:0;padding:4px 0;color:var(--subtle)">publicado</td><td class="n" style="border:0;padding:4px 0">04/08/2026</td></tr>
+              <tr><td style="border:0;padding:4px 0;color:var(--subtle)">imágenes aquí</td><td class="n" style="border:0;padding:4px 0">68</td></tr>
+              <tr><td style="border:0;padding:4px 0;color:var(--subtle)">fuentes</td><td class="n" style="border:0;padding:4px 0">
+                <span class="row" style="gap:4px;justify-content:flex-end"><i class="sq" style="background:var(--p-mly)"></i><i class="sq" style="background:var(--p-kv)"></i><i class="sq" style="background:var(--p-goo)"></i></span></td></tr>
+              <tr><td style="border:0;padding:4px 0;color:var(--subtle)">asset</td><td class="n" style="border:0;padding:4px 0">1,88 GiB</td></tr>
+            </table>
+            <div class="row" style="gap:8px;margin-top:12px;padding:8px 10px;border-radius:7px;
+                 background:rgba(239,159,39,.07);border:1px solid rgba(239,159,39,.24)">
+              <svg class="i" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--warning-fg)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M14 7l5 5-5 5"/></svg>
+              <span style="font-size:10.5px;color:var(--warning-fg);line-height:1.5">Viajará como dependencia de tu
+                índice, no en él</span>
+            </div>
+            <div style="display:flex;gap:7px;margin-top:11px">
+              <button class="btn gho sm" style="flex:1">Ver ficha</button>
+              <button class="btn gho sm">Perfil</button>
+            </div>
+            <p class="note" style="margin-top:10px">¿Está mal cubierta? <b style="text-decoration:underline;text-underline-offset:2px">Reportar</b>
+              — un desreclamo la devuelve a «sin indexar» para todos.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="shot">
+  <div class="cap"><b>8 · Un modelo nuevo, sin volver a descargar nada</b>
+    <span>la respuesta a «que lumi&nbsp;2.2 funcione sin reindexar». Reindexar —volver a comprarle píxeles al
+    proveedor— <b>no vuelve a pasar nunca</b>: las imágenes ya están en el paquete. Lo que sí hay que rehacer es el
+    embebido, y eso es GPU local sobre material que ya tienes. Publicar la capa nueva no resube ni un byte de
+    imagen.</span></div>
+  <div class="frame">
+    <div class="rail"><div class="ri on"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 9.5h17M9 5v14"/></svg></div><div class="sp"></div><div class="av sk"></div></div>
+    <div class="top"><div class="crumb"><b>Índices</b></div></div>
+    <div class="body"><div class="pad"><div class="col">
+
+      <div style="border:1px solid rgba(133,183,235,.30);background:rgba(55,138,221,.05);border-radius:10px;padding:15px 17px">
+        <div class="row" style="gap:11px;align-items:flex-start">
+          <span class="dot" style="margin-top:5px"></span>
+          <div style="flex:1">
+            <p style="font-size:12.5px">Hay un modelo nuevo: <span class="mono">lumi-2 · 2.2</span></p>
+            <p class="note" style="margin-top:7px">7 de tus índices están embebidos con <span class="mono">2.1</span>.
+              Sus imágenes no hay que volver a descargarlas — <b>ya las tienes</b>. Solo hay que pasarles la GPU otra
+              vez y, si quieres, publicar la capa resultante para que no la repita nadie más.</p>
+          </div>
+          <button class="btn gho sm">Más tarde</button>
+          <button class="btn pri sm">Embeber los 7</button>
+        </div>
+      </div>
+
+      <p class="k" style="margin-top:26px">Índices por modelo</p>
+      <table class="t2" style="margin-top:11px">
+        <tr><th>Índice</th><th>lumi-2 2.1</th><th>lumi-2 2.2</th><th style="text-align:right">Imágenes</th><th style="text-align:right"></th></tr>
+        <tr>
+          <td>Sevilla norte <span class="chip on" style="margin-left:6px">publicado</span></td>
+          <td><span class="chip on">completo</span></td>
+          <td><span class="row" style="gap:7px"><span class="dot"></span><span class="mono" style="font-size:10px;color:var(--draw-fg)">1 204 / 3 224</span></span></td>
+          <td class="n">3 224</td>
+          <td class="n" style="width:150px"><span style="color:var(--subtle);font-size:10.5px">embebiendo…</span></td>
+        </tr>
+        <tr>
+          <td>Cádiz bahía <span class="chip on" style="margin-left:6px">publicado</span></td>
+          <td><span class="chip on">completo</span></td>
+          <td><span class="chip on">completo</span></td>
+          <td class="n">8 940</td>
+          <td class="n" style="width:150px"><button class="btn pri sm" style="padding:3px 10px;font-size:9.5px">Publicar capa 2.2</button></td>
+        </tr>
+        <tr>
+          <td>Sevilla casco antiguo <span class="chip" style="margin-left:6px">de mmartin</span></td>
+          <td><span class="chip on">completo</span></td>
+          <td><span class="chip on">completo</span></td>
+          <td class="n">41 902</td>
+          <td class="n" style="width:150px"><button class="btn gho sm" style="padding:3px 10px;font-size:9.5px">Publicar capa 2.2</button></td>
+        </tr>
+        <tr>
+          <td>tokyo</td>
+          <td><span class="chip on">completo</span></td>
+          <td><span class="chip">sin empezar</span></td>
+          <td class="n">3 224</td>
+          <td class="n" style="width:150px"><span style="color:var(--subtle);font-size:10.5px">en cola</span></td>
+        </tr>
+      </table>
+
+      <div class="card" style="margin-top:22px;padding:15px 17px">
+        <div class="row" style="gap:10px">
+          <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 14.5v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="M12 15.5V4M8.2 7.8 12 4l3.8 3.8"/></svg>
+          <p style="font-size:12px;flex:1">Publicar una capa sobre el paquete de otra persona</p>
+        </div>
+        <p class="note" style="margin-top:9px">No tienes permiso de escritura en el repositorio de
+          <span class="mono">mmartin</span>, así que la capa se publica <b>en uno tuyo</b> y su ficha apunta al
+          cuerpo original por hash. Al instalarlo, Lumi une las dos piezas: cuerpo de mmartin, vectores tuyos, cada
+          uno con su firma.</p>
+        <div class="row" style="gap:9px;margin-top:13px">
+          <span class="mono" style="font-size:10.5px;color:var(--subtle);flex:1">
+            cuerpo <span style="color:var(--fg)">@mmartin/lumi-andalucia</span> · sha256 9f2c…4e18</span>
+          <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--subtle)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M14 7l5 5-5 5"/></svg>
+          <span class="mono" style="font-size:10.5px;color:var(--subtle);flex:1;text-align:right">
+            capa <span style="color:var(--fg)">@nickespro130/lumi-capas</span> · 84 MiB</span>
+        </div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ E · DEPENDENCIAS ══════════════════════════ -->
+<h2>E · Instalar es resolver un grafo</h2>
+
+<section class="shot">
+  <div class="cap"><b>9 · Lumi Station · el catálogo hila las dependencias</b>
+    <span>aquí es donde se paga el ancho de banda que el indexador no pagó. Un índice que dejó 412 teselas a otros
+    no las lleva dentro: las <b>declara</b>. Instalarlo es descargar el grafo entero, con el peso sumado antes de
+    empezar. Y este grafo <b>es</b> el árbol de «hecho con la colaboración de»: no hay que construirlo aparte, sale
+    de encadenar fichas.</span></div>
+  <div class="tabs" data-tabs="s9">
+    <span class="lb">estado</span>
+    <button data-go="s9a" class="on">grafo completo</button>
+    <button data-go="s9b">una dependencia ha muerto</button>
+  </div>
+  <div class="frame">
+    <div style="position:absolute;inset:0;background:radial-gradient(120% 80% at 50% 0%,#171a1e 0%,#0e0f11 60%)"></div>
+    <div class="top" style="left:0"><div class="crumb">Lumi Station <span class="sep">/</span> <b>Catálogo</b></div></div>
+    <div style="position:absolute;inset:38px 0 0 0;background:rgba(6,7,8,.55);backdrop-filter:blur(2px);z-index:40"></div>
+
+    <div data-state id="s9a" class="on">
+      <div class="glass rise" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:620px;z-index:50;padding:22px 24px">
+        <div class="row" style="gap:10px">
+          <p style="font-size:13.5px;flex:1">Instalar «Sevilla norte»</p>
+          <span class="chip">de nickespro130</span>
+        </div>
+        <p class="note" style="margin-top:9px">Este índice se apoya en el trabajo de otras dos personas. Para tener
+          el área completa hacen falta los tres paquetes.</p>
+
+        <div style="margin-top:18px;position:relative">
+          <!-- raíz -->
+          <div class="row" style="gap:10px;padding:9px 0">
+            <div class="avatar sk" style="width:26px;height:26px"></div>
+            <div style="flex:1">
+              <p style="font-size:12px">Sevilla norte <span class="mono" style="font-size:9.5px;color:var(--subtle)">· @nickespro130</span></p>
+              <p class="mono" style="font-size:9.5px;color:var(--subtle);margin-top:2px">208 teselas propias · 4 assets</p>
+            </div>
+            <span class="mono" style="font-size:10.5px">9,7 GiB</span>
+            <svg class="i draw" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg>
+          </div>
+
+          <!-- hijos -->
+          <div style="margin-left:13px;border-left:1px solid var(--border);padding-left:20px">
+            <div class="row" style="gap:10px;padding:9px 0;position:relative">
+              <span style="position:absolute;left:-20px;top:22px;width:14px;height:1px;background:var(--border)"></span>
+              <div class="avatar sk" style="width:26px;height:26px"></div>
+              <div style="flex:1">
+                <p style="font-size:12px">Sevilla casco antiguo <span class="mono" style="font-size:9.5px;color:var(--subtle)">· @mmartin</span></p>
+                <p class="mono" style="font-size:9.5px;color:var(--subtle);margin-top:2px">284 teselas · aporta el centro</p>
+              </div>
+              <span class="mono" style="font-size:10.5px">18,4 GiB</span>
+              <svg class="i draw" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="animation-delay:.22s"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg>
+            </div>
+
+            <div style="margin-left:13px;border-left:1px solid var(--border);padding-left:20px">
+              <div class="row" style="gap:10px;padding:9px 0;position:relative">
+                <span style="position:absolute;left:-20px;top:22px;width:14px;height:1px;background:var(--border)"></span>
+                <div class="avatar sk" style="width:26px;height:26px"></div>
+                <div style="flex:1">
+                  <p style="font-size:12px">Aljarafe <span class="mono" style="font-size:9.5px;color:var(--subtle)">· @aicaza</span></p>
+                  <p class="mono" style="font-size:9.5px;color:var(--subtle);margin-top:2px">96 teselas · dependencia de mmartin</p>
+                </div>
+                <span class="mono" style="font-size:10.5px">2,1 GiB</span>
+                <svg class="i draw" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="animation-delay:.44s"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hair" style="margin:14px 0"></div>
+        <div class="row" style="gap:26px">
+          <div><p class="k">teselas z14</p><p class="mono" style="font-size:15px;margin-top:3px">588</p></div>
+          <div><p class="k">paquetes</p><p class="mono" style="font-size:15px;margin-top:3px">3</p></div>
+          <div><p class="k">de</p><p class="mono" style="font-size:15px;margin-top:3px">3 personas</p></div>
+          <span style="flex:1"></span>
+          <div style="text-align:right"><p class="k">descarga total</p><p class="mono" style="font-size:15px;margin-top:3px">30,2 GiB</p></div>
+        </div>
+
+        <div class="row" style="gap:9px;margin-top:15px;padding:9px 11px;border-radius:8px;background:rgba(255,255,255,.035)">
+          <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.2"/><path d="M12 11v5.4M12 8.1h.01"/></svg>
+          <span style="font-size:10.5px;color:var(--muted);flex:1">Las 3 firmas se comprueban al abrir cada paquete.
+            Si una no cuadra, ese paquete no se instala y se dice cuál.</span>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:9px;margin-top:18px">
+          <button class="btn gho">Cancelar</button>
+          <button class="btn pri">Descargar los 3 · 30,2 GiB</button>
+        </div>
+      </div>
+    </div>
+
+    <div data-state id="s9b">
+      <div class="glass rise" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:620px;z-index:50;padding:22px 24px">
+        <div class="row" style="gap:10px">
+          <p style="font-size:13.5px;flex:1">Instalar «Sevilla norte»</p>
+          <span class="chip amber">cobertura incompleta</span>
+        </div>
+
+        <div style="margin-top:16px;border:1px solid rgba(239,159,39,.32);background:rgba(239,159,39,.06);
+             border-radius:10px;padding:14px 15px">
+          <div class="row" style="gap:10px;align-items:flex-start">
+            <svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warning-fg)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="margin-top:1px">
+              <path d="M12 4.5 21 19.5H3L12 4.5Z"/><path d="M12 10v4M12 16.8h.01"/></svg>
+            <div style="flex:1">
+              <p style="font-size:12px;color:var(--warning-fg)">Una zona la aportaba un paquete que ya no existe</p>
+              <p class="note" style="margin-top:7px;color:var(--muted)">
+                <span class="mono" style="color:var(--fg)">@osm-andalucia/Sevilla este</span> responde 404. Son
+                <b>32 teselas z14</b> que este índice no cubre y que nadie más cubre ahora mismo. Se instala el resto
+                y el área queda con ese hueco marcado en el mapa.</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:16px;position:relative">
+          <div class="row" style="gap:10px;padding:8px 0">
+            <div class="avatar sk" style="width:24px;height:24px"></div>
+            <span style="font-size:11.5px;flex:1">Sevilla norte <span class="mono" style="font-size:9.5px;color:var(--subtle)">· @nickespro130</span></span>
+            <span class="mono" style="font-size:10.5px">9,7 GiB</span>
+            <span class="chip on">ok</span>
+          </div>
+          <div style="margin-left:12px;border-left:1px solid var(--border);padding-left:20px">
+            <div class="row" style="gap:10px;padding:8px 0;position:relative">
+              <span style="position:absolute;left:-20px;top:20px;width:14px;height:1px;background:var(--border)"></span>
+              <div class="avatar sk" style="width:24px;height:24px"></div>
+              <span style="font-size:11.5px;flex:1">Sevilla casco antiguo <span class="mono" style="font-size:9.5px;color:var(--subtle)">· @mmartin</span></span>
+              <span class="mono" style="font-size:10.5px">18,4 GiB</span>
+              <span class="chip on">ok</span>
+            </div>
+            <div class="row" style="gap:10px;padding:8px 0;position:relative;opacity:.62">
+              <span style="position:absolute;left:-20px;top:20px;width:14px;height:1px;background:var(--border)"></span>
+              <div class="avatar sk" style="width:24px;height:24px"></div>
+              <span style="font-size:11.5px;flex:1">Sevilla este <span class="mono" style="font-size:9.5px;color:var(--subtle)">· @osm-andalucia</span></span>
+              <span class="mono" style="font-size:10.5px;color:var(--subtle)">32 teselas</span>
+              <span class="chip red">404</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="hair" style="margin:14px 0"></div>
+        <div class="row" style="gap:26px">
+          <div><p class="k">cobertura</p><p class="mono" style="font-size:15px;margin-top:3px">556 / 588</p></div>
+          <div><p class="k">sin cubrir</p><p class="mono" style="font-size:15px;margin-top:3px;color:var(--warning-fg)">32</p></div>
+          <span style="flex:1"></span>
+          <div style="text-align:right"><p class="k">descarga total</p><p class="mono" style="font-size:15px;margin-top:3px">28,1 GiB</p></div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:9px;margin-top:18px">
+          <button class="btn gho">Cancelar</button>
+          <button class="btn pri">Instalar sin esa zona</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="shot">
+  <div class="cap"><b>10 · Al otro lado: se te ha muerto una dependencia</b>
+    <span>el mismo hecho, la otra persona. El Indexer ya refresca fichas para el mapa de cobertura, así que
+    enterarse sale gratis. Y como la tesela vuelve a estar libre al caducar el reclamo, <b>rellenar el hueco es
+    indexar con normalidad</b> y publicar una versión que ya no depende de nadie.</span></div>
+  <div class="frame">
+    <div class="rail"><div class="ri on"><svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 9.5h17M9 5v14"/></svg></div><div class="sp"></div><div class="av sk"></div></div>
+    <div class="top"><div class="crumb"><b>Índices</b></div></div>
+    <div class="body"><div class="pad"><div class="col">
+
+      <div class="rise" style="border:1px solid rgba(239,159,39,.30);background:rgba(239,159,39,.05);border-radius:10px;padding:15px 17px">
+        <div class="row" style="gap:11px;align-items:flex-start">
+          <svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--warning-fg)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="margin-top:2px">
+            <path d="M12 4.5 21 19.5H3L12 4.5Z"/><path d="M12 10v4M12 16.8h.01"/></svg>
+          <div style="flex:1">
+            <p style="font-size:12.5px">Una dependencia de <b style="font-weight:400">Sevilla norte</b> ha desaparecido</p>
+            <p class="note" style="margin-top:7px">
+              <span class="mono" style="color:var(--fg)">@osm-andalucia/Sevilla este</span> lleva 6 días dando 404.
+              Quien instale tu índice recibe <b>32 teselas menos</b> de las que promete su ficha. Esas teselas han
+              vuelto a estar libres, así que puedes indexarlas tú.</p>
+            <div class="row" style="gap:9px;margin-top:12px">
+              <span class="mono" style="font-size:10px;color:var(--subtle)">32 teselas · ~1 400 imágenes estimadas · 3 orígenes</span>
+            </div>
+          </div>
+          <button class="btn gho sm">Ignorar</button>
+          <button class="btn pri sm">Indexar esa zona</button>
+        </div>
+      </div>
+
+      <p class="k" style="margin-top:26px">Tus índices publicados · dependencias</p>
+      <table class="t2" style="margin-top:11px">
+        <tr><th>Índice</th><th>Depende de</th><th style="text-align:right">Teselas ajenas</th><th>Estado</th></tr>
+        <tr>
+          <td>Sevilla norte</td>
+          <td><span class="row" style="gap:6px"><span class="mono" style="font-size:10.5px;color:var(--subtle)">@mmartin</span>
+            <span class="mono" style="font-size:10.5px;color:var(--subtle)">· @osm-andalucia</span></span></td>
+          <td class="n">380</td>
+          <td><span class="chip amber">1 rota</span></td>
+        </tr>
+        <tr>
+          <td>Cádiz bahía</td>
+          <td><span class="mono" style="font-size:10.5px;color:var(--subtle)">@aicaza</span></td>
+          <td class="n">64</td>
+          <td><span class="chip on">todas vivas</span></td>
+        </tr>
+        <tr>
+          <td>Huelva costa</td>
+          <td><span style="color:var(--subtle);font-size:10.5px">ninguna</span></td>
+          <td class="n">0</td>
+          <td><span class="chip on">autónomo</span></td>
+        </tr>
+      </table>
+      <p class="note" style="margin-top:12px">Un índice <b>autónomo</b> no depende de nadie: se instala solo. No es
+        mejor ni peor — significa que nadie había cubierto ese territorio antes que tú.</p>
+    </div></div></div>
+  </div>
+</section>
+
+<h2>Lo que estas pantallas dan por decidido</h2>
+<p class="lede">
+<b>1.</b> Publicar produce tres cosas: una <b>ficha en claro</b> de kilobytes, <b>cuerpos cifrados</b> troceados por
+geografía, y <b>capas de vectores</b> por modelo. Buscar, dibujar y reclamar solo leen fichas.<br>
+<b>2.</b> El descubrimiento va por <b>etiqueta de repositorio</b>, sin registro central. El mapa de cobertura es una
+copia local que se refresca, y por eso el reclamo caduca solo cuando el asset deja de responder.<br>
+<b>3.</b> El reclamo es <b>duro</b> y descuenta antes de estimar. La web del subsistema 9 solo puede <b>quitar</b>
+reclamos, nunca añadirlos: si desaparece, todo lo demás sigue funcionando.<br>
+<b>3b.</b> <b>Quien indexa no descarga nada de nadie.</b> Una tesela reclamada sale de su índice y entra en su ficha
+como <b>dependencia</b>. El ancho de banda lo paga quien instala, en Station, resolviendo el grafo entero. Ese grafo
+es el árbol de «hecho con la colaboración de»: no se construye aparte, sale de encadenar fichas. Si una dependencia
+muere, <b>quien instala</b> recibe el aviso y el hueco, y <b>quien publicó</b> recibe la oferta de rellenarlo.<br>
+<b>4.</b> Una capa de modelo es <b>publicable por cualquiera</b> y vive en el repositorio de quien la produce,
+apuntando al cuerpo original por hash. Se comprueba por muestreo antes de fiarse de ella.<br>
+<b>5.</b> El material no redistribuible <b>viaja, con advertencia y descargo</b>, y la ficha lo declara para que
+quien instale sepa lo que se lleva.<br>
+<b>6.</b> Fuera de esta entrega: el <b>árbol de colaboración</b>, los perfiles ricos y la web de moderación — van con
+el subsistema 9.</p>
+
+<script>
+document.querySelectorAll('[data-tabs]').forEach(function(g){
+  var scope = g.getAttribute('data-tabs');
+  g.querySelectorAll('button').forEach(function(b){
+    b.addEventListener('click', function(){
+      g.querySelectorAll('button').forEach(function(o){o.classList.remove('on')});
+      b.classList.add('on');
+      var id = b.getAttribute('data-go');
+      // Cada estado puede encender varios trozos repartidos por el marco:
+      // el sufijo tras el guion permite que un mismo botón mueva panel,
+      // leyenda e interruptor a la vez sin duplicar el marco entero.
+      document.querySelectorAll('[data-state]').forEach(function(el){
+        if(el.id.indexOf(scope) !== 0) return;
+        el.classList.toggle('on', el.id === id || el.id.indexOf(id + '-') === 0);
+      });
+      // El estado "reclamada en detalle" hereda todo lo de "encendida".
+      if(id === 's7c'){
+        ['s7b-lg','s7b-tg','s7b-p'].forEach(function(x){
+          var e = document.getElementById(x); if(e) e.classList.add('on');
+        });
+        document.querySelectorAll('#s7a-tg,#s7a-p').forEach(function(e){e.classList.remove('on')});
+      }
+      if(id === 's7b' || id === 's7a'){
+        var pop = document.getElementById('s7c-pop'); if(pop) pop.classList.remove('on');
+      }
+      // La capa de reclamos pinta o despinta las teselas marcadas. El barrido
+      // y los números que bajan son la misma información contada dos veces:
+      // de dónde sale el descuento y cuánto es.
+      if(scope === 's7'){
+        var on = (id !== 's7a');
+        document.querySelectorAll('.t.rec').forEach(function(t){
+          t.classList.toggle('nueva', !on); t.classList.toggle('recl', on);
+          if(on) reanimar(t);
+        });
+        if(on){
+          contar(document.getElementById('s7-nrec'), 0, 412, 0);
+          contar(document.getElementById('s7-nnew'), 620, 208, 0);
+          contar(document.getElementById('s7-precio'), 148.20, 49.60, 2, ' €');
+          reanimar(document.querySelector('#s7b-p .tach'));
+        }
+      }
+      // Los resultados del buscador entran con desfase, no de golpe.
+      if(scope === 's3' && id === 's3b'){
+        var filas = document.querySelectorAll('#s3b .glass > div');
+        filas.forEach(function(f, i){ f.classList.add('rise');
+          f.style.animationDelay = (i * 20) + 'ms'; reanimar(f); });
+      }
+      // Los checks se vuelven a dibujar al reentrar en un estado.
+      var vivo = document.getElementById(id);
+      if(vivo) vivo.querySelectorAll('.draw, .rise').forEach(reanimar);
+      // El buscador cambia el texto de la caja además de abrir el desplegable.
+      if(scope === 's3'){
+        var qa = document.getElementById('s3a-q'), qb = document.getElementById('s3b-q');
+        if(qa && qb){ qa.classList.toggle('on', id !== 's3b'); qb.classList.toggle('on', id === 's3b'); }
+        var inc = document.getElementById('s3c'); if(inc) inc.classList.toggle('on', id === 's3c');
+      }
+    });
+  });
+});
+// Estado inicial de las teselas reclamables: apagadas.
+document.querySelectorAll('.t.rec').forEach(function(t){t.classList.add('nueva')});
+
+/* Reinicia una animación CSS sin duplicar reglas: quitarla, forzar un
+   reflujo, devolverla. Hace falta porque los estados del mockup se
+   encienden y apagan, y una animación ya consumida no vuelve a correr. */
+function reanimar(el){
+  if(!el) return;
+  var a = el.style.animation; el.style.animation = 'none';
+  void el.offsetWidth; el.style.animation = a;
+  var p = el.querySelector && el.querySelector('path');
+  if(el.classList.contains('draw') && p){
+    var b = p.style.animation; p.style.animation = 'none';
+    void p.offsetWidth; p.style.animation = b;
+  }
+}
+
+/* El desfase del barrido sale de la distancia al centro del grupo
+   reclamado, no del orden en el DOM: así se abre hacia fuera en lugar de
+   recorrer filas, que es lo que lo hace legible como «esta zona entera». */
+(function(){
+  var ts = Array.prototype.slice.call(document.querySelectorAll('.t.rec'));
+  if(!ts.length) return;
+  var cx = 0, cy = 0;
+  ts.forEach(function(t){ cx += t.offsetLeft; cy += t.offsetTop; });
+  cx /= ts.length; cy /= ts.length;
+  var max = 1;
+  var ds = ts.map(function(t){
+    var d = Math.hypot(t.offsetLeft - cx, t.offsetTop - cy);
+    if(d > max) max = d; return d;
+  });
+  ts.forEach(function(t, i){ t.style.animationDelay = Math.round(ds[i] / max * 260) + 'ms'; });
+})();
+
+/* Interpolación de números. En ease-out expo, y con tabular-nums en el
+   CSS mono para que el ancho no baile y no empuje el layout. */
+function contar(el, desde, hasta, dec, sufijo){
+  if(!el) return;
+  var t0 = null, dur = 520;
+  function paso(t){
+    if(t0 === null) t0 = t;
+    var p = Math.min(1, (t - t0) / dur);
+    var e = 1 - Math.pow(2, -10 * p);
+    var v = desde + (hasta - desde) * e;
+    el.textContent = v.toLocaleString('es-ES', {
+      minimumFractionDigits: dec, maximumFractionDigits: dec
+    }) + (sufijo || '');
+    if(p < 1) requestAnimationFrame(paso);
+  }
+  requestAnimationFrame(paso);
+}
+</script>
+</body>
+</html>
