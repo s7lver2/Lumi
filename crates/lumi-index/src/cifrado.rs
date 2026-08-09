@@ -11,6 +11,7 @@ const NONCE: usize = 12;
 
 /// La semilla la aporta quien llama —el Indexer usa `rand`—, para que este
 /// crate siga sin depender de un generador y los tests sean deterministas.
+// ponytail: passthrough de la semilla — el generador vive en quien llama, no aquí, para no meter un rand::* en lumi-index; ver identidad.rs (Task 4) para la generación real.
 pub fn clave_nueva(semilla: [u8; 32]) -> [u8; 32] {
     semilla
 }
