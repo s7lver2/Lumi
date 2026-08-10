@@ -1,5 +1,6 @@
 mod limits;
 mod exif;
+mod indices;
 mod master;
 mod projects;
 mod qdrant;
