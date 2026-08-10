@@ -134,19 +134,26 @@ pub struct Bbox {
     pub norte: f64,
 }
 
-/// Deshace el entrelazado del quadkey y proyecta las dos esquinas de vuelta a
-/// grados. Es la inversa exacta de `xy` + `quadkey_de`.
-///
-/// Una tesela z14 mide ~0,0005 grados cuadrados, veinte veces menos que el tope
-/// de área de la Graph API de Mapillary: por eso una tesela entera cabe en una
-/// sola consulta y el 7b nunca necesita decodificar teselas vectoriales en Rust.
-pub fn bbox_de_tesela(qk: &str) -> Bbox {
+/// Deshace el entrelazado de un quadkey en sus índices (x, y). Es la inversa
+/// exacta de `quadkey_de`, y la comparte quien necesite comparar vecindad de
+/// teselas sin pasar por grados — `agrupar::en_grupos` es el otro llamante.
+pub fn xy_de_quadkey(qk: &str) -> (u32, u32) {
     let (mut x, mut y) = (0u32, 0u32);
     for c in qk.chars() {
         let d = c as u32 - '0' as u32;
         x = (x << 1) | (d & 1);
         y = (y << 1) | ((d >> 1) & 1);
     }
+    (x, y)
+}
+
+/// Proyecta las dos esquinas de una tesela de vuelta a grados.
+///
+/// Una tesela z14 mide ~0,0005 grados cuadrados, veinte veces menos que el tope
+/// de área de la Graph API de Mapillary: por eso una tesela entera cabe en una
+/// sola consulta y el 7b nunca necesita decodificar teselas vectoriales en Rust.
+pub fn bbox_de_tesela(qk: &str) -> Bbox {
+    let (x, y) = xy_de_quadkey(qk);
     let escala = (1u32 << qk.len().min(31)) as f64;
     let lng_de = |tx: f64| tx / escala * 360.0 - 180.0;
     let lat_de = |ty: f64| {
