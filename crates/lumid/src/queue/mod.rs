@@ -434,6 +434,17 @@ impl Queue {
                     });
                 }
             }
+            // ponytail: sin trabajador que mande esto todavía (llega en la
+            // Tarea 10 con `lumi_geo.py`) ni consumidor que lo recupere
+            // contra Qdrant (Tarea 12/13, `recuperar::hipotesis`). Se anota
+            // el arm ya porque `Msg::Vectores` entró en el contrato en la
+            // Tarea 9 y `match` tiene que ser exhaustivo; el cuerpo real
+            // llega con esas tareas.
+            Evento::Vectores { dispositivo, id, dims, fichero } => {
+                tracing::warn!(
+                    "[{dispositivo}] mandó un vector de {dims} dimensiones para {id} ({fichero}) y todavía nadie lo recupera"
+                );
+            }
             Evento::Resultado { dispositivo, id, lat, lng, radio_m, confianza } => {
                 if !self.es_suyo(&dispositivo, id) {
                     return;
