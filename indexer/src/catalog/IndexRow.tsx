@@ -19,6 +19,11 @@ export function IndexRow({ r, embebiendo, onAbrir }: { r: ResumenIndice; embebie
           r.estado === "sellado" ? "border-border text-subtle" : "border-draw-fg text-draw-fg"}`}>
           {r.estado === "sellado" ? "sellado" : "indexando"}
         </span>
+        {r.publicado && (
+          <span className="rounded-full border border-border px-1.5 py-px text-[9px] text-subtle">
+            publicado
+          </span>
+        )}
         {desconocidaPct > 0 && (
           <span className="flex items-center gap-1 rounded-full border border-warning/[.35] px-1.5 py-px text-[9px] text-warning-fg">
             <Icon name="alert" size={9} />

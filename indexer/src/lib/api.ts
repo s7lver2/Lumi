@@ -29,6 +29,7 @@ export interface PorcentajesImagenes {
 export interface ResumenIndice {
   id: number; nombre: string; slug: string; estado: string;
   imagenes: number; teselas: number; imagenes_pct: PorcentajesImagenes;
+  publicado: boolean;
 }
 export interface DetalleIndice {
   nombre: string; slug: string; estado: string;

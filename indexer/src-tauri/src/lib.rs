@@ -365,6 +365,7 @@ struct ResumenIndice {
     imagenes: u32,
     teselas: u32,
     imagenes_pct: lumi_index::manifest::PorcentajesImagenes,
+    publicado: bool,
 }
 
 /// Minúsculas, espacios y símbolos colapsados a un solo `-`, sin guiones en
@@ -397,6 +398,7 @@ fn indice_crear(estado: tauri::State<'_, Estado>, nombre: String) -> Result<i64,
 #[tauri::command]
 fn indices_lista(estado: tauri::State<'_, Estado>) -> Result<Vec<ResumenIndice>, String> {
     let indices = estado.almacen.listar_indices().map_err(|e| e.to_string())?;
+    let publicados = estado.almacen.indices_publicados().map_err(|e| e.to_string())?;
 
     indices
         .into_iter()
@@ -404,6 +406,7 @@ fn indices_lista(estado: tauri::State<'_, Estado>) -> Result<Vec<ResumenIndice>,
             let filas = estado.almacen.filas_procedencia(id).map_err(|e| e.to_string())?;
             let pct = lumi_index::manifest::porcentajes(&filas);
             Ok(ResumenIndice {
+                publicado: publicados.contains(&id),
                 id,
                 nombre,
                 slug,

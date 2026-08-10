@@ -682,6 +682,18 @@ impl Almacen {
         Ok(filas)
     }
 
+    /// Los índices con `ficha.json` ya subida: la única prueba fiable de que
+    /// una publicación llegó al final, en vez de quedarse a medio subir.
+    pub fn indices_publicados(&self) -> Result<std::collections::HashSet<i64>> {
+        let c = self.0.lock().unwrap();
+        let mut q = c.prepare(
+            "SELECT indice_id FROM publicaciones WHERE asset = 'ficha.json' AND subido = 1",
+        )?;
+        let filas: std::collections::HashSet<i64> =
+            q.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?;
+        Ok(filas)
+    }
+
     /// Guarda un secreto ya cifrado por `Maestra` bajo una clave de ajuste,
     /// como la de Mapbox. Nunca se guarda en claro.
     pub fn guardar_ajuste_sellado(&self, clave: &str, sellado: &[u8]) -> Result<()> {

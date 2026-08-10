@@ -17,7 +17,7 @@ use crate::red::cliente_http;
 use crate::store::Almacen;
 
 /// La etiqueta con la que un repositorio se declara parte del catálogo.
-const ETIQUETA: &str = "lumi-index";
+pub(crate) const ETIQUETA: &str = "lumi-index";
 
 /// La web puede QUITAR reclamos, nunca anadirlos. Esa asimetria es lo que
 /// impide que el producto dependa de un servicio: si esto no responde, se usa

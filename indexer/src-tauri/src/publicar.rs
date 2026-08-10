@@ -204,9 +204,46 @@ pub async fn repos(testigo: &str) -> Result<Vec<Repo>> {
         .map(|r| Repo {
             nombre: r.full_name,
             privado: r.private,
-            tiene_etiqueta: r.topics.iter().any(|t| t == "lumi-index"),
+            tiene_etiqueta: r.topics.iter().any(|t| t == crate::catalogo::ETIQUETA),
         })
         .collect())
+}
+
+/// Añade la etiqueta `lumi-index` al repositorio si no la lleva ya. Sin esto
+/// los assets suben pero el repositorio nunca aparece en la búsqueda por
+/// topic que usa `catalogo::refrescar` -- ni el buscador, ni el reclamo en
+/// Territorio, ni "mis repositorios" saben que existió.
+async fn etiquetar_repo(cliente: &reqwest::Client, testigo: &str, repo: &str) -> Result<()> {
+    #[derive(serde::Deserialize, Default)]
+    struct R {
+        #[serde(default)]
+        names: Vec<String>,
+    }
+    let r = cliente
+        .get(format!("https://api.github.com/repos/{repo}/topics"))
+        .bearer_auth(testigo)
+        .header("user-agent", "lumi-indexer")
+        .header("accept", "application/vnd.github+json")
+        .send()
+        .await?;
+    let mut nombres = if r.status().is_success() {
+        r.json::<R>().await.unwrap_or_default().names
+    } else {
+        Vec::new()
+    };
+    if nombres.iter().any(|n| n == crate::catalogo::ETIQUETA) {
+        return Ok(());
+    }
+    nombres.push(crate::catalogo::ETIQUETA.to_string());
+    cliente
+        .put(format!("https://api.github.com/repos/{repo}/topics"))
+        .bearer_auth(testigo)
+        .header("user-agent", "lumi-indexer")
+        .header("accept", "application/vnd.github+json")
+        .json(&serde_json::json!({ "names": nombres }))
+        .send()
+        .await?;
+    Ok(())
 }
 
 pub fn previsualizar(almacen: &Almacen, indice_id: i64) -> Result<Previsualizacion> {
@@ -420,6 +457,7 @@ pub async fn publicar(
 
     let cliente = cliente_http();
     let release = asegurar_release(&cliente, &testigo, &repo, &paquete).await?;
+    etiquetar_repo(&cliente, &testigo, &repo).await?;
 
     // Una sola clave para todo el paquete: la ofuscación es del alojamiento,
     // no un permiso por asset, y una clave por trozo solo añadiría formas de
@@ -639,6 +677,7 @@ pub async fn publicar_capa(
     let cliente = cliente_http();
     let etiqueta = format!("capa-{m}-{version}");
     let release = asegurar_release(&cliente, &testigo, &repo, &etiqueta).await?;
+    etiquetar_repo(&cliente, &testigo, &repo).await?;
 
     let mut semilla = [0u8; 32];
     {
