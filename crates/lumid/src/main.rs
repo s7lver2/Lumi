@@ -5,6 +5,7 @@ mod master;
 mod projects;
 mod qdrant;
 mod queue;
+mod recuperar;
 mod routes;
 mod store;
 mod tasks;
