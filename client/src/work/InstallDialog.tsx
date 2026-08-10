@@ -23,8 +23,13 @@ function tamano(bytes: number): string {
  *  Cada firma se comprueba al abrir. Una dependencia rota no aborta la
  *  instalación —se instala lo que hay y se dice qué falta—, pero una firma que
  *  no cuadra sí: no hay «instalar igualmente». */
-export function InstallDialog({ url, token, onCerrar }: {
-  url: string; token?: string; onCerrar: () => void;
+export function InstallDialog({ url, token, busy, onCerrar, onConfirm }: {
+  url: string; token?: string;
+  /** La instalación ya se pidió y está en curso: los botones se ocultan y el
+   *  árbol se queda quieto detrás del progreso, que pinta quien llama. */
+  busy?: boolean;
+  onCerrar: () => void;
+  onConfirm: () => void;
 }) {
   const [grafo, setGrafo] = useState<Grafo | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -79,16 +84,18 @@ export function InstallDialog({ url, token, onCerrar }: {
             </div>
           )}
 
-          <div className="mt-4 flex justify-end gap-2">
-            <button onClick={onCerrar}
-              className="rounded-lg border border-white/15 px-3.5 py-2 text-[11.5px] text-white/70">
-              Cancelar
-            </button>
-            <button
-              className="rounded-lg bg-[#378add] px-3.5 py-2 text-[11.5px] font-medium text-black">
-              {grafo.rotas.length > 0 ? "Instalar sin esa zona" : "Instalar"}
-            </button>
-          </div>
+          {!busy && (
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={onCerrar}
+                className="rounded-lg border border-white/15 px-3.5 py-2 text-[11.5px] text-white/70">
+                Cancelar
+              </button>
+              <button onClick={onConfirm}
+                className="rounded-lg bg-[#378add] px-3.5 py-2 text-[11.5px] font-medium text-black">
+                {grafo.rotas.length > 0 ? "Instalar sin esa zona" : "Instalar"}
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>

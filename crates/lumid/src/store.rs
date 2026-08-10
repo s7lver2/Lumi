@@ -133,6 +133,46 @@ CREATE INDEX IF NOT EXISTS cases_by_project ON cases(project_id);
 CREATE INDEX IF NOT EXISTS images_by_case ON images(case_id);
 CREATE INDEX IF NOT EXISTS analyses_by_case ON analyses(case_id);
 CREATE UNIQUE INDEX IF NOT EXISTS limits_global ON limits(key) WHERE user_id IS NULL;
+CREATE TABLE IF NOT EXISTS installed_indices (
+    paquete      TEXT PRIMARY KEY,
+    nombre       TEXT NOT NULL,
+    autor        TEXT NOT NULL,
+    url          TEXT NOT NULL,
+    ficha_sha256 TEXT NOT NULL,
+    modelo       TEXT NOT NULL,
+    version      TEXT NOT NULL,
+    teselas      INTEGER NOT NULL,
+    bytes        INTEGER NOT NULL,
+    -- Qué assets se han volcado ya, uno por línea. Es lo que permite reanudar
+    -- por asset: una instalación cortada no vuelve a descargar ni a descifrar
+    -- lo que ya está en disco.
+    hechos       TEXT NOT NULL DEFAULT '',
+    completo     INTEGER NOT NULL DEFAULT 0,
+    installed_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS reference_images (
+    id      INTEGER PRIMARY KEY,
+    paquete TEXT NOT NULL,
+    ruta    TEXT NOT NULL,
+    lat     REAL NOT NULL,
+    lng     REAL NOT NULL,
+    quadkey TEXT NOT NULL,
+    fuente  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ref_paquete ON reference_images(paquete);
+-- Las alternativas. La principal NO se duplica aquí: sigue en las columnas
+-- result_* de `analyses`, que el cliente ya lee.
+CREATE TABLE IF NOT EXISTS analysis_hypotheses (
+    analysis_id INTEGER NOT NULL,
+    orden       INTEGER NOT NULL,
+    lat         REAL NOT NULL,
+    lng         REAL NOT NULL,
+    radio_m     REAL NOT NULL,
+    peso        REAL NOT NULL,
+    indice      TEXT NOT NULL,
+    autor       TEXT NOT NULL,
+    PRIMARY KEY (analysis_id, orden)
+);
 ";
 
 pub struct Store(Mutex<Connection>);

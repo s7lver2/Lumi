@@ -30,6 +30,18 @@ impl Job {
     }
 }
 
+/// Una zona candidata con su respaldo. `peso` no es una probabilidad: es
+/// cuánto pesa este grupo frente a los demás del mismo análisis.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Hipotesis {
+    pub lat: f64,
+    pub lng: f64,
+    pub radio_m: f64,
+    pub peso: f64,
+    pub indice: String,
+    pub autor: String,
+}
+
 /// Lo que el trabajador contesta por `stdout`. Su `stderr` es el log y no
 /// tiene contrato: se guarda tal cual.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -42,7 +54,20 @@ pub enum Msg {
     Listo { dispositivo: String, modelo: Option<String> },
     /// Cuantos quiera. No se persiste nunca: se retransmite y se olvida.
     Progreso { id: i64, fase: String, pct: u8 },
-    Resultado { id: i64, lat: f64, lng: f64, radio_m: f64, confianza: f64 },
+    /// El trabajador solo embebe: escribe el vector a un fichero y contesta su
+    /// ruta. Los flotantes NO salen por stdout, misma razón que en el Indexer.
+    Vectores { id: i64, dims: u32, fichero: String },
+    Resultado {
+        id: i64,
+        lat: f64,
+        lng: f64,
+        radio_m: f64,
+        confianza: f64,
+        /// `#[serde(default)]` a propósito: un trabajador que no las mande
+        /// —como el de referencia— sigue siendo válido sin tocar una línea.
+        #[serde(default)]
+        alternativas: Vec<Hipotesis>,
+    },
     /// El motor contestó «no puedo». Es un RESULTADO, no una avería: no se
     /// reintenta, porque reintentarlo solo quema GPU.
     Fallo { id: i64, motivo: String },
@@ -55,23 +80,38 @@ impl Msg {
     /// que nadie supiera por qué. Los rangos comparados con `NaN` dan siempre
     /// falso, así que `is_finite` solo hace falta donde no hay rango cerrado.
     pub fn validar(&self) -> Result<(), &'static str> {
-        let Msg::Resultado { lat, lng, radio_m, confianza, .. } = self else {
+        let Msg::Resultado { lat, lng, radio_m, confianza, alternativas, .. } = self else {
             return Ok(());
         };
-        if !(-90.0..=90.0).contains(lat) {
-            return Err("la latitud no está entre -90 y 90");
-        }
-        if !(-180.0..=180.0).contains(lng) {
-            return Err("la longitud no está entre -180 y 180");
-        }
-        if !radio_m.is_finite() || *radio_m <= 0.0 {
-            return Err("el radio no es un número positivo");
-        }
+        validar_coordenada(*lat, *lng, *radio_m)?;
         if !(0.0..=1.0).contains(confianza) {
             return Err("la confianza no está entre 0 y 1");
         }
+        // Al trabajador se le cree el log, no los datos — y eso vale igual
+        // para la hipótesis número tres: una alternativa con una latitud
+        // imposible es tan peligrosa como que lo fuera la principal. `peso`
+        // no se acota: no es una probabilidad, es una comparación entre
+        // grupos y no tiene un rango cerrado que comprobar.
+        for alt in alternativas {
+            validar_coordenada(alt.lat, alt.lng, alt.radio_m)?;
+        }
         Ok(())
     }
+}
+
+/// Los rangos que cualquier coordenada tiene que cumplir, sea la principal o
+/// una alternativa.
+fn validar_coordenada(lat: f64, lng: f64, radio_m: f64) -> Result<(), &'static str> {
+    if !(-90.0..=90.0).contains(&lat) {
+        return Err("la latitud no está entre -90 y 90");
+    }
+    if !(-180.0..=180.0).contains(&lng) {
+        return Err("la longitud no está entre -180 y 180");
+    }
+    if !radio_m.is_finite() || radio_m <= 0.0 {
+        return Err("el radio no es un número positivo");
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -106,6 +146,24 @@ mod tests {
             let m: Msg = serde_json::from_str(malo).unwrap();
             assert!(m.validar().is_err(), "debería rechazarse: {malo}");
         }
+
+        // Una alternativa con una latitud imposible se rechaza igual que si
+        // lo fuera la principal: al trabajador se le cree el log, no los
+        // datos, y eso vale para la hipótesis número tres también.
+        let con_alt_mala: Msg = serde_json::from_str(
+            r#"{"tipo":"resultado","id":1,"lat":0,"lng":0,"radio_m":10,"confianza":0.5,
+                "alternativas":[{"lat":91,"lng":0,"radio_m":10,"peso":1.0,"indice":"a","autor":"@x"}]}"#,
+        )
+        .unwrap();
+        assert!(con_alt_mala.validar().is_err());
+
+        // Y una alternativa válida no rompe nada.
+        let con_alt_buena: Msg = serde_json::from_str(
+            r#"{"tipo":"resultado","id":1,"lat":0,"lng":0,"radio_m":10,"confianza":0.5,
+                "alternativas":[{"lat":1,"lng":1,"radio_m":500,"peso":2.3,"indice":"a","autor":"@x"}]}"#,
+        )
+        .unwrap();
+        assert!(con_alt_buena.validar().is_ok());
 
         // Y un fallo del motor pasa la validación: es un resultado legítimo.
         let f = Msg::Fallo { id: 1, motivo: "sin puntos de referencia".into() };

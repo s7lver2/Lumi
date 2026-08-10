@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useServer } from "../lib/store";
 import { Icon } from "../ui/Icon";
+import { IndicesPanel } from "./IndicesPanel";
 import { MapRow } from "./MapRow";
 import { QueueRow } from "./QueueRow";
 import { RequestsView } from "./RequestsView";
@@ -11,6 +12,7 @@ export function AdminPanel({ token, onClose }: { token: string; onClose: () => v
   const [copied, setCopied] = useState(false);
   const addr = useServer((s) => s.addr);
   const fingerprint = useServer((s) => s.hello?.fingerprint) ?? "";
+  const capIndices = useServer((s) => s.hello?.capabilities.find((c) => c.id === "indices"));
   // La tarjeta pública, formada igual que ServerCard::Display en lumi-proto:
   // lumi1s_<addr>_<huella>. Sin secreto: es lo que se reparte al equipo para
   // que pidan acceso, y hasta ahora no se mostraba en ningún sitio de la app
@@ -62,6 +64,19 @@ export function AdminPanel({ token, onClose }: { token: string; onClose: () => v
 
       <div className="mt-5" style={{ animation: "jg-fade-rise .9s .18s both" }}>
         <MapRow token={token} />
+      </div>
+
+      {/* Deshabilitado con el motivo cuando falta Qdrant: la regla del
+          proyecto es que un botón apagado siempre dice por qué. */}
+      <div className="mt-5" style={{ animation: "jg-fade-rise .95s .22s both" }}>
+        {capIndices?.state === "on" ? (
+          <IndicesPanel token={token} />
+        ) : (
+          <div className="rounded-card border border-border p-3.5 opacity-60">
+            <p className="text-[12.5px] text-fg">Índices</p>
+            <p className="mt-1 text-[11px] text-muted">{capIndices?.reason ?? "no disponible"}</p>
+          </div>
+        )}
       </div>
     </div>
   );

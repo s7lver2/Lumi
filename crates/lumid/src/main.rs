@@ -1,8 +1,11 @@
 mod limits;
 mod exif;
+mod indices;
 mod master;
 mod projects;
+mod qdrant;
 mod queue;
+mod recuperar;
 mod routes;
 mod store;
 mod tasks;
@@ -37,6 +40,9 @@ pub struct App {
     /// La cola vive tanto como el daemon. Sus trabajadores son procesos hijo
     /// con `kill_on_drop`, así que mueren con él y no dejan VRAM ocupada.
     pub queue: Arc<queue::Queue>,
+    /// Un solo hueco de instalación de índice a la vez. `None` es "nunca se
+    /// ha instalado nada en esta sesión del daemon", no "hay un error".
+    pub indices_en_curso: indices::EnCurso,
 }
 
 #[tokio::main]
@@ -64,12 +70,16 @@ async fn main() -> anyhow::Result<()> {
         dir: dir.clone(),
         sysinfo: Arc::new(Mutex::new(sysinfo::System::new_all())),
         queue,
+        indices_en_curso: Arc::new(Mutex::new(None)),
     };
 
     use axum::routing::post;
     let router = Router::new()
         .route("/v1/hello", get(routes::hello::get))
         .route("/v1/catalogo/grafo", get(routes::catalogo::resolver_grafo))
+        .route("/v1/indices", get(routes::indices::listar).post(routes::indices::instalar))
+        .route("/v1/indices/eventos", get(routes::indices::eventos))
+        .route("/v1/indices/:paquete", axum::routing::delete(routes::indices::desinstalar))
         .route("/v1/claim", post(routes::claim::claim))
         .route("/v1/admin", post(routes::claim::create_admin))
         .route("/v1/auth/login", post(routes::auth::login))

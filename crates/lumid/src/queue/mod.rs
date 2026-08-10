@@ -57,7 +57,7 @@ fn find_python() -> PathBuf {
     PathBuf::from("python3")
 }
 
-/// Dónde puede estar `lumi_worker.py`, de más a menos probable.
+/// Dónde puede estar `lumi_geo.py`, de más a menos probable.
 ///
 /// El directorio de datos es donde vivirá el día que un instalador lo copie
 /// ahí. El segundo candidato es la ruta del repositorio en la máquina donde
@@ -67,9 +67,9 @@ fn find_python() -> PathBuf {
 /// lanzados desde la raíz del repositorio.
 fn find_script(dir: &std::path::Path) -> PathBuf {
     let candidatos = [
-        dir.join("workers/lumi_worker.py"),
-        PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../workers/lumi_worker.py")),
-        PathBuf::from("workers/lumi_worker.py"),
+        dir.join("workers/lumi_geo.py"),
+        PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../workers/lumi_geo.py")),
+        PathBuf::from("workers/lumi_geo.py"),
     ];
     // Cada candidato con su resultado, no solo el elegido: sin esto, cuando
     // ninguno existe de verdad, el único rastro es una ruta relativa que no
@@ -80,7 +80,20 @@ fn find_script(dir: &std::path::Path) -> PathBuf {
     candidatos
         .into_iter()
         .find(|p| p.exists())
-        .unwrap_or_else(|| PathBuf::from("workers/lumi_worker.py"))
+        .unwrap_or_else(|| PathBuf::from("workers/lumi_geo.py"))
+}
+
+/// El vector que escribió el trabajador: `dims` floats de 32 bits en little
+/// endian, sin cabecera — el mismo formato crudo que ya usaba el Indexer para
+/// esto. `None` si el fichero no está donde dijo, o mide lo que no toca.
+fn leer_f32(ruta: &str, dims: u32) -> Option<Vec<f32>> {
+    let bytes = std::fs::read(ruta).ok()?;
+    let esperado = dims as usize * 4;
+    if bytes.len() != esperado {
+        tracing::warn!("{ruta}: {} bytes, se esperaban {esperado} ({dims} floats)", bytes.len());
+        return None;
+    }
+    Some(bytes.chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect())
 }
 
 fn ahora() -> i64 {
@@ -378,7 +391,7 @@ impl Queue {
     ) {
         loop {
             tokio::select! {
-                Some(ev) = rx_ev.recv() => self.aplicar(ev),
+                Some(ev) = rx_ev.recv() => self.aplicar(ev).await,
                 Some(_) = rx_avisos.recv() => {}
                 _ = tokio::time::sleep(std::time::Duration::from_secs(TICK_S)) => {}
             }
@@ -405,7 +418,7 @@ impl Queue {
         suyo
     }
 
-    fn aplicar(&self, ev: Evento) {
+    async fn aplicar(&self, ev: Evento) {
         match ev {
             Evento::Listo { dispositivo, modelo } => {
                 if let Ok(mut e) = self.estado.lock() {
@@ -434,17 +447,44 @@ impl Queue {
                     });
                 }
             }
-            Evento::Resultado { dispositivo, id, lat, lng, radio_m, confianza } => {
+            Evento::Vectores { dispositivo, id, dims, fichero } => {
                 if !self.es_suyo(&dispositivo, id) {
                     return;
                 }
-                let _ = self.store.conn().execute(
-                    "UPDATE analyses SET state = 'hecho', error = NULL, result_lat = ?2,
-                            result_lng = ?3, result_radius_m = ?4, result_confidence = ?5,
-                            finished_at = ?6
-                     WHERE id = ?1",
-                    rusqlite::params![id, lat, lng, radio_m, confianza, ahora()],
-                );
+                // El vector viene por fichero y no por la tubería. Se lee, se
+                // borra, y a partir de aquí el trabajo es del daemon: el
+                // trabajador ya terminó el suyo y queda libre para el
+                // siguiente mientras Rust recupera y agrupa.
+                let vector = leer_f32(&fichero, dims);
+                let _ = std::fs::remove_file(&fichero);
+                self.soltar(&dispositivo, id);
+
+                let Some(vector) = vector else {
+                    self.fallar(id, "no se pudo leer el vector que escribió el trabajador");
+                    return;
+                };
+                let modelo = self.modelo_del_analisis(id).unwrap_or_default();
+                match crate::recuperar::hipotesis(&self.store, &modelo, &vector).await {
+                    Ok(h) if !h.is_empty() => self.guardar_resultado(id, &h),
+                    // Sin candidatos NO es una avería: es una respuesta.
+                    // Ningún índice instalado cubre nada parecido, y decirlo
+                    // es más útil que un punto.
+                    Ok(_) => self.fallar(id, "ningún índice instalado cubre esta imagen"),
+                    Err(e) => self.fallar(id, &format!("no se pudo recuperar: {e}")),
+                }
+            }
+            Evento::Resultado { dispositivo, id, lat, lng, radio_m, confianza, alternativas } => {
+                if !self.es_suyo(&dispositivo, id) {
+                    return;
+                }
+                // Un motor que sepa contestar por su cuenta (sin pasar por
+                // `Vectores`) sigue siendo legal — `lumi_worker.py` sigue
+                // siendo una referencia válida. La principal manda su propia
+                // confianza; las alternativas, la suya, tal como las mandó.
+                let principal = lumi_proto::worker::Hipotesis {
+                    lat, lng, radio_m, peso: confianza, indice: String::new(), autor: String::new(),
+                };
+                self.guardar_hipotesis(id, &principal, &alternativas);
                 self.soltar(&dispositivo, id);
                 self.anunciar(id, "hecho");
             }
@@ -452,16 +492,59 @@ impl Queue {
                 if !self.es_suyo(&dispositivo, id) {
                     return;
                 }
-                let _ = self.store.conn().execute(
-                    "UPDATE analyses SET state = 'error', error = ?2, finished_at = ?3
-                     WHERE id = ?1",
-                    rusqlite::params![id, motivo, ahora()],
-                );
-                self.soltar(&dispositivo, id);
-                self.anunciar(id, "error");
+                self.fallar(id, &motivo);
             }
             Evento::Muerto { dispositivo } => self.enterrar(&dispositivo),
         }
+    }
+
+    fn modelo_del_analisis(&self, id: i64) -> Option<String> {
+        self.store.conn().query_row("SELECT model FROM analyses WHERE id = ?1", [id], |r| r.get(0)).ok()
+    }
+
+    /// Guarda la hipótesis principal en las columnas `result_*` de `analyses`
+    /// (que ya existen y que el cliente ya lee) y las alternativas en
+    /// `analysis_hypotheses`, en una sola transacción: un análisis a medio
+    /// escribir es peor que uno que tarda un poco más.
+    fn guardar_hipotesis(&self, id: i64, principal: &lumi_proto::worker::Hipotesis, alternativas: &[lumi_proto::worker::Hipotesis]) {
+        let mut c = self.store.conn();
+        let tx = match c.transaction() {
+            Ok(t) => t,
+            Err(_) => return,
+        };
+        let _ = tx.execute(
+            "UPDATE analyses SET state = 'hecho', error = NULL, result_lat = ?2,
+                    result_lng = ?3, result_radius_m = ?4, result_confidence = ?5,
+                    finished_at = ?6
+             WHERE id = ?1",
+            rusqlite::params![id, principal.lat, principal.lng, principal.radio_m, principal.peso, ahora()],
+        );
+        let _ = tx.execute("DELETE FROM analysis_hypotheses WHERE analysis_id = ?1", [id]);
+        for (i, h) in alternativas.iter().enumerate() {
+            let _ = tx.execute(
+                "INSERT INTO analysis_hypotheses (analysis_id, orden, lat, lng, radio_m, peso, indice, autor)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                rusqlite::params![id, i as i64, h.lat, h.lng, h.radio_m, h.peso, h.indice, h.autor],
+            );
+        }
+        let _ = tx.commit();
+    }
+
+    /// Lo mismo que `guardar_hipotesis`, pero para el camino de
+    /// `recuperar::hipotesis`: la primera hipótesis de la lista es la
+    /// principal, el resto son sus alternativas.
+    fn guardar_resultado(&self, id: i64, hipotesis: &[lumi_proto::worker::Hipotesis]) {
+        let Some((principal, alternativas)) = hipotesis.split_first() else { return };
+        self.guardar_hipotesis(id, principal, alternativas);
+        self.anunciar(id, "hecho");
+    }
+
+    fn fallar(&self, id: i64, motivo: &str) {
+        let _ = self.store.conn().execute(
+            "UPDATE analyses SET state = 'error', error = ?2, finished_at = ?3 WHERE id = ?1",
+            rusqlite::params![id, motivo, ahora()],
+        );
+        self.anunciar(id, "error");
     }
 
     /// El trabajador se murió. Lo que tenía en la mano no es culpa suya, así que

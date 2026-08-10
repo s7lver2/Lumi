@@ -200,17 +200,38 @@ nunca añadirlos—, pero **qué cuenta como motivo válido para desreclamar** (
 abuso) lo decide la web del subsistema 9, que todavía no existe. Hasta entonces la lista
 vive vacía y todo reclamo válido se mantiene.
 
-### Sin punto de entrada a instalar dentro de Lumi Station
+---
 
-Esto no se aparcó a propósito: no se pensó. El Task 15 del plan del 8 solo pedía el endpoint
-que resuelve el grafo, `InstallDialog` y la comprobación de firma al abrir —nada sobre cómo se
-llega hasta ahí—, y el resultado es que `InstallDialog` no está importado desde ningún sitio de
-`client/src`. Hoy no hay manera de abrir el diálogo sin escribir código: ni un buscador del
-catálogo dentro de Station, ni un campo para pegar la URL de una ficha. El diseño daba por
-hecho que la vía de entrada sería un enlace desde la web del subsistema 9 apuntando directo a
-una ficha, pero eso deja a Station sin nada mientras esa web no exista. Hace falta decidir
-—cuando le toque su ciclo spec → plan— si el punto de entrada vive en Station (una pantalla de
-catálogo, aunque sea mínima) o si de verdad se espera al 9.
+## Motor de inferencia (subsistema 5)
+
+El 5 se partió en tres (ver la spec `2026-08-10-motor-inferencia-design.md` §1): 5-0 y 5a están
+terminados, y esto es lo que queda aparcado a propósito para el 5b y para después.
+
+### Los modelos reales
+
+El embebedor sigue siendo el de juguete de `lumi_embed.py`/`lumi_geo.py`: vectores
+deterministas por hash de la ruta, no una red entrenada. Lo que el 5-0/5a cerraron es que el
+camino entero exista, sea reanudable y sea comprobable — no que acierte. **Las coordenadas
+serán malas hasta el 5b**, que es su propio ciclo spec → plan cuando haya modelos elegidos.
+
+### Los verificadores geométricos
+
+La idea original del subsistema («ensemble de verificadores geométricos») no se tocó: sigue
+esperando al 5b, por la misma razón que los modelos — es investigación, no fontanería, y
+necesita corpus y métrica delante antes de empezar.
+
+### Elegir el corpus por caso
+
+Hoy un análisis busca contra **todo lo instalado** para su modelo, sin pantalla de selección.
+Se aplazó porque exige saber qué hay instalado y añade una pantalla antes de poder analizar. Si
+aparece la necesidad real de «para este caso solo material verificado», se replantea entonces.
+
+### Instalar solo un área
+
+Se instala el índice entero, sin recorte geográfico. El troceado por geografía del 8 sigue
+ganándose el sueldo (permite reanudar por trozos), pero elegir *qué* trozos exigiría una
+pantalla de mapa completa en Station, hoy inexistente, para resolver un problema de disco que
+nadie ha tenido todavía.
 
 ---
 

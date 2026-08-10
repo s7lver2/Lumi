@@ -410,6 +410,11 @@ pub struct Analysis {
     /// Siempre una imagen hoy. La lista existe desde el primer día para que la
     /// cola no haya que rehacerla cuando un análisis agrupe varias tomas.
     pub image_ids: Vec<i64>,
+    /// Las hipótesis que no ganaron, en orden. La principal NO está aquí:
+    /// sigue en `result_*`. Vacía y no `null` cuando no hay ninguna, para que
+    /// el cliente no tenga dos casos donde hay uno.
+    #[serde(default)]
+    pub hypotheses: Vec<crate::worker::Hipotesis>,
     pub created_at: i64,
     pub finished_at: Option<i64>,
 }

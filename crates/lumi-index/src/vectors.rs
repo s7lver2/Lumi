@@ -144,6 +144,47 @@ pub fn leer_b1(r: &mut impl Read) -> Result<Vec<Vec<bool>>> {
     Ok(fuera)
 }
 
+/// Lee todos los vectores de un modelo/versión de la carpeta `fragmentos/` de
+/// un paquete ya abierto (`fragmentos/<quadkey>/<modelo>-<version>.i8`).
+///
+/// ponytail: el ORDEN entre directorios de quadkey es el de `Path::cmp`
+/// (alfabético), no el de `indice.db`. Es una aproximación: el formato del
+/// fragmento ata un vector a su fila por POSICIÓN dentro de un mismo fichero,
+/// pero no dice en qué orden concatenar varios ficheros de teselas distintas.
+/// Quien llama (`lumid::indices::volcar`) ya asume esa misma limitación al
+/// leer `indice.db` sin `ORDER BY`. El techo es ese; la salida, si algún día
+/// hace falta exactitud, es que la ficha declare el orden explícito.
+pub fn leer_fragmentos(
+    dir: &std::path::Path,
+    modelo: &str,
+    version: &str,
+    dims: u32,
+) -> Result<Vec<Vec<f32>>> {
+    let mut quadkeys: Vec<_> = match std::fs::read_dir(dir) {
+        Ok(it) => it.flatten().map(|e| e.path()).collect(),
+        Err(_) => return Ok(Vec::new()),
+    };
+    quadkeys.sort();
+
+    let nombre = format!("{modelo}-{version}.i8");
+    let mut fuera = Vec::new();
+    for qk in quadkeys {
+        let f = qk.join(&nombre);
+        if !f.exists() {
+            continue;
+        }
+        let mut file = std::fs::File::open(&f)?;
+        let mut vs = leer_i8(&mut file)?;
+        if let Some(v) = vs.first() {
+            if dims != 0 && v.len() != dims as usize {
+                bail!("{}: {} dimensiones, se esperaban {dims}", f.display(), v.len());
+            }
+        }
+        fuera.append(&mut vs);
+    }
+    Ok(fuera)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

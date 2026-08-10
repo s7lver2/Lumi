@@ -51,6 +51,12 @@ contra qué no.
 **El log crudo está a un clic.** Cuando algo falla, el `stderr` real se muestra dentro de la
 interfaz, no detrás de un código de error.
 
+**Un análisis puede devolver más de una respuesta.** Cuando el motor no logra que los
+candidatos se pongan de acuerdo, no elige por su cuenta ni se niega a contestar: entrega la
+zona dominante como respuesta principal y las demás como alternativas, cada una con su peso y
+con qué índice y qué autor la respaldan. Que aparezcan alternativas es en sí la señal de que el
+motor duda — más honesto que un único punto con falsa seguridad, y más útil que un silencio.
+
 ## Anti-referencias
 
 - Paneles de admin tipo SaaS con tarjetas de métrica gigante y acento en gradiente.

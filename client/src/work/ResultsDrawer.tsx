@@ -1,4 +1,4 @@
-import type { Analysis, Image } from "../lib/api";
+import type { Analysis, Hipotesis, Image } from "../lib/api";
 import { lumiUrl } from "../lib/bridge";
 import type { MenuEntry, MenuState } from "../ui/ContextMenu";
 import { menuAt } from "../ui/ContextMenu";
@@ -15,6 +15,56 @@ export function metersBetween(aLat: number, aLng: number, bLat: number, bLng: nu
   const h = Math.sin(dLat / 2) ** 2 +
     Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/** Bajo el análisis seleccionado: la principal (sin índice ni autor propios en
+ *  la API, viven en `result_*`) y sus alternativas, numeradas y con su barra
+ *  de peso. Que haya alternativas es en sí la señal de que el motor duda, sin
+ *  números que interpretar — la frase de arriba es la única lectura que hace
+ *  falta.
+ *
+ *  ponytail: `Hipotesis` no lleva cuántos candidatos respaldan el grupo (eso
+ *  es `Grupo::candidatos` en Rust, que no cruza la API); se enseña la
+ *  coordenada, el radio, el peso y la procedencia, que es lo que sí viaja. */
+function HipotesisList({ a }: { a: Analysis }) {
+  if (a.state !== "hecho" || a.result_lat == null || a.result_lng == null) return null;
+  const principal: Hipotesis = {
+    lat: a.result_lat, lng: a.result_lng, radio_m: a.result_radius_m ?? 0,
+    peso: a.result_confidence ?? 0, indice: "", autor: "",
+  };
+  const todas = [principal, ...a.hypotheses];
+  const maxPeso = Math.max(...todas.map((h) => h.peso), 1e-9);
+  return (
+    <div className="flex flex-col gap-2 rounded-[10px] border border-border p-[8px_9px]">
+      <p className="text-[10px] leading-relaxed text-muted">
+        {a.hypotheses.length > 0
+          ? <>Le saca <b className="text-fg">{(a.result_confidence ?? 0).toFixed(1)}×</b> a la siguiente</>
+          : "Ninguna otra zona reúne votos suficientes para competir"}
+      </p>
+      <div className="flex flex-col gap-1.5">
+        {todas.map((h, i) => (
+          <div key={i} className="flex items-start gap-2">
+            <span className="mt-px w-3 shrink-0 font-mono text-[9px] text-subtle">{i + 1}</span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-1.5">
+                <span className="font-mono text-[10.5px] text-fg">
+                  {h.lat.toFixed(4)}, {h.lng.toFixed(4)}
+                </span>
+                <span className="font-mono text-[9px] text-subtle">± {Math.round(h.radio_m)} m</span>
+              </div>
+              <div className="mt-1 h-[3px] overflow-hidden rounded-full bg-white/[.06]">
+                <div className="h-full bg-white/40"
+                  style={{ width: `${Math.max(6, (h.peso / maxPeso) * 100)}%` }} />
+              </div>
+              {h.indice && (
+                <p className="mt-1 truncate font-mono text-[9px] text-subtle">{h.indice} · @{h.autor}</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /** Lo que se sabe de la imagen elegida: la foto, los intentos y el GPS que
@@ -88,6 +138,11 @@ export function ResultsDrawer({
           </button>
         );
       })}
+
+      {(() => {
+        const shownA = analyses.find((a) => a.id === selected) ?? null;
+        return shownA && <HipotesisList a={shownA} />;
+      })()}
 
       {/* El GPS declarado tiene sitio propio y color ámbar: no es una
           candidata, es lo que dice la cámara. */}
