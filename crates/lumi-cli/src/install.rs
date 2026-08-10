@@ -35,6 +35,34 @@ Environment=LUMI_DATA=/var/lib/lumi
 WantedBy=multi-user.target
 ";
 
+/// Fijados a mano, no un ajuste: subir de versión es cambiar esta constante
+/// y volver a calcular el sha256 del asset real, nunca copiarlo de una nota.
+/// Igual que con cualquier otra firma en este sistema, no hay "instalar de
+/// todas formas" si el hash no coincide.
+const QDRANT_VERSION: &str = "v1.19.0";
+const QDRANT_ASSET: &str = "qdrant-x86_64-unknown-linux-gnu.tar.gz";
+const QDRANT_SHA256: &str = "e4405091f67d02f96fb941695ef8a6974e677632507ff7b04a3fcbb332ad9c19";
+const QDRANT_DIR: &str = "/var/lib/lumi/qdrant";
+
+const QDRANT_UNIT: &str = "\
+[Unit]
+Description=Qdrant vector database (Lumi Station)
+After=network.target
+
+[Service]
+ExecStart=/var/lib/lumi/qdrant/qdrant
+WorkingDirectory=/var/lib/lumi/qdrant
+Restart=on-failure
+RestartSec=3
+User=root
+Environment=QDRANT__STORAGE__STORAGE_PATH=/var/lib/lumi/qdrant/storage
+Environment=QDRANT__SERVICE__HOST=127.0.0.1
+Environment=QDRANT__TELEMETRY_DISABLED=true
+
+[Install]
+WantedBy=multi-user.target
+";
+
 /// `auto`: sin preguntas, elige los defectos recomendados (nativo si no hay
 /// Docker, clave maestra automática) y los imprime igual que si se hubieran
 /// elegido a mano. "Nada desaparece en silencio": el modo se ve, solo que no
@@ -85,22 +113,6 @@ pub fn run(auto: bool) -> Result<PairKey> {
         ];
         if ui::choose("modo", &opts, 0)? == 0 { Mode::Native } else { Mode::Docker }
     };
-
-    ui::head("capacidades");
-    // Qdrant todavía no existe en esta fase de la instalación (el asistente de
-    // runtime lo trae después, desde la app): la capacidad `indices` se
-    // enseña recortada aquí a propósito, no es un fallo de detección.
-    for c in lumi_proto::caps::matrix(mode, gpus.len(), false) {
-        match c.state {
-            CapState::On => ui::ok(&c.label),
-            _ => {
-                ui::warn(&format!("{} · recortada", c.label));
-                if let Some(r) = c.reason {
-                    println!("      {r}");
-                }
-            }
-        }
-    }
 
     ui::head("clave maestra");
     let (sealed, passphrase) = if auto {
@@ -180,6 +192,28 @@ pub fn run(auto: bool) -> Result<PairKey> {
     run_ok("systemctl", &["enable", "--now", "lumid.service"])?;
     pb.finish_and_clear();
     ui::ok(&format!("lumid.service activo · escuchando en 0.0.0.0:{}", lumi_proto::PORT));
+
+    let pb = ui::step("instalando Qdrant");
+    let qdrant_vivo = instalar_qdrant()?;
+    pb.finish_and_clear();
+    if qdrant_vivo {
+        ui::ok("qdrant.service activo · escuchando en 127.0.0.1:6333");
+    } else {
+        ui::warn("qdrant.service arrancó pero no responde todavía; revisa journalctl -u qdrant");
+    }
+
+    ui::head("capacidades");
+    for c in lumi_proto::caps::matrix(mode, gpus.len(), qdrant_vivo) {
+        match c.state {
+            CapState::On => ui::ok(&c.label),
+            _ => {
+                ui::warn(&format!("{} · recortada", c.label));
+                if let Some(r) = c.reason {
+                    println!("      {r}");
+                }
+            }
+        }
+    }
 
     let addr = format!("{}:{}", local_ip().unwrap_or_else(|| "127.0.0.1".into()), lumi_proto::PORT);
     let key = PairKey::generate(&addr, &der);
@@ -288,6 +322,49 @@ fn offer_driver_install(kernel: &str, auto: bool) -> Result<()> {
     Ok(())
 }
 
+/// Baja, verifica e instala Qdrant como su propia unidad systemd, y espera a
+/// que responda antes de devolver el control. Idempotente: si el binario ya
+/// está en su sitio no vuelve a descargar 30 MB por cada reinstalación.
+/// Devuelve si al final quedó vivo — un fallo aquí no aborta la instalación
+/// de Station entera, se enseña como capacidad recortada como cualquier otra.
+fn instalar_qdrant() -> Result<bool> {
+    fs::create_dir_all(format!("{QDRANT_DIR}/storage")).context("no se pudo crear el directorio de Qdrant")?;
+    let bin = format!("{QDRANT_DIR}/qdrant");
+    if !Path::new(&bin).exists() {
+        let tarball = format!("{QDRANT_DIR}/{QDRANT_ASSET}");
+        let url = format!(
+            "https://github.com/qdrant/qdrant/releases/download/{QDRANT_VERSION}/{QDRANT_ASSET}"
+        );
+        run_ok("curl", &["-fsSL", "-o", &tarball, &url]).context("no se pudo descargar Qdrant")?;
+
+        let bytes = fs::read(&tarball).context("no se pudo leer el tarball de Qdrant recién bajado")?;
+        use sha2::{Digest, Sha256};
+        let hash = format!("{:x}", Sha256::digest(&bytes));
+        if hash != QDRANT_SHA256 {
+            let _ = fs::remove_file(&tarball);
+            bail!("el sha256 de Qdrant no coincide (esperado {QDRANT_SHA256}, obtenido {hash}) — nada se instala");
+        }
+
+        run_ok("tar", &["-xzf", &tarball, "-C", QDRANT_DIR]).context("no se pudo extraer Qdrant")?;
+        let _ = fs::remove_file(&tarball);
+    }
+
+    fs::write("/etc/systemd/system/qdrant.service", QDRANT_UNIT)?;
+    run_ok("systemctl", &["daemon-reload"])?;
+    run_ok("systemctl", &["enable", "--now", "qdrant.service"])?;
+
+    // Arrancar el proceso no es lo mismo que estar listo para servir: se
+    // sondea /readyz un puñado de veces en vez de asumir que el primer
+    // intento ya vale.
+    for _ in 0..10 {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        if run_quiet_status("curl", &["-fsS", "-o", "/dev/null", "http://127.0.0.1:6333/readyz"]) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 fn run_ok(cmd: &str, args: &[&str]) -> Result<()> {
     let out = Command::new(cmd).args(args).output()?;
     if !out.status.success() {
@@ -300,6 +377,13 @@ fn run_ok(cmd: &str, args: &[&str]) -> Result<()> {
 /// de conveniencia (regla de ufw) que no son estrictamente necesarios.
 fn run_quiet(cmd: &str, args: &[&str]) {
     let _ = Command::new(cmd).args(args).output();
+}
+
+/// Como `run_quiet`, pero devuelve si salió bien en vez de tragarse el
+/// resultado — para sondeos donde el fallo es una respuesta válida, no un
+/// error que reportar.
+fn run_quiet_status(cmd: &str, args: &[&str]) -> bool {
+    Command::new(cmd).args(args).output().is_ok_and(|o| o.status.success())
 }
 
 fn now() -> i64 {
@@ -367,13 +451,15 @@ pub fn uninstall(yes: bool, pip: bool) -> Result<()> {
         }
     }
 
-    let pb = ui::step("deteniendo el servicio");
+    let pb = ui::step("deteniendo los servicios");
     run_quiet("systemctl", &["disable", "--now", "lumid.service"]);
+    run_quiet("systemctl", &["disable", "--now", "qdrant.service"]);
     pb.finish_and_clear();
-    ui::ok("lumid.service detenido");
+    ui::ok("lumid.service y qdrant.service detenidos");
 
     let pb = ui::step("eliminando ficheros");
     let _ = fs::remove_file("/etc/systemd/system/lumid.service");
+    let _ = fs::remove_file("/etc/systemd/system/qdrant.service");
     run_quiet("systemctl", &["daemon-reload"]);
     let _ = fs::remove_file(BIN);
     if has_state {
