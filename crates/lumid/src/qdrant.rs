@@ -148,8 +148,6 @@ impl Cliente {
     /// Si Qdrant no responde en el plazo corto, la capacidad `indices` se ve
     /// deshabilitada con el motivo. Un timeout largo aquí colgaría `/v1/hello`,
     /// que es lo primero que el cliente pide y no puede esperar a una red caída.
-    // ponytail: sin llamante hasta la Tarea 7 (la capacidad `indices`).
-    #[allow(dead_code)]
     pub async fn vivo(&self) -> bool {
         let cliente = reqwest::Client::builder()
             .connect_timeout(std::time::Duration::from_millis(300))

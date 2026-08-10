@@ -37,8 +37,18 @@ fn cap(id: &str, label: &str, state: CapState, reason: Option<&str>) -> Capabili
     }
 }
 
-pub fn matrix(mode: Mode, gpu_count: usize) -> Vec<Capability> {
+pub fn matrix(mode: Mode, gpu_count: usize, qdrant_vivo: bool) -> Vec<Capability> {
     let multi = gpu_count > 1;
+    let indices = cap(
+        "indices",
+        "Instalar índices del catálogo",
+        if qdrant_vivo { CapState::On } else { CapState::Off },
+        if qdrant_vivo {
+            None
+        } else {
+            Some("Qdrant no responde en 127.0.0.1:6333. Sin él no hay dónde meter los vectores.")
+        },
+    );
     match mode {
         Mode::Native => vec![
             cap(
@@ -50,6 +60,7 @@ pub fn matrix(mode: Mode, gpu_count: usize) -> Vec<Capability> {
             cap("offload", "Offload GPU + CPU", CapState::On, None),
             cap("nvml", "Telemetría NVML", CapState::On, None),
             cap("sealed", "Modo sellado", CapState::On, None),
+            indices,
         ],
         Mode::Docker => vec![
             cap(
@@ -71,6 +82,7 @@ pub fn matrix(mode: Mode, gpu_count: usize) -> Vec<Capability> {
                 Some("Uso y VRAM sí; temperatura y potencia requieren --privileged."),
             ),
             cap("sealed", "Modo sellado", CapState::On, None),
+            indices,
         ],
     }
 }
@@ -83,14 +95,16 @@ mod tests {
     fn todo_recorte_lleva_motivo() {
         for mode in [Mode::Native, Mode::Docker] {
             for gpus in [1, 4] {
-                for c in matrix(mode, gpus) {
-                    if c.state != CapState::On {
-                        assert!(
-                            c.reason.as_ref().is_some_and(|r| !r.trim().is_empty()),
-                            "{:?}/{gpus} GPU: '{}' recortada sin motivo",
-                            mode,
-                            c.id
-                        );
+                for qdrant_vivo in [true, false] {
+                    for c in matrix(mode, gpus, qdrant_vivo) {
+                        if c.state != CapState::On {
+                            assert!(
+                                c.reason.as_ref().is_some_and(|r| !r.trim().is_empty()),
+                                "{:?}/{gpus} GPU/qdrant={qdrant_vivo}: '{}' recortada sin motivo",
+                                mode,
+                                c.id
+                            );
+                        }
                     }
                 }
             }

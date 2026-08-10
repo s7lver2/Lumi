@@ -87,7 +87,10 @@ pub fn run(auto: bool) -> Result<PairKey> {
     };
 
     ui::head("capacidades");
-    for c in lumi_proto::caps::matrix(mode, gpus.len()) {
+    // Qdrant todavía no existe en esta fase de la instalación (el asistente de
+    // runtime lo trae después, desde la app): la capacidad `indices` se
+    // enseña recortada aquí a propósito, no es un fallo de detección.
+    for c in lumi_proto::caps::matrix(mode, gpus.len(), false) {
         match c.state {
             CapState::On => ui::ok(&c.label),
             _ => {
