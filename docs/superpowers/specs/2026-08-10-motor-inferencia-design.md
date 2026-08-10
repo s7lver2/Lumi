@@ -5,6 +5,10 @@ elegirlo y tiene un trabajador caliente esperando; el 7 sabe construir un corpus
 publicarlo y encontrarlo. Falta la pieza que los une: **que una imagen entre por el cliente y
 salga un punto en el mapa**.
 
+Maquetas: [`lumi-s5-mockups.html`](lumi-s5-mockups.html) (un análisis con una hipótesis clara, con tres
+que compiten y sin cobertura; instalar con su árbol de dependencias, instalando, firma inválida y
+dependencia caída; lo que hay instalado).
+
 **Orden vigente:** `1 → 2 → 6 → 4 → 7a → 7b → 8 → 5 → 3 → 9`.
 
 ---
