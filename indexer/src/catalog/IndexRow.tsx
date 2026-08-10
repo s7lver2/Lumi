@@ -1,6 +1,7 @@
 import type { ResumenIndice } from "../lib/api";
 import { Icon } from "../ui/Icon";
 import { ProvenanceBar } from "./ProvenanceBar";
+import { SourceBar } from "./SourceBar";
 
 /** La fila del catálogo: nombre, insignia de estado, insignia ámbar de
  *  procedencia desconocida cuando pasa del 0 %, las cuatro cifras en mono, y
@@ -44,6 +45,9 @@ export function IndexRow({ r, embebiendo, onAbrir }: { r: ResumenIndice; embebie
       </div>
       <div className="mt-2.5">
         <ProvenanceBar tipos={r.imagenes_pct.por_tipo} desconocidaPct={desconocidaPct} />
+      </div>
+      <div className="mt-2.5">
+        <SourceBar fuentes={r.imagenes_pct.por_fuente} />
       </div>
     </button>
   );

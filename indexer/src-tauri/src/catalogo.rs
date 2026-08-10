@@ -42,6 +42,62 @@ pub struct FichaResumen {
     pub url: String,
     pub teselas: usize,
     pub viva: bool,
+    /// Qué porcentaje de las teselas del paquete declara cada fuente. Sale de
+    /// `fuentes_por_quadkey`, así que puede sumar más de 100: una tesela con
+    /// dos fuentes cuenta en las dos.
+    pub por_fuente: Vec<lumi_index::manifest::PctFuente>,
+}
+
+/// El mismo cálculo que `lumi_index::manifest::porcentajes`, pero sobre
+/// `fuentes_por_quadkey` (quadkey → fuentes) en vez de sobre imágenes: la
+/// ficha no lleva ninguna imagen, así que teselas es la unidad que hay.
+fn por_fuente_de(f: &Ficha) -> Vec<lumi_index::manifest::PctFuente> {
+    let total = f.fuentes_por_quadkey.len() as u32;
+    let mut cuenta: std::collections::BTreeMap<&str, u32> = Default::default();
+    for (_, fuentes) in &f.fuentes_por_quadkey {
+        for fu in fuentes {
+            *cuenta.entry(fu.as_str()).or_default() += 1;
+        }
+    }
+    cuenta
+        .into_iter()
+        .map(|(fuente, teselas)| lumi_index::manifest::PctFuente {
+            fuente: fuente.to_string(),
+            imagenes: teselas,
+            imagenes_pct: if total == 0 { 0.0 } else { (teselas as f64) * 100.0 / (total as f64) },
+        })
+        .collect()
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PerfilGithub {
+    pub avatar_url: String,
+    pub nombre: Option<String>,
+    pub bio: Option<String>,
+    pub seguidores: u32,
+    pub url: String,
+}
+
+/// La ficha pública de GitHub de una cuenta: solo lo que hace falta para que
+/// el perfil se vea como un perfil de GitHub. Anónimo, como el resto del
+/// catálogo -- no hace falta estar identificado para mirar el de otro.
+pub async fn perfil_github(cuenta: &str) -> Result<PerfilGithub> {
+    #[derive(serde::Deserialize)]
+    struct U {
+        avatar_url: String,
+        name: Option<String>,
+        bio: Option<String>,
+        followers: u32,
+        html_url: String,
+    }
+    let u: U = cliente_http()
+        .get(format!("https://api.github.com/users/{cuenta}"))
+        .header("user-agent", "lumi-indexer")
+        .send()
+        .await?
+        .json()
+        .await?;
+    Ok(PerfilGithub { avatar_url: u.avatar_url, nombre: u.name, bio: u.bio, seguidores: u.followers, url: u.html_url })
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -71,6 +127,7 @@ fn resumen(f: &Ficha, url: &str, viva: bool) -> FichaResumen {
         url: url.to_string(),
         teselas: f.fuentes_por_quadkey.len(),
         viva,
+        por_fuente: por_fuente_de(f),
     }
 }
 

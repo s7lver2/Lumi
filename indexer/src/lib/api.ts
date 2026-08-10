@@ -167,11 +167,15 @@ export interface ProgresoCola {
 }
 export interface FichaResumen {
   paquete: string; nombre: string; autor: string; url: string;
-  teselas: number; viva: boolean;
+  teselas: number; viva: boolean; por_fuente: PctFuente[];
 }
 export interface Resultados { indices: FichaResumen[]; cuentas: string[] }
 export interface Perfil { cuenta: string; publicaciones: FichaResumen[]; teselas: number }
 export interface RepoRemoto { repo: string; paquetes: FichaResumen[] }
+export interface PerfilGithub {
+  avatar_url: string; nombre: string | null; bio: string | null;
+  seguidores: number; url: string;
+}
 export interface CapaRemota {
   modelo: string; version: string; dims: number;
   autor: string; paquete: string; del_autor_del_cuerpo: boolean;
@@ -291,6 +295,7 @@ export const api = {
   catalogoRefrescar: () => invoke<number>("catalogo_refrescar"),
   catalogoBuscar: (texto: string) => invoke<Resultados>("catalogo_buscar", { texto }),
   catalogoPerfil: (cuenta: string) => invoke<Perfil>("catalogo_perfil", { cuenta }),
+  catalogoPerfilGithub: (cuenta: string) => invoke<PerfilGithub>("catalogo_perfil_github", { cuenta }),
   catalogoDependenciasRotas: () => invoke<DependenciaRota[]>("catalogo_dependencias_rotas"),
   catalogoCapas: () => invoke<CapaRemota[]>("catalogo_capas"),
   publicarCapaArrancar: (

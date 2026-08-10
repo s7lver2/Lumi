@@ -1013,6 +1013,11 @@ async fn catalogo_perfil(
 }
 
 #[tauri::command]
+async fn catalogo_perfil_github(cuenta: String) -> Result<catalogo::PerfilGithub, String> {
+    catalogo::perfil_github(&cuenta).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn catalogo_mios(
     estado: tauri::State<'_, Estado>,
 ) -> Result<Vec<catalogo::RepoRemoto>, String> {
@@ -1416,6 +1421,7 @@ pub fn run() {
             catalogo_refrescar,
             catalogo_buscar,
             catalogo_perfil,
+            catalogo_perfil_github,
             catalogo_mios,
             catalogo_reclamos,
             catalogo_dependencias_rotas,
