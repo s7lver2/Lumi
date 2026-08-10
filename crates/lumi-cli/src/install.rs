@@ -143,7 +143,7 @@ pub fn run(auto: bool) -> Result<PairKey> {
     };
     fs::create_dir_all(&models_dir)
         .with_context(|| format!("no se pudo crear {models_dir}: revisa permisos o espacio en disco"))?;
-    ui::ok(&format!("{models_dir}"));
+    ui::ok(&models_dir);
 
     ui::head("instalación");
     fs::create_dir_all(DATA).context("no se pudo crear /var/lib/lumi")?;

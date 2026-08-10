@@ -254,6 +254,11 @@ fn rewrite(mut style: serde_json::Value) -> Result<(serde_json::Value, Upstreams
     Ok((style, up))
 }
 
+// ponytail: `style`/`tile`/`glyphs`/`sprite`/`patch_admin` siguen a este módulo
+// de tests en vez de antes, porque `rewrite()` y sus tests nacieron primero y
+// reordenar doscientas líneas para complacer al lint no aporta nada que leer
+// aquí no dé ya.
+#[allow(clippy::items_after_test_module)]
 #[cfg(test)]
 mod tests {
     use super::*;

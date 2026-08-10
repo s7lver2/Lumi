@@ -63,6 +63,10 @@ pub struct Row {
     pub status: String,
     pub display_name: String,
     pub granted_models: Option<String>,
+    // ponytail: se lee de SQLite para tener la fila completa, pero ningún
+    // llamante mira la caducidad hoy (la comprueba la consulta SQL, no este
+    // struct). Se deja de campo por si algún día hace falta mostrarla.
+    #[allow(dead_code)]
     pub expires_at: i64,
 }
 

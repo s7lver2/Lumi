@@ -20,6 +20,9 @@ pub fn step(label: &str) -> ProgressBar {
     pb
 }
 
+// ponytail: sin llamante hoy (las descargas del instalador todavía no
+// muestran barra de bytes), se deja lista para cuando lo necesiten.
+#[allow(dead_code)]
 pub fn bar(label: &str, total: u64) -> ProgressBar {
     let pb = ProgressBar::new(total);
     pb.set_style(

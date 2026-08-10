@@ -237,7 +237,6 @@ pub async fn patch_user(
     // adivinar el resultado ni volver a pedirlo.
     get_user(State(app), Path(id), headers)
         .await
-        .map(|d| d)
         .map_err(|c| (c, "no se pudo releer el usuario".to_string()))
 }
 

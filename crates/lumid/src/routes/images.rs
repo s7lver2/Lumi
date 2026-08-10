@@ -110,6 +110,7 @@ pub async fn reuse(
     let (uid, pid, _) = guard_case(&app, &headers, case_id)?;
     let is_admin = require_session(&app, &bearer(&headers)).map(|(_, a)| a).unwrap_or(false);
 
+    #[allow(clippy::type_complexity)]
     let (src_case, src_pid, filename, bytes, sha256, width, height, mime, exif_json, exif_lat, exif_lng): (
         i64, i64, String, i64, String, Option<i64>, Option<i64>, String, Option<String>, Option<f64>, Option<f64>,
     ) = app

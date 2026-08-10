@@ -13,6 +13,10 @@ pub struct Env {
     pub kernel: String,
     pub systemd: Option<String>,
     pub driver: Option<String>,
+    // ponytail: se detecta pero nadie lo lee todavía (ni la instalación ni el
+    // resumen impreso lo necesitan hoy); se deja detectado para cuando el
+    // asistente de runtime tenga que decidir qué CUDA pedir.
+    #[allow(dead_code)]
     pub cuda: Option<String>,
     pub disk_free_mb: u64,
     pub port_free: bool,

@@ -51,6 +51,9 @@ pub fn project_of_case(s: &Store, case_id: i64) -> Option<i64> {
     parent(s, "SELECT project_id FROM cases WHERE id = ?1", case_id)
 }
 
+// ponytail: mismo caso que `project_of_analysis` — sin llamante hoy, hará
+// falta en cuanto una ruta necesite resolver una imagen hasta su proyecto.
+#[allow(dead_code)]
 pub fn project_of_image(s: &Store, image_id: i64) -> Option<i64> {
     parent(
         s,
@@ -59,6 +62,10 @@ pub fn project_of_image(s: &Store, image_id: i64) -> Option<i64> {
     )
 }
 
+// ponytail: sin llamante todavía — el subsistema 5 (recuperar.rs) es quien
+// necesitará resolver un análisis hasta su proyecto; se deja lista en vez de
+// duplicarla cuando llegue esa tarea.
+#[allow(dead_code)]
 pub fn project_of_analysis(s: &Store, analysis_id: i64) -> Option<i64> {
     parent(
         s,
