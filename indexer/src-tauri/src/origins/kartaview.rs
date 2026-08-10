@@ -83,6 +83,9 @@ impl OrigenDeRed for KartaView {
     fn redistribucion(&self) -> Redistribucion {
         Redistribucion::Libre { licencia: "CC BY-SA 4.0".into() }
     }
+    fn bajadas(&self) -> u32 {
+        self.ctx.bajadas()
+    }
 
     async fn sondear(&self, tesela: &str) -> Result<Disponibilidad> {
         let puntos = puntos_de_tesela(&self.ctx, tesela).await?;

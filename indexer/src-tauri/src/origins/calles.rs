@@ -4,13 +4,26 @@
 //! **una vez por tesela**: el resultado sirve para los tres orígenes que
 //! muestrean, no uno por origen.
 
+use std::sync::OnceLock;
+
 use anyhow::Result;
 use lumi_index::tiles::{bbox_de_tesela, Punto};
 use serde::Deserialize;
 
-use super::Ctx;
+use super::{Ctx, Limitador};
 
 const OVERPASS: &str = "https://overpass-api.de/api/interpreter";
+
+/// Un limitador PROPIO de Overpass, no el de quien lo llame. `Ctx::limitador`
+/// es de Google (10 req/s) o de KartaView (4 req/s), y las dos lo llaman aquí:
+/// combinados eso es hasta 14 req/s contra un servicio donado que solo tolera
+/// pedir despacio. El síntoma real de esto era un sondeo entero saliendo gris
+/// — Overpass rechazando la mayoría de las peticiones y cada una cayendo al
+/// mismo "nada" sin distinguirse de una tesela sin calles de verdad.
+fn limitador_overpass() -> &'static Limitador {
+    static L: OnceLock<Limitador> = OnceLock::new();
+    L.get_or_init(|| Limitador::nuevo(1, 1))
+}
 
 /// Cada cuántos metros se pregunta. 20 m es lo que usaba la v1: más fino
 /// devuelve la misma panorámica repetida, más grueso deja huecos de fachada.
@@ -56,7 +69,7 @@ pub async fn calles_de_tesela(ctx: &Ctx, tesela: &str) -> Result<Vec<Vec<Punto>>
          ({},{},{},{});out geom;",
         b.sur, b.oeste, b.norte, b.este
     );
-    let _p = ctx.limitador.permiso().await;
+    let _p = limitador_overpass().permiso().await;
     let r = ctx.cliente.post(OVERPASS).body(consulta).send().await?;
     if !r.status().is_success() {
         anyhow::bail!("Overpass respondió {}", r.status());

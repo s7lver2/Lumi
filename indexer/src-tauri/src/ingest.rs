@@ -8,6 +8,7 @@
 
 use std::io::Read;
 use std::path::Path;
+use std::sync::Mutex;
 
 use anyhow::{bail, Context, Result};
 use lumi_index::legacy::{descifrar, nombre_seguro, validar_manifiesto, Topes};
@@ -25,6 +26,83 @@ pub struct Resumen {
     /// Cuántas llegaron ya con vector dentro y por tanto no gastan GPU.
     pub con_vector: u32,
     pub motivos: Vec<String>,
+}
+
+/// Un vector que vino DENTRO del paquete legacy, listo para subir a Qdrant.
+/// `desde_legacy` no lo sube ella misma —es una función síncrona, y Qdrant se
+/// habla por HTTP async— así que lo devuelve para que el llamador lo suba y
+/// solo entonces marque la fila como `hecho`. Marcarla antes sería mentir:
+/// una fila `hecho` sin el vector correspondiente en Qdrant es peor que
+/// dejarla `pendiente`, porque nadie vuelve a intentarlo.
+pub struct VectorTraido {
+    pub imagen_id: i64,
+    pub modelo: String,
+    pub vector: Vec<f32>,
+    pub quadkey: String,
+}
+
+/// Lo que ve el operador mientras un paquete legacy se importa. El descifrado
+/// y el parseo del manifiesto son de varios segundos con un paquete real
+/// (centenares de MB de floats); sin esto la interfaz no tiene nada que
+/// enseñar mientras tanto y el operador no puede distinguir "trabajando" de
+/// "colgado".
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ProgresoIngesta {
+    pub trabajando: bool,
+    pub etapa: String,
+    pub hechas: u32,
+    pub total: u32,
+    pub terminado: bool,
+    pub error: Option<String>,
+    pub resumen: Option<Resumen>,
+}
+
+/// Un contador compartido, igual en espíritu al `Descarga` del 7b: se crea al
+/// arrancar, un hilo aparte lo va actualizando, y el comando de progreso solo
+/// lee lo último que dejó.
+#[derive(Default)]
+pub struct Ingesta {
+    progreso: Mutex<ProgresoIngesta>,
+}
+
+impl Ingesta {
+    pub fn nueva() -> Self {
+        Self {
+            progreso: Mutex::new(ProgresoIngesta { trabajando: true, ..Default::default() }),
+        }
+    }
+
+    pub fn progreso(&self) -> ProgresoIngesta {
+        self.progreso.lock().unwrap().clone()
+    }
+
+    fn etapa(&self, texto: &str) {
+        self.progreso.lock().unwrap().etapa = texto.to_string();
+    }
+
+    fn empezar_imagenes(&self, total: u32) {
+        let mut p = self.progreso.lock().unwrap();
+        p.etapa = "importando imágenes".to_string();
+        p.total = total;
+        p.hechas = 0;
+    }
+
+    fn una_imagen(&self) {
+        self.progreso.lock().unwrap().hechas += 1;
+    }
+
+    /// Cierra el progreso, en éxito o en error. Siempre se llama, para que el
+    /// operador nunca se quede mirando una barra que ya no avanza y no dice
+    /// por qué.
+    pub fn terminar(&self, r: Result<Resumen>) {
+        let mut p = self.progreso.lock().unwrap();
+        p.trabajando = false;
+        p.terminado = true;
+        match r {
+            Ok(resumen) => p.resumen = Some(resumen),
+            Err(e) => p.error = Some(e.to_string()),
+        }
+    }
 }
 
 fn sha256_de(ruta: &Path) -> Result<String> {
@@ -181,7 +259,9 @@ pub fn desde_legacy(
     declarada_por_operador: bool,
     modelos: &[String],
     destino_imagenes: &Path,
-) -> Result<Resumen> {
+    ingesta: &Ingesta,
+) -> Result<(Resumen, Vec<VectorTraido>)> {
+    ingesta.etapa("descifrando el paquete");
     let cifrado = std::fs::read(paquete)?;
     let topes = Topes::por_defecto();
     let zip_bytes = descifrar(&cifrado).context("no se pudo descifrar el paquete")?;
@@ -198,6 +278,10 @@ pub fn desde_legacy(
     // Todo va a un staging; cualquier fallo lo tira entero.
     let stage = tempfile::Builder::new().prefix("lumidx-stage-").tempdir()?;
 
+    // La etapa más larga de un paquete real: un manifiesto de cientos de MB de
+    // floats tarda varios segundos en deserializarse, y es donde el operador
+    // más necesita saber que la aplicación sigue viva y no colgada.
+    ingesta.etapa("leyendo el manifiesto");
     let mut manifiesto_bytes = Vec::new();
     zip.by_name("manifest.json")
         .context("el paquete no trae manifest.json")?
@@ -215,11 +299,16 @@ pub fn desde_legacy(
         declarada_por_operador,
     )?;
     let mut r = Resumen { lote_id, ..Default::default() };
+    let mut vectores_traidos = Vec::new();
     let conocidos: Vec<String> = modelos.to_vec();
     std::fs::create_dir_all(destino_imagenes)?;
 
+    let total_imagenes: u32 = manifiesto.areas.iter().map(|a| a.images.len() as u32).sum();
+    ingesta.empezar_imagenes(total_imagenes);
+
     for area in &manifiesto.areas {
         for img in &area.images {
+            ingesta.una_imagen();
             if !nombre_seguro(&img.pano_id) {
                 r.saltadas += 1;
                 r.motivos.push(format!("{} — nombre no admisible", img.pano_id));
@@ -247,16 +336,17 @@ pub fn desde_legacy(
                 std::fs::copy(&en_stage, &destino).map(|_| ())
             })?;
 
-            // Los vectores vienen dentro. Si el modelo coincide con uno
-            // instalado se dan por hechos; si no, la imagen entra SIN vector y
-            // la cola la recoge. Es el mecanismo que la v1 tuvo que inventar a
-            // posteriori, aquí desde el principio.
-            let trae: Vec<String> = img
-                .embeddings
-                .iter()
-                .filter(|(m, v)| v.is_some() && conocidos.contains(m))
-                .map(|(m, _)| m.clone())
-                .collect();
+            // El vector viene dentro, y es de UN modelo: la v1 nunca exportó
+            // más de uno por manifiesto (`manifiesto.model`, no un mapa por
+            // imagen). Si coincide con uno instalado se da por hecho; si no,
+            // la imagen entra SIN vector y la cola la recoge — el mecanismo
+            // que la v1 tuvo que inventar a posteriori, aquí desde el
+            // principio.
+            let trae: Vec<String> = if img.embedding.is_some() && conocidos.contains(&manifiesto.model.id) {
+                vec![manifiesto.model.id.clone()]
+            } else {
+                Vec::new()
+            };
             let pendientes: Vec<String> =
                 conocidos.iter().filter(|m| !trae.contains(m)).cloned().collect();
 
@@ -271,8 +361,19 @@ pub fn desde_legacy(
                 &quadkey(img.lat, img.lng),
                 &pendientes,
             )?;
+            // NO se marca `hecho` aquí: esta función es síncrona y Qdrant se
+            // habla por HTTP async. El llamador sube estos vectores de
+            // verdad y solo entonces marca la fila — antes de eso, `id` es lo
+            // único que necesita para saber a qué imagen atarlo.
             for m in &trae {
-                almacen.marcar_vector(id, m, "hecho")?;
+                if let Some(v) = &img.embedding {
+                    vectores_traidos.push(VectorTraido {
+                        imagen_id: id,
+                        modelo: m.clone(),
+                        vector: v.clone(),
+                        quadkey: quadkey(img.lat, img.lng),
+                    });
+                }
             }
             if !trae.is_empty() {
                 r.con_vector += 1;
@@ -281,5 +382,5 @@ pub fn desde_legacy(
         }
     }
     almacen.estado_lote(lote_id, "pendiente", None)?;
-    Ok(r)
+    Ok((r, vectores_traidos))
 }

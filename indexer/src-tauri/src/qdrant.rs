@@ -55,8 +55,15 @@ impl Cliente {
         Ok(())
     }
 
-    /// Sube un bloque de puntos. `ids` son los `imagenes.id` de SQLite, que es
-    /// lo que ata cada vector a su fila.
+    /// Sube un bloque de puntos, troceado en lotes que quepan bajo el límite
+    /// de cuerpo HTTP de Qdrant (32 MiB por defecto). `ids` son los
+    /// `imagenes.id` de SQLite, que es lo que ata cada vector a su fila.
+    ///
+    /// El tamaño del lote se calcula a partir de la dimensión REAL del
+    /// vector, no de un número fijo: 5173 imágenes de una importación legacy
+    /// con un vector de 8448 floats pesan 944 MB como JSON —cada float es
+    /// texto, no 4 bytes binarios— y de un golpe Qdrant lo rechazaba entero.
+    /// Con `lumi-2` (12288-d) un lote fijo que valiera hoy reventaría igual.
     pub async fn subir(
         &self,
         nombre: &str,
@@ -67,6 +74,37 @@ impl Cliente {
         if ids.len() != vectores.len() || ids.len() != quadkeys.len() {
             bail!("subir: ids, vectores y quadkeys tienen que venir en paralelo");
         }
+        if ids.is_empty() {
+            return Ok(());
+        }
+        // El primer cálculo (16 bytes/float, tope en 24 MiB) todavía reventó
+        // el límite real: un lote de 186 puntos de 8448-d midió 33 951 060
+        // bytes, 182 533 por punto — 21,6 bytes por float, no 16. `serde_json`
+        // no serializa un `f32` con su propia precisión corta: lo promueve a
+        // `f64` y escribe el decimal más corto que redondea a ESE `f64`, que
+        // para un `f32` no exacto suele ser mucho más largo que sus 7-8
+        // cifras significativas. De ahí el margen grande, medido contra el
+        // fallo real y no adivinado.
+        const TOPE_BYTES: usize = 16 << 20;
+        const BYTES_POR_FLOAT_JSON: usize = 32;
+        let dims = vectores[0].len().max(1);
+        let por_lote = (TOPE_BYTES / (dims * BYTES_POR_FLOAT_JSON)).max(1);
+
+        for desde in (0..ids.len()).step_by(por_lote) {
+            let hasta = (desde + por_lote).min(ids.len());
+            self.subir_lote(nombre, &ids[desde..hasta], &vectores[desde..hasta], &quadkeys[desde..hasta])
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn subir_lote(
+        &self,
+        nombre: &str,
+        ids: &[i64],
+        vectores: &[Vec<f32>],
+        quadkeys: &[String],
+    ) -> Result<()> {
         let puntos: Vec<_> = ids
             .iter()
             .zip(vectores)
@@ -77,6 +115,19 @@ impl Cliente {
         let r = self.http.put(&url).json(&json!({ "points": puntos })).send().await?;
         if !r.status().is_success() {
             bail!("Qdrant rechazó los puntos: {}", r.text().await.unwrap_or_default());
+        }
+        Ok(())
+    }
+
+    /// Borra puntos por id. Se usa al borrar un índice: los puntos de otros
+    /// índices en la misma colección no se tocan, porque `id` es el
+    /// `imagenes.id` de SQLite y es único en toda la aplicación, no por
+    /// índice.
+    pub async fn borrar(&self, nombre: &str, ids: &[i64]) -> Result<()> {
+        let url = format!("{}/collections/{nombre}/points/delete?wait=true", self.base);
+        let r = self.http.post(&url).json(&json!({ "points": ids })).send().await?;
+        if !r.status().is_success() {
+            bail!("Qdrant rechazó el borrado: {}", r.text().await.unwrap_or_default());
         }
         Ok(())
     }

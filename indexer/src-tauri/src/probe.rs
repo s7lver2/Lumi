@@ -7,6 +7,8 @@
 //! Y solo se sondea lo que se pide, cuando se pide. Nunca al mover el mapa.
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 
 use lumi_index::budget::{cabe, previsto, LineaPrevista};
 use lumi_index::network::Tarifa;
@@ -30,6 +32,52 @@ pub struct SondeoTesela {
     pub del_cache: bool,
 }
 
+/// Lo que ve el operador mientras se sondea un área grande: cada origen sondea
+/// sus teselas a su propio ritmo (su `Limitador`), así que sin esto la
+/// interfaz esperaba a que TODOS terminaran para pintar un solo punto —
+/// minutos de mapa gris en un área como Londres, con Mapillary (rápido) y
+/// Google/KartaView (lento porque comparten el limitador de Overpass, ver
+/// `calles.rs`) mezclados en la misma espera.
+#[derive(Default)]
+pub struct Sondeo {
+    resultados: Mutex<Vec<SondeoTesela>>,
+    hechos: AtomicU32,
+    total: u32,
+    terminado: AtomicBool,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ProgresoSondeo {
+    pub resultados: Vec<SondeoTesela>,
+    pub hechos: u32,
+    pub total: u32,
+    pub terminado: bool,
+}
+
+impl Sondeo {
+    pub fn nuevo(total: u32) -> Self {
+        Self { total, ..Default::default() }
+    }
+
+    fn empujar(&self, s: SondeoTesela) {
+        self.resultados.lock().unwrap().push(s);
+        self.hechos.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn terminar(&self) {
+        self.terminado.store(true, Ordering::SeqCst);
+    }
+
+    pub fn progreso(&self) -> ProgresoSondeo {
+        ProgresoSondeo {
+            resultados: self.resultados.lock().unwrap().clone(),
+            hechos: self.hechos.load(Ordering::SeqCst),
+            total: self.total,
+            terminado: self.terminado.load(Ordering::SeqCst),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Estimacion {
     pub lineas: Vec<LineaPrevista>,
@@ -41,54 +89,66 @@ pub struct Estimacion {
 }
 
 /// Sondea cada tesela contra cada origen, reutilizando lo que esté vigente en
-/// la caché.
+/// la caché, y empujando cada resultado a `sondeo` EN CUANTO llega — no al
+/// final. Todas las combinaciones origen×tesela salen a la vez; el ritmo real
+/// de cada una lo pone el `Limitador` de su propio origen (o el de Overpass
+/// compartido, para las que muestrean calles), no un bucle secuencial de aquí.
 ///
 /// Mapillary también pasa por aquí aunque el mapa pinte sus puntos por su
 /// cuenta: la estimación necesita su número igual que el de los demás.
 pub async fn sondear_area(
-    almacen: &Almacen,
-    origenes: &[Origen],
-    teselas: &[String],
-) -> Vec<SondeoTesela> {
-    let mut fuera = Vec::new();
-    for o in origenes {
-        for qk in teselas {
-            if let Ok(Some((nivel, estimadas))) = almacen.sondeo_leer(o.id(), qk, CADUCIDAD_DIAS) {
-                fuera.push(SondeoTesela {
-                    quadkey: qk.clone(),
+    almacen: Arc<Almacen>,
+    origenes: Vec<Origen>,
+    teselas: Vec<String>,
+    sondeo: Arc<Sondeo>,
+) {
+    let mut tareas = tokio::task::JoinSet::new();
+    for o in &origenes {
+        for qk in &teselas {
+            let o = o.clone();
+            let qk = qk.clone();
+            let almacen = almacen.clone();
+            let sondeo = sondeo.clone();
+            tareas.spawn(async move {
+                if let Ok(Some((nivel, estimadas))) = almacen.sondeo_leer(o.id(), &qk, CADUCIDAD_DIAS) {
+                    sondeo.empujar(SondeoTesela {
+                        quadkey: qk,
+                        fuente: o.id().to_string(),
+                        nivel,
+                        estimadas,
+                        del_cache: true,
+                    });
+                    return;
+                }
+                // Un origen que falla al sondear no tumba el área: se anota
+                // como «nada» sin guardarlo en caché, para que el siguiente
+                // intento vuelva a preguntar en vez de heredar el fallo
+                // durante 30 días.
+                let Ok(d) = o.sondear(&qk).await else {
+                    log::warn!("{} no pudo sondear {qk}", o.id());
+                    sondeo.empujar(SondeoTesela {
+                        quadkey: qk,
+                        fuente: o.id().to_string(),
+                        nivel: "nada".into(),
+                        estimadas: 0,
+                        del_cache: false,
+                    });
+                    return;
+                };
+                let nivel = format!("{:?}", d.nivel()).to_lowercase();
+                let _ = almacen.sondeo_guardar(o.id(), &qk, &nivel, d.unidades());
+                sondeo.empujar(SondeoTesela {
+                    quadkey: qk,
                     fuente: o.id().to_string(),
                     nivel,
-                    estimadas,
-                    del_cache: true,
-                });
-                continue;
-            }
-            // Un origen que falla al sondear no tumba el área: se anota como
-            // «nada» sin guardarlo en caché, para que el siguiente intento
-            // vuelva a preguntar en vez de heredar el fallo durante 30 días.
-            let Ok(d) = o.sondear(qk).await else {
-                log::warn!("{} no pudo sondear {qk}", o.id());
-                fuera.push(SondeoTesela {
-                    quadkey: qk.clone(),
-                    fuente: o.id().to_string(),
-                    nivel: "nada".into(),
-                    estimadas: 0,
+                    estimadas: d.unidades(),
                     del_cache: false,
                 });
-                continue;
-            };
-            let nivel = format!("{:?}", d.nivel()).to_lowercase();
-            let _ = almacen.sondeo_guardar(o.id(), qk, &nivel, d.unidades());
-            fuera.push(SondeoTesela {
-                quadkey: qk.clone(),
-                fuente: o.id().to_string(),
-                nivel,
-                estimadas: d.unidades(),
-                del_cache: false,
             });
         }
     }
-    fuera
+    while tareas.join_next().await.is_some() {}
+    sondeo.terminar();
 }
 
 /// Lo que costaría bajar `nuevas`, que es un mapa `fuente → teselas que ESE
@@ -189,19 +249,25 @@ mod tests {
     #[tokio::test]
     async fn el_segundo_sondeo_sale_del_cache_y_no_toca_el_origen() {
         let (_d, a) = temporal();
+        let a = Arc::new(a);
         let o: Vec<Origen> = vec![std::sync::Arc::new(
             Falso::nuevo("falso", Tipo::Suelta, Tarifa::Gratis).con("AAA", 80).con("BBB", 0),
         )];
         let teselas = vec!["AAA".to_string(), "BBB".to_string()];
 
-        let uno = sondear_area(&a, &o, &teselas).await;
-        assert_eq!(uno.len(), 2);
-        assert!(uno.iter().all(|s| !s.del_cache), "la primera vez se pregunta");
-        assert_eq!(uno.iter().find(|s| s.quadkey == "AAA").unwrap().estimadas, 80);
+        let s1 = Arc::new(Sondeo::nuevo((o.len() * teselas.len()) as u32));
+        sondear_area(a.clone(), o.clone(), teselas.clone(), s1.clone()).await;
+        let uno = s1.progreso();
+        assert!(uno.terminado);
+        assert_eq!(uno.resultados.len(), 2);
+        assert!(uno.resultados.iter().all(|s| !s.del_cache), "la primera vez se pregunta");
+        assert_eq!(uno.resultados.iter().find(|s| s.quadkey == "AAA").unwrap().estimadas, 80);
 
-        let dos = sondear_area(&a, &o, &teselas).await;
-        assert!(dos.iter().all(|s| s.del_cache), "la segunda sale de la caché");
-        assert_eq!(dos.iter().find(|s| s.quadkey == "AAA").unwrap().estimadas, 80);
+        let s2 = Arc::new(Sondeo::nuevo((o.len() * teselas.len()) as u32));
+        sondear_area(a, o, teselas, s2.clone()).await;
+        let dos = s2.progreso();
+        assert!(dos.resultados.iter().all(|s| s.del_cache), "la segunda sale de la caché");
+        assert_eq!(dos.resultados.iter().find(|s| s.quadkey == "AAA").unwrap().estimadas, 80);
     }
 
     #[tokio::test]

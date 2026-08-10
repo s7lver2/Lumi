@@ -170,16 +170,23 @@ impl Servicios {
                 (false, true) => "Redis no escucha",
                 (true, true) => unreachable!("se ha devuelto Ok más arriba"),
             };
-            bail!(
+            let motivo = format!(
                 "{faltan}. Ninguno de los dos publica binario oficial para Windows, así que van \
                  dentro de WSL. Pulsa «Levantar en WSL» y el Indexer los arranca ahí y los adopta; \
                  si no están instalados, los instala antes.\n\
                  \nVer la sección «Linux primero» del README."
             );
+            // Se apunta ANTES de fallar: un `bail!` sin proceso hijo de por medio
+            // no deja rastro en ningún log, y esto era exactamente lo que hacía
+            // parecer que "no pasó nada" al abrir la app en Windows sin nada
+            // adoptado todavía.
+            self.log.apuntar(format!("arrancar: {motivo}"));
+            bail!(motivo);
         }
 
         if !redis_vivo {
             let Some(redis) = buscar(&["redis-server"]) else {
+                self.log.apuntar("arrancar: no encuentro `redis-server` en el PATH".into());
                 bail!("no encuentro `redis-server` en el PATH");
             };
             let conf = escribir_redis_conf(&self.dir)?;
@@ -191,6 +198,7 @@ impl Servicios {
 
         if !qdrant_vivo {
             let Some(qdrant) = buscar(&["qdrant"]) else {
+                self.log.apuntar("arrancar: no encuentro `qdrant` en el PATH".into());
                 bail!("no encuentro `qdrant` en el PATH");
             };
             let almacen = self.dir.join("qdrant");
@@ -435,6 +443,50 @@ impl Servicios {
 
         vec![redis, qdrant]
     }
+
+    /// Lo que hace falta para diagnosticar «no arranca» sin adivinar: qué
+    /// sistema operativo ve el proceso, si encuentra los binarios nativos en
+    /// el PATH, si `wsl.exe` responde en absoluto (Windows sin WSL instalado
+    /// es un caso real y da un error de spawn distinto al de "no está
+    /// arrancado"), y el estado en vivo de los dos servicios con su detalle
+    /// crudo — el mismo que ya se ve en Ajustes, pero reunido en un sitio que
+    /// no depende de haber llegado a entrar en la aplicación.
+    pub async fn diagnostico(&self) -> Diagnostico {
+        let wsl_responde = if cfg!(windows) {
+            Some(
+                Command::new("wsl")
+                    .arg("--status")
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .await
+                    .is_ok_and(|s| s.success()),
+            )
+        } else {
+            None
+        };
+        Diagnostico {
+            so: std::env::consts::OS.into(),
+            redis_en_path: buscar(&["redis-server"]).is_some(),
+            qdrant_en_path: buscar(&["qdrant"]).is_some(),
+            wsl_responde,
+            redis_puerto: REDIS_PUERTO,
+            qdrant_puerto: QDRANT_PUERTO,
+            estado: self.estado().await,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Diagnostico {
+    pub so: String,
+    pub redis_en_path: bool,
+    pub qdrant_en_path: bool,
+    /// `None` fuera de Windows: la pregunta no aplica.
+    pub wsl_responde: Option<bool>,
+    pub redis_puerto: u16,
+    pub qdrant_puerto: u16,
+    pub estado: Vec<EstadoServicio>,
 }
 
 fn no_vivo(nombre: &str, detalle: String) -> EstadoServicio {

@@ -149,6 +149,9 @@ impl OrigenDeRed for Flickr {
     fn redistribucion(&self) -> Redistribucion {
         Redistribucion::PorImagen
     }
+    fn bajadas(&self) -> u32 {
+        self.ctx.bajadas()
+    }
 
     async fn sondear(&self, tesela: &str) -> Result<Disponibilidad> {
         let n = self.fotos(tesela).await?.len() as u32;

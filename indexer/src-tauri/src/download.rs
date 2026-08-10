@@ -13,11 +13,30 @@ use std::sync::{Arc, Mutex};
 
 use lumi_index::budget::Presupuesto;
 use lumi_index::tiles::quadkey;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::origins::Origen;
 use crate::spend;
 use crate::store::Almacen;
+
+/// La clave en `ajustes` bajo la que vive el plan de la descarga en curso —
+/// mientras está en curso. Se escribe al arrancar y se borra al terminar
+/// `correr()`, pase lo que pase (fin normal, `parar()` o sin saldo): si sigue
+/// ahí al arrancar la aplicación, es porque `correr()` nunca llegó a su
+/// final, que es justo lo que pasa cuando se cierra la app a mitad.
+pub const CLAVE_PLAN_PENDIENTE: &str = "descarga_pendiente";
+
+/// Lo mínimo para volver a lanzar la misma descarga tal cual se pidió la
+/// primera vez. `imagenes_estimadas` viaja aquí y no se recalcula porque
+/// recalcularlo exigiría sondear de nuevo — y es solo para el ETA, no para
+/// decidir nada.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanDescarga {
+    pub indice_id: i64,
+    pub nuevas: std::collections::BTreeMap<String, Vec<String>>,
+    pub presupuesto_eur: f64,
+    pub imagenes_estimadas: u32,
+}
 
 /// Reintentos de una tesela cuya descarga se cayó. Uno: si falla dos veces, el
 /// problema no es de suerte.
@@ -54,6 +73,31 @@ fn sumar_a_origen(p: &mut Progreso, fuente: &str, imagenes: u32, coste_eur: f64)
     }
 }
 
+/// Una tesela × origen del plan, para pintarla en el mapa en cuanto termina.
+/// Vive aparte de `descargas` (la tabla, que es el contrato de reanudación):
+/// esto es solo para que la interfaz sepa qué dibujar mientras la descarga
+/// corre, y se descarta con el resto de `Progreso` al terminar.
+#[derive(Debug, Clone, Serialize)]
+pub struct TeselaProgreso {
+    pub quadkey: String,
+    pub fuente: String,
+    pub hecha: bool,
+}
+
+/// La tesela × origen que se está bajando AHORA MISMO, con lo único que se
+/// sabe de verdad mientras corre: cuántas fotos van. No hay un total que
+/// enseñar aquí —eso solo se sabe al terminar la consulta— así que esto no es
+/// una barra de progreso de la tesela, es la prueba de que sigue viva.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct TeselaEnCurso {
+    pub quadkey: String,
+    pub fuente: String,
+    pub imagenes: u32,
+    /// Cuántas trae la tesela en total, si ya se sabe. `0` es "no se sabe
+    /// todavía" — ver `OrigenDeRed::objetivo`.
+    pub objetivo: u32,
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Progreso {
     pub trabajando: bool,
@@ -63,6 +107,8 @@ pub struct Progreso {
     pub gastado_eur: f64,
     pub sin_saldo: bool,
     pub por_origen: Vec<LineaOrigen>,
+    pub teselas: Vec<TeselaProgreso>,
+    pub en_curso: Option<TeselaEnCurso>,
     pub ultimo: String,
     pub registro: Vec<String>,
 }
@@ -98,15 +144,37 @@ impl Descarga {
         self.parar.store(true, Ordering::SeqCst);
     }
 
+    /// Todos los orígenes activos, uno tras otro. `trabajando` se enciende y
+    /// se apaga AQUÍ, una sola vez para la descarga entera — antes cada
+    /// `un_origen` apagaba `trabajando` al terminar SU lista, y con dos
+    /// orígenes activos eso significaba que tras terminar Mapillary la
+    /// interfaz veía `trabajando: false` un instante y se creía la descarga
+    /// completa mientras KartaView ni había empezado: `DownloadView` se
+    /// navegaba fuera sola, y "Detener" parecía no hacer nada porque el
+    /// operador ya no estaba en la pantalla para verlo parar.
+    pub async fn correr(&self, origenes: &[Origen], nuevas: &std::collections::BTreeMap<String, Vec<String>>) {
+        self.progreso.lock().unwrap().trabajando = true;
+        for o in origenes {
+            if self.parar.load(Ordering::SeqCst) {
+                break;
+            }
+            let Some(teselas) = nuevas.get(o.id()) else { continue };
+            self.un_origen(o, teselas).await;
+        }
+        self.progreso.lock().unwrap().trabajando = false;
+        // Llegar aquí —por el motivo que sea— es la prueba de que esta
+        // descarga ya no necesita reanudarse sola al reabrir la aplicación.
+        let _ = self.almacen.borrar_ajuste(CLAVE_PLAN_PENDIENTE);
+    }
+
     /// Un origen contra su lista de teselas. Lo que ya está `hecho` ni se pide.
-    pub async fn un_origen(&self, o: &Origen, teselas: &[String]) {
+    async fn un_origen(&self, o: &Origen, teselas: &[String]) {
         let pendientes = self
             .almacen
             .descargas_pendientes(self.indice_id, o.id(), teselas)
             .unwrap_or_default();
         {
             let mut p = self.progreso.lock().unwrap();
-            p.trabajando = true;
             p.teselas_total += pendientes.len() as u32;
             p.por_origen.push(LineaOrigen {
                 fuente: o.id().to_string(),
@@ -115,6 +183,9 @@ impl Descarga {
                 imagenes: 0,
                 coste_eur: 0.0,
             });
+            for qk in &pendientes {
+                p.teselas.push(TeselaProgreso { quadkey: qk.clone(), fuente: o.id().to_string(), hecha: false });
+            }
         }
 
         // Un lote por origen: la fila padre ES la cadena de custodia, y la
@@ -144,7 +215,7 @@ impl Descarga {
             let _ = self.almacen.descarga_marcar(self.indice_id, o.id(), &qk, "en_curso", 0, 0, None);
             let antes = self.tope.gastado_eur();
 
-            match o.descargar(&qk, &self.tope).await {
+            match self.descargar_con_avisos(o, &qk).await {
                 Ok(caps) => {
                     let gastado = self.tope.gastado_eur() - antes;
                     let unidades: u32 = caps.iter().map(|c| c.unidades).sum();
@@ -200,6 +271,9 @@ impl Descarga {
                         if let Some(l) = p.por_origen.iter_mut().find(|l| l.fuente == o.id()) {
                             l.hechas += 1;
                         }
+                        if let Some(t) = p.teselas.iter_mut().find(|t| t.quadkey == qk && t.fuente == o.id()) {
+                            t.hecha = true;
+                        }
                     }
                     apuntar_en(&mut p, format!("{} {qk} · {n} imágenes", o.id()));
                 }
@@ -224,7 +298,63 @@ impl Descarga {
         }
 
         let _ = self.almacen.estado_lote(lote_id, "pendiente", None);
-        self.progreso.lock().unwrap().trabajando = false;
+    }
+
+    /// `o.descargar()` puede tardar minutos sin devolver nada intermedio, y la
+    /// mayor parte de ese tiempo no está resolviendo la consulta: está BAJANDO
+    /// imágenes de una en una contra el limitador del origen. Una tesela densa
+    /// con dos mil fotos a 8 por segundo son más de cuatro minutos de trabajo
+    /// legítimo. Sin esto el registro se queda mudo y la pantalla se lee como
+    /// congelada en «0 de N teselas».
+    ///
+    /// El contador de `bajadas()` es lo que hace que el aviso diga algo cierto
+    /// en vez de un «sigue trabajando» que se lee igual que «está colgado»: si
+    /// el número sube, hay avance real; si no sube, el tiempo se está yendo en
+    /// la consulta y eso también se ve.
+    async fn descargar_con_avisos(
+        &self,
+        o: &Origen,
+        qk: &str,
+    ) -> anyhow::Result<Vec<lumi_index::network::Captura>> {
+        let base = o.bajadas();
+        let futura = o.descargar(qk, &self.tope);
+        tokio::pin!(futura);
+        let inicio = tokio::time::Instant::now();
+        let mut ticks = 0u32;
+        loop {
+            tokio::select! {
+                r = &mut futura => {
+                    // Se apaga aquí, no solo cuando arranca la siguiente: si
+                    // no, la última tesela se quedaría enseñando su cuenta de
+                    // fotos para siempre después de terminar la descarga.
+                    self.progreso.lock().unwrap().en_curso = None;
+                    return r;
+                }
+                // Cada segundo para que la barra se vea viva; el aviso al
+                // registro solo cada sexto tick (6s), que es ruido de sobra
+                // para un log que hay que poder leer.
+                _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {
+                    let hechas = o.bajadas().saturating_sub(base);
+                    {
+                        let mut p = self.progreso.lock().unwrap();
+                        p.en_curso = Some(TeselaEnCurso {
+                            quadkey: qk.to_string(), fuente: o.id().to_string(),
+                            imagenes: hechas, objetivo: o.objetivo(),
+                        });
+                    }
+                    ticks += 1;
+                    if ticks % 6 == 0 {
+                        let s = inicio.elapsed().as_secs();
+                        let objetivo = o.objetivo();
+                        self.anotar(match (hechas, objetivo) {
+                            (0, _) => format!("{} {qk} · resolviendo la consulta, aún sin imágenes ({s}s)", o.id()),
+                            (h, 0) => format!("{} {qk} · {h} imágenes bajadas ({s}s)", o.id()),
+                            (h, t) => format!("{} {qk} · {h} de {t} imágenes ({s}s)", o.id()),
+                        });
+                    }
+                }
+            }
+        }
     }
 
     fn anotar(&self, s: String) {
@@ -269,6 +399,37 @@ mod tests {
         assert_eq!(d2.progreso().teselas_hechas, 0, "no había nada que hacer");
     }
 
+    /// El bug real: `un_origen` apagaba `trabajando` al terminar SU lista, así
+    /// que con dos orígenes activos la interfaz veía `trabajando: false` al
+    /// terminar el primero y se creía la descarga completa mientras el
+    /// segundo ni había empezado — se navegaba fuera de `DownloadView` sola.
+    #[tokio::test]
+    async fn un_origen_no_apaga_trabajando_de_la_descarga_entera() {
+        let (_d, a) = temporal();
+        let i = a.crear_indice("x", "x").unwrap();
+        let o: Origen = std::sync::Arc::new(Falso::nuevo("f", Tipo::Suelta, Tarifa::Gratis).con("AAA", 1));
+        let d = Descarga::nueva(a.clone(), i, 100.0, &[]);
+        d.progreso.lock().unwrap().trabajando = true;
+        d.un_origen(&o, &["AAA".into()]).await;
+        assert!(d.progreso().trabajando, "un origen que termina no apaga la descarga entera");
+    }
+
+    #[tokio::test]
+    async fn correr_procesa_todos_los_origenes_y_solo_entonces_apaga_trabajando() {
+        let (_d, a) = temporal();
+        let i = a.crear_indice("x", "x").unwrap();
+        let o1: Origen = std::sync::Arc::new(Falso::nuevo("uno", Tipo::Suelta, Tarifa::Gratis).con("AAA", 1));
+        let o2: Origen = std::sync::Arc::new(Falso::nuevo("dos", Tipo::Suelta, Tarifa::Gratis).con("BBB", 1));
+        let d = Descarga::nueva(a.clone(), i, 100.0, &[]);
+        let nuevas = std::collections::BTreeMap::from([
+            ("uno".to_string(), vec!["AAA".to_string()]),
+            ("dos".to_string(), vec!["BBB".to_string()]),
+        ]);
+        d.correr(&[o1, o2], &nuevas).await;
+        assert!(!d.progreso().trabajando, "termina apagado");
+        assert_eq!(d.progreso().teselas_hechas, 2, "los dos orígenes se procesan, no solo el primero");
+    }
+
     #[tokio::test]
     async fn el_presupuesto_agotado_para_la_descarga_y_lo_bajado_se_conserva() {
         let (_d, a) = temporal();
@@ -304,5 +465,24 @@ mod tests {
         let mes = crate::spend::mes_iso();
         let g = a.gasto_del_mes(&mes).unwrap();
         assert!((g - 0.0651).abs() < 1e-6, "{g}");
+    }
+
+    /// El plan pendiente solo tiene sentido mientras `correr()` no ha llegado
+    /// a su final: si se cierra la app a mitad, `correr()` nunca corre esta
+    /// línea, y por eso sigue ahí para reanudar. Si SÍ llega al final —el
+    /// caso de este test—, tiene que desaparecer, o cada descarga terminada
+    /// se ofrecería para "reanudar" sin nada que reanudar.
+    #[tokio::test]
+    async fn correr_borra_el_plan_pendiente_al_terminar() {
+        let (_d, a) = temporal();
+        let i = a.crear_indice("x", "x").unwrap();
+        a.guardar_ajuste(CLAVE_PLAN_PENDIENTE, "{\"lo que sea\":true}").unwrap();
+        let o: Origen = std::sync::Arc::new(Falso::nuevo("uno", Tipo::Suelta, Tarifa::Gratis).con("AAA", 1));
+        let d = Descarga::nueva(a.clone(), i, 100.0, &[]);
+        let nuevas = std::collections::BTreeMap::from([("uno".to_string(), vec!["AAA".to_string()])]);
+
+        d.correr(&[o], &nuevas).await;
+
+        assert_eq!(a.leer_ajuste(CLAVE_PLAN_PENDIENTE).unwrap(), None);
     }
 }

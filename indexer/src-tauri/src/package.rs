@@ -10,6 +10,7 @@
 
 use std::io::Write;
 use std::path::Path;
+use std::sync::Mutex;
 
 use anyhow::{bail, Result};
 use lumi_index::vectors::{escribir_b1, escribir_i8};
@@ -22,6 +23,61 @@ pub struct Informe {
     /// `(modelo, filas esperadas, vectores encontrados)`.
     pub por_modelo: Vec<(String, u32, u32)>,
     pub cuadra: bool,
+}
+
+/// El sellado de un índice real (miles de imágenes, varios modelos) tarda —
+/// cada fragmento pide sus vectores a Qdrant y copia sus imágenes — y antes
+/// era un único comando bloqueante sin nada que enseñar mientras tanto: el
+/// botón decía «Sellando…» y ahí se quedaba, indistinguible de colgado. Mismo
+/// patrón que `download::Descarga` e `ingest::Ingesta`: se arranca en
+/// segundo plano y el progreso se lee aparte.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ProgresoSellado {
+    pub etapa: String,
+    pub hechos: u32,
+    pub total: u32,
+    pub terminado: bool,
+    pub informe: Option<Informe>,
+    pub error: Option<String>,
+}
+
+pub struct Sellado(Mutex<ProgresoSellado>);
+
+impl Sellado {
+    pub fn nuevo(total: u32) -> Self {
+        Self(Mutex::new(ProgresoSellado { etapa: "preparando".into(), total, ..Default::default() }))
+    }
+
+    /// Cambia de etapa sin tocar el contador: las etapas (vectores, imágenes,
+    /// manifiesto, firmando) no comparten unidad, así que mezclarlas en un
+    /// solo contador mentiría sobre cuánto queda de la etapa actual.
+    pub fn etapa(&self, nombre: &str) {
+        self.0.lock().unwrap().etapa = nombre.into();
+    }
+
+    pub fn avanzar(&self) {
+        self.0.lock().unwrap().hechos += 1;
+    }
+
+    /// El total real no se conoce hasta después de filtrar qué viaja
+    /// (`redistribucion_de(...).viaja(...)`), así que `nuevo` arranca en 0 y
+    /// esto lo corrige en cuanto se calcula, antes del primer `avanzar`.
+    pub fn fijar_total(&self, total: u32) {
+        self.0.lock().unwrap().total = total;
+    }
+
+    pub fn terminar(&self, resultado: Result<Informe, String>) {
+        let mut g = self.0.lock().unwrap();
+        g.terminado = true;
+        match resultado {
+            Ok(informe) => g.informe = Some(informe),
+            Err(e) => g.error = Some(e),
+        }
+    }
+
+    pub fn progreso(&self) -> ProgresoSellado {
+        self.0.lock().unwrap().clone()
+    }
 }
 
 /// Cuenta filas contra vectores y NO declara éxito si no cuadran. Es lo que

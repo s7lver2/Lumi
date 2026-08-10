@@ -88,6 +88,9 @@ impl OrigenDeRed for MapboxSatelite {
     fn redistribucion(&self) -> Redistribucion {
         Redistribucion::SoloLocal
     }
+    fn bajadas(&self) -> u32 {
+        self.ctx.bajadas()
+    }
 
     /// Sin sonda y sin red: la cobertura es global. Devolver `Siempre` es lo
     /// que permite estimar sus unidades sin pedir nada a nadie.

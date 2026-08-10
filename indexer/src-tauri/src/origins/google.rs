@@ -77,6 +77,9 @@ impl OrigenDeRed for Google {
         // ellas ni sus vectores salen en un paquete publicado.
         Redistribucion::SoloLocal
     }
+    fn bajadas(&self) -> u32 {
+        self.ctx.bajadas()
+    }
 
     async fn sondear(&self, tesela: &str) -> Result<Disponibilidad> {
         let puntos = puntos_de_tesela(&self.ctx, tesela).await?;

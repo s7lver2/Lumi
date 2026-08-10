@@ -49,6 +49,27 @@ pub trait OrigenDeRed: Send + Sync {
     /// presupuesto se agota a mitad, devuelve lo que llevara: es trabajo bueno
     /// y ya pagado.
     async fn descargar(&self, tesela: &str, tope: &Presupuesto) -> Result<Vec<Captura>>;
+
+    /// Cuántas imágenes lleva bajadas este origen desde que arrancó, para que
+    /// el planificador pueda decir algo cierto mientras una tesela tarda.
+    ///
+    /// Una tesela densa pasa la mayor parte de su tiempo AQUÍ, bajando fotos
+    /// de una en una contra el limitador — no resolviendo la consulta. Sin
+    /// este contador, el aviso periódico solo podía decir "sigue trabajando",
+    /// que se lee igual que "está colgado". `0` por defecto: un origen sin
+    /// `Ctx` (el falso de las pruebas) no tiene nada que contar.
+    fn bajadas(&self) -> u32 {
+        0
+    }
+
+    /// Cuántas fotos trae la tesela que está bajando ahora mismo, si ya se
+    /// sabe. Algunos orígenes (Mapillary) resuelven la lista entera ANTES de
+    /// bajar la primera foto, así que el total se sabe desde el principio —
+    /// solo hace falta enseñarlo. `0` es "todavía no se sabe" (o el origen no
+    /// lo rastrea, como los que descubren fotos punto a punto sobre la marcha).
+    fn objetivo(&self) -> u32 {
+        0
+    }
 }
 
 /// Peticiones por segundo y peticiones a la vez. Los dos hacen falta: el
@@ -116,6 +137,12 @@ pub struct Ctx {
     pub clave: Option<String>,
     pub stage: PathBuf,
     pub limitador: Limitador,
+    /// Contador vivo de imágenes bajadas, para `OrigenDeRed::bajadas`. Es lo
+    /// único observable desde fuera mientras una tesela larga está en marcha.
+    bajadas: std::sync::atomic::AtomicU32,
+    /// El total de la tesela en curso, para `OrigenDeRed::objetivo`. Se pisa
+    /// entero al empezar cada tesela — no es acumulado como `bajadas`.
+    objetivo: std::sync::atomic::AtomicU32,
 }
 
 impl Ctx {
@@ -129,7 +156,21 @@ impl Ctx {
             clave,
             stage,
             limitador: Limitador::nuevo(req_s, conc),
+            bajadas: std::sync::atomic::AtomicU32::new(0),
+            objetivo: std::sync::atomic::AtomicU32::new(0),
         }
+    }
+
+    pub fn fijar_objetivo(&self, n: u32) {
+        self.objetivo.store(n, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn objetivo(&self) -> u32 {
+        self.objetivo.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn bajadas(&self) -> u32 {
+        self.bajadas.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Baja unos bytes y los deja en el directorio de paso. Comprueba que
@@ -156,6 +197,9 @@ impl Ctx {
             let _ = std::fs::remove_file(&ruta);
             anyhow::bail!("lo que devolvió {} no decodifica como imagen", crate::keys::redactar(url));
         }
+        // Se cuenta lo que de verdad quedó en disco y decodifica, igual que el
+        // gasto cuenta lo servido: un 404 o unos bytes corruptos no son avance.
+        self.bajadas.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Ok(ruta)
     }
 }

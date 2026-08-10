@@ -10,8 +10,6 @@
 //! validación de este módulo. Un paquete descifrado no es un paquete de
 //! confianza.
 
-use std::collections::HashMap;
-
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Nonce};
 use anyhow::{bail, Context, Result};
@@ -132,8 +130,11 @@ pub struct ImagenV1 {
     #[serde(rename = "streetViewDate")]
     #[serde(default)]
     pub street_view_date: Option<String>,
+    // Un solo vector, no un mapa: la v1 nunca exportó más de un modelo por
+    // manifiesto. Confirmado contra un paquete real — `embedding`, en
+    // singular, un array de floats directo, no `embeddings` como mapa.
     #[serde(default)]
-    pub embeddings: HashMap<String, Option<Vec<f32>>>,
+    pub embedding: Option<Vec<f32>>,
     #[serde(rename = "hasFile")]
     #[serde(default)]
     pub has_file: bool,
@@ -153,7 +154,10 @@ pub struct ManifiestoV1 {
     pub version: u32,
     #[serde(rename = "exportedAt")]
     pub exported_at: String,
-    pub models: Vec<ModeloV1>,
+    // Singular, no `models: Vec<ModeloV1>`: un paquete real de la v1 trae
+    // `"model": {...}`, un único modelo por manifiesto. La v1 nunca soportó
+    // más de uno a la vez, y el campo plural nunca fue el formato real.
+    pub model: ModeloV1,
     pub areas: Vec<AreaV1>,
 }
 
@@ -161,31 +165,24 @@ pub struct ManifiestoV1 {
 /// suelto y por eso necesitó esta función después.
 ///
 /// Lo que se comprueba y por qué:
-/// - `models` no vacío y con dimensión positiva: sin eso no se sabe qué mide
-///   ningún vector.
-/// - cada clave de `embeddings` es un modelo DECLARADO: un bundle malicioso
-///   podría anunciar un modelo compatible y traer datos de otro espacio.
-/// - la longitud de cada vector cuadra con la dimensión declarada: si
-///   coincidiera por casualidad, corrompería el índice en silencio.
+/// - `model` con id, versión y dimensión positiva: sin eso no se sabe qué mide
+///   el vector.
+/// - la longitud del `embedding` de cada imagen cuadra con la dimensión
+///   declarada: si coincidiera por casualidad, corrompería el índice en
+///   silencio.
 /// - `panoId` pasa `nombre_seguro`: acaba siendo una ruta.
 /// - lat/lng dentro de rango: un NaN o una latitud de 300 llegan hasta el mapa.
 pub fn validar_manifiesto(bytes: &[u8]) -> Result<ManifiestoV1> {
     let m: ManifiestoV1 =
         serde_json::from_slice(bytes).context("el manifiesto no es un JSON con la forma esperada")?;
 
-    if m.models.is_empty() {
-        bail!("el manifiesto no declara ningún modelo");
+    if m.model.id.is_empty() || m.model.version.is_empty() {
+        bail!("model tiene id o versión vacíos");
     }
-    let mut dims = HashMap::new();
-    for (i, modelo) in m.models.iter().enumerate() {
-        if modelo.id.is_empty() || modelo.version.is_empty() {
-            bail!("models[{i}] tiene id o versión vacíos");
-        }
-        if modelo.embedding_dim == 0 {
-            bail!("models[{i}].embeddingDim tiene que ser positivo");
-        }
-        dims.insert(modelo.id.clone(), modelo.embedding_dim as usize);
+    if m.model.embedding_dim == 0 {
+        bail!("model.embeddingDim tiene que ser positivo");
     }
+    let dim = m.model.embedding_dim as usize;
 
     for (a, area) in m.areas.iter().enumerate() {
         for (i, img) in area.images.iter().enumerate() {
@@ -198,17 +195,12 @@ pub fn validar_manifiesto(bytes: &[u8]) -> Result<ManifiestoV1> {
             if !(-180.0..=180.0).contains(&img.lng) {
                 bail!("areas[{a}].images[{i}].lng no está entre -180 y 180");
             }
-            for (modelo, v) in &img.embeddings {
-                let Some(d) = dims.get(modelo) else {
-                    bail!("areas[{a}].images[{i}] trae embedding de un modelo no declarado: {modelo}");
-                };
-                if let Some(v) = v {
-                    if v.len() != *d {
-                        bail!(
-                            "areas[{a}].images[{i}].embeddings[{modelo}] mide {} y debería medir {d}",
-                            v.len()
-                        );
-                    }
+            if let Some(v) = &img.embedding {
+                if v.len() != dim {
+                    bail!(
+                        "areas[{a}].images[{i}].embedding mide {} y debería medir {dim}",
+                        v.len()
+                    );
                 }
             }
         }
@@ -260,28 +252,55 @@ mod tests {
 
         // Manifiesto bueno.
         let bueno = br#"{
-          "version": 2, "exportedAt": "2026-07-28T11:04:00Z",
-          "models": [{"id":"lumi-2","version":"1.0","embeddingDim":4}],
+          "version": 1, "exportedAt": "2026-07-28T11:04:00Z",
+          "model": {"id":"lumi-2","version":"1.0","embeddingDim":4},
           "areas": [{"geometryWkt":"POLYGON((0 0,1 0,1 1,0 0))","images":[
             {"panoId":"pano1","heading":90,"lat":43.36,"lng":-8.41,
-             "embeddings":{"lumi-2":[0.1,0.2,0.3,0.4]},"hasFile":true}
+             "embedding":[0.1,0.2,0.3,0.4],"hasFile":true}
           ],"points":[]}]
         }"#;
         let m = validar_manifiesto(bueno).unwrap();
-        assert_eq!(m.models[0].embedding_dim, 4);
+        assert_eq!(m.model.embedding_dim, 4);
         assert_eq!(m.areas[0].images[0].pano_id, "pano1");
+
+        // Forma real de un paquete v1, confirmada contra un bundle real: `model`
+        // en singular (nunca `models`) y `embedding` como array directo (nunca
+        // `embeddings` como mapa). Antes de esta corrección `serde_json` rechazaba
+        // esto por falta del campo `models`, que nunca existió en la v1.
+        let real = br#"{
+          "version": 1, "exportedAt": "2026-07-20T07:59:24.522Z",
+          "model": {"id":"lumi-preview","version":"1.0","embeddingDim":4},
+          "areas": [{"name":null,"geometryWkt":"P","areaKm2":0.1,"status":"indexed",
+            "pointsEstimated":1,"pointsCaptured":1,"pointsFailed":0,"imagesEmbedded":1,
+            "estimatedCostUsd":0.0,"actualCostUsd":0.0,
+            "images":[{"panoId":"pano1","heading":0,"lat":42.6,"lng":-5.5,
+              "streetViewDate":"2025-09-30T22:00:00.000Z",
+              "embedding":[0.1,0.2,0.3,0.4],"hasFile":true}],
+            "points":[]}]
+        }"#;
+        assert!(validar_manifiesto(real).is_ok());
 
         // Y todo lo que tiene que rechazar, uno por uno.
         for (que, json) in [
-            ("panoId con traversal", &br#"{"version":2,"exportedAt":"x","models":[{"id":"m","version":"1","embeddingDim":2}],"areas":[{"geometryWkt":"P","images":[{"panoId":"../x","heading":0,"lat":0,"lng":0,"embeddings":{},"hasFile":true}],"points":[]}]}"#[..]),
-            ("dimensión que no cuadra", &br#"{"version":2,"exportedAt":"x","models":[{"id":"m","version":"1","embeddingDim":2}],"areas":[{"geometryWkt":"P","images":[{"panoId":"p","heading":0,"lat":0,"lng":0,"embeddings":{"m":[1,2,3]},"hasFile":true}],"points":[]}]}"#[..]),
-            ("modelo desconocido", &br#"{"version":2,"exportedAt":"x","models":[{"id":"m","version":"1","embeddingDim":2}],"areas":[{"geometryWkt":"P","images":[{"panoId":"p","heading":0,"lat":0,"lng":0,"embeddings":{"otro":[1,2]},"hasFile":true}],"points":[]}]}"#[..]),
-            ("sin modelos", &br#"{"version":2,"exportedAt":"x","models":[],"areas":[]}"#[..]),
-            ("latitud imposible", &br#"{"version":2,"exportedAt":"x","models":[{"id":"m","version":"1","embeddingDim":2}],"areas":[{"geometryWkt":"P","images":[{"panoId":"p","heading":0,"lat":91,"lng":0,"embeddings":{},"hasFile":true}],"points":[]}]}"#[..]),
+            ("panoId con traversal", &br#"{"version":1,"exportedAt":"x","model":{"id":"m","version":"1","embeddingDim":2},"areas":[{"geometryWkt":"P","images":[{"panoId":"../x","heading":0,"lat":0,"lng":0,"hasFile":true}],"points":[]}]}"#[..]),
+            ("dimensión que no cuadra", &br#"{"version":1,"exportedAt":"x","model":{"id":"m","version":"1","embeddingDim":2},"areas":[{"geometryWkt":"P","images":[{"panoId":"p","heading":0,"lat":0,"lng":0,"embedding":[1,2,3],"hasFile":true}],"points":[]}]}"#[..]),
+            ("sin modelo", &br#"{"version":1,"exportedAt":"x","areas":[]}"#[..]),
+            ("latitud imposible", &br#"{"version":1,"exportedAt":"x","model":{"id":"m","version":"1","embeddingDim":2},"areas":[{"geometryWkt":"P","images":[{"panoId":"p","heading":0,"lat":91,"lng":0,"hasFile":true}],"points":[]}]}"#[..]),
             ("no es json", &b"esto no es json"[..]),
         ] {
             assert!(validar_manifiesto(json).is_err(), "debería rechazarse: {que}");
         }
+
+        // Una imagen sin embedding (`hasFile: false`, capturada pero no embebida)
+        // no se rechaza: es material que la cola recoge después, no un fallo.
+        let sin_embedding = br#"{
+          "version": 1, "exportedAt": "x",
+          "model": {"id":"m","version":"1","embeddingDim":4},
+          "areas": [{"geometryWkt":"P","images":[
+            {"panoId":"p","heading":0,"lat":0,"lng":0,"hasFile":false}
+          ],"points":[]}]
+        }"#;
+        assert!(validar_manifiesto(sin_embedding).is_ok());
 
         // Los topes se miran ANTES de descomprimir, sobre lo declarado.
         //

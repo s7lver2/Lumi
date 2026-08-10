@@ -4,9 +4,11 @@
 //! la misma tabla `ajustes`, una fila por proveedor. Nunca en claro en disco y
 //! nunca dentro de un paquete.
 //!
-//! La de Mapbox se COMPARTE entre el mapa y el origen cenital: es la misma
-//! cuenta y la misma cuota, y tener dos filas para la misma clave solo crearía
-//! la posibilidad de que se desincronicen.
+//! El mapa base y el origen cenital de Mapbox Satellite son cuentas
+//! DISTINTAS en la práctica: un operador puede tener acceso al estilo del
+//! mapa sin tener activado el producto de satélite, o preferir cuentas
+//! separadas para no mezclar la cuota de una con la otra. Cada una vive en su
+//! propia fila.
 
 use anyhow::Result;
 
@@ -17,18 +19,14 @@ use crate::store::Almacen;
 pub const TOPE_MENSUAL_EUR_POR_DEFECTO: f64 = 100.0;
 
 // El mismo literal que ya usaban `mapbox_clave_guardar`/`mapbox_clave_leer`
-// (código de la 7a, sin tocar aquí): si no coincide, la clave que se guarda
-// desde "Orígenes de red" no es la que el mapa lee, y el mapa se queda en
-// blanco sin ningún error que lo delate.
+// (código de la 7a, sin tocar aquí): es la clave del MAPA BASE, no la del
+// origen cenital — esa vive en `ajuste_de("mapbox-satelite")`, como cualquier
+// otro proveedor.
 pub const CLAVE_MAPBOX: &str = "mapbox";
 pub const CLAVE_TOPE: &str = "tope_mensual_eur";
 
 /// La clave de ajuste donde vive el secreto de un proveedor.
 pub fn ajuste_de(proveedor: &str) -> String {
-    // Mapbox no tiene fila propia: usa la misma que el mapa.
-    if proveedor == "mapbox-satelite" {
-        return CLAVE_MAPBOX.to_string();
-    }
     format!("clave_{proveedor}")
 }
 
@@ -105,8 +103,9 @@ mod tests {
     }
 
     #[test]
-    fn mapbox_comparte_la_clave_con_el_mapa() {
-        assert_eq!(ajuste_de("mapbox-satelite"), CLAVE_MAPBOX);
+    fn mapbox_satelite_tiene_su_propia_clave_distinta_del_mapa() {
+        assert_ne!(ajuste_de("mapbox-satelite"), CLAVE_MAPBOX);
+        assert_eq!(ajuste_de("mapbox-satelite"), "clave_mapbox-satelite");
         assert_eq!(ajuste_de("flickr"), "clave_flickr");
     }
 }
