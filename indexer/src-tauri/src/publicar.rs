@@ -676,8 +676,11 @@ async fn empaquetar_y_cifrar(
     prog.anotar(format!("empaquetando {nombre}"));
     let etiqueta = nombre.to_string();
     let prog2 = prog.clone();
+    let prog3 = prog.clone();
+    let nombre2 = nombre.to_string();
     tokio::task::spawn_blocking(move || -> Result<Vec<u8>> {
         let claro = empaquetar(&raiz, &ficheros, &|hechos, total| prog2.avance_empaquetado(hechos, total))?;
+        prog3.anotar(format!("cifrando {nombre2}"));
         cifrar_asset(&claro, &clave)
     })
     .await

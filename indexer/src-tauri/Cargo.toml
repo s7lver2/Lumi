@@ -1,5 +1,13 @@
 [workspace]
 
+# ponytail: sin esto, cifrar un trozo de ~1,8 GB con AES-GCM en modo `dev`
+# tarda minutos en vez de segundos -- es lo que se veía como "colgado" tras
+# terminar de empaquetar. El código propio de la app se queda sin optimizar
+# (compila igual de rápido en cada cambio); solo las dependencias —criptografía,
+# zip, reqwest— se compilan con optimización real.
+[profile.dev.package."*"]
+opt-level = 2
+
 [package]
 name = "indexer-app"
 version = "0.1.0"
