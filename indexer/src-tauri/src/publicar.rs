@@ -308,6 +308,44 @@ async fn subir_asset(
     bail!("no se pudo subir {nombre} tras tres intentos")
 }
 
+/// Borra el asset `nombre` de un release si ya existe. Solo hace falta para
+/// la ficha: es el único asset cuyo contenido cambia en cada publicación (la
+/// firma y las fechas son nuevas cada vez), así que "ya existe" no significa
+/// "ya está subido" como para cuerpos y capas -- significa que hay que
+/// reemplazarlo, porque GitHub rechaza con 422 un nombre duplicado.
+async fn borrar_asset_si_existe(
+    cliente: &reqwest::Client,
+    testigo: &str,
+    repo: &str,
+    release: i64,
+    nombre: &str,
+) -> Result<()> {
+    #[derive(serde::Deserialize)]
+    struct A {
+        id: i64,
+        name: String,
+    }
+    let r = cliente
+        .get(format!("https://api.github.com/repos/{repo}/releases/{release}/assets?per_page=100"))
+        .bearer_auth(testigo)
+        .header("user-agent", "lumi-indexer")
+        .send()
+        .await?;
+    if !r.status().is_success() {
+        return Ok(());
+    }
+    let assets: Vec<A> = r.json().await.unwrap_or_default();
+    if let Some(a) = assets.into_iter().find(|a| a.name == nombre) {
+        let _ = cliente
+            .delete(format!("https://api.github.com/repos/{repo}/releases/assets/{}", a.id))
+            .bearer_auth(testigo)
+            .header("user-agent", "lumi-indexer")
+            .send()
+            .await;
+    }
+    Ok(())
+}
+
 /// El release donde van los assets. Si ya existe con esa etiqueta se reutiliza:
 /// reanudar una subida cortada no puede crear un release nuevo cada vez.
 async fn asegurar_release(
@@ -509,6 +547,7 @@ pub async fn publicar(
     let json = serde_json::to_vec_pretty(&ficha)?;
     prog.empezar_asset("ficha.json");
     almacen.publicacion_apuntar(indice_id, "ficha.json", &sha256_hex(&json), json.len() as u64)?;
+    borrar_asset_si_existe(&cliente, &testigo, &repo, release, "ficha.json").await?;
     let url = subir_asset(&cliente, &testigo, &repo, release, "ficha.json", json.clone()).await?;
     almacen.publicacion_marcar_subido(indice_id, "ficha.json", &url)?;
     prog.terminar_asset(json.len() as u64);
@@ -655,6 +694,7 @@ pub async fn publicar_capa(
     ficha.firmar(&secreta)?;
     let json = serde_json::to_vec_pretty(&ficha)?;
     prog.empezar_asset("ficha.json");
+    borrar_asset_si_existe(&cliente, &testigo, &repo, release, "ficha.json").await?;
     subir_asset(&cliente, &testigo, &repo, release, "ficha.json", json.clone()).await?;
     prog.terminar_asset(json.len() as u64);
     Ok(())
