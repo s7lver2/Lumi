@@ -123,9 +123,27 @@ significa poblarlo, no tocar pesos.
 
 ### Recaptura por tesela
 
-El 7a impide reindexar territorio ya cubierto, y esa regla necesita una salida para cuando el
-material existente esté desfasado: pedir la recaptura de una tesela concreta, con su motivo
-anotado. Sin ella la única alternativa es no usar la herramienta, que es peor.
+Resuelto por la spec de versiones de índice (2026-08-10): `liberar_tesela` borra imágenes y
+vectores de una quadkey para un índice `abierto` y deja la maquinaria de descarga que ya existe
+tratarla como si nunca se hubiera bajado. Sigue sin haber un "motivo anotado" por liberación —no
+lo pedía esa spec— ni recaptura de una imagen suelta dentro de la tesela: la unidad es la tesela
+entera, igual que la descarga.
+
+### Versiones de índice: agrupar v1/v2/v3 bajo una tarjeta con selector
+
+`indice_crear` para una versión nueva (`viene_de` no nulo) inserta una fila normal en
+`indices`/`fichas_remotas`, así que hoy cada versión publicada aparece en el catálogo como una
+tarjeta suelta, con su `numero_version` visible junto al resto de metadatos. Agruparlas bajo una
+sola tarjeta con un selector de versión —lo que un catálogo de paquetes normal ofrece— se aparcó
+a propósito al escribir esa spec: exige decidir qué tarjeta enseña qué versión por defecto y cómo
+se buscan versiones antiguas, y ninguna de las dos cosas bloqueaba tener versionado de verdad.
+
+### Versiones de índice: re-descarga por imagen individual
+
+La misma spec fijó la unidad de borrado/recuperación en la tesela entera, reutilizando
+`descargas`, en vez de una re-descarga por imagen: ninguno de los seis adaptadores de origen
+expone hoy "bájame esta imagen por su id", solo "bájame esta tesela", y construirlo para ganar
+precisión que nadie pidió no se justificaba.
 
 ---
 
