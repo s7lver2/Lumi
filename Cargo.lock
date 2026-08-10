@@ -1506,6 +1506,7 @@ dependencies = [
  "async-stream",
  "axum",
  "axum-server",
+ "base64",
  "bs58",
  "futures",
  "image",
@@ -1526,6 +1527,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "zip",
 ]
 
 [[package]]

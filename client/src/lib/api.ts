@@ -127,6 +127,14 @@ export interface Analysis {
   image_ids: number[]; created_at: number; finished_at: number | null;
 }
 export interface Usage { used_bytes: number; limit_gb: number; overridden: boolean }
+export interface IndiceInstalado {
+  paquete: string; nombre: string; autor: string;
+  teselas: number; bytes: number; modelo: string; version: string; completo: boolean;
+}
+export interface ProgresoInstalacion {
+  paquete: string; asset: string; hechos: number; total: number;
+  registro: string[]; terminado: boolean; error: string | null; rotas: string[];
+}
 /** Lo que `/v1/auth/me` contesta. Los límites vienen aquí para que la interfaz
  *  sepa desde el primer render qué puede ofrecer habilitado. */
 export interface Me { username: string; is_admin: boolean; limits: Limits }

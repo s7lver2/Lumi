@@ -31,6 +31,11 @@ export async function announcePresence(token: string): Promise<void> {
   await invoke("start_queue_events", { token });
 }
 
+/** El SSE de una instalación de índice en curso, reemitido como evento
+ *  `indices-progress`. Se llama solo mientras el diálogo de instalar está
+ *  abierto: a diferencia de la cola, no hay presencia que anunciar aquí. */
+export const startIndicesEvents = (token: string) => invoke("start_indices_events", { token });
+
 export async function uploadPaths(caseId: number, paths: string[]): Promise<Image[]> {
   if (paths.length === 0) return [];
   const raw = await invoke<string>("upload_images", { caseId, paths });
