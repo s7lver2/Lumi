@@ -182,6 +182,18 @@ nunca añadirlos—, pero **qué cuenta como motivo válido para desreclamar** (
 abuso) lo decide la web del subsistema 9, que todavía no existe. Hasta entonces la lista
 vive vacía y todo reclamo válido se mantiene.
 
+### Sin punto de entrada a instalar dentro de Lumi Station
+
+Esto no se aparcó a propósito: no se pensó. El Task 15 del plan del 8 solo pedía el endpoint
+que resuelve el grafo, `InstallDialog` y la comprobación de firma al abrir —nada sobre cómo se
+llega hasta ahí—, y el resultado es que `InstallDialog` no está importado desde ningún sitio de
+`client/src`. Hoy no hay manera de abrir el diálogo sin escribir código: ni un buscador del
+catálogo dentro de Station, ni un campo para pegar la URL de una ficha. El diseño daba por
+hecho que la vía de entrada sería un enlace desde la web del subsistema 9 apuntando directo a
+una ficha, pero eso deja a Station sin nada mientras esa web no exista. Hace falta decidir
+—cuando le toque su ciclo spec → plan— si el punto de entrada vive en Station (una pantalla de
+catálogo, aunque sea mínima) o si de verdad se espera al 9.
+
 ---
 
 ## Transversales
