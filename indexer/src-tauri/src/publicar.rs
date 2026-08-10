@@ -431,13 +431,21 @@ async fn asegurar_release(
 }
 
 /// Los ficheros de un trozo: las imágenes de sus quadkeys.
+///
+/// Una misma imagen puede caer en más de un quadkey del trozo (linda con la
+/// tesela vecina, o el import heredado la asoció dos veces), y como todas las
+/// imágenes viven en el mismo `imagenes/` sin subcarpeta por tesela, el
+/// nombre de fichero ya es la clave del zip: repetirlo era lo que el zip
+/// rechazaba con «Duplicate filename», no un fichero corrupto.
 fn ficheros_del_trozo(raiz: &Path, trozo: &Trozo, por_qk: &BTreeMap<String, Vec<String>>) -> Vec<PathBuf> {
     let imgs = raiz.join("imagenes");
+    let mut vistos = std::collections::HashSet::new();
     trozo
         .quadkeys
         .iter()
         .filter_map(|q| por_qk.get(q))
         .flatten()
+        .filter(|nombre| vistos.insert((*nombre).clone()))
         .filter_map(|nombre| {
             let p = imgs.join(nombre);
             p.exists().then_some(p)
