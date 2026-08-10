@@ -196,6 +196,7 @@ export interface ProgresoPublicacion {
   terminado: boolean;
   error: string | null;
   registro: string[];
+  detalle: string | null;
 }
 
 export interface ProgresoIndiceEmbed {

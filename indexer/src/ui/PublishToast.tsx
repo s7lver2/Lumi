@@ -56,7 +56,7 @@ export function PublishToast({ onAbrir }: { onAbrir: (indiceId: number) => void 
             <i className="block h-full bg-fg transition-[width] duration-300" style={{ width: `${pct}%` }} />
           </span>
           <p className="mt-1.5 truncate font-mono text-[9.5px] text-subtle">
-            {progreso.asset || "preparando…"} · {progreso.hechos}/{progreso.total}
+            {progreso.asset || "preparando…"}{progreso.detalle && <> · {progreso.detalle}</>} · {progreso.hechos}/{progreso.total}
           </p>
         </>
       )}

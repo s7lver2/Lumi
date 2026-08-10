@@ -34,6 +34,7 @@ export function suscribir(f: Oyente): () => void {
 
 const VACIO: ProgresoPublicacion = {
   asset: "", hechos: 0, total: 0, bytes_hechos: 0, bytes_total: 0, terminado: false, error: null, registro: [],
+  detalle: null,
 };
 
 export function iniciar(indiceId: number, nombre: string) {

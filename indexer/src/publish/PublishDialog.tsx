@@ -185,7 +185,9 @@ export function PublishDialog({ indiceId, nombre, onHecho }: {
       {paso === "subiendo" && progreso && (
         <div className="mt-4">
           <div className="flex items-center justify-between">
-            <span className="font-mono text-[10.5px] text-muted">{progreso.asset || "preparando…"}</span>
+            <span className="font-mono text-[10.5px] text-muted">
+              {progreso.asset || "preparando…"}{progreso.detalle && <> · {progreso.detalle}</>}
+            </span>
             <span className="font-mono text-[10px] text-subtle">{progreso.hechos}/{progreso.total}</span>
           </div>
           <span className="mt-1.5 block h-1 overflow-hidden rounded-[2px] bg-elevated">

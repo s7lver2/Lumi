@@ -66,6 +66,11 @@ pub struct ProgresoPublicacion {
     pub terminado: bool,
     pub error: Option<String>,
     pub registro: Vec<String>,
+    /// Cuántos ficheros lleva metidos en el zip del asset activo. Un trozo de
+    /// varios miles de imágenes puede tardar minutos solo en empaquetar, y sin
+    /// esto la pantalla se queda en el mismo texto todo ese rato — indistinguible
+    /// de estar colgada.
+    pub detalle: Option<String>,
 }
 
 pub struct Publicacion(Mutex<ProgresoPublicacion>);
@@ -80,13 +85,20 @@ impl Publicacion {
     /// en vez de "subiendo" fijo mientras en realidad todavía se está
     /// empaquetando o cifrando.
     pub fn empezar_asset(&self, nombre: &str) {
-        self.0.lock().unwrap().asset = nombre.into();
+        let mut g = self.0.lock().unwrap();
+        g.asset = nombre.into();
+        g.detalle = None;
+    }
+
+    pub fn avance_empaquetado(&self, hechos: usize, total: usize) {
+        self.0.lock().unwrap().detalle = Some(format!("{hechos}/{total} ficheros"));
     }
 
     pub fn terminar_asset(&self, bytes: u64) {
         let mut g = self.0.lock().unwrap();
         g.hechos += 1;
         g.bytes_hechos += bytes;
+        g.detalle = None;
     }
 
     pub fn anotar(&self, linea: String) {
@@ -229,16 +241,22 @@ pub fn previsualizar(almacen: &Almacen, indice_id: i64) -> Result<Previsualizaci
 /// el tamaño ni un 2% mientras cuesta minutos de CPU en un trozo de casi
 /// 2 GB — era la causa real de que una publicación pareciera colgada sin
 /// avisar: estaba comprimiendo, no atascada.
-fn empaquetar(raiz: &Path, ficheros: &[PathBuf]) -> Result<Vec<u8>> {
+fn empaquetar(raiz: &Path, ficheros: &[PathBuf], avance: &dyn Fn(usize, usize)) -> Result<Vec<u8>> {
     let mut z = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
     let opciones: zip::write::FileOptions<'_, ()> =
         zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
-    for f in ficheros {
+    let total = ficheros.len();
+    for (i, f) in ficheros.iter().enumerate() {
         let Ok(rel) = f.strip_prefix(raiz) else { continue };
         let Ok(bytes) = std::fs::read(f) else { continue };
         z.start_file(rel.to_string_lossy().replace('\\', "/"), opciones)?;
         use std::io::Write;
         z.write_all(&bytes)?;
+        // Cada 25: suficiente para que el contador se vea moverse sin que el
+        // propio candado del progreso compita con la E/S por el hilo.
+        if i % 25 == 0 || i + 1 == total {
+            avance(i + 1, total);
+        }
     }
     Ok(z.finish()?.into_inner())
 }
@@ -411,7 +429,7 @@ pub async fn publicar(
             continue;
         }
         let ficheros = ficheros_del_trozo(&raiz, t, &por_qk);
-        let sellado = empaquetar_y_cifrar(&prog, &nombre, raiz.clone(), ficheros, clave).await?;
+        let sellado = empaquetar_y_cifrar(prog.clone(), &nombre, raiz.clone(), ficheros, clave).await?;
         let sha = sha256_hex(&sellado);
         let bytes = sellado.len() as u64;
         almacen.publicacion_apuntar(indice_id, &nombre, &sha, bytes)?;
@@ -444,7 +462,7 @@ pub async fn publicar(
             prog.anotar(format!("{modelo} no tiene fragmentos en el paquete"));
             continue;
         }
-        let sellado = empaquetar_y_cifrar(&prog, &nombre, raiz.clone(), ficheros, clave).await?;
+        let sellado = empaquetar_y_cifrar(prog.clone(), &nombre, raiz.clone(), ficheros, clave).await?;
         let sha = sha256_hex(&sellado);
         let bytes = sellado.len() as u64;
         almacen.publicacion_apuntar(indice_id, &nombre, &sha, bytes)?;
@@ -592,10 +610,12 @@ pub async fn publicar_capa(
 
     let nombre = format!("{etiqueta}.enc");
     prog.empezar_asset(&nombre);
-    let sellado = cifrar_asset(&empaquetar(&raiz, &fragmentos_de_modelo(&raiz, &m, &version))?, &clave)?;
+    let ficheros = fragmentos_de_modelo(&raiz, &m, &version);
+    let sellado = empaquetar_y_cifrar(prog.clone(), &nombre, raiz.clone(), ficheros, clave).await?;
     let sha = sha256_hex(&sellado);
     let bytes = sellado.len() as u64;
     almacen.publicacion_apuntar(indice_id, &nombre, &sha, bytes)?;
+    prog.anotar(format!("subiendo {nombre}"));
     subir_asset(&cliente, &testigo, &repo, release, &nombre, sellado).await?;
     almacen.publicacion_marcar_subido(indice_id, &nombre, "")?;
     prog.terminar_asset(bytes);
@@ -647,7 +667,7 @@ pub async fn publicar_capa(
 /// podía parecer colgada del todo en vez de "sin nada nuevo que enseñar
 /// todavía". `spawn_blocking` lo saca a un hilo dedicado para bloquear.
 async fn empaquetar_y_cifrar(
-    prog: &Publicacion,
+    prog: Arc<Publicacion>,
     nombre: &str,
     raiz: PathBuf,
     ficheros: Vec<PathBuf>,
@@ -655,8 +675,9 @@ async fn empaquetar_y_cifrar(
 ) -> Result<Vec<u8>> {
     prog.anotar(format!("empaquetando {nombre}"));
     let etiqueta = nombre.to_string();
+    let prog2 = prog.clone();
     tokio::task::spawn_blocking(move || -> Result<Vec<u8>> {
-        let claro = empaquetar(&raiz, &ficheros)?;
+        let claro = empaquetar(&raiz, &ficheros, &|hechos, total| prog2.avance_empaquetado(hechos, total))?;
         cifrar_asset(&claro, &clave)
     })
     .await
