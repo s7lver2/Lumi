@@ -27,7 +27,7 @@ use anyhow::{bail, Result};
 use lumi_index::embed::{Lote, MsgEmbed};
 use serde::Serialize;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{Child, ChildStdin, Command};
+use tokio::process::{Child, ChildStdin};
 
 use crate::qdrant::{coleccion_de, Cliente};
 use crate::runtime::python_del_venv;
@@ -104,7 +104,7 @@ async fn arrancar(dir: &std::path::Path, log: Arc<Log>, dispositivo: &str, dims:
     if !script.exists() {
         bail!("no encuentro el trabajador en {}", script.display());
     }
-    let mut hijo = Command::new(&py)
+    let mut hijo = crate::proceso::cmd_async(&py)
         .arg("-u")
         .arg(&script)
         .env("LUMI_DEVICE", dispositivo)

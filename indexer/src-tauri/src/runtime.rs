@@ -12,7 +12,6 @@ use std::sync::Arc;
 
 use anyhow::{bail, Result};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
 
 use crate::services::Log;
 
@@ -31,7 +30,7 @@ pub fn python_del_venv(dir: &Path) -> PathBuf {
 pub fn esta_instalado(dir: &Path) -> bool {
     let py = python_del_venv(dir);
     py.exists()
-        && std::process::Command::new(&py)
+        && crate::proceso::cmd(&py)
             .args(["-c", "import torch"])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -41,7 +40,7 @@ pub fn esta_instalado(dir: &Path) -> bool {
 
 async fn correr(log: &Arc<Log>, etiqueta: &'static str, exe: &Path, args: &[&str]) -> Result<()> {
     log.apuntar(format!("{etiqueta}: {} {}", exe.display(), args.join(" ")));
-    let mut hijo = Command::new(exe)
+    let mut hijo = crate::proceso::cmd_async(exe)
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -88,7 +87,7 @@ pub async fn instalar(dir: &Path, log: Arc<Log>) -> Result<()> {
     std::fs::create_dir_all(&base)?;
 
     let Some(py) = ["python3", "python"].into_iter().find(|c| {
-        std::process::Command::new(c)
+        crate::proceso::cmd(c)
             .arg("--version")
             .stdout(Stdio::null())
             .stderr(Stdio::null())

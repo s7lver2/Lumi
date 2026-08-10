@@ -23,7 +23,7 @@ pub struct Rendimiento {
 /// Bloqueante a propósito (lanza un proceso y espera): se llama desde
 /// `spawn_blocking`, nunca directamente desde un comando async.
 pub fn leer() -> Rendimiento {
-    let salida = std::process::Command::new("nvidia-smi")
+    let salida = crate::proceso::cmd("nvidia-smi")
         .args([
             "--query-gpu=name,utilization.gpu,memory.used,memory.total",
             "--format=csv,noheader,nounits",

@@ -90,7 +90,7 @@ fn escribir_redis_conf(dir: &Path) -> Result<PathBuf> {
 /// cualquier máquina donde se llame de otra forma.
 fn buscar(candidatos: &[&str]) -> Option<String> {
     candidatos.iter().find_map(|c| {
-        let ok = std::process::Command::new(c)
+        let ok = crate::proceso::cmd(c)
             .arg("--version")
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -140,7 +140,7 @@ impl Servicios {
     /// otro extremo es el servicio mismo y no un shell que lo envuelve, y
     /// matarlo lo mata de verdad.
     fn en_wsl(guion: &str) -> Command {
-        let mut cmd = Command::new("wsl");
+        let mut cmd = crate::proceso::cmd_async("wsl");
         cmd.args(["-e", "sh", "-lc", guion]);
         cmd
     }
@@ -191,7 +191,7 @@ impl Servicios {
             };
             let conf = escribir_redis_conf(&self.dir)?;
             self.log.apuntar(format!("redis: usando {}", conf.display()));
-            let mut cmd = Command::new(&redis);
+            let mut cmd = crate::proceso::cmd_async(&redis);
             cmd.arg(conf.display().to_string());
             self.lanzar("redis", cmd).await?;
         }
@@ -206,7 +206,7 @@ impl Servicios {
             self.log.apuntar(format!("qdrant: storage en {}", almacen.display()));
             // Qdrant se configura por entorno; se le fija el host explícitamente
             // porque su defecto (0.0.0.0) es justo lo que no queremos.
-            let mut cmd = Command::new(&qdrant);
+            let mut cmd = crate::proceso::cmd_async(&qdrant);
             cmd.env("QDRANT__STORAGE__STORAGE_PATH", &almacen)
                 .env("QDRANT__SERVICE__HOST", "127.0.0.1")
                 .env("QDRANT__SERVICE__HTTP_PORT", QDRANT_PUERTO.to_string())
@@ -274,7 +274,7 @@ impl Servicios {
             // `-u root` en vez de `sudo`: WSL entra como root sin contraseña, y
             // `sudo` en un proceso sin terminal se queda esperando una que no
             // va a llegar nunca.
-            let mut cmd = Command::new("wsl");
+            let mut cmd = crate::proceso::cmd_async("wsl");
             cmd.args([
                 "-u",
                 "root",
@@ -295,7 +295,7 @@ impl Servicios {
             // instalación y no hay suma de verificación que comparar; la
             // salida, fijar versión y hash aquí el día que el Indexer se
             // empaquete para distribuir en vez de para desarrollar.
-            let mut cmd = Command::new("wsl");
+            let mut cmd = crate::proceso::cmd_async("wsl");
             cmd.args([
                 "-e", "sh", "-lc",
                 "set -e; mkdir -p \"$HOME/.lumi-indexer/bin\"; \
@@ -314,7 +314,7 @@ impl Servicios {
 
     /// ¿Existe este ejecutable dentro de WSL?
     async fn hay_en_wsl(que: &str) -> bool {
-        Command::new("wsl")
+        crate::proceso::cmd_async("wsl")
             .args(["-e", "sh", "-lc", &format!("command -v {que} >/dev/null 2>&1 || test -x {que}")])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -454,7 +454,7 @@ impl Servicios {
     pub async fn diagnostico(&self) -> Diagnostico {
         let wsl_responde = if cfg!(windows) {
             Some(
-                Command::new("wsl")
+                crate::proceso::cmd_async("wsl")
                     .arg("--status")
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())

@@ -14,6 +14,7 @@ mod models;
 mod origins;
 mod package;
 mod perf;
+mod proceso;
 mod probe;
 mod publicar;
 mod qdrant;
