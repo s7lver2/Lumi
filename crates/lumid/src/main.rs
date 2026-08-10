@@ -2,6 +2,7 @@ mod limits;
 mod exif;
 mod master;
 mod projects;
+mod qdrant;
 mod queue;
 mod routes;
 mod store;
