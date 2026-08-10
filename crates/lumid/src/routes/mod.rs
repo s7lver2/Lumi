@@ -7,6 +7,7 @@ pub mod catalogo;
 pub mod claim;
 pub mod hello;
 pub mod images;
+pub mod indices;
 pub mod map;
 pub mod projects;
 pub mod queue;

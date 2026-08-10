@@ -3,10 +3,6 @@
 //! El orden importa. El SHA-256 se comprueba ANTES de descifrar y de abrir el
 //! zip: descomprimir algo que no es lo que dijo la ficha es darle de comer al
 //! parseador bytes de un desconocido.
-//!
-//! ponytail: sin llamante hasta la Tarea 5 (`indices::instalar`), de la misma
-//! tanda de este plan.
-#![allow(dead_code)]
 
 use anyhow::{anyhow, Result};
 use base64::{engine::general_purpose::STANDARD, Engine};

@@ -2,11 +2,6 @@
 //!
 //! Una colección por `(modelo, versión)`: los modelos van de 8448 a 12288
 //! dimensiones y un vector de uno no significa nada en el espacio de otro.
-//!
-//! ponytail: este módulo llega completo en la Tarea 1 pero sus llamantes
-//! (instalar, volcar, recuperar, la capacidad `indices`) son tareas
-//! posteriores del mismo plan; hasta que existan, algo de esto está sin usar.
-#![allow(dead_code)]
 
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
@@ -19,6 +14,8 @@ pub fn coleccion_de(modelo: &str, version: &str) -> String {
 
 /// Un candidato tal como sale de Qdrant: el `id` es la fila de
 /// `reference_images` en SQLite, que es lo que le da procedencia.
+// ponytail: sin llamante hasta la Tarea 12 (`recuperar::hipotesis`).
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Vecino {
     pub id: i64,
@@ -102,6 +99,8 @@ impl Cliente {
 
     /// Los `limite` vecinos más próximos. Devuelve ids de SQLite, no vectores:
     /// lo que hace falta después es la procedencia, no los números.
+    // ponytail: sin llamante hasta la Tarea 12 (`recuperar::hipotesis`).
+    #[allow(dead_code)]
     pub async fn buscar(&self, nombre: &str, vector: &[f32], limite: usize) -> Result<Vec<Vecino>> {
         #[derive(Deserialize)]
         struct Punto {
@@ -149,6 +148,8 @@ impl Cliente {
     /// Si Qdrant no responde en el plazo corto, la capacidad `indices` se ve
     /// deshabilitada con el motivo. Un timeout largo aquí colgaría `/v1/hello`,
     /// que es lo primero que el cliente pide y no puede esperar a una red caída.
+    // ponytail: sin llamante hasta la Tarea 7 (la capacidad `indices`).
+    #[allow(dead_code)]
     pub async fn vivo(&self) -> bool {
         let cliente = reqwest::Client::builder()
             .connect_timeout(std::time::Duration::from_millis(300))

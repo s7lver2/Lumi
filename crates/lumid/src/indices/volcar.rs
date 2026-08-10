@@ -3,9 +3,6 @@
 //! El `id` de `reference_images` es el mismo en SQLite y en Qdrant. Es lo que
 //! permite que una búsqueda vectorial devuelva algo con autor, y lo que hace
 //! que desinstalar sea borrar por id sin tocar lo de nadie más.
-//!
-//! ponytail: sin llamante hasta la Tarea 5 (`indices::instalar`).
-#![allow(dead_code)]
 
 use anyhow::{Context, Result};
 use lumi_index::ficha::Ficha;
