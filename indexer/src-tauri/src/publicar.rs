@@ -383,6 +383,19 @@ async fn borrar_asset_si_existe(
     Ok(())
 }
 
+/// Convierte un nombre cualquiera en algo que GitHub acepta como `tag_name`:
+/// sin espacios ni el resto de caracteres que un ref de git rechaza. El
+/// nombre del paquete es el que puso quien indexó (p. ej. «All Tokyo»), y esa
+/// cadena via directa a la API sin pasar por aquí es lo que devolvía 422.
+fn etiqueta_de(paquete: &str) -> String {
+    let cruda: String = paquete
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' { c.to_ascii_lowercase() } else { '-' })
+        .collect();
+    let recortada = cruda.trim_matches('-');
+    if recortada.is_empty() { "indice".to_string() } else { recortada.to_string() }
+}
+
 /// El release donde van los assets. Si ya existe con esa etiqueta se reutiliza:
 /// reanudar una subida cortada no puede crear un release nuevo cada vez.
 async fn asegurar_release(
@@ -456,7 +469,7 @@ pub async fn publicar(
         .unwrap_or_else(|| nombre_indice.clone());
 
     let cliente = cliente_http();
-    let release = asegurar_release(&cliente, &testigo, &repo, &paquete).await?;
+    let release = asegurar_release(&cliente, &testigo, &repo, &etiqueta_de(&paquete)).await?;
     etiquetar_repo(&cliente, &testigo, &repo).await?;
 
     // Una sola clave para todo el paquete: la ofuscación es del alojamiento,
