@@ -10,3 +10,4 @@ dist/
 client/src-tauri/target
 .superpowers/
 .claude/worktrees/
+recovery.txt
