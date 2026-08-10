@@ -162,6 +162,18 @@ pub fn bbox_de_tesela(qk: &str) -> Bbox {
     }
 }
 
+/// Área aproximada de una tesela en km², a partir de su rectángulo en grados.
+/// Aproximación plana: a la escala de una tesela z14 (unas décimas de grado)
+/// el error frente a una fórmula geodésica exacta es insignificante, y evita
+/// traer trigonometría esférica solo para esto.
+pub fn area_km2(qk: &str) -> f64 {
+    let b = bbox_de_tesela(qk);
+    let lat_media = (b.norte + b.sur) / 2.0;
+    let ancho_km = (b.este - b.oeste) * 111.320 * lat_media.to_radians().cos();
+    let alto_km = (b.norte - b.sur) * 110.574;
+    ancho_km * alto_km
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

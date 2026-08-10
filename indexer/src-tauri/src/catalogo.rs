@@ -113,7 +113,17 @@ pub struct Resultados {
 pub struct Perfil {
     pub cuenta: String,
     pub publicaciones: Vec<FichaResumen>,
+    /// Suma de teselas por publicación: si dos índices propios se solapan, la
+    /// tesela compartida cuenta dos veces. Es la misma cifra que ya se
+    /// enseñaba antes de `km2`; se deja así por continuidad con el resto de
+    /// la pantalla, no es una medida de área.
     pub teselas: usize,
+    /// Área real cubierta, sobre el CONJUNTO de quadkeys sin repetir -- al
+    /// contrario que `teselas`, una tesela compartida entre dos índices
+    /// propios solo cuenta una vez: es terreno, no cuenta de publicaciones.
+    pub km2: f64,
+    /// Los quadkeys sin repetir, para dibujar dónde está ese terreno.
+    pub quadkeys: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -315,15 +325,24 @@ pub fn buscar(almacen: &Almacen, texto: &str) -> Result<Resultados> {
 }
 
 pub fn perfil(almacen: &Almacen, cuenta: &str) -> Result<Perfil> {
-    let publicaciones: Vec<FichaResumen> = fichas(almacen)?
-        .into_iter()
-        .filter(|(f, _, _)| f.autor == cuenta)
-        .map(|(f, url, viva)| resumen(&f, &url, viva))
+    let propias: Vec<(Ficha, String, bool)> =
+        fichas(almacen)?.into_iter().filter(|(f, _, _)| f.autor == cuenta).collect();
+
+    let quadkeys: std::collections::BTreeSet<String> = propias
+        .iter()
+        .flat_map(|(f, _, _)| f.fuentes_por_quadkey.iter().map(|(qk, _)| qk.clone()))
         .collect();
+    let km2 = quadkeys.iter().map(|qk| lumi_index::tiles::area_km2(qk)).sum();
+
+    let publicaciones: Vec<FichaResumen> =
+        propias.into_iter().map(|(f, url, viva)| resumen(&f, &url, viva)).collect();
+
     Ok(Perfil {
         teselas: publicaciones.iter().map(|p| p.teselas).sum(),
         cuenta: cuenta.to_string(),
         publicaciones,
+        km2,
+        quadkeys: quadkeys.into_iter().collect(),
     })
 }
 

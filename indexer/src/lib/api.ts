@@ -171,7 +171,10 @@ export interface FichaResumen {
   capas: number; publicada_en: string;
 }
 export interface Resultados { indices: FichaResumen[]; cuentas: string[] }
-export interface Perfil { cuenta: string; publicaciones: FichaResumen[]; teselas: number }
+export interface Perfil {
+  cuenta: string; publicaciones: FichaResumen[]; teselas: number;
+  km2: number; quadkeys: string[];
+}
 export interface RepoRemoto { repo: string; paquetes: FichaResumen[] }
 export interface PerfilGithub {
   avatar_url: string; nombre: string | null; bio: string | null;

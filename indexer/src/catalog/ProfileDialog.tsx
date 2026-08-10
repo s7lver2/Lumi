@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
 
 import { api, type Perfil, type PerfilGithub } from "../lib/api";
+import { CoverageMap } from "./CoverageMap";
 import { SourceBar } from "./SourceBar";
 
 function fecha(epochSeg: string): string {
   const n = Number(epochSeg);
   return Number.isFinite(n) && n > 0 ? new Date(n * 1000).toLocaleDateString("es-ES") : "—";
+}
+
+function km2(n: number): string {
+  return n.toLocaleString("es-ES", { maximumFractionDigits: n < 10 ? 1 : 0 });
 }
 
 /** La ficha de una cuenta, con la misma forma que el perfil de una cuenta de
@@ -49,16 +54,22 @@ export function ProfileDialog({ cuenta, onCerrar }: { cuenta: string; onCerrar: 
 
       {publica ? (
         <>
-          <div className="mt-5 flex gap-7">
+          <div className="mt-5 flex flex-wrap gap-x-6 gap-y-3">
             <Stat k="índices publicados" v={perfil!.publicaciones.length} />
             <Stat k="teselas z14 cubiertas" v={perfil!.teselas} />
+            <Stat k="km² cubiertos" v={km2(perfil!.km2)} />
             <Stat k="capas de modelo" v={capas} />
             <Stat k="primera publicación" v={primera} mono={false} />
           </div>
 
           <div className="mt-[18px] h-px bg-border" />
 
-          <p className="text-[8px] uppercase tracking-[.11em] text-subtle">publicaciones recientes</p>
+          <p className="text-[8px] uppercase tracking-[.11em] text-subtle">cobertura</p>
+          <div className="mt-2.5">
+            <CoverageMap quadkeys={perfil!.quadkeys} />
+          </div>
+
+          <p className="mt-4 text-[8px] uppercase tracking-[.11em] text-subtle">publicaciones recientes</p>
           <div className="mt-2.5 flex flex-col gap-3">
             {perfil!.publicaciones.map((p) => (
               <div key={p.paquete}>
@@ -71,7 +82,7 @@ export function ProfileDialog({ cuenta, onCerrar }: { cuenta: string; onCerrar: 
                   </span>
                 </div>
                 <div className="mt-1.5">
-                  <SourceBar fuentes={p.por_fuente} />
+                  <SourceBar fuentes={p.por_fuente} unidad="teselas" />
                 </div>
               </div>
             ))}
