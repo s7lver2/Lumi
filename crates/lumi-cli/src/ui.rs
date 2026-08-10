@@ -20,6 +20,10 @@ pub fn step(label: &str) -> ProgressBar {
     pb
 }
 
+// ponytail: sin llamador todavía — ninguna descarga del CLI enseña progreso
+// binario hoy — pero es la barra que `install.rs` va a necesitar en cuanto
+// baje pesos de un modelo en vez de solo instalar el runtime.
+#[allow(dead_code)]
 pub fn bar(label: &str, total: u64) -> ProgressBar {
     let pb = ProgressBar::new(total);
     pb.set_style(

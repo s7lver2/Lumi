@@ -101,6 +101,7 @@ pub async fn project_gallery(
 /// Copia una imagen de otro caso del MISMO proyecto a este. Es una copia y no
 /// un traslado: el caso de origen no pierde nada, que es justo la razón de
 /// que un investigador quiera reutilizarla sin desmontar su otro caso.
+#[allow(clippy::type_complexity)]
 pub async fn reuse(
     State(app): State<App>,
     Path(case_id): Path<i64>,

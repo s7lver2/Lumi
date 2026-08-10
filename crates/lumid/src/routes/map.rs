@@ -254,64 +254,6 @@ fn rewrite(mut style: serde_json::Value) -> Result<(serde_json::Value, Upstreams
     Ok((style, up))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// La forma real de un estilo oficial de Mapbox (`dark-v11`), recortada a
-    /// lo que este proxy toca. Sin esto, la única forma de saber si `rewrite()`
-    /// deja un estilo dibujable es abrir la aplicación y mirar un rectángulo
-    /// negro, que es exactamente lo que no se puede depurar.
-    #[test]
-    fn el_estilo_reescrito_no_deja_ni_una_url_del_proveedor() {
-        let raw = serde_json::json!({
-            "version": 8,
-            "name": "Dark",
-            "sprite": "mapbox://sprites/mapbox/dark-v11",
-            "glyphs": "mapbox://fonts/mapbox/{fontstack}/{range}.pbf",
-            "sources": {
-                "composite": {
-                    "url": "mapbox://mapbox.mapbox-streets-v8,mapbox.mapbox-terrain-v2",
-                    "type": "vector"
-                }
-            },
-            "layers": [{ "id": "background", "type": "background" }]
-        });
-
-        let (fixed, up) = rewrite(raw).expect("dark-v11 tiene que poder reescribirse");
-
-        // Lo que el cliente recibe apunta SOLO a rutas nuestras. Un `mapbox://`
-        // o un `api.mapbox.com` que se colara aquí sería la clave viajando.
-        let texto = serde_json::to_string(&fixed).unwrap();
-        assert!(!texto.contains("mapbox://"), "quedó un esquema del proveedor: {texto}");
-        assert!(!texto.contains("api.mapbox.com"), "quedó una URL del proveedor: {texto}");
-
-        // Y las tres piezas que MapLibre necesita para dibujar están puestas.
-        assert_eq!(fixed["sources"]["composite"]["tiles"][0], "/v1/map/tiles/{z}/{x}/{y}");
-        assert_eq!(fixed["glyphs"], "/v1/map/glyphs/{fontstack}/{range}");
-        assert_eq!(fixed["sprite"], "/v1/map/sprite/base");
-        assert!(fixed["sources"]["composite"].get("url").is_none(), "la url del tileset sigue ahí");
-
-        // Y lo que el daemon tiene que recordar para servir esas tres rutas.
-        assert_eq!(up.tileset.as_deref(), Some("mapbox.mapbox-streets-v8,mapbox.mapbox-terrain-v2"));
-        assert_eq!(up.glyphs.as_deref(), Some("https://api.mapbox.com/fonts/v1/mapbox/{fontstack}/{range}.pbf"));
-        assert_eq!(up.sprite.as_deref(), Some("https://api.mapbox.com/styles/v1/mapbox/dark-v11/sprite"));
-    }
-
-    /// Un estilo sin tipografías se rechaza en el servidor. MapLibre no dibuja
-    /// NADA sin ellas —ni las capas sin letras—, así que servirlo sería mandar
-    /// al cliente un rectángulo negro sin motivo.
-    #[test]
-    fn un_estilo_sin_glyphs_no_pasa() {
-        let raw = serde_json::json!({
-            "version": 8,
-            "sources": { "s": { "type": "vector", "tiles": ["https://ejemplo/{z}/{x}/{y}.pbf"] } },
-            "layers": []
-        });
-        assert!(rewrite(raw).is_err());
-    }
-}
-
 pub async fn style(State(app): State<App>, headers: HeaderMap) -> Result<Json<serde_json::Value>, Fail> {
     require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
     let theme = current_theme(&app)
@@ -539,4 +481,62 @@ pub async fn patch_admin(
     );
     tracing::info!("tema de mapa: {}", theme.id);
     config(State(app), headers).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// La forma real de un estilo oficial de Mapbox (`dark-v11`), recortada a
+    /// lo que este proxy toca. Sin esto, la única forma de saber si `rewrite()`
+    /// deja un estilo dibujable es abrir la aplicación y mirar un rectángulo
+    /// negro, que es exactamente lo que no se puede depurar.
+    #[test]
+    fn el_estilo_reescrito_no_deja_ni_una_url_del_proveedor() {
+        let raw = serde_json::json!({
+            "version": 8,
+            "name": "Dark",
+            "sprite": "mapbox://sprites/mapbox/dark-v11",
+            "glyphs": "mapbox://fonts/mapbox/{fontstack}/{range}.pbf",
+            "sources": {
+                "composite": {
+                    "url": "mapbox://mapbox.mapbox-streets-v8,mapbox.mapbox-terrain-v2",
+                    "type": "vector"
+                }
+            },
+            "layers": [{ "id": "background", "type": "background" }]
+        });
+
+        let (fixed, up) = rewrite(raw).expect("dark-v11 tiene que poder reescribirse");
+
+        // Lo que el cliente recibe apunta SOLO a rutas nuestras. Un `mapbox://`
+        // o un `api.mapbox.com` que se colara aquí sería la clave viajando.
+        let texto = serde_json::to_string(&fixed).unwrap();
+        assert!(!texto.contains("mapbox://"), "quedó un esquema del proveedor: {texto}");
+        assert!(!texto.contains("api.mapbox.com"), "quedó una URL del proveedor: {texto}");
+
+        // Y las tres piezas que MapLibre necesita para dibujar están puestas.
+        assert_eq!(fixed["sources"]["composite"]["tiles"][0], "/v1/map/tiles/{z}/{x}/{y}");
+        assert_eq!(fixed["glyphs"], "/v1/map/glyphs/{fontstack}/{range}");
+        assert_eq!(fixed["sprite"], "/v1/map/sprite/base");
+        assert!(fixed["sources"]["composite"].get("url").is_none(), "la url del tileset sigue ahí");
+
+        // Y lo que el daemon tiene que recordar para servir esas tres rutas.
+        assert_eq!(up.tileset.as_deref(), Some("mapbox.mapbox-streets-v8,mapbox.mapbox-terrain-v2"));
+        assert_eq!(up.glyphs.as_deref(), Some("https://api.mapbox.com/fonts/v1/mapbox/{fontstack}/{range}.pbf"));
+        assert_eq!(up.sprite.as_deref(), Some("https://api.mapbox.com/styles/v1/mapbox/dark-v11/sprite"));
+    }
+
+    /// Un estilo sin tipografías se rechaza en el servidor. MapLibre no dibuja
+    /// NADA sin ellas —ni las capas sin letras—, así que servirlo sería mandar
+    /// al cliente un rectángulo negro sin motivo.
+    #[test]
+    fn un_estilo_sin_glyphs_no_pasa() {
+        let raw = serde_json::json!({
+            "version": 8,
+            "sources": { "s": { "type": "vector", "tiles": ["https://ejemplo/{z}/{x}/{y}.pbf"] } },
+            "layers": []
+        });
+        assert!(rewrite(raw).is_err());
+    }
 }

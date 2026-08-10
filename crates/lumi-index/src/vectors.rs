@@ -114,7 +114,7 @@ pub fn leer_i8(r: &mut impl Read) -> Result<Vec<Vec<f32>>> {
 pub fn escribir_b1(w: &mut impl Write, vs: &[Vec<f32>]) -> Result<()> {
     let dims = dims_de(vs)?;
     escribir_cabecera(w, Cabecera { dims, cuenta: vs.len() as u32, forma: Forma::Binario })?;
-    let bytes_por_vector = (dims as usize + 7) / 8;
+    let bytes_por_vector = (dims as usize).div_ceil(8);
     for v in vs {
         let mut fila = vec![0u8; bytes_por_vector];
         for (i, x) in v.iter().enumerate() {
@@ -132,7 +132,7 @@ pub fn leer_b1(r: &mut impl Read) -> Result<Vec<Vec<bool>>> {
     if c.forma != Forma::Binario {
         bail!("se esperaba un fragmento binario");
     }
-    let bytes_por_vector = (c.dims as usize + 7) / 8;
+    let bytes_por_vector = (c.dims as usize).div_ceil(8);
     let mut fuera = Vec::with_capacity(c.cuenta as usize);
     let mut fila = vec![0u8; bytes_por_vector];
     for _ in 0..c.cuenta {
@@ -188,7 +188,7 @@ mod tests {
         escribir_b1(&mut buf, &vs).unwrap();
         assert_eq!(
             buf.len(),
-            CABECERA_BYTES + 3 * 1,
+            CABECERA_BYTES + 3,
             "4 dimensiones caben en 1 byte por vector"
         );
         let bits = leer_b1(&mut buf.as_slice()).unwrap();

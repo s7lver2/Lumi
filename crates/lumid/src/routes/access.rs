@@ -63,6 +63,10 @@ pub struct Row {
     pub status: String,
     pub display_name: String,
     pub granted_models: Option<String>,
+    // ponytail: se lee de la fila porque la consulta ya la trae, pero nada
+    // todavía decide nada por caducidad de acceso concedido — el ticket en sí
+    // ya expira aparte. Queda aquí para cuando esa política exista.
+    #[allow(dead_code)]
     pub expires_at: i64,
 }
 

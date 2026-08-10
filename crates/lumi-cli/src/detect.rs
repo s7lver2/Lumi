@@ -13,6 +13,10 @@ pub struct Env {
     pub kernel: String,
     pub systemd: Option<String>,
     pub driver: Option<String>,
+    // ponytail: se detecta y se guarda, pero nada lo lee todavía — la versión
+    // de CUDA no es una de las condiciones que hoy hacen fallar el instalador.
+    // Queda aquí para cuando haga falta sin repetir la detección.
+    #[allow(dead_code)]
     pub cuda: Option<String>,
     pub disk_free_mb: u64,
     pub port_free: bool,

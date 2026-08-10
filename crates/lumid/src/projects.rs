@@ -51,6 +51,11 @@ pub fn project_of_case(s: &Store, case_id: i64) -> Option<i64> {
     parent(s, "SELECT project_id FROM cases WHERE id = ?1", case_id)
 }
 
+// ponytail: sin llamador todavía. Los guards de acceso de hoy resuelven el
+// proyecto a partir de `case_id`, no de `image_id`/`analysis_id` directos, así
+// que estas dos están aquí como el mismo camino de código para cuando una
+// ruta las necesite sin volver a escribir el JOIN.
+#[allow(dead_code)]
 pub fn project_of_image(s: &Store, image_id: i64) -> Option<i64> {
     parent(
         s,
@@ -59,6 +64,7 @@ pub fn project_of_image(s: &Store, image_id: i64) -> Option<i64> {
     )
 }
 
+#[allow(dead_code)]
 pub fn project_of_analysis(s: &Store, analysis_id: i64) -> Option<i64> {
     parent(
         s,
