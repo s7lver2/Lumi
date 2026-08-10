@@ -21,6 +21,9 @@ export function IndexList({ onAbrir }: { onAbrir: (id: number) => void }) {
 
   useEffect(() => { void api.indicesLista().then(setIndices); }, []);
   useEffect(() => { void api.catalogoDependenciasRotas().then(setRotas, () => {}); }, []);
+  // Nunca al mover el mapa, siempre al abrir esta pantalla: es lo que
+  // mantiene el buscador y el perfil de cuenta al día sin pedirlo a mano.
+  useEffect(() => { void api.catalogoRefrescar(); }, []);
   useEffect(() => {
     const tick = () =>
       void api.colaProgreso().then((cola) => {

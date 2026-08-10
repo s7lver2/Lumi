@@ -40,6 +40,10 @@ export function TerritoryView({
 
   useEffect(() => { void api.origenesLista().then(setFichas); }, []);
   useEffect(() => { void api.claveLeer("mapillary").then(setTokenMapillary); }, []);
+  // Nunca al mover el mapa, siempre al abrir Territorio: sin esto la
+  // cobertura remota que decide qué tesela está "reclamada" puede quedarse
+  // vacía si nunca se pasó antes por Índices o Ajustes.
+  useEffect(() => { void api.catalogoRefrescar(); }, []);
 
   // La clasificación necesita saber contra QUÉ orígenes se pregunta, porque
   // una tesela heredada puede seguir sin cubrir en alguno de ellos.
