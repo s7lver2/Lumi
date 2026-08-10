@@ -213,6 +213,10 @@ export function MapCanvas({
         // mandarlo. Qué cuenta como baja calidad lo decide el subsistema 9, y
         // ese endpoint todavía no existe; la salida es cambiar este
         // `clipboard.writeText` por un POST cuando exista.
+        //
+        // Un `paquete` vacío no es un reclamo de verdad: es el techo de una
+        // versión (spec de versiones, sección 4) — mismo color, mismo patrón
+        // visual, pero sin autor ni "Reportar" porque no hay a quién reportar.
         m.on("click", "teselas-relleno", (e) => {
           if (herramientaRef.current !== "mano") return;
           const props = propsDe(e.features?.[0]);
@@ -221,13 +225,19 @@ export function MapCanvas({
           const autor = String(props.autor ?? "");
           const nodo = document.createElement("div");
           nodo.className = "font-mono text-[10.5px] leading-relaxed";
-          nodo.innerHTML =
-            `<b>${autor}</b><br/>${paquete}<br/>` +
-            `<span style="opacity:.7">viajará como dependencia de tu índice, no en él</span><br/>` +
-            `<button data-reportar style="text-decoration:underline">Reportar</button>`;
-          nodo.querySelector("[data-reportar]")?.addEventListener("click", () => {
-            void navigator.clipboard.writeText(`desreclamo: ${paquete} (${autor}) — motivo: `);
-          });
+          if (!paquete) {
+            nodo.innerHTML =
+              `<b>Fuera de esta versión</b><br/>` +
+              `<span style="opacity:.7">esta tesela no estaba en la versión de la que parte este índice</span>`;
+          } else {
+            nodo.innerHTML =
+              `<b>${autor}</b><br/>${paquete}<br/>` +
+              `<span style="opacity:.7">viajará como dependencia de tu índice, no en él</span><br/>` +
+              `<button data-reportar style="text-decoration:underline">Reportar</button>`;
+            nodo.querySelector("[data-reportar]")?.addEventListener("click", () => {
+              void navigator.clipboard.writeText(`desreclamo: ${paquete} (${autor}) — motivo: `);
+            });
+          }
           new mapboxgl.Popup({ closeButton: true }).setLngLat(e.lngLat).setDOMContent(nodo).addTo(m);
         });
 

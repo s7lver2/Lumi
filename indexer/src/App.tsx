@@ -150,7 +150,8 @@ export function App() {
                 {destino === "indices" && (
                   indiceAbierto === null
                     ? <IndexList onAbrir={setIndiceAbierto} />
-                    : <IndexDetail key={indiceAbierto} id={indiceAbierto} onVolver={() => setIndiceAbierto(null)} />
+                    : <IndexDetail key={indiceAbierto} id={indiceAbierto} onVolver={() => setIndiceAbierto(null)}
+                        onNuevaVersion={setIndiceAbierto} />
                 )}
                 {/* Territorio trabaja SIEMPRE sobre un índice: sin esto, el
                     carril deja llegar a la pantalla sin haber elegido uno, y

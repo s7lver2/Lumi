@@ -35,7 +35,12 @@ export function RemoteRepos({ onContinuar }: { onContinuar?: (paquete: string) =
             <div className="mt-1.5 flex flex-col gap-1">
               {r.paquetes.map((p) => (
                 <div key={p.paquete} className="flex items-center justify-between text-[11px]">
-                  <span className="text-fg">{p.nombre}</span>
+                  <span className="flex items-center gap-1.5 text-fg">
+                    {p.nombre}
+                    {p.numero_version > 1 && (
+                      <span className="font-mono text-[9px] text-subtle">v{p.numero_version}</span>
+                    )}
+                  </span>
                   {p.viva ? (
                     <span className="font-mono text-[10px] text-subtle">publicado</span>
                   ) : (

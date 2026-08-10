@@ -12,12 +12,17 @@ import { IndexQueueBar } from "../ui/IndexQueueBar";
 import { Overlay } from "../ui/Overlay";
 import { IndexMapDialog } from "./IndexMapDialog";
 import { ProvenanceTable } from "./ProvenanceTable";
+import { TeselasPanel } from "./TeselasPanel";
 
 /** `soloLectura` esconde todo lo que escribe, exactamente el mismo mecanismo
  *  que ya usa con un índice sellado: mirar el índice de otra persona no
- *  necesita una pantalla paralela que mantener. */
-export function IndexDetail({ id, onVolver, soloLectura = false }: {
-  id: number; onVolver: () => void; soloLectura?: boolean;
+ *  necesita una pantalla paralela que mantener.
+ *
+ *  `onNuevaVersion` es cómo se navega tras "Crear versión nueva": la fila
+ *  nueva ya existe y está abierta, y quedarse mirando el índice sellado del
+ *  que salió sería el paso extra que nadie quiere dar. */
+export function IndexDetail({ id, onVolver, onNuevaVersion, soloLectura = false }: {
+  id: number; onVolver: () => void; onNuevaVersion?: (id: number) => void; soloLectura?: boolean;
 }) {
   const [detalle, setDetalle] = useState<DetalleIndice | null>(null);
   const [lotes, setLotes] = useState<LoteResumen[]>([]);
@@ -33,6 +38,7 @@ export function IndexDetail({ id, onVolver, soloLectura = false }: {
   // paso de subida en vez de forzar a pulsar «Publicar» otra vez.
   const [publicando, setPublicando] = useState(() => estadoActual()?.indiceId === id);
   const [sesion, setSesion] = useState<Sesion | null>(null);
+  const [creandoVersion, setCreandoVersion] = useState(false);
 
   useEffect(() => { void api.identidadLeer().then(setSesion); }, []);
 
@@ -81,6 +87,16 @@ export function IndexDetail({ id, onVolver, soloLectura = false }: {
     }
   }
 
+  async function crearVersion() {
+    setCreandoVersion(true);
+    try {
+      const nuevaId = await api.versionCrear(id);
+      onNuevaVersion?.(nuevaId);
+    } finally {
+      setCreandoVersion(false);
+    }
+  }
+
   if (!detalle) return null;
   const vacio = detalle.imagenes.imagenes_total === 0;
   const sellado = detalle.estado === "sellado";
@@ -117,6 +133,13 @@ export function IndexDetail({ id, onVolver, soloLectura = false }: {
                 className="jg-press rounded-lg border border-border px-3 py-1.5 text-[11px] text-fg disabled:opacity-40"
               >
                 Sellar
+              </button>
+            )}
+            {sellado && !soloLectura && (
+              <button onClick={() => void crearVersion()} disabled={creandoVersion}
+                title="Clona este índice en una fila nueva y abierta, con el mismo contenido — sin duplicar las fotos en disco"
+                className="jg-press rounded-lg border border-border px-3 py-1.5 text-[11px] text-fg disabled:opacity-40">
+                {creandoVersion ? "Creando versión…" : "Crear versión nueva"}
               </button>
             )}
             {sellado && !soloLectura && (
@@ -158,6 +181,11 @@ export function IndexDetail({ id, onVolver, soloLectura = false }: {
           <span className="rounded-full border border-border px-2 py-px text-[9px] text-subtle">
             {detalle.estado}
           </span>
+          {detalle.numero_version > 1 && (
+            <span className="rounded-full border border-border px-2 py-px font-mono text-[9px] text-subtle">
+              v{detalle.numero_version}
+            </span>
+          )}
           {/* La señal de que el embebido de fondo terminó: antes la única
               pista era una barra de progreso al 100 % indistinguible, de un
               vistazo, de una que sigue subiendo despacio. */}
@@ -223,7 +251,10 @@ export function IndexDetail({ id, onVolver, soloLectura = false }: {
               </p>
             </div>
           ) : (
-            <ProvenanceTable p={detalle.imagenes} trabajo={detalle.trabajo} />
+            <div className="flex flex-col gap-5">
+              <ProvenanceTable p={detalle.imagenes} trabajo={detalle.trabajo} />
+              {!sellado && !soloLectura && <TeselasPanel indiceId={id} />}
+            </div>
           )}
 
           <div>

@@ -34,7 +34,13 @@ export interface ResumenIndice {
 export interface DetalleIndice {
   nombre: string; slug: string; estado: string;
   imagenes: PorcentajesImagenes; trabajo: [string, number, number][];
+  numero_version: number;
+  viene_de: number | null;
 }
+/** Espejo de `lumi_index::manifest::TrabajoDe`: serde externamente etiquetado,
+ *  así que la unidad es una cadena y las que llevan dato son un objeto de una
+ *  clave. */
+export type TrabajoDe = "Aqui" | { Local: string } | { Catalogo: string };
 export interface LoteResumen { id: number; clase: string; origen: string; estado: string }
 export interface FichaMapa {
   id: number; ruta: string; lat: number; lng: number; fuente: string;
@@ -168,7 +174,7 @@ export interface ProgresoCola {
 export interface FichaResumen {
   paquete: string; nombre: string; autor: string; url: string;
   teselas: number; viva: boolean; por_fuente: PctFuente[];
-  capas: number; publicada_en: string;
+  capas: number; publicada_en: string; numero_version: number;
 }
 export interface Resultados { indices: FichaResumen[]; cuentas: string[] }
 export interface Perfil {
@@ -247,8 +253,12 @@ export const api = {
   loteCancelar: (id: number) => invoke<boolean>("lote_cancelar", { id }),
   indiceBorrar: (id: number) => invoke<void>("indice_borrar", { id }),
   indiceImagenes: (id: number) => invoke<FichaMapa[]>("indice_imagenes", { id }),
-  territorioClasificar: (poligono: Punto[], fuentes: string[]) =>
-    invoke<Clasificacion>("territorio_clasificar", { poligono, fuentes }),
+  versionCrear: (padreId: number) => invoke<number>("version_crear", { padreId }),
+  indiceTeselas: (id: number) => invoke<[string, TrabajoDe][]>("indice_teselas", { id }),
+  teselaLiberar: (indiceId: number, quadkey: string) =>
+    invoke<void>("tesela_liberar", { indiceId, quadkey }),
+  territorioClasificar: (poligono: Punto[], fuentes: string[], indiceId?: number) =>
+    invoke<Clasificacion>("territorio_clasificar", { poligono, fuentes, indiceId: indiceId ?? null }),
   territorioHeredar: (indiceId: number, heredadas: [string, string, string][]) =>
     invoke<void>("territorio_heredar", { indiceId, heredadas }),
   mapboxClaveGuardar: (clave: string) => invoke<void>("mapbox_clave_guardar", { clave }),

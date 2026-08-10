@@ -77,7 +77,9 @@ export function CatalogSearch({ locales, onAbrirLocal, onAbrirCuenta }: {
               style={{ animation: `jg-fade-rise 160ms ${(propios.length + n) * 20}ms cubic-bezier(.2,.85,.35,1) both` }}
               className="flex w-full items-center justify-between rounded-md px-1.5 py-1.5 text-left text-[11px] text-fg hover:bg-white/[.06]">
               {f.nombre}
-              <span className="font-mono text-[10px] text-subtle">{f.autor} · {f.teselas} teselas</span>
+              <span className="font-mono text-[10px] text-subtle">
+                {f.autor} · {f.teselas} teselas{f.numero_version > 1 ? ` · v${f.numero_version}` : ""}
+              </span>
             </a>
           ))}
           {(remoto?.cuentas.length ?? 0) > 0 && (

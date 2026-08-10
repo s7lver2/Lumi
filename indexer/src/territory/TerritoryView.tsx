@@ -50,7 +50,7 @@ export function TerritoryView({
   async function alTerminarDibujo(p: Punto[]) {
     setDibujo(p);
     setSondeos([]);
-    setClasificacion(await api.territorioClasificar(p, fichas.map((f) => f.id)));
+    setClasificacion(await api.territorioClasificar(p, fichas.map((f) => f.id), indiceId));
   }
 
   function cambiarActivo(id: string, on: boolean) {

@@ -78,7 +78,8 @@ export function ProfileDialog({ cuenta, onCerrar }: { cuenta: string; onCerrar: 
                     {p.nombre}
                   </a>
                   <span className="font-mono text-[9.5px] text-subtle">
-                    {p.teselas} teselas{p.viva ? "" : " · no disponible"}
+                    {p.teselas} teselas{p.numero_version > 1 ? ` · v${p.numero_version}` : ""}
+                    {p.viva ? "" : " · no disponible"}
                   </span>
                 </div>
                 <div className="mt-1.5">
