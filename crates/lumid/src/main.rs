@@ -39,6 +39,9 @@ pub struct App {
     /// La cola vive tanto como el daemon. Sus trabajadores son procesos hijo
     /// con `kill_on_drop`, así que mueren con él y no dejan VRAM ocupada.
     pub queue: Arc<queue::Queue>,
+    /// Un solo hueco de instalación de índice a la vez. `None` es "nunca se
+    /// ha instalado nada en esta sesión del daemon", no "hay un error".
+    pub indices_en_curso: indices::EnCurso,
 }
 
 #[tokio::main]
@@ -66,6 +69,7 @@ async fn main() -> anyhow::Result<()> {
         dir: dir.clone(),
         sysinfo: Arc::new(Mutex::new(sysinfo::System::new_all())),
         queue,
+        indices_en_curso: Arc::new(Mutex::new(None)),
     };
 
     use axum::routing::post;
