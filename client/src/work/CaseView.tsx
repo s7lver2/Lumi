@@ -230,10 +230,22 @@ export function CaseView({
   const markers: Marker[] = useMemo(() => {
     const out: Marker[] = [];
     mine.forEach((a, i) => {
-      if (a.result_lat != null && a.result_lng != null) {
-        out.push({
-          id: `a${a.id}`, lat: a.result_lat, lng: a.result_lng, label: String(i + 1),
-          kind: a.id === shown?.id ? "top" : "alt", radiusM: a.result_radius_m ?? undefined,
+      // Sin candidatos NO se pinta nada: un marcador donde no hay respuesta
+      // se lee como que la hay.
+      if (a.result_lat == null || a.result_lng == null) return;
+      const esElMostrado = a.id === shown?.id;
+      out.push({
+        id: `a${a.id}`, lat: a.result_lat, lng: a.result_lng, label: String(i + 1),
+        kind: esElMostrado ? "top" : "alt", radiusM: a.result_radius_m ?? undefined,
+      });
+      // Las alternativas del análisis que se está mirando: el motor dudó
+      // entre varias zonas, y esas zonas se pintan perfiladas y más tenues.
+      if (esElMostrado) {
+        a.hypotheses.forEach((h, j) => {
+          out.push({
+            id: `a${a.id}h${j}`, lat: h.lat, lng: h.lng, label: String(i + 2 + j),
+            kind: "alt", radiusM: h.radio_m,
+          });
         });
       }
     });
@@ -278,7 +290,10 @@ export function CaseView({
     <div className="absolute inset-0 overflow-hidden"
       style={{ animation: "jg-page-fade-in 260ms cubic-bezier(.16,1,.3,1) both" }}>
       <MapCanvas markers={markers} flyTo={flyTo} onMarker={(id) => {
-        if (id.startsWith("a")) setSelAnalysis(Number(id.slice(1)));
+        // "a123" es un análisis; "a123h0" es una de sus alternativas y
+        // selecciona el mismo análisis, que es lo que ya sabe pintar el cajón.
+        const m = /^a(\d+)/.exec(id);
+        if (m) setSelAnalysis(Number(m[1]));
       }} />
       {rail}
 

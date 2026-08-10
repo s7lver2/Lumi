@@ -18,7 +18,9 @@ export interface Marker {
 
 const COLOR = {
   top: { bg: "#f2f3f5", fg: "#000", border: "#f2f3f5" },
-  alt: { bg: "#101215", fg: "#e8e8e6", border: "rgba(255,255,255,.22)" },
+  // Perfilado y no relleno: la jerarquía entre la hipótesis principal y sus
+  // alternativas se dice con relleno + opacidad, nunca con un color nuevo.
+  alt: { bg: "transparent", fg: "#e8e8e6", border: "rgba(255,255,255,.5)" },
   exif: { bg: "#101215", fg: "#efb968", border: "#efb968" },
   off: { bg: "#101215", fg: "#6a6c70", border: "#3a3e44" },
 } as const;
@@ -47,8 +49,9 @@ function el(m: Marker): HTMLElement {
   d.title = m.kind === "exif" ? "GPS declarado por la cámara" : m.label;
   d.style.cssText = `width:22px;height:22px;border-radius:50%;display:flex;
     align-items:center;justify-content:center;font-size:11px;cursor:pointer;
-    background:${c.bg};color:${c.fg};border:1px solid ${c.border};
-    ${m.kind === "off" ? "border-style:dashed;" : ""}`;
+    background:${c.bg};color:${c.fg};border:1.5px solid ${c.border};
+    ${m.kind === "off" ? "border-style:dashed;" : ""}
+    ${m.kind === "alt" ? "opacity:.75;" : ""}`;
   return d;
 }
 
