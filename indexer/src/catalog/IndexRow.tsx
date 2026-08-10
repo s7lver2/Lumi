@@ -1,11 +1,10 @@
 import type { ResumenIndice } from "../lib/api";
 import { Icon } from "../ui/Icon";
-import { ProvenanceBar } from "./ProvenanceBar";
 import { SourceBar } from "./SourceBar";
 
 /** La fila del catálogo: nombre, insignia de estado, insignia ámbar de
  *  procedencia desconocida cuando pasa del 0 %, las cuatro cifras en mono, y
- *  la barra de procedencia — todo visible sin abrir el detalle. */
+ *  la barra de fuentes — todo visible sin abrir el detalle. */
 export function IndexRow({ r, embebiendo, onAbrir }: { r: ResumenIndice; embebiendo: boolean; onAbrir: () => void }) {
   const desconocida = r.imagenes_pct.por_fuente.find((f) => f.fuente === "desconocida");
   const desconocidaPct = desconocida?.imagenes_pct ?? 0;
@@ -42,9 +41,6 @@ export function IndexRow({ r, embebiendo, onAbrir }: { r: ResumenIndice; embebie
         <span className="font-mono text-[10px] text-subtle">
           {r.imagenes} imágenes · {r.teselas} teselas
         </span>
-      </div>
-      <div className="mt-2.5">
-        <ProvenanceBar tipos={r.imagenes_pct.por_tipo} desconocidaPct={desconocidaPct} />
       </div>
       <div className="mt-2.5">
         <SourceBar fuentes={r.imagenes_pct.por_fuente} />

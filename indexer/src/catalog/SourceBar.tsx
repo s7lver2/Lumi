@@ -1,35 +1,36 @@
 import type { PctFuente } from "../lib/api";
+import { color, nombre } from "../lib/origenes";
 
-/** La misma rampa de neutros que `ProvenanceBar`, más sombras de ella para
- *  cuando hay más de tres fuentes: sigue sin haber un color por fuente, solo
- *  grises que se turnan. `desconocida` es la única que rompe la rampa. */
-const RAMPA = ["bg-fg", "bg-muted", "bg-subtle", "bg-fg/50", "bg-muted/50", "bg-subtle/50"];
-
-function colorDe(fuente: string, indice: number): string {
-  return fuente === "desconocida" ? "bg-warning" : RAMPA[indice % RAMPA.length];
+/** La paleta de `origenes.ts` es el único sitio de la aplicación donde el
+ *  color codifica una categoría (ver su comentario) — esta barra es la
+ *  segunda vez que se apoya en ella, no una paleta nueva. `desconocida` no
+ *  está ahí, así que cae en el ámbar de aviso, igual que en el resto de la
+ *  procedencia. */
+function colorDe(fuente: string): string {
+  return fuente === "desconocida" ? "#ef9f27" : color(fuente);
 }
 
-/** Composición por fuente (Mapillary, KartaView, una carpeta local…) en vez
- *  de por tipo. Sobre una ficha remota se calcula por TESELA, no por imagen
- *  -- una tesela con dos fuentes cuenta en las dos --, así que aquí la barra
- *  puede pasar de 100 % y no se normaliza: es la misma información que
- *  `territorio_suma`, dicha con una barra en vez de un número. */
+/** Composición por fuente (Mapillary, KartaView, una carpeta local…). Sobre
+ *  una ficha remota se calcula por TESELA, no por imagen -- una tesela con
+ *  dos fuentes cuenta en las dos --, así que aquí la barra puede pasar de
+ *  100 % y no se normaliza: es la misma información que `territorio_suma`,
+ *  dicha con una barra en vez de un número. */
 export function SourceBar({ fuentes }: { fuentes: PctFuente[] }) {
   if (fuentes.length === 0) return null;
   const ordenadas = [...fuentes].sort((a, b) => b.imagenes_pct - a.imagenes_pct);
   return (
     <>
       <div className="flex h-[5px] overflow-hidden rounded-[3px] bg-elevated">
-        {ordenadas.map((f, i) => (
-          <i key={f.fuente} className={colorDe(f.fuente, i)} style={{ width: `${f.imagenes_pct}%` }} />
+        {ordenadas.map((f) => (
+          <i key={f.fuente} style={{ width: `${f.imagenes_pct}%`, background: colorDe(f.fuente) }} />
         ))}
       </div>
       <div className="mt-[9px] flex flex-wrap gap-3">
-        {ordenadas.map((f, i) => (
-          <div key={f.fuente}
-            className={`flex items-center gap-1.5 text-[10.5px] ${f.fuente === "desconocida" ? "text-warning-fg" : "text-muted"}`}>
-            <s className={`block h-[7px] w-[7px] rounded-sm no-underline ${colorDe(f.fuente, i)}`} />
-            {f.fuente} <b className="font-mono font-normal text-fg">{f.imagenes_pct.toFixed(0)} %</b>
+        {ordenadas.map((f) => (
+          <div key={f.fuente} className="flex items-center gap-1.5 text-[10.5px] text-muted">
+            <s className="block h-[7px] w-[7px] rounded-sm no-underline" style={{ background: colorDe(f.fuente) }} />
+            {f.fuente === "desconocida" ? "desconocida" : nombre(f.fuente)}{" "}
+            <b className="font-mono font-normal text-fg">{f.imagenes_pct.toFixed(0)} %</b>
           </div>
         ))}
       </div>

@@ -200,7 +200,7 @@ export function TerritoryView({
         <CoveragePanel c={clasificacion} onPlanear={() => setMostrarPlan(true)} />
       )}
 
-      {clasificacion && !mostrarPlan && <MapLegend activos={activos} />}
+      {clasificacion && !mostrarPlan && <MapLegend />}
 
       {clasificacion && mostrarPlan && clasificacion.nuevas === 0 && (
         <Overlay>

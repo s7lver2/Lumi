@@ -168,6 +168,7 @@ export interface ProgresoCola {
 export interface FichaResumen {
   paquete: string; nombre: string; autor: string; url: string;
   teselas: number; viva: boolean; por_fuente: PctFuente[];
+  capas: number; publicada_en: string;
 }
 export interface Resultados { indices: FichaResumen[]; cuentas: string[] }
 export interface Perfil { cuenta: string; publicaciones: FichaResumen[]; teselas: number }

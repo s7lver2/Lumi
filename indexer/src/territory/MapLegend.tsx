@@ -1,51 +1,34 @@
-import { color } from "../lib/origenes";
-
-/** Las cuatro marcas que el mapa puede pintar. Se elige un origen de muestreo
- *  activo para las dos muestras de sombreado, en vez de un color fijo: enseñar
- *  la escala en un color que no está en pantalla no explica nada. */
-export function MapLegend({ activos }: { activos: Set<string> }) {
-  const deMuestreo = [...activos].find((id) => id !== "mapillary" && id !== "mapbox-satelite");
-  const c = deMuestreo ? color(deMuestreo) : "#6a6c70";
-
+/** Las cuatro marcas que el mapa puede pintar, tal como las dibuja el mockup
+ *  del subsistema 8: un cuadro por estado en vez de las combinaciones de
+ *  punto/opacidad que tenía antes -- son los mismos cuatro `Estado` de
+ *  `coverage.rs`, uno por fila, sin desglosar por origen de muestreo. */
+export function MapLegend() {
   return (
-    <div className="absolute bottom-[22px] right-4 z-20 rounded-card border border-white/[.13]
-      bg-[rgba(16,19,25,.72)] px-3.5 py-[11px] shadow-lg shadow-black/40 backdrop-blur-xl">
-      <p className="text-[8.5px] uppercase tracking-[.13em] text-subtle">Leyenda</p>
-      <div className="mt-2.5 flex gap-[18px]">
-        <div className="flex flex-col gap-1.5">
-          <Marca forma="punto" color={color("mapillary")} texto="punto con foto" />
-          <Marca forma="cuadro" color={c} opacidad={0.3} texto="tesela con mucho" />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Marca forma="cuadro" color={c} opacidad={0.13} texto="tesela con poco" />
-          <Marca forma="punteado" texto="sin indexar por nadie" />
-          <Marca forma="cuadro" color="#ef9f27" opacidad={0.45} texto="reclamada por otro" />
-        </div>
+    <div className="absolute bottom-[14px] left-[14px] z-20 rounded-card border border-white/[.13]
+      bg-[rgba(16,19,25,.72)] px-3 py-2.5 shadow-lg shadow-black/40 backdrop-blur-xl">
+      <p className="text-[8px] uppercase tracking-[.11em] text-subtle">Teselas z14</p>
+      <div className="mt-2 flex flex-col gap-1.5">
+        <Fila color="rgba(255,255,255,.16)" borde="rgba(255,255,255,.28)" texto="en tus índices" />
+        <Fila color="rgba(55,138,221,.22)" borde="rgba(133,183,235,.5)" texto="en tu catálogo local" />
+        <Fila color="rgba(239,159,39,.2)" borde="rgba(239,159,39,.55)" texto="reclamada por otro" claseTexto="text-warning-fg" />
+        <Fila color="transparent" borde="rgba(154,154,149,.5)" punteado texto="sin indexar" />
       </div>
     </div>
   );
 }
 
-function Marca({ forma, color, opacidad, texto }: {
-  forma: "punto" | "cuadro" | "punteado";
-  color?: string;
-  opacidad?: number;
+function Fila({ color, borde, texto, punteado, claseTexto }: {
+  color: string;
+  borde: string;
   texto: string;
+  punteado?: boolean;
+  claseTexto?: string;
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span
-        className="shrink-0"
-        style={{
-          width: 9,
-          height: 9,
-          borderRadius: forma === "punto" ? 999 : 2,
-          background: forma === "punteado" ? "transparent" : color,
-          opacity: opacidad ?? 1,
-          border: forma === "punteado" ? "1px dashed rgba(154,154,149,.42)" : undefined,
-        }}
-      />
-      <span className="text-[10.5px] text-muted">{texto}</span>
+      <span className="block h-[11px] w-[11px] shrink-0 rounded-[2px]"
+        style={{ background: color, border: `1px ${punteado ? "dashed" : "solid"} ${borde}` }} />
+      <span className={`text-[10.5px] ${claseTexto ?? "text-muted"}`}>{texto}</span>
     </div>
   );
 }

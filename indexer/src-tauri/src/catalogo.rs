@@ -46,6 +46,9 @@ pub struct FichaResumen {
     /// `fuentes_por_quadkey`, así que puede sumar más de 100: una tesela con
     /// dos fuentes cuenta en las dos.
     pub por_fuente: Vec<lumi_index::manifest::PctFuente>,
+    pub capas: usize,
+    /// Epoch en segundos, como el resto de timestamps de la aplicación.
+    pub publicada_en: String,
 }
 
 /// El mismo cálculo que `lumi_index::manifest::porcentajes`, pero sobre
@@ -128,6 +131,8 @@ fn resumen(f: &Ficha, url: &str, viva: bool) -> FichaResumen {
         teselas: f.fuentes_por_quadkey.len(),
         viva,
         por_fuente: por_fuente_de(f),
+        capas: f.capas.len(),
+        publicada_en: f.publicada_en.clone(),
     }
 }
 
