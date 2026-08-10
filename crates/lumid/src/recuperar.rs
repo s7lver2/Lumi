@@ -1,12 +1,10 @@
 //! De un vector de consulta a hipótesis con dueño.
-//!
-//! ponytail: sin llamante hasta la Tarea 13 (`queue::mod`, al recibir
-//! `Evento::Vectores`).
-#![allow(dead_code)]
 
 use anyhow::Result;
 use lumi_index::agrupar::{confianza, en_grupos, Candidato};
 use lumi_proto::worker::Hipotesis;
+
+use crate::store::Store;
 
 /// Cuántos vecinos se piden. Constante con nombre y no un ajuste: bastante
 /// para que un grupo real se note sobre el ruido, poco para que agrupar sea
@@ -14,11 +12,15 @@ use lumi_proto::worker::Hipotesis;
 /// se puede.
 const VECINOS: usize = 64;
 
-pub async fn hipotesis(app: &crate::App, modelo: &str, vector: &[f32]) -> Result<Vec<Hipotesis>> {
+/// Toma `&Store` y no `&crate::App`: es todo lo que hace falta, y es todo lo
+/// que la cola (que llama a esto desde dentro de `Queue`, no desde un
+/// handler con `App` en la mano) puede ofrecer sin guardar una referencia
+/// circular a la aplicación entera.
+pub async fn hipotesis(store: &Store, modelo: &str, vector: &[f32]) -> Result<Vec<Hipotesis>> {
     // Qué versión del modelo hay instalada. Si hay varias, se consultan todas:
     // el investigador no tiene por qué saber qué hay en el servidor.
     let colecciones: Vec<String> = {
-        let c = app.store.conn();
+        let c = store.conn();
         let mut q = c.prepare(
             "SELECT DISTINCT version FROM installed_indices WHERE modelo = ?1 AND completo = 1",
         )?;
@@ -40,7 +42,7 @@ pub async fn hipotesis(app: &crate::App, modelo: &str, vector: &[f32]) -> Result
     // La traducción de punto a procedencia. Es la razón entera de que la
     // recuperación viva aquí y no en Python: esto está en SQLite.
     let cands: Vec<Candidato> = {
-        let c = app.store.conn();
+        let c = store.conn();
         let mut fuera = Vec::new();
         for v in &vecinos {
             let fila = c.query_row(

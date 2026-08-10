@@ -23,7 +23,15 @@ pub enum Evento {
     /// El trabajador terminó de embeber: el vector está en `fichero`, a la
     /// espera de que la cola lo lea, lo recupere contra Qdrant y lo borre.
     Vectores { dispositivo: String, id: i64, dims: u32, fichero: String },
-    Resultado { dispositivo: String, id: i64, lat: f64, lng: f64, radio_m: f64, confianza: f64 },
+    Resultado {
+        dispositivo: String,
+        id: i64,
+        lat: f64,
+        lng: f64,
+        radio_m: f64,
+        confianza: f64,
+        alternativas: Vec<lumi_proto::worker::Hipotesis>,
+    },
     Fallo { dispositivo: String, id: i64, motivo: String },
     /// Su `stdout` se cerró: el proceso terminó, con o sin gracia.
     Muerto { dispositivo: String },
@@ -39,13 +47,8 @@ impl Evento {
             Msg::Listo { modelo, .. } => Evento::Listo { dispositivo: d, modelo },
             Msg::Progreso { id, fase, pct } => Evento::Progreso { dispositivo: d, id, fase, pct },
             Msg::Vectores { id, dims, fichero } => Evento::Vectores { dispositivo: d, id, dims, fichero },
-            Msg::Resultado { id, lat, lng, radio_m, confianza, .. } => {
-                // ponytail: `alternativas` todavía no viaja al planificador —
-                // eso llega con `recuperar::hipotesis` (Tarea 12) y su
-                // enganche en la cola (Tarea 13). Este `Msg` ya las acepta
-                // desde la Tarea 9 para no romper la deserialización del
-                // trabajador de referencia, que sigue sin mandarlas.
-                Evento::Resultado { dispositivo: d, id, lat, lng, radio_m, confianza }
+            Msg::Resultado { id, lat, lng, radio_m, confianza, alternativas } => {
+                Evento::Resultado { dispositivo: d, id, lat, lng, radio_m, confianza, alternativas }
             }
             Msg::Fallo { id, motivo } => Evento::Fallo { dispositivo: d, id, motivo },
         }
