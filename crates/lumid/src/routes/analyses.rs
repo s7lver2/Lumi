@@ -37,9 +37,33 @@ fn row_to_analysis(r: &rusqlite::Row) -> rusqlite::Result<Analysis> {
         result_radius_m: r.get(7)?,
         result_confidence: r.get(8)?,
         image_ids: vec![],
+        hypotheses: vec![],
         created_at: r.get(9)?,
         finished_at: r.get(10)?,
     })
+}
+
+/// Las alternativas de un análisis, en orden. Vacía y no `null` cuando no
+/// hay ninguna: el cliente no debería tener dos casos donde hay uno.
+fn hypotheses(c: &rusqlite::Connection, analysis_id: i64) -> Vec<lumi_proto::worker::Hipotesis> {
+    let Ok(mut q) = c.prepare(
+        "SELECT lat, lng, radio_m, peso, indice, autor FROM analysis_hypotheses
+          WHERE analysis_id = ?1 ORDER BY orden",
+    ) else {
+        return vec![];
+    };
+    q.query_map([analysis_id], |r| {
+        Ok(lumi_proto::worker::Hipotesis {
+            lat: r.get(0)?,
+            lng: r.get(1)?,
+            radio_m: r.get(2)?,
+            peso: r.get(3)?,
+            indice: r.get(4)?,
+            autor: r.get(5)?,
+        })
+    })
+    .map(|it| it.flatten().collect())
+    .unwrap_or_default()
 }
 
 pub async fn list(
@@ -61,6 +85,7 @@ pub async fn list(
         .collect();
     for a in &mut rows {
         a.image_ids = image_ids(&c, a.id);
+        a.hypotheses = hypotheses(&c, a.id);
     }
     Ok(Json(rows))
 }
@@ -82,6 +107,7 @@ pub async fn get_one(
         .query_row(&format!("SELECT {COLS} FROM analyses WHERE id = ?1"), [id], row_to_analysis)
         .map_err(|_| missing())?;
     a.image_ids = image_ids(&c, id);
+    a.hypotheses = hypotheses(&c, id);
     Ok(Json(a))
 }
 
@@ -174,6 +200,7 @@ pub async fn create(
         result_radius_m: None,
         result_confidence: None,
         image_ids: req.image_ids,
+        hypotheses: vec![],
         created_at: t,
         finished_at: None,
     }))
@@ -202,6 +229,9 @@ pub async fn remove(
     }
     let c = app.store.conn();
     let _ = c.execute("DELETE FROM analysis_images WHERE analysis_id = ?1", [id]);
+    // Un huérfano en analysis_hypotheses no rompe nada hoy, pero es basura
+    // que crece: se borra en cascada con el resto de lo que cuelga del análisis.
+    let _ = c.execute("DELETE FROM analysis_hypotheses WHERE analysis_id = ?1", [id]);
     c.execute("DELETE FROM analyses WHERE id = ?1", [id])
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
     Ok(StatusCode::NO_CONTENT)
