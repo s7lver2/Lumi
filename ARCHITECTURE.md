@@ -131,10 +131,10 @@ spec → plan → implementación, y cada una debe producir software que funcion
 | **2** | **Auth, usuarios y permisos** | Solicitudes de acceso, creación de cuentas, roles, límites por usuario, dispositivos de confianza | **Terminado** |
 | **3** | **Panel de administración** | Hardware, monitorización, notificaciones, mantenimiento, gestión de modelos | Pendiente |
 | **4** | **Cola y planificador** | Cientos de usuarios, pausa por desconexión, prioridades, multi-GPU y GPU+CPU | **Terminado** |
-| **5** | **Motor de inferencia** | Lumi Mini / Pro / Vision, ensemble de verificadores geométricos | Pendiente |
+| **5** | **Motor de inferencia** | Lumi Mini / Pro / Vision, ensemble de verificadores geométricos | **5-0 y 5a terminados** (instalar un `.lumidx` en Station, y consulta → candidatos → hipótesis); **5b pendiente** (los modelos reales y los verificadores geométricos — el embebedor sigue siendo el de juguete) |
 | **6** | **Cliente y proyectos** | Workspaces tipo Burp/Caido, imágenes, historial, mapa | Esqueleto terminado |
 | **7a** | **Lumi Indexer · cimientos** | App Tauri aparte; las tres bases; el paquete de índice troceado; procedencia de imágenes y de trabajo; mapa, territorio y la regla de no indexar dos veces; orígenes locales | Terminado |
-| **7b** | **Lumi Indexer · orígenes de red** | Seis adaptadores tras un contrato por tesela (Mapillary, KartaView, Google, Mapbox Satellite, Commons, Flickr); disponibilidad en el mapa; estimar, confirmar y tope de gasto; descarga reanudable con atribución; qué se puede republicar | Con spec |
+| **7b** | **Lumi Indexer · orígenes de red** | Seis adaptadores tras un contrato por tesela (Mapillary, KartaView, Google, Mapbox Satellite, Commons, Flickr); disponibilidad en el mapa; estimar, confirmar y tope de gasto; descarga reanudable con atribución; qué se puede republicar | **Terminado** (la tabla llevaba treinta commits diciendo «con spec» en `master`) |
 | **8** | **Catálogo de índices** | Publicar (trocear, cifrar, firmar, subir) e instalar índices desde repositorios etiquetados `lumi-index`; identidad de firma Ed25519 aparte de la cuenta; reclamo por `(quadkey, fuente)` para no indexar dos veces lo que ya publicó otro; grafo de dependencias transitivas al instalar | **Terminado** |
 | **9** | **Página web del proyecto** | El sitio público, a partir de mockups que aporta el owner | Sin spec |
 
@@ -459,10 +459,16 @@ nuevos en el servidor.
 las claves emitidas y obliga a re-vincular. Aceptable con validez de 10 años; hay que
 documentarlo en `lumi key reissue`.
 
-**Frontera Rust↔Python: definida en el subsistema 4.** JSON por líneas sobre las tuberías
-estándar de un proceso hijo; los tipos viven en `lumi-proto::worker` y el trabajador de
-referencia, en `workers/lumi_worker.py`. El subsistema 5 sustituye `_cargar` y `_resolver` de
-ese archivo sin tocar el daemon.
+**Frontera Rust↔Python: definida en el subsistema 4, y corregida en el 5.** JSON por líneas
+sobre las tuberías estándar de un proceso hijo; los tipos viven en `lumi-proto::worker`. Lo que
+`ARCHITECTURE.md` decía antes del 5 —«el subsistema 5 sustituye `_cargar` y `_resolver` de
+`lumi_worker.py` sin tocar el daemon»— dejó de ser cierto en cuanto una hipótesis tuvo que
+decir de qué índice y de qué autor sale: eso vive en SQLite, y el trabajador de Python no tiene
+SQLite. El reparto real es **el trabajador solo embebe** (`workers/lumi_geo.py`, que sustituye
+a `lumi_worker.py` como trabajador por defecto) **y el daemon recupera, agrupa y atribuye**
+(`lumid::recuperar`, sobre `lumi_index::agrupar`). `lumi_worker.py` se queda como referencia
+válida de un motor que conteste por su cuenta sin pasar por `Vectores` — sigue siendo legal,
+solo que sin alternativas.
 
 **`limits::effective` es la frontera con los subsistemas 4 y 6.** Aquí (subsistema 2) los
 límites por usuario se definen, se almacenan en dos niveles (global/anulación) y se exponen.

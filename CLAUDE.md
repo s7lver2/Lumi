@@ -87,17 +87,21 @@ tools/package.py        zips everything not excluded by .gitignore
 envelope encryption are defined once and compiled into daemon, CLI, and client — a serialization
 mismatch between client and server doesn't compile, rather than surfacing as a runtime bug.
 
-### Storage: three databases, same rule on both sides (Lumi Station and Indexer)
+### Storage: three databases, not the same three on both sides
 
-| DB | Holds |
-|---|---|
-| SQLite | Everything relational; the source of truth; survives a power cut |
-| Redis | Queues and hot state only — live progress, in-flight counters |
-| Qdrant | Vectors, one collection per `(model, version)` — chosen because pgvector caps HNSW/ivfflat at 2000 dims and these models run 8448–12288 |
+| DB | Holds | Where |
+|---|---|---|
+| SQLite | Everything relational; the source of truth; survives a power cut | Station and Indexer |
+| Qdrant | Vectors, one collection per `(model, version)` — chosen because pgvector caps HNSW/ivfflat at 2000 dims and these models run 8448–12288 | Station and Indexer |
+| Redis | Queues and hot state only — live progress, in-flight counters | **Indexer only** |
 
-**Redis is the doorbell, SQLite is the truth.** If Redis is wiped, only the progress bar is
-lost — work is reconstructed from SQLite. Never persist per-job progress; it's retransmitted over
-SSE and forgotten. In the Indexer specifically, the queue rebuilds from SQLite by checking which
+Station's queue (subsystem 4) lives entirely in SQLite and stays there — subsystem 5 gave
+Station a corpus to search (Qdrant) but deliberately did not bring Redis along: it would mean
+installing, watching, and explaining a service nobody would use, since the queue already has
+its "doorbell" pattern without one. **Redis is the doorbell, SQLite is the truth** remains the
+rule inside the Indexer, where it does exist: if Redis is wiped, only the progress bar is lost —
+work is reconstructed from SQLite. Never persist per-job progress; it's retransmitted over SSE
+and forgotten. In the Indexer specifically, the queue rebuilds from SQLite by checking which
 images still lack a vector.
 
 ### Trust & transport (Lumi Station)
@@ -152,17 +156,24 @@ medias. La ficha caduca a los 90 días: un reclamo abandonado no bloquea territo
 
 ### Rust↔Python boundary
 
-JSON-lines over a child process's stdio. Types live in `lumi-proto::worker`; `workers/lumi_worker.py`
-is both the reference implementation and the executable spec — whoever writes a real inference
-engine reads it, not a doc. The inference engine itself (subsystem 5) doesn't exist yet;
-analyses are created and sit in `pendiente` until the queue (done) has a real consumer.
+JSON-lines over a child process's stdio. Types live in `lumi-proto::worker`. The worker only
+embeds: it writes a query image's vector to a temp file and answers with the path
+(`workers/lumi_geo.py`, subsystem 5a's default); the daemon (`lumid::recuperar`, on top of
+`lumi_index::agrupar`) queries Qdrant, groups candidates by tile neighborhood, and attributes
+each hypothesis to its index and author — that part had to move to Rust because provenance
+lives in SQLite, which the Python worker doesn't have. `workers/lumi_worker.py` remains a valid
+reference for a worker that resolves on its own (no candidates, no alternatives) instead of only
+embedding; both scripts are executable specs, not docs — whoever writes a real inference engine
+reads them.
 
 ### Subsystem status (see ARCHITECTURE.md §5 for the full table and ordering rationale)
 
 Order: `1 (install/pairing) → 2 (auth) → 6 (client/projects skeleton) → 4 (queue) → 7a (indexer
 foundations) → 7b (indexer network origins) → 8 (index catalog) → 5 (inference engine) → 3 (admin
-panel) → 9 (website)`. 1/2/4/7a done; 6 is skeleton-only (no inference, no reverse geocoding, no
-project ownership transfer — see FUTURO.md); 7b has a spec; 3/5/8/9 not started.
+panel) → 9 (website)`. 1/2/4/7a/7b/8 done; 6 is skeleton-only (no reverse geocoding, no project
+ownership transfer — see FUTURO.md); 5 is **5-0 and 5a done** (install a `.lumidx` into Station;
+query → candidates → hypotheses) **with 5b pending** (real models and geometric verifiers — the
+embedder is still the toy one, so coordinates are still bad); 3/9 not started.
 
 ## Conventions
 
