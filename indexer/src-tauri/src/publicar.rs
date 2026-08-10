@@ -387,13 +387,20 @@ async fn borrar_asset_si_existe(
 /// sin espacios ni el resto de caracteres que un ref de git rechaza. El
 /// nombre del paquete es el que puso quien indexó (p. ej. «All Tokyo»), y esa
 /// cadena via directa a la API sin pasar por aquí es lo que devolvía 422.
-fn etiqueta_de(paquete: &str) -> String {
+///
+/// `numero_version` decide el release: la v1 de cualquier índice sigue
+/// publicándose en el tag de siempre —nadie que ya haya resuelto esa URL ve
+/// nada distinto—, y las versiones 2 en adelante van a su propio release
+/// (`paquete-v2`, `paquete-v3`…) para no pisar un asset que alguien ya pudo
+/// instalar apuntando al anterior.
+fn etiqueta_de(paquete: &str, numero_version: u32) -> String {
     let cruda: String = paquete
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' { c.to_ascii_lowercase() } else { '-' })
         .collect();
     let recortada = cruda.trim_matches('-');
-    if recortada.is_empty() { "indice".to_string() } else { recortada.to_string() }
+    let base = if recortada.is_empty() { "indice".to_string() } else { recortada.to_string() };
+    if numero_version <= 1 { base } else { format!("{base}-v{numero_version}") }
 }
 
 /// El release donde van los assets. Si ya existe con esa etiqueta se reutiliza:
@@ -476,8 +483,9 @@ pub async fn publicar(
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| nombre_indice.clone());
 
+    let (_, numero_version) = almacen.genealogia(indice_id)?;
     let cliente = cliente_http();
-    let release = asegurar_release(&cliente, &testigo, &repo, &etiqueta_de(&paquete)).await?;
+    let release = asegurar_release(&cliente, &testigo, &repo, &etiqueta_de(&paquete, numero_version)).await?;
     etiquetar_repo(&cliente, &testigo, &repo).await?;
 
     // Una sola clave para todo el paquete: la ofuscación es del alojamiento,
@@ -584,6 +592,7 @@ pub async fn publicar(
         version: 1,
         paquete: paquete.clone(),
         nombre: nombre_indice,
+        numero_version,
         autor,
         alojamiento: "github".into(),
         clave_publica: String::new(),
@@ -724,6 +733,9 @@ pub async fn publicar_capa(
         version: 1,
         paquete: format!("{cuerpo_paquete}+{m}-{version}"),
         nombre: format!("{m} {version} sobre {cuerpo_paquete}"),
+        // Una capa no es una versión de contenido del índice: es un modelo
+        // más sobre el mismo cuerpo, así que siempre es "la única" de sí misma.
+        numero_version: 1,
         autor: autor.clone(),
         alojamiento: "github".into(),
         clave_publica: String::new(),
@@ -840,5 +852,18 @@ mod tests {
     #[test]
     fn sin_muestras_no_pasa() {
         assert!(!comprobar_capa(&[], &[]).casan);
+    }
+
+    // La v1 de cualquier índice sigue publicándose en el tag de siempre:
+    // nadie que ya haya resuelto esa URL ve nada distinto al crear una v2.
+    #[test]
+    fn la_version_uno_no_cambia_de_tag() {
+        assert_eq!(etiqueta_de("All Tokyo", 1), "all-tokyo");
+    }
+
+    #[test]
+    fn las_versiones_siguientes_van_a_su_propio_tag() {
+        assert_eq!(etiqueta_de("All Tokyo", 2), "all-tokyo-v2");
+        assert_eq!(etiqueta_de("All Tokyo", 3), "all-tokyo-v3");
     }
 }

@@ -4,6 +4,7 @@
 //! un corte de luz a mitad de una indexación de días está aquí. Si Redis se
 //! vacía, la cola se reconstruye leyendo qué imágenes siguen sin vector.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -21,6 +22,8 @@ CREATE TABLE IF NOT EXISTS indices (
     creado_en  INTEGER NOT NULL,
     sellado_en INTEGER
 );
+-- Genealogía de versiones: la migración idempotente de más abajo añade
+-- `viene_de` y `numero_version` a una base que ya existía antes del 8s.
 
 -- Una fila por cada vez que entra material. Cada imagen apunta a su lote, y
 -- eso ES la cadena de custodia: no hace falta un campo «cómo llegó esto aquí»,
@@ -198,6 +201,26 @@ pub type FilaFichaRemota = (String, String, String, String, bool);
 /// `(quadkey, fuente, paquete, autor, url)`.
 pub type FilaReclamo = (String, String, String, String, String);
 
+/// `(id_viejo, id_nuevo, ruta_vieja, quadkey)` de cada imagen clonada, y
+/// `(modelo, id_viejo, id_nuevo)` de los vectores que ya estaban `hecho` en el
+/// padre. Es lo que necesita quien clona una versión para hardlinkear
+/// ficheros y duplicar puntos en Qdrant — las dos cosas que viven fuera de
+/// esta base de datos.
+#[derive(Debug, Default)]
+pub struct ClonVersion {
+    pub imagenes: Vec<(i64, i64, String, String)>,
+    pub vectores_hechos: Vec<(String, i64, i64)>,
+}
+
+/// Lo que queda de una tesela liberada: sus rutas de fichero (para borrarlas
+/// en disco) y sus vectores `hecho` (para limpiarlos en Qdrant). Ambas cosas
+/// viven fuera de esta base de datos.
+#[derive(Debug, Default)]
+pub struct TeselaLiberada {
+    pub rutas: Vec<String>,
+    pub vectores_hechos: Vec<(String, i64)>,
+}
+
 pub struct Almacen(Mutex<Connection>);
 
 impl Almacen {
@@ -226,6 +249,12 @@ impl Almacen {
             "ALTER TABLE imagenes ADD COLUMN atribucion TEXT",
             "ALTER TABLE imagenes ADD COLUMN id_origen TEXT",
             "ALTER TABLE imagenes ADD COLUMN rumbo REAL",
+            // Genealogía de versiones (subsistema 8s): `viene_de` es `NULL`
+            // para cualquier índice creado como siempre — una v1. Crear una
+            // versión nueva inserta una fila NUEVA con esto relleno; la fila
+            // sellada del padre nunca se toca.
+            "ALTER TABLE indices ADD COLUMN viene_de INTEGER REFERENCES indices(id)",
+            "ALTER TABLE indices ADD COLUMN numero_version INTEGER NOT NULL DEFAULT 1",
         ] {
             let _ = c.execute(alter, []);
         }
@@ -280,6 +309,31 @@ impl Almacen {
         c.execute(
             "INSERT INTO indices (nombre, slug, estado, creado_en) VALUES (?1, ?2, 'abierto', ?3)",
             params![nombre, slug, Self::ahora()],
+        )?;
+        Ok(c.last_insert_rowid())
+    }
+
+    /// `(viene_de, numero_version)` de un índice. `viene_de` es `None` para
+    /// cualquier índice creado como siempre — una v1.
+    pub fn genealogia(&self, indice_id: i64) -> Result<(Option<i64>, u32)> {
+        let c = self.0.lock().unwrap();
+        Ok(c.query_row(
+            "SELECT viene_de, numero_version FROM indices WHERE id = ?1",
+            params![indice_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?)
+    }
+
+    /// Crea la fila de una versión nueva: nace `abierto`, con `viene_de`
+    /// apuntando al padre y `numero_version` un paso por delante del suyo. La
+    /// fila del padre nunca se toca — sellado es sellado para siempre, y una
+    /// versión nueva es una fila nueva, no una reapertura.
+    pub fn crear_version(&self, padre_id: i64, nombre: &str, slug: &str, numero_version: u32) -> Result<i64> {
+        let c = self.0.lock().unwrap();
+        c.execute(
+            "INSERT INTO indices (nombre, slug, estado, viene_de, numero_version, creado_en)
+             VALUES (?1, ?2, 'abierto', ?3, ?4, ?5)",
+            params![nombre, slug, padre_id, numero_version, Self::ahora()],
         )?;
         Ok(c.last_insert_rowid())
     }
@@ -508,6 +562,158 @@ impl Almacen {
         c.execute("DELETE FROM lotes WHERE indice_id = ?1", params![indice_id])?;
         c.execute("DELETE FROM teselas WHERE indice_id = ?1", params![indice_id])?;
         c.execute("DELETE FROM indices WHERE id = ?1", params![indice_id])?;
+        Ok(())
+    }
+
+    /// Clona lotes, imágenes, vectores y teselas del padre a la fila
+    /// `nueva_id`, en una sola transacción — «mismo contenido lógico, otra
+    /// clave foránea» (spec §2). Un `imagen_id` nuevo no tiene punto propio en
+    /// Qdrant todavía, así que el llamador tiene que duplicarlo con lo que
+    /// devuelve `vectores_hechos`; los ficheros, con `imagenes`.
+    pub fn clonar_version(&self, padre_id: i64, nueva_id: i64) -> Result<ClonVersion> {
+        let mut c = self.0.lock().unwrap();
+        let tx = c.transaction()?;
+
+        // Lotes: hace falta el mapa viejo → nuevo para reapuntar `imagenes.lote_id`.
+        #[allow(clippy::type_complexity)]
+        let filas_lotes: Vec<(
+            i64, String, String, Option<String>, String, Option<String>, Option<String>,
+            i64, String, Option<String>, i64, String, i64,
+        )> = {
+            let mut q = tx.prepare(
+                "SELECT id, clase, origen, tipo, fuente, licencia, atribucion, declarada_por_operador,
+                        estado, error, reintentos, version_indexer, creado_en
+                   FROM lotes WHERE indice_id = ?1 ORDER BY id",
+            )?;
+            let filas = q.query_map(params![padre_id], |r| {
+                Ok((
+                    r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?,
+                    r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?, r.get(11)?, r.get(12)?,
+                ))
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+            filas
+        };
+        let mut mapa_lotes: HashMap<i64, i64> = HashMap::new();
+        for f in &filas_lotes {
+            tx.execute(
+                "INSERT INTO lotes (indice_id, clase, origen, tipo, fuente, licencia, atribucion,
+                    declarada_por_operador, estado, error, reintentos, version_indexer, creado_en)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+                params![nueva_id, f.1, f.2, f.3, f.4, f.5, f.6, f.7, f.8, f.9, f.10, f.11, f.12],
+            )?;
+            mapa_lotes.insert(f.0, tx.last_insert_rowid());
+        }
+
+        // Imágenes, y sus vectores fila a fila.
+        #[allow(clippy::type_complexity)]
+        let filas_imgs: Vec<(
+            i64, i64, String, String, f64, f64, String, Option<String>, Option<i64>,
+            Option<i64>, Option<String>, i64, Option<String>, Option<String>, Option<String>,
+            Option<String>, Option<f64>,
+        )> = {
+            let mut q = tx.prepare(
+                "SELECT id, lote_id, ruta, sha256, lat, lng, quadkey, capturada_en, ancho, alto,
+                        saltada_motivo, creada_en, revision, licencia, atribucion, id_origen, rumbo
+                   FROM imagenes WHERE indice_id = ?1 ORDER BY id",
+            )?;
+            let filas = q.query_map(params![padre_id], |r| {
+                Ok((
+                    r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?,
+                    r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?, r.get(11)?, r.get(12)?, r.get(13)?,
+                    r.get(14)?, r.get(15)?, r.get(16)?,
+                ))
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+            filas
+        };
+
+        let mut imagenes = Vec::with_capacity(filas_imgs.len());
+        let mut vectores_hechos = Vec::new();
+        for f in &filas_imgs {
+            let nuevo_lote = *mapa_lotes.get(&f.1).unwrap_or(&f.1);
+            tx.execute(
+                "INSERT INTO imagenes (indice_id, lote_id, ruta, sha256, lat, lng, quadkey, capturada_en,
+                    ancho, alto, saltada_motivo, creada_en, revision, licencia, atribucion, id_origen, rumbo)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
+                params![
+                    nueva_id, nuevo_lote, f.2, f.3, f.4, f.5, f.6, f.7, f.8, f.9, f.10, f.11,
+                    f.12, f.13, f.14, f.15, f.16,
+                ],
+            )?;
+            let nueva_imagen_id = tx.last_insert_rowid();
+            imagenes.push((f.0, nueva_imagen_id, f.2.clone(), f.6.clone()));
+
+            let vs: Vec<(String, String)> = {
+                let mut qv = tx.prepare("SELECT modelo, estado FROM vectores WHERE imagen_id = ?1")?;
+                let filas = qv.query_map(params![f.0], |r| Ok((r.get(0)?, r.get(1)?)))?
+                    .collect::<rusqlite::Result<_>>()?;
+                filas
+            };
+            for (modelo, estado) in vs {
+                tx.execute(
+                    "INSERT INTO vectores (imagen_id, modelo, estado) VALUES (?1, ?2, ?3)",
+                    params![nueva_imagen_id, modelo, estado],
+                )?;
+                if estado == "hecho" {
+                    vectores_hechos.push((modelo, f.0, nueva_imagen_id));
+                }
+            }
+        }
+
+        // Teselas: el techo de la versión nueva nace exactamente igual al del
+        // padre. Ni `liberar_tesela` ni el guardián de la sección 4 vuelven a
+        // tocar esta tabla — es la única razón de que el techo se pueda
+        // comprobar sin guardarlo aparte.
+        tx.execute(
+            "INSERT INTO teselas (indice_id, quadkey, trabajo, fuente_indice, sha256)
+             SELECT ?1, quadkey, trabajo, fuente_indice, sha256 FROM teselas WHERE indice_id = ?2",
+            params![nueva_id, padre_id],
+        )?;
+
+        tx.commit()?;
+        Ok(ClonVersion { imagenes, vectores_hechos })
+    }
+
+    /// Borra las filas de imagen y vector de una quadkey para ESTE índice, y
+    /// resetea sus `descargas` a pendiente — borrarlas basta, porque
+    /// `descargas_pendientes` solo excluye lo `hecho`. La fila de `teselas` NO
+    /// se toca: no hay valor "pendiente" en su CHECK, y el techo de la
+    /// sección 4 solo necesita que la fila siga existiendo, no un valor
+    /// concreto de `trabajo`.
+    pub fn liberar_tesela(&self, indice_id: i64, quadkey: &str) -> Result<TeselaLiberada> {
+        let mut c = self.0.lock().unwrap();
+        let tx = c.transaction()?;
+        let imagenes: Vec<(i64, String)> = {
+            let mut q = tx.prepare("SELECT id, ruta FROM imagenes WHERE indice_id = ?1 AND quadkey = ?2")?;
+            let filas = q.query_map(params![indice_id, quadkey], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<rusqlite::Result<_>>()?;
+            filas
+        };
+        let mut vectores_hechos = Vec::new();
+        for (id, _) in &imagenes {
+            let modelos: Vec<String> = {
+                let mut qv = tx.prepare("SELECT modelo FROM vectores WHERE imagen_id = ?1 AND estado = 'hecho'")?;
+                let filas = qv.query_map(params![id], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?;
+                filas
+            };
+            for m in modelos {
+                vectores_hechos.push((m, *id));
+            }
+            tx.execute("DELETE FROM vectores WHERE imagen_id = ?1", params![id])?;
+            tx.execute("DELETE FROM imagenes WHERE id = ?1", params![id])?;
+        }
+        tx.execute("DELETE FROM descargas WHERE indice_id = ?1 AND quadkey = ?2", params![indice_id, quadkey])?;
+        tx.commit()?;
+        let rutas = imagenes.into_iter().map(|(_, r)| r).collect();
+        Ok(TeselaLiberada { rutas, vectores_hechos })
+    }
+
+    /// Repunta el fichero de una imagen clonada tras hardlinkearla (o
+    /// copiarla) al directorio de la versión nueva.
+    pub fn actualizar_ruta_imagen(&self, imagen_id: i64, ruta: &str) -> Result<()> {
+        let c = self.0.lock().unwrap();
+        c.execute("UPDATE imagenes SET ruta = ?2 WHERE id = ?1", params![imagen_id, ruta])?;
         Ok(())
     }
 
@@ -1381,5 +1587,78 @@ mod tests {
         // estado ahora se deriva de los vectores, no de esta columna.
         let (_, _, _, estado) = a.listar_lotes(i).unwrap().into_iter().find(|(id, ..)| *id == lote).unwrap();
         assert_ne!(estado, "cancelado");
+    }
+
+    /// Una versión nueva nace `abierto`, con `viene_de` al padre y un
+    /// `numero_version` un paso por delante — y la fila del padre no se toca.
+    #[test]
+    fn crear_version_no_toca_al_padre_y_encadena_el_numero() {
+        let (_d, a) = temporal();
+        let padre = a.crear_indice("lugo", "lugo").unwrap();
+        a.sellar_indice(padre, "/tmp/lugo").unwrap();
+
+        let v2 = a.crear_version(padre, "lugo", "lugo-v2", 2).unwrap();
+        assert_eq!(a.genealogia(v2).unwrap(), (Some(padre), 2));
+        assert_eq!(a.genealogia(padre).unwrap(), (None, 1), "el padre no cambia");
+        assert!(!a.indice_sellado(v2).unwrap(), "la versión nueva nace abierta");
+        assert!(a.indice_sellado(padre).unwrap(), "el padre sigue sellado");
+    }
+
+    /// El corazón de la sección 2 de la spec: clonar copia lotes, imágenes,
+    /// vectores y teselas con el `indice_id` reapuntado, y devuelve lo que el
+    /// llamador necesita para hardlinkear ficheros y duplicar puntos en
+    /// Qdrant — los `hecho` de verdad, no los `pendiente`.
+    #[test]
+    fn clonar_version_copia_el_contenido_logico_del_padre() {
+        let (_d, a) = temporal();
+        let padre = a.crear_indice("lugo", "lugo").unwrap();
+        let lote = a.crear_lote(padre, "red", "mapillary", Some("calle"), "mapillary", None, None, false).unwrap();
+        let img_a = a.insertar_imagen(padre, lote, "a.jpg", "sha-a", 43.36, -8.41, "0311", &["lumi-2".into()]).unwrap();
+        a.marcar_vector(img_a, "lumi-2", "hecho").unwrap();
+        let img_b = a.insertar_imagen(padre, lote, "b.jpg", "sha-b", 43.36, -8.41, "0311", &["lumi-2".into()]).unwrap();
+        a.anotar_tesela(padre, "0311", "aqui", None, None).unwrap();
+
+        let nueva = a.crear_version(padre, "lugo", "lugo-v2", 2).unwrap();
+        let clon = a.clonar_version(padre, nueva).unwrap();
+
+        assert_eq!(clon.imagenes.len(), 2, "las dos imágenes del padre se clonan");
+        assert_eq!(clon.vectores_hechos.len(), 1, "solo la que ya estaba `hecho`, no la pendiente");
+        assert_eq!(clon.vectores_hechos[0].0, "lumi-2");
+        assert_eq!(clon.vectores_hechos[0].1, img_a, "el id viejo es el del padre");
+        assert_ne!(clon.vectores_hechos[0].2, img_a, "el id nuevo no reutiliza el del padre");
+
+        // Las filas nuevas existen de verdad bajo el `indice_id` nuevo, y el
+        // padre queda exactamente como estaba.
+        assert_eq!(a.total_imagenes(nueva).unwrap(), 2);
+        assert_eq!(a.total_imagenes(padre).unwrap(), 2, "clonar no le quita nada al padre");
+        assert_eq!(a.teselas_trabajo(nueva).unwrap().len(), 1);
+        assert_eq!(a.sin_vector(nueva, "lumi-2").unwrap(), 1, "b.jpg sigue pendiente en la versión nueva");
+        let _ = img_b;
+    }
+
+    /// `liberar_tesela` borra imágenes y vectores de esa quadkey para ESTE
+    /// índice, y deja `descargas` sin fila — que es lo que hace que la
+    /// maquinaria de descarga que ya existe la trate como nunca bajada.
+    #[test]
+    fn liberar_tesela_borra_y_deja_la_descarga_pendiente_otra_vez() {
+        let (_d, a) = temporal();
+        let i = a.crear_indice("lugo", "lugo").unwrap();
+        let lote = a.crear_lote(i, "red", "mapillary", Some("calle"), "mapillary", None, None, false).unwrap();
+        let img = a.insertar_imagen(i, lote, "a.jpg", "sha-a", 43.36, -8.41, "0311", &["lumi-2".into()]).unwrap();
+        a.marcar_vector(img, "lumi-2", "hecho").unwrap();
+        a.descarga_marcar(i, "mapillary", "0311", "hecho", 1, 1, None).unwrap();
+        a.anotar_tesela(i, "0311", "aqui", None, None).unwrap();
+
+        let liberada = a.liberar_tesela(i, "0311").unwrap();
+        assert_eq!(liberada.rutas, vec!["a.jpg".to_string()]);
+        assert_eq!(liberada.vectores_hechos, vec![("lumi-2".to_string(), img)]);
+
+        assert_eq!(a.total_imagenes(i).unwrap(), 0, "la imagen ya no está");
+        assert_eq!(
+            a.descarga_estado(i, "mapillary", "0311").unwrap(), None,
+            "sin fila en `descargas`, `descargas_pendientes` la trata como pendiente"
+        );
+        // El techo no se mueve: la fila de `teselas` sigue estando.
+        assert_eq!(a.teselas_trabajo(i).unwrap().len(), 1, "liberar no borra la fila de teselas");
     }
 }

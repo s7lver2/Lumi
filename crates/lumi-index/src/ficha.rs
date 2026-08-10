@@ -41,12 +41,23 @@ pub struct Dependencia {
     pub sha256: String,
 }
 
+/// El valor por defecto de `Ficha::numero_version` para una ficha publicada
+/// antes de que este campo existiera: sin versionado, siempre fue "la única".
+fn version_uno() -> u32 {
+    1
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Ficha {
     pub version: u32,
     pub paquete: String,
     pub nombre: String,
     pub autor: String,
+    /// Versión de CONTENIDO del índice — "Crear versión nueva" en el Indexer,
+    /// no la versión de FORMATO de la ficha (`version`, arriba). `1` para
+    /// cualquier ficha publicada antes de que esto existiera.
+    #[serde(default = "version_uno")]
+    pub numero_version: u32,
     /// "github" o "huggingface". La firma no depende de esto, pero saber de
     /// dónde vino sirve para volver a pedirlo.
     pub alojamiento: String,
@@ -118,6 +129,7 @@ mod tests {
             version: 1,
             paquete: "sevilla-norte".into(),
             nombre: "Sevilla norte".into(),
+            numero_version: 1,
             autor: "nickespro130".into(),
             alojamiento: "github".into(),
             clave_publica: String::new(),
@@ -171,5 +183,16 @@ mod tests {
         let f = ficha_de_prueba();
         assert_eq!(f.fuentes_de("0313101"), vec!["mapillary".to_string()]);
         assert!(f.fuentes_de("9999999").is_empty());
+    }
+
+    // Una ficha publicada antes del 8s (versiones de índice) no trae
+    // `numero_version` en su JSON. Sin `#[serde(default)]` eso sería un campo
+    // que ya no deserializa, y fichas publicadas dejarían de leerse de golpe.
+    #[test]
+    fn una_ficha_sin_numero_version_deserializa_como_la_uno() {
+        let mut j: serde_json::Value = serde_json::to_value(ficha_de_prueba()).unwrap();
+        j.as_object_mut().unwrap().remove("numero_version");
+        let f: Ficha = serde_json::from_value(j).unwrap();
+        assert_eq!(f.numero_version, 1);
     }
 }

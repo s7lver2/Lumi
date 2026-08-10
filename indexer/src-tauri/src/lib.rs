@@ -26,6 +26,7 @@ mod services;
 mod spend;
 mod store;
 mod territory;
+mod versions;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -251,6 +252,35 @@ fn exige_abierto(estado: &Estado, indice_id: i64) -> Result<(), String> {
     Ok(())
 }
 
+/// El techo, no el suelo (spec de versiones, sección 4): si `indice_id` viene
+/// de otro índice (`viene_de` no es `NULL`), cualquier quadkey que no tenga ya
+/// fila en `teselas` para ESTE índice se rechaza. El conjunto de quadkeys de
+/// una versión es, por construcción, exactamente el que tenía al nacer —
+/// `clonar_version` lo inserta una sola vez y nadie más lo amplía. Se llama
+/// antes de reclamar (`territorio_heredar`) y antes de descargar
+/// (`descarga_arrancar`); la segunda comprobación, en `package::comprobar` al
+/// sellar, es la misma regla aplicada en defensa de profundidad.
+fn exige_dentro_del_techo(estado: &Estado, indice_id: i64, quadkeys: &[String]) -> Result<(), String> {
+    let (viene_de, _) = estado.almacen.genealogia(indice_id).map_err(|e| e.to_string())?;
+    if viene_de.is_none() {
+        return Ok(());
+    }
+    let techo: std::collections::HashSet<String> = estado
+        .almacen
+        .teselas_trabajo(indice_id)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(qk, _)| qk)
+        .collect();
+    if let Some(fuera) = quadkeys.iter().find(|qk| !techo.contains(*qk)) {
+        return Err(format!(
+            "{fuera} no estaba en la versión de la que parte este índice: una versión no puede \
+             crecer más allá del territorio con el que nació"
+        ));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn ingesta_carpeta(
     estado: tauri::State<'_, Estado>,
@@ -281,6 +311,11 @@ struct DetalleIndice {
     estado: String,
     imagenes: lumi_index::manifest::PorcentajesImagenes,
     trabajo: Vec<(String, u32, f64)>,
+    /// Genealogía de versiones (spec de versiones): `numero_version` es 1 para
+    /// cualquier índice creado como siempre, y `viene_de` es el `id` del
+    /// padre si esta fila nació de "Crear versión nueva".
+    numero_version: u32,
+    viene_de: Option<i64>,
 }
 
 #[tauri::command]
@@ -295,13 +330,69 @@ fn indice_detalle(estado: tauri::State<'_, Estado>, id: i64) -> Result<DetalleIn
         .find(|(i, ..)| *i == id)
         .map(|(_, n, s, e)| (n, s, e))
         .unwrap_or_default();
+    let (viene_de, numero_version) = estado.almacen.genealogia(id).map_err(|e| e.to_string())?;
     Ok(DetalleIndice {
         nombre,
         slug,
         estado: estado_str,
         imagenes: lumi_index::manifest::porcentajes(&filas),
         trabajo: lumi_index::manifest::porcentajes_trabajo(&teselas),
+        numero_version,
+        viene_de,
     })
+}
+
+/// «Crear versión nueva»: clona un índice sellado en una fila nueva, abierta,
+/// con el mismo contenido lógico. Ver `versions::crear`.
+#[tauri::command]
+async fn version_crear(estado: tauri::State<'_, Estado>, padre_id: i64) -> Result<i64, String> {
+    versions::crear(&estado, padre_id).await.map_err(|e| e.to_string())
+}
+
+/// Las teselas de un índice, con quién hizo el trabajo de cada una — mismo
+/// dato que alimenta la tabla de "Procedencia del trabajo", pero sin agregar:
+/// es lo que necesita el botón "Liberar" por tesela.
+#[tauri::command]
+fn indice_teselas(
+    estado: tauri::State<'_, Estado>,
+    id: i64,
+) -> Result<Vec<(String, lumi_index::manifest::TrabajoDe)>, String> {
+    estado.almacen.teselas_trabajo(id).map_err(|e| e.to_string())
+}
+
+/// «Liberar» una tesela (spec de versiones, sección 3): borra sus imágenes y
+/// vectores para ESTE índice, y resetea `descargas` a pendiente para que la
+/// maquinaria de descarga que ya existe la vea como nunca bajada. Solo válido
+/// sobre un índice abierto.
+#[tauri::command]
+async fn tesela_liberar(
+    estado: tauri::State<'_, Estado>,
+    indice_id: i64,
+    quadkey: String,
+) -> Result<(), String> {
+    exige_abierto(&estado, indice_id)?;
+    let liberada = estado.almacen.liberar_tesela(indice_id, &quadkey).map_err(|e| e.to_string())?;
+    for ruta in &liberada.rutas {
+        let _ = std::fs::remove_file(ruta);
+    }
+    if !liberada.vectores_hechos.is_empty() {
+        let mut por_modelo: std::collections::BTreeMap<String, Vec<i64>> = Default::default();
+        for (modelo, id) in liberada.vectores_hechos {
+            por_modelo.entry(modelo).or_default().push(id);
+        }
+        let cliente = qdrant::Cliente::nuevo();
+        for (modelo_id, ids) in por_modelo {
+            let Some(m) = estado.modelos.iter().find(|m| m.id == modelo_id) else { continue };
+            let coleccion = qdrant::coleccion_de(&m.id, &m.version);
+            if let Err(e) = cliente.borrar(&coleccion, &ids).await {
+                log::warn!(
+                    "liberar tesela {quadkey} del índice {indice_id}: no se pudieron borrar {} puntos de {coleccion}: {e}",
+                    ids.len()
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 #[derive(serde::Serialize)]
@@ -435,6 +526,12 @@ async fn territorio_clasificar(
     estado: tauri::State<'_, Estado>,
     poligono: Vec<lumi_index::tiles::Punto>,
     fuentes: Vec<String>,
+    // `None` cuando todavía no hay índice elegido (no debería pasar desde la
+    // interfaz, que siempre dibuja sobre uno, pero el comando no depende de
+    // ello para lo de siempre). Con un índice versionado, es lo que permite
+    // pintar el techo de la sección 4 antes de que el operador intente
+    // reclamar algo que se va a rechazar al confirmar.
+    indice_id: Option<i64>,
 ) -> Result<territory::Clasificacion, String> {
     let locales = territory::coberturas_locales(&estado.dir.join("paquetes"));
     let mut c =
@@ -456,6 +553,34 @@ async fn territorio_clasificar(
             }
         }
     }
+
+    // El techo de una versión (sección 4 de la spec de versiones): lo que
+    // quedó fuera del territorio con el que nació no se puede reclamar. Se
+    // pinta con el mismo aviso que "ya la cubre otro" —ni un color nuevo, ni
+    // una tabla nueva— y un `paquete` vacío es la marca de que esto no es un
+    // reclamo de verdad, sino el límite de esta versión; el frontend lo lee
+    // así para no ofrecer "Reportar" sobre algo que nadie reclamó.
+    if let Some(id) = indice_id {
+        let (viene_de, _) = estado.almacen.genealogia(id).map_err(|e| e.to_string())?;
+        if viene_de.is_some() {
+            let techo: std::collections::HashSet<String> = estado
+                .almacen
+                .teselas_trabajo(id)
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .map(|(qk, _)| qk)
+                .collect();
+            for (qk, e) in c.teselas.iter_mut() {
+                if !techo.contains(qk) {
+                    *e = lumi_index::coverage::Estado::Reclamada {
+                        paquete: String::new(),
+                        autor: String::new(),
+                    };
+                }
+            }
+        }
+    }
+
     let reparto = lumi_index::coverage::repartir(&c.teselas);
     c.nuevas = reparto.nuevas;
     c.reclamadas = reparto.reclamadas;
@@ -472,6 +597,8 @@ fn territorio_heredar(
     heredadas: Vec<(String, String, String)>,
 ) -> Result<(), String> {
     exige_abierto(&estado, indice_id)?;
+    let quadkeys: Vec<String> = heredadas.iter().map(|(qk, ..)| qk.clone()).collect();
+    exige_dentro_del_techo(&estado, indice_id, &quadkeys)?;
     for (qk, indice_fuente, sha256) in &heredadas {
         estado
             .almacen
@@ -543,6 +670,8 @@ async fn descarga_arrancar(
     imagenes_estimadas: u32,
 ) -> Result<(), String> {
     exige_abierto(&estado, indice_id)?;
+    let todas_las_quadkeys: Vec<String> = nuevas.values().flatten().cloned().collect();
+    exige_dentro_del_techo(&estado, indice_id, &todas_las_quadkeys)?;
     // Se escribe ANTES de arrancar: si la app se cierra en el segundo entre
     // esto y el primer progreso, el plan ya quedó anotado y es reanudable.
     let plan = download::PlanDescarga { indice_id, nuevas: nuevas.clone(), presupuesto_eur, imagenes_estimadas };
@@ -755,7 +884,34 @@ async fn sellar(
         por_modelo.push((m.id.clone(), esperadas, hechos));
     }
     let cuadra = por_modelo.iter().all(|(_, e, v)| e == v);
-    let informe = package::Informe { filas: esperadas, por_modelo, cuadra };
+
+    // El techo, otra vez (spec de versiones, sección 4): `exige_dentro_del_techo`
+    // ya lo comprobó al reclamar y al descargar, pero esto es la comprobación
+    // en defensa de profundidad — el mismo principio que ya aplica esta
+    // función comparando imágenes contra vectores antes de escribir un byte.
+    let (viene_de, _) = almacen.genealogia(indice_id).map_err(|e| e.to_string())?;
+    let fuera_de_techo = if viene_de.is_some() {
+        let techo: std::collections::HashSet<String> = almacen
+            .teselas_trabajo(indice_id)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|(qk, _)| qk)
+            .collect();
+        let mut fuera: Vec<String> = almacen
+            .filas_procedencia(indice_id)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|f| f.quadkey)
+            .filter(|qk| !techo.contains(qk))
+            .collect();
+        fuera.sort();
+        fuera.dedup();
+        fuera
+    } else {
+        Vec::new()
+    };
+
+    let informe = package::Informe { filas: esperadas, por_modelo, cuadra, fuera_de_techo };
 
     // Se aborta ANTES de escribir un solo byte si las cuentas no cuadran.
     package::comprobar(&informe).map_err(|e| e.to_string())?;
@@ -1381,6 +1537,9 @@ pub fn run() {
             lote_cancelar,
             indice_borrar,
             indice_imagenes,
+            version_crear,
+            indice_teselas,
+            tesela_liberar,
             territorio_clasificar,
             territorio_heredar,
             origenes_lista,

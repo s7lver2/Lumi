@@ -23,6 +23,13 @@ pub struct Informe {
     /// `(modelo, filas esperadas, vectores encontrados)`.
     pub por_modelo: Vec<(String, u32, u32)>,
     pub cuadra: bool,
+    /// Quadkeys con imágenes que NO tenían fila en `teselas` al nacer esta
+    /// versión — el techo de la spec de versiones, sección 4. Vacío para
+    /// cualquier índice que no venga de otro (`viene_de` es `NULL`). Es la
+    /// segunda comprobación, en defensa de profundidad: la primera es
+    /// `exige_dentro_del_techo`, al reclamar y al descargar.
+    #[serde(default)]
+    pub fuera_de_techo: Vec<String>,
 }
 
 /// El sellado de un índice real (miles de imágenes, varios modelos) tarda —
@@ -92,6 +99,13 @@ pub fn comprobar(informe: &Informe) -> Result<()> {
             .map(|(m, e, v)| format!("{m}: {v} de {e}"))
             .collect();
         bail!("las filas no cuadran con los vectores — {}", faltan.join("; "));
+    }
+    if !informe.fuera_de_techo.is_empty() {
+        bail!(
+            "esta versión indexó fuera de su techo — {} no estaban en la versión de la que parte: {}",
+            informe.fuera_de_techo.len(),
+            informe.fuera_de_techo.join(", "),
+        );
     }
     Ok(())
 }

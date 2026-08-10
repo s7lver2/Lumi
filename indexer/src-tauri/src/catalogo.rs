@@ -49,6 +49,8 @@ pub struct FichaResumen {
     pub capas: usize,
     /// Epoch en segundos, como el resto de timestamps de la aplicación.
     pub publicada_en: String,
+    /// Versión de CONTENIDO del índice publicado — 1 para lo de siempre.
+    pub numero_version: u32,
 }
 
 /// El mismo cálculo que `lumi_index::manifest::porcentajes`, pero sobre
@@ -143,6 +145,7 @@ fn resumen(f: &Ficha, url: &str, viva: bool) -> FichaResumen {
         por_fuente: por_fuente_de(f),
         capas: f.capas.len(),
         publicada_en: f.publicada_en.clone(),
+        numero_version: f.numero_version,
     }
 }
 
