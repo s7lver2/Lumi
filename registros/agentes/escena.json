@@ -1,0 +1,11 @@
+{
+  "id": "escena",
+  "nombre": "Tipo de escena",
+  "motor": "vlm",
+  "pregunta": "¿Qué clase de sitio es este? Responde solo con una de las opciones.",
+  "etiquetas": ["centro urbano", "extrarradio", "carretera interurbana", "pueblo", "campo", "costa", "montaña", "interior de un edificio"],
+  "tipo": "describe",
+  "restriccion": "",
+  "mapa": {},
+  "umbral_confianza": 0.5
+}

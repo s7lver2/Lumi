@@ -1,0 +1,11 @@
+{
+  "id": "dimensiones",
+  "nombre": "Forma del espacio",
+  "motor": "profundidad",
+  "pregunta": "",
+  "etiquetas": ["fachada ancha y baja", "fachada estrecha y alta", "calle profunda", "espacio abierto"],
+  "tipo": "describe",
+  "restriccion": "",
+  "mapa": {},
+  "umbral_confianza": 0.5
+}

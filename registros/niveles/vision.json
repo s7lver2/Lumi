@@ -3,5 +3,6 @@
   "nombre": "Lumi Vision",
   "recuperacion": ["lumi-preview", "lumi-2", "eigenplaces", "mixvpr", "salad", "cliquemining", "anyloc", "cosplace"],
   "geometricos": ["roma", "lightglue-aliked", "efficient-loftr", "roma-v2"],
+  "agentes": [],
   "cae_a": "pro"
 }

@@ -1,0 +1,20 @@
+{
+  "id": "idioma",
+  "nombre": "Idioma del cartel",
+  "motor": "ocr",
+  "pregunta": "",
+  "etiquetas": ["latino", "cirilico", "griego", "arabe", "hebreo", "devanagari", "tailandes", "cjk", "hangul", "kana", "sin texto"],
+  "tipo": "filtra",
+  "restriccion": "pais",
+  "mapa": {
+    "griego": ["GRC", "CYP"],
+    "cirilico": ["RUS", "BLR", "UKR", "BGR", "SRB", "MKD", "MNE", "KAZ", "KGZ", "TJK", "MNG"],
+    "hebreo": ["ISR"],
+    "devanagari": ["IND", "NPL"],
+    "tailandes": ["THA"],
+    "hangul": ["KOR", "PRK"],
+    "kana": ["JPN"],
+    "arabe": ["MAR", "DZA", "TUN", "LBY", "EGY", "SDN", "SAU", "ARE", "QAT", "KWT", "BHR", "OMN", "YEM", "JOR", "SYR", "IRQ", "LBN", "PSE", "IRN", "AFG", "PAK", "MRT"]
+  },
+  "umbral_confianza": 0.6
+}

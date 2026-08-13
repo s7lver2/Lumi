@@ -1,0 +1,15 @@
+{
+  "id": "matricula",
+  "nombre": "Matrícula",
+  "motor": "vlm",
+  "pregunta": "Mira las matrículas de los vehículos. ¿De qué formato son, por su proporción, color de fondo y franjas laterales? Responde solo con una de las opciones.",
+  "etiquetas": ["banda azul UE", "blanca alargada sin banda", "cuadrada norteamericana", "amarilla trasera", "negra o antigua", "no legible"],
+  "tipo": "filtra",
+  "restriccion": "pais",
+  "mapa": {
+    "banda azul UE": ["ESP", "PRT", "FRA", "ITA", "DEU", "AUT", "BEL", "NLD", "LUX", "IRL", "DNK", "SWE", "FIN", "EST", "LVA", "LTU", "POL", "CZE", "SVK", "HUN", "SVN", "HRV", "ROU", "BGR", "GRC", "CYP", "MLT"],
+    "cuadrada norteamericana": ["USA", "CAN", "MEX"],
+    "amarilla trasera": ["GBR", "NLD", "LUX", "ISR"]
+  },
+  "umbral_confianza": 0.8
+}

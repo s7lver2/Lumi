@@ -1,0 +1,16 @@
+{
+  "id": "senalizacion",
+  "nombre": "Señalización vial",
+  "motor": "vlm",
+  "pregunta": "Por la forma, el color y el borde de las señales de tráfico que se ven, ¿a qué convenio de señalización pertenecen? Responde solo con una de las opciones.",
+  "etiquetas": ["Viena (Europa continental)", "británica", "MUTCD (Norteamérica)", "australiana", "japonesa", "no se ven señales"],
+  "tipo": "filtra",
+  "restriccion": "pais",
+  "mapa": {
+    "británica": ["GBR", "IRL", "MLT", "CYP", "HKG", "SGP", "NZL", "ZAF", "IND"],
+    "MUTCD (Norteamérica)": ["USA", "CAN", "MEX", "PRI"],
+    "australiana": ["AUS", "NZL"],
+    "japonesa": ["JPN"]
+  },
+  "umbral_confianza": 0.8
+}

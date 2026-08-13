@@ -1,0 +1,17 @@
+{
+  "id": "clima-aparente",
+  "nombre": "Clima aparente",
+  "motor": "vlm",
+  "pregunta": "Por la vegetación, el suelo y la construcción, ¿en qué clima está tomada esta foto? Responde solo con una de las opciones.",
+  "etiquetas": ["tropical", "arido", "templado", "continental", "polar o alta montaña", "no se puede decir"],
+  "tipo": "filtra",
+  "restriccion": "clima_koppen",
+  "mapa": {
+    "tropical": ["A"],
+    "arido": ["B"],
+    "templado": ["C"],
+    "continental": ["D"],
+    "polar o alta montaña": ["E"]
+  },
+  "umbral_confianza": 0.8
+}

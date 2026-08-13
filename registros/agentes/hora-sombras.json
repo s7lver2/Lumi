@@ -1,0 +1,11 @@
+{
+  "id": "hora-sombras",
+  "nombre": "Hora aparente por las sombras",
+  "motor": "vlm",
+  "pregunta": "Por la longitud y la dirección de las sombras y por el color de la luz, ¿en qué momento del día está tomada esta foto? Responde solo con una de las opciones.",
+  "etiquetas": ["amanecer", "media mañana", "mediodía", "media tarde", "atardecer", "noche", "cielo cubierto, sin sombras"],
+  "tipo": "describe",
+  "restriccion": "",
+  "mapa": {},
+  "umbral_confianza": 0.5
+}

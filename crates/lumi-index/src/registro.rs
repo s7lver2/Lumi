@@ -83,3 +83,14 @@ pub fn cargar_verificadores(dir: &Path) -> Vec<Verificador> {
 pub fn cargar_niveles(dir: &Path) -> Vec<Nivel> {
     leer_dir::<Nivel>(dir).into_iter().filter(|n| !n.id.is_empty()).collect()
 }
+
+/// Los agentes. Mismo trato que los demás registros: un fichero malo cuesta un
+/// agente, nunca la lista. Se descarta además el que diga que filtra sin decir
+/// por qué restricción — filtraría con la cadena vacía y no acotaría nada,
+/// que es peor que no estar.
+pub fn cargar_agentes(dir: &Path) -> Vec<crate::agentes::Agente> {
+    leer_dir::<crate::agentes::Agente>(dir)
+        .into_iter()
+        .filter(|a| !a.id.is_empty() && (a.tipo != "filtra" || !a.restriccion.is_empty()))
+        .collect()
+}

@@ -16,6 +16,13 @@ pub struct Nivel {
     /// índice para que el nivel se pueda correr.
     pub recuperacion: Vec<String>,
     pub geometricos: Vec<String>,
+    /// Los agentes del nivel, por id. **Vacío significa «todos los del
+    /// registro»**, que es como está Vision: crece al añadir un fichero, sin
+    /// tocar código. Tiene un coste asumido por el propietario —dos servidores
+    /// con registros distintos dan resultados distintos llamándolos igual— y
+    /// se compensa guardando en cada análisis qué agentes corrieron de verdad.
+    #[serde(default)]
+    pub agentes: Vec<String>,
     /// A qué nivel se baja si al índice le faltan capas. `None` en el más
     /// bajo: por debajo no hay nada.
     pub cae_a: Option<String>,
@@ -53,6 +60,7 @@ mod tests {
                 nombre: "Lumi Vision".into(),
                 recuperacion: vec!["megaloc".into(), "boq-dinov2".into(), "anyloc".into()],
                 geometricos: vec!["roma".into(), "roma-v2".into()],
+                agentes: Vec::new(),
                 cae_a: Some("pro".into()),
             },
             Nivel {
@@ -60,6 +68,7 @@ mod tests {
                 nombre: "Lumi Pro".into(),
                 recuperacion: vec!["megaloc".into(), "boq-dinov2".into()],
                 geometricos: vec!["roma".into()],
+                agentes: Vec::new(),
                 cae_a: Some("mini".into()),
             },
             Nivel {
@@ -67,6 +76,7 @@ mod tests {
                 nombre: "Lumi Mini".into(),
                 recuperacion: vec!["cosplace".into()],
                 geometricos: vec!["tiny-roma".into()],
+                agentes: Vec::new(),
                 cae_a: None,
             },
         ]

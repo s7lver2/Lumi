@@ -3,5 +3,6 @@
   "nombre": "Lumi Mini",
   "recuperacion": ["cosplace"],
   "geometricos": ["tiny-roma"],
+  "agentes": ["idioma", "lado-conduccion", "clima-aparente", "hora-sombras"],
   "cae_a": null
 }

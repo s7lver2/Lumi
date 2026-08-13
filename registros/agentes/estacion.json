@@ -1,0 +1,11 @@
+{
+  "id": "estacion",
+  "nombre": "Estación del año",
+  "motor": "vlm",
+  "pregunta": "Por el estado de la vegetación, la ropa de la gente y la luz, ¿en qué estación está tomada esta foto? Responde solo con una de las opciones.",
+  "etiquetas": ["primavera", "verano", "otoño", "invierno", "no se puede decir"],
+  "tipo": "describe",
+  "restriccion": "",
+  "mapa": {},
+  "umbral_confianza": 0.5
+}

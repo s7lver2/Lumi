@@ -1,0 +1,11 @@
+{
+  "id": "toponimos",
+  "nombre": "Texto legible",
+  "motor": "ocr",
+  "pregunta": "",
+  "etiquetas": [],
+  "tipo": "describe",
+  "restriccion": "",
+  "mapa": {},
+  "umbral_confianza": 0.5
+}

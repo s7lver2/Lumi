@@ -1,0 +1,17 @@
+{
+  "id": "vegetacion",
+  "nombre": "Vegetación dominante",
+  "motor": "vlm",
+  "pregunta": "¿Qué vegetación domina la escena? Responde solo con una de las opciones.",
+  "etiquetas": ["palmeras", "coníferas", "frondosas de hoja caduca", "matorral seco", "estepa o pradera", "selva", "sin vegetación"],
+  "tipo": "filtra",
+  "restriccion": "clima_koppen",
+  "mapa": {
+    "palmeras": ["A", "B", "C"],
+    "coníferas": ["C", "D", "E"],
+    "selva": ["A"],
+    "matorral seco": ["B", "C"],
+    "frondosas de hoja caduca": ["C", "D"]
+  },
+  "umbral_confianza": 0.8
+}

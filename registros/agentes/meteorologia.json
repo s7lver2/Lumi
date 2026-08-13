@@ -1,0 +1,11 @@
+{
+  "id": "meteorologia",
+  "nombre": "Meteorología",
+  "motor": "vlm",
+  "pregunta": "¿Qué tiempo hace en esta foto? Responde solo con una de las opciones.",
+  "etiquetas": ["despejado", "nublado", "lluvia", "nieve", "niebla", "no se puede decir"],
+  "tipo": "describe",
+  "restriccion": "",
+  "mapa": {},
+  "umbral_confianza": 0.5
+}

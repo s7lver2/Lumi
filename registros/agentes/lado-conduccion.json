@@ -1,0 +1,11 @@
+{
+  "id": "lado-conduccion",
+  "nombre": "Lado de conducción",
+  "motor": "vlm",
+  "pregunta": "En esta foto, ¿por qué lado de la calzada circulan los vehículos, o dónde está el volante si se ve el interior de uno? Responde solo con una de las opciones.",
+  "etiquetas": ["izquierda", "derecha", "no visible"],
+  "tipo": "filtra",
+  "restriccion": "lado_conduccion",
+  "mapa": { "izquierda": ["izquierda"], "derecha": ["derecha"] },
+  "umbral_confianza": 0.75
+}
