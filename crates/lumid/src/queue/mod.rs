@@ -115,6 +115,10 @@ struct Vivo {
     matar: Option<oneshot::Sender<()>>,
 }
 
+/// Vectores recibidos por análisis, a la espera de que lleguen los N del
+/// nivel: modelo y vector de cada uno.
+type VectoresPorAnalisis = HashMap<i64, Vec<(String, Vec<f32>)>>;
+
 struct Estado {
     trabajadores: HashMap<String, Vivo>,
     /// Cuándo se puede volver a intentar cada dispositivo ausente, y cuántas
@@ -139,6 +143,11 @@ pub struct Queue {
     script: PathBuf,
     dir: PathBuf,
     eventos: mpsc::UnboundedSender<Evento>,
+    /// El registro de niveles, cargado una vez al arrancar: es datos, y datos
+    /// que no cambian mientras el daemon vive.
+    niveles: Vec<lumi_index::niveles::Nivel>,
+    /// No se persiste: si el daemon se cae, el análisis se rehace.
+    vectores: Mutex<VectoresPorAnalisis>,
 }
 
 /// Mientras esto viva, su dueño cuenta como conectado. Se suelta cuando el
@@ -210,6 +219,8 @@ impl Queue {
             script,
             dir,
             eventos: tx_ev,
+            niveles: lumi_index::registro::cargar_niveles(std::path::Path::new("registros/niveles")),
+            vectores: Mutex::new(HashMap::new()),
         });
 
         // No se lanzan aquí: el vigilante del bucle ve que faltan todos y los
@@ -451,24 +462,47 @@ impl Queue {
                 if !self.es_suyo(&dispositivo, id) {
                     return;
                 }
-                // El vector viene por fichero y no por la tubería. Se lee, se
-                // borra, y a partir de aquí el trabajo es del daemon: el
-                // trabajador ya terminó el suyo y queda libre para el
-                // siguiente mientras Rust recupera y agrupa.
+                // El vector viene por fichero y no por la tubería. Se lee y se
+                // borra; el trabajador ya terminó el suyo y queda libre para
+                // el siguiente mientras Rust recupera y agrupa.
                 let vector = leer_f32(&fichero, dims);
                 let _ = std::fs::remove_file(&fichero);
-                self.soltar(&dispositivo, id);
 
                 let Some(vector) = vector else {
+                    self.soltar(&dispositivo, id);
                     self.fallar(id, "no se pudo leer el vector que escribió el trabajador");
                     return;
                 };
-                let modelo = self.modelo_del_analisis(id).unwrap_or_default();
-                match crate::recuperar::hipotesis(&self.store, &modelo, &vector).await {
-                    Ok(h) if !h.is_empty() => self.guardar_resultado(id, &h),
+                let pedido = self.modelo_del_analisis(id).unwrap_or_default();
+                let Some(nivel) = self.nivel_de(&pedido) else {
+                    self.soltar(&dispositivo, id);
+                    self.fallar(id, "ningún índice instalado sirve para consultar con este nivel");
+                    return;
+                };
+                // ponytail: un trabajador viejo no manda el campo `modelo` de
+                // `Msg::Vectores`, así que aquí siempre llega vacío por ahora
+                // — la tarea 9 es quien lo empieza a rellenar de verdad desde
+                // `Evento`. Mientras tanto se asume el primero del nivel, que
+                // es lo que ese trabajador habrá embebido.
+                let cual = nivel.recuperacion.first().cloned().unwrap_or_default();
+                let recibidos = {
+                    let mut v = self.vectores.lock().unwrap();
+                    let recibidos = v.entry(id).or_default();
+                    recibidos.push((cual, vector));
+                    recibidos.len()
+                };
+                if recibidos < nivel.recuperacion.len() {
+                    return; // faltan modelos; el trabajador sigue mandando
+                }
+
+                let vectores = self.vectores.lock().unwrap().remove(&id).unwrap_or_default();
+                self.soltar(&dispositivo, id);
+                match crate::recuperar::candidatos(&self.store, &nivel, &vectores).await {
+                    Ok(c) if !c.is_empty() => {
+                        let h = crate::recuperar::hipotesis(&c);
+                        self.guardar_resultado(id, &h);
+                    }
                     // Sin candidatos NO es una avería: es una respuesta.
-                    // Ningún índice instalado cubre nada parecido, y decirlo
-                    // es más útil que un punto.
                     Ok(_) => self.fallar(id, "ningún índice instalado cubre esta imagen"),
                     Err(e) => self.fallar(id, &format!("no se pudo recuperar: {e}")),
                 }
@@ -500,6 +534,13 @@ impl Queue {
 
     fn modelo_del_analisis(&self, id: i64) -> Option<String> {
         self.store.conn().query_row("SELECT model FROM analyses WHERE id = ?1", [id], |r| r.get(0)).ok()
+    }
+
+    /// El nivel que de verdad se puede correr: el pedido, o el primero por
+    /// debajo cuyas capas estén todas instaladas.
+    fn nivel_de(&self, pedido: &str) -> Option<lumi_index::niveles::Nivel> {
+        let capas = crate::recuperar::capas_instaladas(&self.store);
+        lumi_index::niveles::resolver(&self.niveles, pedido, &capas).cloned()
     }
 
     /// Guarda la hipótesis principal en las columnas `result_*` de `analyses`
@@ -666,11 +707,19 @@ impl Queue {
                 continue;
             }
 
+            // El campo `modelo` del análisis guarda el NIVEL («mini», «pro»,
+            // «vision»), no un id de modelo. Se resuelve contra el registro y
+            // se manda la lista.
+            let modelos = self
+                .nivel_de(&modelo)
+                .map(|n| n.recuperacion.clone())
+                .unwrap_or_else(|| vec![modelo.clone()]);
+
             let enviado = match self.estado.lock() {
                 Ok(mut e) => match e.trabajadores.get_mut(&a.dispositivo) {
                     Some(w) => {
                         w.trabajo = Some(a.analysis_id);
-                        w.tx.send(Job::nuevo(a.analysis_id, modelo, imagenes)).is_ok()
+                        w.tx.send(Job::con_modelos(a.analysis_id, modelos, imagenes)).is_ok()
                     }
                     None => false,
                 },

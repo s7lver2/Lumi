@@ -1,76 +1,127 @@
-//! De un vector de consulta a hipótesis con dueño.
+//! De los vectores de consulta a hipótesis con dueño.
+//!
+//! Con varios modelos hay varias listas de vecinos, una por colección de
+//! Qdrant, y se fusionan con RRF antes de agrupar. Ver `lumi_index::fusion`
+//! para por qué RRF y no un promedio de similitudes.
 
 use anyhow::Result;
 use lumi_index::agrupar::{confianza, en_grupos, Candidato};
+use lumi_index::fusion::{rrf, K};
+use lumi_index::niveles::Nivel;
 use lumi_proto::worker::Hipotesis;
 
 use crate::store::Store;
 
-/// Cuántos vecinos se piden. Constante con nombre y no un ajuste: bastante
-/// para que un grupo real se note sobre el ruido, poco para que agrupar sea
-/// instantáneo. El 5b lo revisará con datos de verdad delante, que es cuando
-/// se puede.
+/// Cuántos vecinos se piden POR MODELO.
 const VECINOS: usize = 64;
 
-/// Toma `&Store` y no `&crate::App`: es todo lo que hace falta, y es todo lo
-/// que la cola (que llama a esto desde dentro de `Queue`, no desde un
-/// handler con `App` en la mano) puede ofrecer sin guardar una referencia
-/// circular a la aplicación entera.
-pub async fn hipotesis(store: &Store, modelo: &str, vector: &[f32]) -> Result<Vec<Hipotesis>> {
-    // Qué versión del modelo hay instalada. Si hay varias, se consultan todas:
-    // el investigador no tiene por qué saber qué hay en el servidor.
-    let colecciones: Vec<String> = {
-        let c = store.conn();
-        let mut q = c.prepare(
-            "SELECT DISTINCT version FROM installed_indices WHERE modelo = ?1 AND completo = 1",
-        )?;
-        let versiones = q
-            .query_map([modelo], |r| r.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        versiones.into_iter().map(|v| crate::qdrant::coleccion_de(modelo, &v)).collect()
-    };
+/// Cuántos sobreviven a la fusión y llegan al verificador geométrico.
+/// Verificar es caro —de 40 ms a 600 ms por par y por verificador— y la fusión
+/// ya ha hecho su trabajo si algo tenía que subir.
+pub const A_VERIFICAR: usize = 12;
 
+/// Los modelos de los que hay vectores instalados. Es lo que decide qué
+/// niveles se pueden correr contra este servidor.
+pub fn capas_instaladas(store: &Store) -> Vec<String> {
+    let c = store.conn();
+    let Ok(mut q) = c.prepare(
+        "SELECT DISTINCT l.modelo FROM installed_index_layers l
+           JOIN installed_indices i ON i.paquete = l.paquete
+          WHERE i.completo = 1",
+    ) else {
+        return Vec::new();
+    };
+    let Ok(filas) = q.query_map([], |r| r.get::<_, String>(0)) else {
+        return Vec::new();
+    };
+    filas.flatten().collect()
+}
+
+/// Una consulta a Qdrant por modelo del nivel, fusión por rango, y traducción
+/// de punto a procedencia. Lo último es la razón entera de que esto viva aquí
+/// y no en Python: está en SQLite, y el trabajador no tiene SQLite.
+pub async fn candidatos(
+    store: &Store,
+    nivel: &Nivel,
+    vectores: &[(String, Vec<f32>)],
+) -> Result<Vec<Candidato>> {
     let cliente = crate::qdrant::Cliente::nuevo();
-    let mut vecinos = Vec::new();
-    for col in &colecciones {
-        vecinos.extend(cliente.buscar(col, vector, VECINOS).await.unwrap_or_default());
+    let mut listas: Vec<Vec<i64>> = Vec::new();
+    let mut similitudes: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
+
+    for modelo in &nivel.recuperacion {
+        let Some((_, vector)) = vectores.iter().find(|(m, _)| m == modelo) else {
+            // El trabajador no mandó este vector (falló ese modelo). Se sigue
+            // con los demás: perder un modelo de ocho degrada, no rompe.
+            tracing::warn!("sin vector para {modelo}, se recupera sin él");
+            continue;
+        };
+        // Todas las versiones instaladas de ese modelo: el investigador no
+        // tiene por qué saber qué hay en el servidor.
+        let versiones: Vec<String> = {
+            let c = store.conn();
+            let mut q = c.prepare(
+                "SELECT DISTINCT l.version FROM installed_index_layers l
+                   JOIN installed_indices i ON i.paquete = l.paquete
+                  WHERE l.modelo = ?1 AND i.completo = 1",
+            )?;
+            let filas = q.query_map([modelo], |r| r.get::<_, String>(0))?.collect::<Result<Vec<_>, _>>()?;
+            filas
+        };
+        let mut lista = Vec::new();
+        for v in versiones {
+            let col = crate::qdrant::coleccion_de(modelo, &v);
+            for vecino in cliente.buscar(&col, vector, VECINOS).await.unwrap_or_default() {
+                similitudes
+                    .entry(vecino.id)
+                    .and_modify(|s| *s = s.max(vecino.similitud as f64))
+                    .or_insert(vecino.similitud as f64);
+                lista.push(vecino.id);
+            }
+        }
+        listas.push(lista);
     }
-    if vecinos.is_empty() {
+
+    let fusionados = rrf(&listas, K);
+    if fusionados.is_empty() {
         return Ok(Vec::new());
     }
 
-    // La traducción de punto a procedencia. Es la razón entera de que la
-    // recuperación viva aquí y no en Python: esto está en SQLite.
-    let cands: Vec<Candidato> = {
-        let c = store.conn();
-        let mut fuera = Vec::new();
-        for v in &vecinos {
-            let fila = c.query_row(
-                "SELECT r.lat, r.lng, r.quadkey, i.nombre, i.autor
-                   FROM reference_images r JOIN installed_indices i ON i.paquete = r.paquete
-                  WHERE r.id = ?1",
-                rusqlite::params![v.id],
-                |r| {
-                    Ok(Candidato {
-                        lat: r.get(0)?,
-                        lng: r.get(1)?,
-                        quadkey: r.get(2)?,
-                        similitud: v.similitud as f64,
-                        indice: r.get(3)?,
-                        autor: r.get(4)?,
-                    })
-                },
-            );
-            if let Ok(c) = fila {
-                fuera.push(c);
-            }
+    let c = store.conn();
+    let mut fuera = Vec::new();
+    for p in fusionados.iter().take(A_VERIFICAR) {
+        let fila = c.query_row(
+            "SELECT r.lat, r.lng, r.quadkey, i.nombre, i.autor
+               FROM reference_images r JOIN installed_indices i ON i.paquete = r.paquete
+              WHERE r.id = ?1",
+            rusqlite::params![p.id],
+            |r| {
+                Ok(Candidato {
+                    lat: r.get(0)?,
+                    lng: r.get(1)?,
+                    quadkey: r.get(2)?,
+                    // La similitud que se arrastra es la mejor que dio
+                    // cualquier modelo. El orden ya lo decidió RRF; esto solo
+                    // alimenta el peso del grupo.
+                    similitud: similitudes.get(&p.id).copied().unwrap_or(0.0),
+                    indice: r.get(3)?,
+                    autor: r.get(4)?,
+                })
+            },
+        );
+        if let Ok(cand) = fila {
+            fuera.push(cand);
         }
-        fuera
-    };
+    }
+    Ok(fuera)
+}
 
-    let grupos = en_grupos(&cands);
+/// Agrupación por vecindad de tesela y atribución. Ya no consulta Qdrant, así
+/// que deja de ser `async`.
+pub fn hipotesis(cands: &[Candidato]) -> Vec<Hipotesis> {
+    let grupos = en_grupos(cands);
     let conf = confianza(&grupos);
-    Ok(grupos
+    grupos
         .into_iter()
         .enumerate()
         .map(|(i, g)| Hipotesis {
@@ -83,5 +134,5 @@ pub async fn hipotesis(store: &Store, modelo: &str, vector: &[f32]) -> Result<Ve
             indice: g.indice,
             autor: g.autor,
         })
-        .collect())
+        .collect()
 }
