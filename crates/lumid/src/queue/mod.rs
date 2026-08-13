@@ -458,7 +458,7 @@ impl Queue {
                     });
                 }
             }
-            Evento::Vectores { dispositivo, id, dims, fichero } => {
+            Evento::Vectores { dispositivo, id, modelo, dims, fichero } => {
                 if !self.es_suyo(&dispositivo, id) {
                     return;
                 }
@@ -479,12 +479,13 @@ impl Queue {
                     self.fallar(id, "ningún índice instalado sirve para consultar con este nivel");
                     return;
                 };
-                // ponytail: un trabajador viejo no manda el campo `modelo` de
-                // `Msg::Vectores`, así que aquí siempre llega vacío por ahora
-                // — la tarea 9 es quien lo empieza a rellenar de verdad desde
-                // `Evento`. Mientras tanto se asume el primero del nivel, que
-                // es lo que ese trabajador habrá embebido.
-                let cual = nivel.recuperacion.first().cloned().unwrap_or_default();
+                // Un trabajador viejo manda `modelo` vacío: se toma el primero
+                // del nivel, que es lo que ese trabajador habrá embebido.
+                let cual = if modelo.is_empty() {
+                    nivel.recuperacion.first().cloned().unwrap_or_default()
+                } else {
+                    modelo
+                };
                 let recibidos = {
                     let mut v = self.vectores.lock().unwrap();
                     let recibidos = v.entry(id).or_default();
@@ -499,7 +500,33 @@ impl Queue {
                 self.soltar(&dispositivo, id);
                 match crate::recuperar::candidatos(&self.store, &nivel, &vectores).await {
                     Ok(c) if !c.is_empty() => {
-                        let h = crate::recuperar::hipotesis(&c);
+                        let consulta = self.imagen_del_analisis(id).unwrap_or_default();
+                        let rutas = self.rutas_de_candidatos(&c);
+                        let afinados =
+                            crate::verificar::afinar(&nivel, &consulta, c, &rutas).await
+                                .unwrap_or_default();
+                        // Los que ningún verificador respaldó se caen. Si se
+                        // caen todos, se contesta con la recuperación sin
+                        // afinar y se dice — negarse escondería información
+                        // que el investigador puede usar.
+                        let vivos: Vec<_> = afinados
+                            .iter()
+                            .filter(|a| a.ganador.is_some())
+                            .map(|a| {
+                                let g = a.ganador.as_ref().unwrap();
+                                lumi_index::agrupar::Candidato {
+                                    lat: g.lat,
+                                    lng: g.lng,
+                                    ..a.candidato.clone()
+                                }
+                            })
+                            .collect();
+                        let usar: Vec<_> = if vivos.is_empty() {
+                            afinados.into_iter().map(|a| a.candidato).collect()
+                        } else {
+                            vivos
+                        };
+                        let h = crate::recuperar::hipotesis(&usar);
                         self.guardar_resultado(id, &h);
                     }
                     // Sin candidatos NO es una avería: es una respuesta.
@@ -541,6 +568,32 @@ impl Queue {
     fn nivel_de(&self, pedido: &str) -> Option<lumi_index::niveles::Nivel> {
         let capas = crate::recuperar::capas_instaladas(&self.store);
         lumi_index::niveles::resolver(&self.niveles, pedido, &capas).cloned()
+    }
+
+    /// La imagen de consulta del análisis, la primera de las que trae —hoy un
+    /// análisis siempre es una sola. Reutiliza `rutas`, que ya sabe dónde vive
+    /// cada imagen en disco (`{DATA}/projects/<id>/<imagen>`).
+    fn imagen_del_analisis(&self, id: i64) -> Option<String> {
+        self.rutas(id)?.into_iter().next()
+    }
+
+    /// La foto de referencia de cada candidato, que es lo que el verificador
+    /// tiene que mirar. Se busca por quadkey y coordenada porque `Candidato`
+    /// no arrastra el id — no lo necesitaba hasta ahora.
+    fn rutas_de_candidatos(&self, cands: &[lumi_index::agrupar::Candidato]) -> Vec<(i64, String)> {
+        let c = self.store.conn();
+        cands
+            .iter()
+            .filter_map(|cand| {
+                c.query_row(
+                    "SELECT id, ruta FROM reference_images
+                      WHERE quadkey = ?1 AND lat = ?2 AND lng = ?3 LIMIT 1",
+                    rusqlite::params![&cand.quadkey, cand.lat, cand.lng],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .ok()
+            })
+            .collect()
     }
 
     /// Guarda la hipótesis principal en las columnas `result_*` de `analyses`

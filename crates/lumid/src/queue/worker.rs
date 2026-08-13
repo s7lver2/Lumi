@@ -22,7 +22,9 @@ pub enum Evento {
     Progreso { dispositivo: String, id: i64, fase: String, pct: u8 },
     /// El trabajador terminó de embeber: el vector está en `fichero`, a la
     /// espera de que la cola lo lea, lo recupere contra Qdrant y lo borre.
-    Vectores { dispositivo: String, id: i64, dims: u32, fichero: String },
+    /// `modelo` vacío significa «el primero del nivel», que es como lo manda
+    /// un trabajador viejo que no conoce el campo.
+    Vectores { dispositivo: String, id: i64, modelo: String, dims: u32, fichero: String },
     Resultado {
         dispositivo: String,
         id: i64,
@@ -46,8 +48,8 @@ impl Evento {
         match m {
             Msg::Listo { modelo, .. } => Evento::Listo { dispositivo: d, modelo },
             Msg::Progreso { id, fase, pct } => Evento::Progreso { dispositivo: d, id, fase, pct },
-            Msg::Vectores { id, dims, fichero, modelo: _ } => {
-                Evento::Vectores { dispositivo: d, id, dims, fichero }
+            Msg::Vectores { id, modelo, dims, fichero } => {
+                Evento::Vectores { dispositivo: d, id, modelo, dims, fichero }
             }
             Msg::Resultado { id, lat, lng, radio_m, confianza, alternativas } => {
                 Evento::Resultado { dispositivo: d, id, lat, lng, radio_m, confianza, alternativas }
