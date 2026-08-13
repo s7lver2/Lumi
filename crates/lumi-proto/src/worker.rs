@@ -54,6 +54,12 @@ pub struct Hipotesis {
     pub peso: f64,
     pub indice: String,
     pub autor: String,
+    /// Cuántas correspondencias sostienen esta coordenada. `None` significa
+    /// que no pasó por verificación geométrica, no que sacara cero.
+    #[serde(default)]
+    pub inliers: Option<u32>,
+    #[serde(default)]
+    pub verificador: Option<String>,
 }
 
 /// Lo que el trabajador contesta por `stdout`. Su `stderr` es el log y no

@@ -415,6 +415,10 @@ pub struct Analysis {
     /// el cliente no tenga dos casos donde hay uno.
     #[serde(default)]
     pub hypotheses: Vec<crate::worker::Hipotesis>,
+    /// El nivel que realmente corrió si hubo descenso por capas que faltaban.
+    /// `None` significa «el que se pidió».
+    #[serde(default)]
+    pub nivel_efectivo: Option<String>,
     pub created_at: i64,
     pub finished_at: Option<i64>,
 }

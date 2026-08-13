@@ -496,6 +496,16 @@ impl Queue {
                     return; // faltan modelos; el trabajador sigue mandando
                 }
 
+                // Nulo significa «el pedido», que es lo normal. Solo se
+                // escribe cuando hubo descenso, para que la ausencia de valor
+                // no se confunda con «no lo sabemos».
+                if nivel.id != pedido {
+                    let _ = self.store.conn().execute(
+                        "UPDATE analyses SET nivel_efectivo = ?2 WHERE id = ?1",
+                        rusqlite::params![id, &nivel.id],
+                    );
+                }
+
                 let vectores = self.vectores.lock().unwrap().remove(&id).unwrap_or_default();
                 self.soltar(&dispositivo, id);
                 match crate::recuperar::candidatos(&self.store, &nivel, &vectores).await {
@@ -521,13 +531,42 @@ impl Queue {
                                 }
                             })
                             .collect();
+                        // ponytail: `en_grupos` agrega candidatos por
+                        // vecindad de tesela, así que un grupo con más de un
+                        // candidato ya no tiene un único respaldo que
+                        // atribuirle. Se busca por coordenada exacta (redonda
+                        // a 6 decimales, ~11 cm): funciona para el caso común
+                        // de un grupo con un solo candidato verificado, y
+                        // degrada a «sin respaldo» —nunca a un dato
+                        // inventado— en el resto.
+                        let clave = |lat: f64, lng: f64| {
+                            ((lat * 1e6).round() as i64, (lng * 1e6).round() as i64)
+                        };
+                        let respaldo_de: std::collections::HashMap<(i64, i64), (u32, String)> =
+                            afinados
+                                .iter()
+                                .filter_map(|a| {
+                                    let g = a.ganador.as_ref()?;
+                                    Some((clave(g.lat, g.lng), (g.inliers, g.verificador.clone())))
+                                })
+                                .collect();
                         let usar: Vec<_> = if vivos.is_empty() {
                             afinados.into_iter().map(|a| a.candidato).collect()
                         } else {
                             vivos
                         };
                         let h = crate::recuperar::hipotesis(&usar);
-                        self.guardar_resultado(id, &h);
+                        let respaldo: Vec<(Option<u32>, Option<String>)> = h
+                            .iter()
+                            .skip(1)
+                            .map(|hip| {
+                                respaldo_de
+                                    .get(&clave(hip.lat, hip.lng))
+                                    .map(|(i, v)| (Some(*i), Some(v.clone())))
+                                    .unwrap_or((None, None))
+                            })
+                            .collect();
+                        self.guardar_resultado(id, &h, &respaldo);
                     }
                     // Sin candidatos NO es una avería: es una respuesta.
                     Ok(_) => self.fallar(id, "ningún índice instalado cubre esta imagen"),
@@ -544,8 +583,9 @@ impl Queue {
                 // confianza; las alternativas, la suya, tal como las mandó.
                 let principal = lumi_proto::worker::Hipotesis {
                     lat, lng, radio_m, peso: confianza, indice: String::new(), autor: String::new(),
+                    inliers: None, verificador: None,
                 };
-                self.guardar_hipotesis(id, &principal, &alternativas);
+                self.guardar_hipotesis(id, &principal, &alternativas, &[]);
                 self.soltar(&dispositivo, id);
                 self.anunciar(id, "hecho");
             }
@@ -600,7 +640,20 @@ impl Queue {
     /// (que ya existen y que el cliente ya lee) y las alternativas en
     /// `analysis_hypotheses`, en una sola transacción: un análisis a medio
     /// escribir es peor que uno que tarda un poco más.
-    fn guardar_hipotesis(&self, id: i64, principal: &lumi_proto::worker::Hipotesis, alternativas: &[lumi_proto::worker::Hipotesis]) {
+    ///
+    /// `respaldo` empareja por posición con `alternativas` — la principal no
+    /// lleva inliers/verificador porque vive en columnas propias de
+    /// `analyses` que este ciclo no amplía. `&[]` es válido: faltan tantas
+    /// entradas como haga falta y todo lo que falte se guarda `NULL`, que es
+    /// justo lo que significa «nadie lo verificó» (el camino de
+    /// `Msg::Resultado`, donde el motor contesta por su cuenta).
+    fn guardar_hipotesis(
+        &self,
+        id: i64,
+        principal: &lumi_proto::worker::Hipotesis,
+        alternativas: &[lumi_proto::worker::Hipotesis],
+        respaldo: &[(Option<u32>, Option<String>)],
+    ) {
         let mut c = self.store.conn();
         let tx = match c.transaction() {
             Ok(t) => t,
@@ -615,10 +668,14 @@ impl Queue {
         );
         let _ = tx.execute("DELETE FROM analysis_hypotheses WHERE analysis_id = ?1", [id]);
         for (i, h) in alternativas.iter().enumerate() {
+            let (inliers, verificador) = respaldo.get(i).cloned().unwrap_or((None, None));
             let _ = tx.execute(
-                "INSERT INTO analysis_hypotheses (analysis_id, orden, lat, lng, radio_m, peso, indice, autor)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                rusqlite::params![id, i as i64, h.lat, h.lng, h.radio_m, h.peso, h.indice, h.autor],
+                "INSERT INTO analysis_hypotheses
+                    (analysis_id, orden, lat, lng, radio_m, peso, indice, autor, inliers, verificador)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                rusqlite::params![
+                    id, i as i64, h.lat, h.lng, h.radio_m, h.peso, h.indice, h.autor, inliers, verificador
+                ],
             );
         }
         let _ = tx.commit();
@@ -627,9 +684,14 @@ impl Queue {
     /// Lo mismo que `guardar_hipotesis`, pero para el camino de
     /// `recuperar::hipotesis`: la primera hipótesis de la lista es la
     /// principal, el resto son sus alternativas.
-    fn guardar_resultado(&self, id: i64, hipotesis: &[lumi_proto::worker::Hipotesis]) {
+    fn guardar_resultado(
+        &self,
+        id: i64,
+        hipotesis: &[lumi_proto::worker::Hipotesis],
+        respaldo: &[(Option<u32>, Option<String>)],
+    ) {
         let Some((principal, alternativas)) = hipotesis.split_first() else { return };
-        self.guardar_hipotesis(id, principal, alternativas);
+        self.guardar_hipotesis(id, principal, alternativas, respaldo);
         self.anunciar(id, "hecho");
     }
 

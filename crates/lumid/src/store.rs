@@ -275,6 +275,13 @@ fn migrate(c: &Connection) {
         // tope, una imagen envenenada tumbaría a la misma GPU en bucle para
         // siempre.
         ("analyses", "requeues", "INTEGER NOT NULL DEFAULT 0"),
+        // El nivel que realmente corrió tras la degradación del 5b. Nulo
+        // significa «el pedido», que es lo normal.
+        ("analyses", "nivel_efectivo", "TEXT"),
+        // De qué verificador salió la coordenada afinada y con cuánto
+        // respaldo. Es evidencia, no telemetría.
+        ("analysis_hypotheses", "inliers", "INTEGER"),
+        ("analysis_hypotheses", "verificador", "TEXT"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }

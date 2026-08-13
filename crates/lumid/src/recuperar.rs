@@ -133,6 +133,11 @@ pub fn hipotesis(cands: &[Candidato]) -> Vec<Hipotesis> {
             peso: if i == 0 { conf } else { g.peso },
             indice: g.indice,
             autor: g.autor,
+            // El respaldo se rellena aparte, en `queue::mod`, que es quien
+            // tiene los veredictos del verificador: `agrupar::Grupo` no los
+            // conoce.
+            inliers: None,
+            verificador: None,
         })
         .collect()
 }
