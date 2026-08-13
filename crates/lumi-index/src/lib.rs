@@ -6,7 +6,6 @@
 //! paquetes y deben depender de este crate en vez de copiar el formato.
 
 pub mod arbitro;
-pub mod arbitro;
 pub mod agrupar;
 pub mod budget;
 pub mod cifrado;
