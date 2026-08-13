@@ -185,6 +185,10 @@ pub struct DeviceInfo {
 pub struct AccessReq {
     pub display_name: String,
     pub message: String,
+    /// Sistema y versión del cliente. Es un dato declarado por quien pide, no
+    /// una huella: sirve para decidir, no para identificar.
+    #[serde(default)]
+    pub device: Option<String>,
 }
 
 /// El ticket se devuelve UNA sola vez. El servidor guarda su hash.
@@ -214,6 +218,10 @@ pub struct AdminRequest {
     pub display_name: String,
     pub message: String,
     pub source_ip: String,
+    /// Lo que declaró el cliente al pedir acceso. `None` en las solicitudes
+    /// anteriores a que esto existiera, y se enseña como «no consta».
+    #[serde(default)]
+    pub device: Option<String>,
     /// La solicitud viene de fuera del rango privado. Lo calcula el servidor
     /// para que la interfaz no tenga que saber de rangos de red.
     pub external: bool,

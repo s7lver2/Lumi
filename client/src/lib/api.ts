@@ -39,6 +39,9 @@ export interface Limits {
 export interface AccessStatus { status: "pending" | "approved" | "rejected"; display_name: string; reason: string | null }
 export interface AdminRequest {
   id: number; display_name: string; message: string; source_ip: string;
+  /** Lo que declaró el cliente al pedir acceso. `null` en las anteriores a
+   *  que esto existiera. */
+  device: string | null;
   external: boolean; status: string; reason: string | null;
   created_at: number; expires_at: number;
 }

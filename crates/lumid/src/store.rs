@@ -299,6 +299,10 @@ fn migrate(c: &Connection) {
         // Por qué un agente hundió esta hipótesis. Nulo significa que ninguno
         // la tocó, no que la aprobaran.
         ("analysis_hypotheses", "motivo_agente", "TEXT"),
+        // Lo que declaró el cliente al pedir acceso. Anulable a propósito: las
+        // solicitudes ya pendientes no lo tienen, y se enseñan con «no
+        // consta» en vez de con un dato inventado.
+        ("access_requests", "device", "TEXT"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }

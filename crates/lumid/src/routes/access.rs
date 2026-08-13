@@ -148,9 +148,9 @@ pub async fn create(
     // Se inserta primero para obtener el id, y el ticket se calcula con él.
     c.execute(
         "INSERT INTO access_requests
-         (display_name, message, ticket_phc, source_ip, status, created_at, expires_at)
-         VALUES (?1, ?2, '', ?3, 'pending', ?4, ?5)",
-        rusqlite::params![name, message, ip, t, t + REQUEST_TTL_S],
+         (display_name, message, ticket_phc, source_ip, device, status, created_at, expires_at)
+         VALUES (?1, ?2, '', ?3, ?4, 'pending', ?5, ?6)",
+        rusqlite::params![name, message, ip, req.device, t, t + REQUEST_TTL_S],
     )
     .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
     let id = c.last_insert_rowid();

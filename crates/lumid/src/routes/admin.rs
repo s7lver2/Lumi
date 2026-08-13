@@ -36,7 +36,7 @@ pub async fn list_requests(
     );
     let mut q = c
         .prepare(
-            "SELECT id, display_name, message, source_ip, status, reason, created_at, expires_at
+            "SELECT id, display_name, message, source_ip, device, status, reason, created_at, expires_at
              FROM access_requests ORDER BY (status = 'pending') DESC, created_at DESC",
         )
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -49,10 +49,11 @@ pub async fn list_requests(
                 message: r.get(2)?,
                 external: is_external(&source_ip),
                 source_ip,
-                status: r.get(4)?,
-                reason: r.get(5)?,
-                created_at: r.get(6)?,
-                expires_at: r.get(7)?,
+                device: r.get(4)?,
+                status: r.get(5)?,
+                reason: r.get(6)?,
+                created_at: r.get(7)?,
+                expires_at: r.get(8)?,
             })
         })
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
