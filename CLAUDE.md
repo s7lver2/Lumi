@@ -79,6 +79,9 @@ indexer/               Lumi Indexer's Tauri v2 + React + Tailwind app (independe
   src/                  catalog, download, ingest, review, seal, settings, territory
 workers/               Python inference workers — the Rust↔Python boundary is explicit:
                        lumi_worker.py (reference geolocation stub), lumi_embed.py (embedding)
+registros/             modelos, verificadores, niveles y agentes — datos, no código. `registros/geo/`
+                       trae además los datasets offline (países, Köppen) que los agentes que filtran
+                       necesitan; se publican ausentes y sin ellos el agente se abstiene
 tools/build.py          dev orchestration (see Commands)
 tools/package.py        zips everything not excluded by .gitignore
 ```
@@ -171,8 +174,10 @@ reads them.
 Order: `1 (install/pairing) → 2 (auth) → 6 (client/projects skeleton) → 4 (queue) → 7a (indexer
 foundations) → 7b (indexer network origins) → 8 (index catalog) → 5 (inference engine) → 3 (admin
 panel) → 9 (website)`. 1/2/4/7a/7b/8 done; 6 is skeleton-only (no reverse geocoding, no project
-ownership transfer — see FUTURO.md); 5 is **5-0, 5a and 5b done** (real models, retrieval
-ensemble and competing geometric verifiers) **with 5c pending** (the agents); 3/9 not started.
+ownership transfer — see FUTURO.md); 5 is **5-0, 5a, 5b and 5c done** (real models, retrieval
+ensemble, competing geometric verifiers, and the agents) **with 5d pending** (annotating the corpus
+with capture dates so season and time-of-day can filter instead of only describing); 3/9 not
+started.
 
 ## Conventions
 

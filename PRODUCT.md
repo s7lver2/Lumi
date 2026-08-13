@@ -36,6 +36,12 @@ correr a un nivel más bajo del pedido si a los índices instalados en el servid
 capas de vectores para el nivel pedido — en cuyo caso el resultado dice con qué nivel corrió
 de verdad y por qué, nunca en silencio.
 
+Bajo las hipótesis, el panel **lo que dice la imagen**: el idioma del cartel, el lado por el que
+circulan los coches, el clima aparente, la hora que sugieren las sombras, el texto que se pudo
+leer. Un agente que no vio suficiente aparece diciéndolo, no desaparece — el investigador tiene
+que poder distinguir «no hay carteles» de «no se lo preguntamos». Y cuando uno de esos datos hunde
+una hipótesis, la hipótesis lo lleva escrito al lado con la frase entera, no con un número.
+
 ## Tono
 
 Español, minúscula en los subtítulos, frases cortas. Precisión sobre entusiasmo: es una

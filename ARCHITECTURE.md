@@ -113,12 +113,25 @@ distintos corren dentro**:
 |---|---|---|
 | **Lumi Mini** | 1 recuperador (CosPlace) + 1 verificador (tiny-RoMa) + 4 agentes | Bajo; corre en un escritorio |
 | **Lumi Pro** | 4 recuperadores + 2 verificadores + 10 agentes | Medio |
-| **Lumi Vision** | 8 recuperadores + 4 verificadores + 20 agentes | Resultados muy superiores, problemas de cómputo reales |
+| **Lumi Vision** | 8 recuperadores + 4 verificadores + **todos los agentes instalados** | Resultados muy superiores, problemas de cómputo reales |
 
 La precisión sale de la competencia entre verificadores, no de un modelo mejor: el árbitro son
-los inliers que sobreviven a RANSAC. Los agentes —idioma, hora por las sombras, dimensiones del
-edificio, clima, estación— son el subsistema 5c. La composición exacta está en `registros/niveles/`,
-que es datos y no código.
+los inliers que sobreviven a RANSAC.
+
+Los agentes —idioma del cartel, lado de conducción, clima, sombras, señalización, matrícula— son
+ficheros JSON en `registros/agentes/`, no código. Los que dan una restricción geográfica dura
+reponderan candidatos comparando su etiqueta contra el país, el lado de la calzada o el grupo de
+Köppen que sale de la COORDENADA del candidato, resuelto offline con los datos de `registros/geo/`;
+los descriptivos solo se le enseñan al investigador. Dos reglas cierran el asunto: un candidato con
+25 inliers o más no lo tumba ningún agente, y si las restricciones vacían la lista se contesta sin
+filtrar diciéndolo.
+
+Que Vision corra «todos los agentes instalados» significa que dos servidores con registros
+distintos pueden componerse distinto llamándose igual. Se asume, y se compensa: cada análisis
+guarda en `analysis_agents` qué agentes corrieron de verdad, así que el informe dice de qué se
+compuso aunque no se pueda repetir a ciegas en otra máquina.
+
+La composición exacta está en `registros/niveles/`, que es datos y no código.
 
 ---
 
@@ -133,8 +146,9 @@ spec → plan → implementación, y cada una debe producir software que funcion
 | **2** | **Auth, usuarios y permisos** | Solicitudes de acceso, creación de cuentas, roles, límites por usuario, dispositivos de confianza | **Terminado** |
 | **3** | **Panel de administración** | Hardware, monitorización, notificaciones, mantenimiento, gestión de modelos | Pendiente |
 | **4** | **Cola y planificador** | Cientos de usuarios, pausa por desconexión, prioridades, multi-GPU y GPU+CPU | **Terminado** |
-| **5** | **Motor de inferencia** | Lumi Mini / Pro / Vision, ensemble de verificadores geométricos | **5-0, 5a y 5b terminados** (instalar un `.lumidx`; consulta → candidatos → hipótesis; modelos reales, ensemble de recuperación y verificadores geométricos compitiendo); **5c pendiente** (los agentes) |
-| **5c** | **Agentes** | Idioma, sombras, dimensiones, clima, estación. Los que dan restricción geográfica dura filtran; los descriptivos solo se muestran | Pendiente |
+| **5** | **Motor de inferencia** | Lumi Mini / Pro / Vision, ensemble de verificadores geométricos | **5-0, 5a, 5b y 5c terminados** (instalar un `.lumidx`; consulta → candidatos → hipótesis; modelos reales, ensemble de recuperación y verificadores geométricos compitiendo; los agentes); **5d pendiente** |
+| **5c** | **Agentes** | Idioma, sombras, dimensiones, clima, estación. Los que dan restricción geográfica dura filtran; los descriptivos solo se muestran | Terminado |
+| **5d** | **Corpus anotado con fecha** | Anotar `reference_images` con la fecha de captura, para que estación y hora puedan filtrar en vez de solo describir | Pendiente |
 | **6** | **Cliente y proyectos** | Workspaces tipo Burp/Caido, imágenes, historial, mapa | Esqueleto terminado |
 | **7a** | **Lumi Indexer · cimientos** | App Tauri aparte; las tres bases; el paquete de índice troceado; procedencia de imágenes y de trabajo; mapa, territorio y la regla de no indexar dos veces; orígenes locales | Terminado |
 | **7b** | **Lumi Indexer · orígenes de red** | Seis adaptadores tras un contrato por tesela (Mapillary, KartaView, Google, Mapbox Satellite, Commons, Flickr); disponibilidad en el mapa; estimar, confirmar y tope de gasto; descarga reanudable con atribución; qué se puede republicar | **Terminado** (la tabla llevaba treinta commits diciendo «con spec» en `master`) |

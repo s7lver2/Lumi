@@ -310,6 +310,9 @@ RoMa v2) esto deja de ser un descuido menor. **Bloqueante antes de publicar la w
 **Mostrar «Built with DINOv3»** en la sección de modelos de la web (subsistema 9). Entra con RoMa
 v2 y no es opcional. La otra obligación de esa licencia —entregar el acuerdo junto con los pesos—
 ya la cumple `lumi_pesos._licencia`, que se niega a cargar unos pesos sin su `LICENCIA.txt` al lado.
+Con el 5c hay dos atribuciones más que enseñar en esa misma sección: **Natural Earth** (dominio
+público, sin obligación, pero se cita) y **Beck et al. 2018** para el mapa de Köppen, que es
+CC BY 4.0 y **sí obliga**.
 
 ### AnyLoc con PCA a 4096 dims
 
@@ -318,9 +321,21 @@ conservaría casi todo su recall, pero obliga a fijar la matriz PCA como parte d
 otra pieza que puede desincronizarse entre Indexer y Station sin que nada falle al compilar. Se
 revisa si el tamaño molesta con corpus grandes.
 
-### Los agentes (subsistema 5c)
+### Corpus anotado con fecha (subsistema 5d)
 
-Idioma, hora por las sombras, dimensiones del edificio, clima, estación. Regla ya acordada:
-los que dan una restricción geográfica dura filtran y reponderan; los descriptivos solo se le
-enseñan al investigador. Los primeros exigen que el corpus sepa de qué país y de qué estación es
-cada foto, y eso es trabajo del Indexer.
+`reference_images` guarda `lat/lng/quadkey/fuente` y nada más, así que **estación** y **hora
+aparente** solo pueden describir, no filtrar: para acotar haría falta saber en qué fecha se tomó
+cada foto de referencia. Anotarla es trabajo del Indexer, cambia el formato `.lumidx` e invalida
+lo ya sellado, así que va en su propio ciclo.
+
+### Topónimos contra un gazetteer
+
+El agente `toponimos` saca el texto legible y se lo enseña al investigador. Cruzarlo con una base
+de nombres de calles convertiría un cartel legible en la restricción geográfica más fuerte de
+todas, y también en la más fácil de equivocar: hay diez mil calles Mayor.
+
+### El metro que la profundidad monocular no da
+
+El agente `dimensiones` se llama «forma del espacio» porque sin una referencia de escala conocida
+en la escena, Depth Anything no da metros. La salida, si algún día hacen falta, es detectar un
+objeto de tamaño conocido —una puerta, un coche, un peldaño— y escalar con él.
