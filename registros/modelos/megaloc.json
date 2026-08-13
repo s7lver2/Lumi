@@ -1,7 +1,7 @@
 {
   "id": "lumi-preview",
-  "nombre": "Lumi Preview",
-  "base": "MegaLoc (congelado)",
+  "nombre": "MegaLoc",
+  "base": "DINOv2-B + SALAD (congelado)",
   "version": "1.0",
   "dims": 8448,
   "familia": "foundation",

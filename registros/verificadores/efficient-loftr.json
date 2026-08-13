@@ -1,0 +1,8 @@
+{
+  "id": "efficient-loftr",
+  "nombre": "Efficient LoFTR",
+  "tipo": "semi-denso",
+  "licencia": "Apache-2.0",
+  "pesos_url": "https://github.com/zju3dv/EfficientLoFTR",
+  "sha256": ""
+}

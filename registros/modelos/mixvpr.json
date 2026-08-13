@@ -1,0 +1,11 @@
+{
+  "id": "mixvpr",
+  "nombre": "MixVPR",
+  "base": "CNN + feature mixing (congelado)",
+  "version": "1.0",
+  "dims": 4096,
+  "familia": "cnn",
+  "licencia": "MIT",
+  "pesos_url": "https://github.com/amaralibey/MixVPR",
+  "sha256": ""
+}

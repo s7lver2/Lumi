@@ -1,0 +1,8 @@
+{
+  "id": "roma",
+  "nombre": "RoMa",
+  "tipo": "denso",
+  "licencia": "MIT + Apache-2.0 (DINOv2)",
+  "pesos_url": "https://github.com/Parskatt/RoMa",
+  "sha256": ""
+}

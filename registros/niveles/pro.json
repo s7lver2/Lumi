@@ -1,0 +1,7 @@
+{
+  "id": "pro",
+  "nombre": "Lumi Pro",
+  "recuperacion": ["lumi-preview", "lumi-2", "eigenplaces", "mixvpr"],
+  "geometricos": ["roma", "lightglue-aliked"],
+  "cae_a": "mini"
+}

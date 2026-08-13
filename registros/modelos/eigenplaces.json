@@ -1,0 +1,11 @@
+{
+  "id": "eigenplaces",
+  "nombre": "EigenPlaces",
+  "base": "ResNet-50 (congelado)",
+  "version": "1.0",
+  "dims": 2048,
+  "familia": "cnn",
+  "licencia": "MIT",
+  "pesos_url": "https://github.com/gmberton/EigenPlaces",
+  "sha256": ""
+}

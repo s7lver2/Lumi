@@ -1,0 +1,7 @@
+{
+  "id": "mini",
+  "nombre": "Lumi Mini",
+  "recuperacion": ["cosplace"],
+  "geometricos": ["tiny-roma"],
+  "cae_a": null
+}

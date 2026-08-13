@@ -1,0 +1,8 @@
+{
+  "id": "roma-v2",
+  "nombre": "RoMa v2",
+  "tipo": "denso",
+  "licencia": "MIT, con DINOv3 bajo licencia propia de Meta: obliga a mostrar «Built with DINOv3» y a entregar el acuerdo junto con los pesos",
+  "pesos_url": "https://github.com/Parskatt/romav2",
+  "sha256": ""
+}

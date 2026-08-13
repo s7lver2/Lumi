@@ -1,7 +1,7 @@
 {
   "id": "lumi-2",
-  "nombre": "Lumi 2",
-  "base": "BoQ + DINOv2 (congelado)",
+  "nombre": "BoQ + DINOv2",
+  "base": "DINOv2 + Bag-of-Queries (congelado)",
   "version": "1.0",
   "dims": 12288,
   "familia": "foundation",

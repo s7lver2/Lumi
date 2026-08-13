@@ -1,0 +1,11 @@
+{
+  "id": "salad",
+  "nombre": "SALAD",
+  "base": "DINOv2-B + transporte optimo (congelado)",
+  "version": "1.0",
+  "dims": 8448,
+  "familia": "foundation",
+  "licencia": "MIT",
+  "pesos_url": "https://github.com/serizba/salad",
+  "sha256": ""
+}

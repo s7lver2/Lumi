@@ -1,0 +1,11 @@
+{
+  "id": "cosplace",
+  "nombre": "CosPlace",
+  "base": "ResNet-18 (congelado)",
+  "version": "1.0",
+  "dims": 512,
+  "familia": "cnn",
+  "licencia": "MIT",
+  "pesos_url": "https://github.com/gmberton/CosPlace",
+  "sha256": ""
+}

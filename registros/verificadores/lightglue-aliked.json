@@ -1,0 +1,8 @@
+{
+  "id": "lightglue-aliked",
+  "nombre": "LightGlue + ALIKED",
+  "tipo": "disperso",
+  "licencia": "Apache-2.0 + BSD-3",
+  "pesos_url": "https://github.com/cvg/LightGlue",
+  "sha256": ""
+}

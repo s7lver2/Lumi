@@ -20,7 +20,15 @@ pub struct Modelo {
     pub base: String,
     pub version: String,
     pub dims: u32,
+    /// `foundation` o `cnn`. `#[serde(default)]` para que los ficheros del 7a
+    /// sigan cargando sin tocarlos.
+    #[serde(default)]
+    pub familia: String,
+    #[serde(default)]
+    pub licencia: String,
     pub pesos_url: String,
+    #[serde(default)]
+    pub sha256: String,
 }
 
 /// Lee todos los `.json` del directorio. Un fichero ilegible o incompleto se
