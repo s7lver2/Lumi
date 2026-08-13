@@ -255,6 +255,13 @@ impl Queue {
         Presencia { uid, cola: self.clone() }
     }
 
+    /// Cuántos usuarios distintos tienen al menos un flujo SSE abierto.
+    /// `presentes` es privado y vive tras el mutex del estado; esto es la
+    /// única forma legítima de preguntarlo desde fuera.
+    pub fn conectados(&self) -> i64 {
+        self.estado.lock().map(|e| e.presentes.len() as i64).unwrap_or(0)
+    }
+
     pub fn profundidad(&self) -> u32 {
         self.store
             .conn()
