@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Lumi Station · 3a — el chasis del panel y la gestión de modelos</title>
+<style>
+/* Los mismos tokens de client/tailwind.config.ts. Nada inventado. */
+:root{
+  --bg:#0e0f11; --surface:#15171a; --panel:#1a1b1e; --elevated:#202226;
+  --border:#26282c; --muted:#9a9a95; --subtle:#6a6c70; --fg:#e8e8e6;
+  --accent:#f2f3f5; --draw:#378add; --draw-fg:#85b7eb;
+  --warning:#ef9f27; --warning-fg:#efb968; --danger:#a33; --danger-fg:#e88f8f;
+  --expo:cubic-bezier(.16,1,.3,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#08090a;color:var(--fg);font:13px/1.5 Inter,system-ui,'Segoe UI',sans-serif;
+  -webkit-font-smoothing:antialiased;padding:34px 26px 90px;max-width:1240px;margin:0 auto}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+h1{font-size:19px;font-weight:500;letter-spacing:-.01em}
+h2{font-size:12px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--subtle);margin:58px 0 12px}
+.lede{color:var(--muted);font-size:12px;margin-top:8px;max-width:900px;line-height:1.7}
+.lede b{font-weight:400;color:var(--fg)}
+.note{font-size:11px;line-height:1.68;color:var(--subtle);max-width:900px;margin-top:12px}
+.note b{font-weight:400;color:var(--fg)}
+.k{font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--subtle)}
+
+/* ══ animaciones ══
+   Las mismas curvas del cliente: `jg-fade-rise` con expo-out. Nada rebota,
+   nada gira sin motivo — el movimiento existe para decir «esto acaba de
+   llegar» o «esto sigue pasando», nunca para adornar. */
+@keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+@keyframes slide-in{from{opacity:0;transform:translateX(-9px)}to{opacity:1;transform:none}}
+@keyframes fill{from{width:0}}
+@keyframes creep{0%{width:58%}50%{width:64%}100%{width:58%}}
+@keyframes breathe{0%,100%{opacity:.42}50%{opacity:1}}
+@keyframes sweep{from{transform:translateX(-100%)}to{transform:translateX(320%)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.an{animation:rise .62s var(--expo) both}
+.an1{animation-delay:.05s}.an2{animation-delay:.1s}.an3{animation-delay:.15s}
+.an4{animation-delay:.2s}.an5{animation-delay:.25s}.an6{animation-delay:.3s}
+/* El escalonado de una lista sale del orden, no de una clase por fila. */
+.stagger > *{animation:rise .55s var(--expo) both}
+.stagger > *:nth-child(1){animation-delay:.04s}
+.stagger > *:nth-child(2){animation-delay:.09s}
+.stagger > *:nth-child(3){animation-delay:.14s}
+.stagger > *:nth-child(4){animation-delay:.19s}
+.stagger > *:nth-child(5){animation-delay:.24s}
+.stagger > *:nth-child(6){animation-delay:.29s}
+.stagger > *:nth-child(7){animation-delay:.34s}
+.stagger > *:nth-child(8){animation-delay:.39s}
+.stagger > *:nth-child(9){animation-delay:.44s}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+}
+
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px}
+.chip{border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-size:8.5px;
+  color:var(--subtle);letter-spacing:.04em;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;
+  transition:border-color .3s var(--expo),color .3s var(--expo)}
+.chip.on{border-color:rgba(255,255,255,.28);color:var(--fg)}
+.chip.amber{border-color:rgba(239,159,39,.42);color:var(--warning-fg)}
+.chip.red{border-color:rgba(163,51,51,.55);color:var(--danger-fg)}
+.chip.blue{border-color:rgba(55,138,221,.5);color:var(--draw-fg)}
+.chip.live{animation:breathe 2.1s ease-in-out infinite}
+.chip .sp{width:8px;height:8px;border:1.4px solid currentColor;border-right-color:transparent;
+  border-radius:50%;animation:spin .8s linear infinite;display:inline-block}
+.hair{height:1px;background:var(--border)}
+.btn{border:1px solid rgba(255,255,255,.15);background:none;color:var(--fg);border-radius:9px;
+  padding:7px 13px;font-size:11.5px;font-family:inherit;cursor:default;
+  transition:border-color .34s var(--expo),transform .34s var(--expo),background-color .34s var(--expo)}
+.btn:hover{border-color:rgba(255,255,255,.34);transform:translateY(-1px)}
+.btn.primary{background:var(--accent);color:#000;border-color:transparent;font-weight:500}
+.btn.primary:hover{background:#fff}
+.btn.small{padding:4px 9px;font-size:10.5px;border-radius:6px}
+.btn[disabled]{opacity:.38}
+.btn[disabled]:hover{transform:none;border-color:rgba(255,255,255,.15)}
+
+/* ══ ventana simulada ══ */
+.win{background:var(--bg);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:18px}
+.win > header{display:flex;align-items:center;gap:9px;padding:9px 13px;border-bottom:1px solid var(--border);
+  background:var(--surface)}
+.win > header .dot{width:8px;height:8px;border-radius:50%;background:var(--border)}
+.win > header .ttl{font-size:11px;color:var(--muted)}
+.win > header .right{margin-left:auto;display:flex;gap:6px}
+.body{padding:18px 20px 22px}
+
+/* ══ el chasis: sidebar + contenido ══ */
+.shell{display:grid;grid-template-columns:196px 1fr;min-height:498px}
+.side{border-right:1px solid var(--border);background:var(--surface);padding:14px 10px;
+  display:flex;flex-direction:column}
+.side .who{padding:0 8px 13px;display:flex;align-items:center;gap:8px}
+.side .who .av{width:24px;height:24px;border-radius:7px;background:var(--elevated);
+  border:1px solid var(--border);display:grid;place-items:center;font-size:10px;color:var(--muted)}
+.side .who .nm{font-size:11px;color:var(--fg);line-height:1.25}
+.side .who .nm small{display:block;font-size:9px;color:var(--subtle)}
+.nav{display:flex;flex-direction:column;gap:1px}
+.nav .grp{padding:13px 8px 5px;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--subtle)}
+.nav a{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;font-size:11.5px;
+  color:var(--muted);text-decoration:none;position:relative;
+  transition:background-color .34s var(--expo),color .34s var(--expo),padding-left .34s var(--expo)}
+.nav a:hover{background:rgba(255,255,255,.035);color:var(--fg);padding-left:11px}
+.nav a.on{background:rgba(255,255,255,.055);color:var(--fg)}
+.nav a.on:before{content:'';position:absolute;left:-10px;top:7px;bottom:7px;width:2px;
+  background:var(--fg);border-radius:0 2px 2px 0;animation:slide-in .5s var(--expo) both}
+.nav a .cnt{margin-left:auto;font-size:9px;color:var(--subtle);font-variant-numeric:tabular-nums}
+.nav a .cnt.amber{color:var(--warning-fg)}
+.nav a.soon{opacity:.42}
+.nav a.soon .cnt{font-size:8.5px;letter-spacing:.1em;text-transform:uppercase}
+.side .foot{margin-top:auto;padding:11px 8px 0;border-top:1px solid var(--border)}
+.side .foot .ln{display:flex;align-items:baseline;justify-content:space-between;font-size:9.5px;
+  color:var(--subtle);padding:2px 0}
+.side .foot .ln b{font-weight:400;color:var(--muted)}
+.main{padding:17px 20px 22px;overflow:hidden}
+
+/* ══ cabeceras ══ */
+.phead{display:flex;align-items:baseline;gap:10px}
+.phead h3{font-size:15px;font-weight:500}
+.phead .sum{margin-left:auto;font-size:10.5px;color:var(--subtle)}
+
+/* ══ niveles como grupo ══ */
+.lvl{border:1px solid var(--border);border-radius:11px;background:var(--panel);margin-top:12px;
+  overflow:hidden;transition:border-color .4s var(--expo)}
+.lvl:hover{border-color:rgba(255,255,255,.16)}
+.lvl.open{border-color:rgba(255,255,255,.2)}
+.lvl > header{display:grid;grid-template-columns:1fr auto;gap:14px;padding:13px 15px;align-items:center}
+.lvl h4{font-size:13.5px;font-weight:500;display:flex;align-items:center;gap:9px}
+.lvl .comp{font-size:10.5px;color:var(--muted);margin-top:3px}
+.lvl .act{display:flex;align-items:center;gap:9px}
+.lvl .act .sz{font-size:10px;color:var(--subtle)}
+.meter{height:3px;border-radius:2px;background:var(--elevated);overflow:hidden;margin-top:9px}
+.meter i{display:block;height:100%;background:var(--fg);animation:fill 1s var(--expo) both}
+.meter i.part{background:var(--warning)}
+.lvl .det{border-top:1px solid var(--border);padding:12px 15px 14px;background:rgba(0,0,0,.16)}
+.cols{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.col > .k{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:7px}
+.col ul{list-style:none;display:flex;flex-direction:column;gap:3px}
+.col li{display:flex;align-items:center;gap:7px;padding:4px 7px;border:1px solid var(--border);
+  border-radius:6px;background:var(--elevated);font-size:10.5px;color:var(--fg);
+  transition:border-color .3s var(--expo)}
+.col li .st{margin-left:auto}
+.col li.miss{background:none;border-style:dashed;color:var(--muted)}
+.col li.share{border-color:rgba(255,255,255,.06)}
+.col li small{font-size:9px;color:var(--subtle)}
+
+/* barra en fila de descarga */
+.dl{display:flex;align-items:center;gap:9px;margin-top:6px}
+.dl .bar{flex:1;height:3px;border-radius:2px;background:var(--elevated);overflow:hidden;position:relative}
+.dl .bar i{display:block;height:100%;background:var(--fg);width:58%;animation:creep 3.4s ease-in-out infinite}
+.dl .bar:after{content:'';position:absolute;inset:0;width:26%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent);
+  animation:sweep 1.9s linear infinite}
+.dl .pc{font-size:9.5px;color:var(--subtle);white-space:nowrap;font-variant-numeric:tabular-nums}
+
+/* ══ licencias ══ */
+.lics{display:flex;flex-direction:column;margin-top:14px;max-height:300px;overflow:auto;
+  border:1px solid var(--border);border-radius:10px;background:var(--panel)}
+.lic-item{padding:11px 13px}
+.lic-item + .lic-item{border-top:1px solid var(--border)}
+.lic-item > header{display:flex;align-items:baseline;gap:9px;margin-bottom:6px}
+.lic-item h4{font-size:11.5px;font-weight:500}
+.lic-item .who{font-size:9.5px;color:var(--subtle)}
+.lic-item .src{margin-left:auto;font-size:9px;color:var(--subtle)}
+.lic-body{font-size:10px;line-height:1.72;color:var(--muted);max-height:56px;overflow:hidden;position:relative}
+.lic-body:after{content:'';position:absolute;left:0;right:0;bottom:0;height:24px;
+  background:linear-gradient(to bottom,transparent,var(--panel))}
+.accept{display:flex;align-items:center;gap:11px;margin-top:14px;padding:12px 13px;
+  border:1px solid rgba(255,255,255,.16);border-radius:10px;background:var(--panel)}
+.box{width:14px;height:14px;border:1px solid var(--fg);border-radius:3px;flex:none;
+  display:grid;place-items:center;font-size:9px;color:#000;background:var(--fg);
+  animation:rise .4s var(--expo) both;animation-delay:.5s}
+.accept p{font-size:11px;color:var(--muted);line-height:1.6}
+.accept p b{font-weight:400;color:var(--fg)}
+.accept .go{margin-left:auto}
+
+/* ══ log ══ */
+pre.log{background:#08090b;border:1px solid var(--border);border-radius:9px;padding:11px 13px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:10.5px;line-height:1.75;
+  color:var(--muted);max-height:158px;overflow:auto;margin-top:12px;white-space:pre}
+pre.log b{font-weight:400;color:var(--fg)}
+pre.log i{font-style:normal;color:var(--warning-fg)}
+pre.log u{text-decoration:none;color:var(--subtle)}
+
+/* ══ puerta ══ */
+.gate{border:1px solid rgba(55,138,221,.34);border-radius:10px;padding:13px 14px;margin-top:14px;
+  background:rgba(55,138,221,.045)}
+.gate h4{font-size:11.5px;font-weight:500;margin-bottom:5px}
+.gate p{font-size:10.5px;line-height:1.7;color:var(--muted);max-width:78ch}
+.gate ol{margin:10px 0 0 16px;display:flex;flex-direction:column;gap:6px}
+.gate li{font-size:10.5px;line-height:1.6;color:var(--muted)}
+.gate li b{font-weight:400;color:var(--fg)}
+.field{display:flex;gap:8px;margin-top:11px;align-items:center}
+.input{flex:1;border:1px solid var(--border);border-radius:7px;background:var(--elevated);
+  padding:6px 9px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:10.5px;color:var(--subtle)}
+
+/* ══ estados ══ */
+.states{display:grid;grid-template-columns:repeat(2,1fr);gap:13px;margin-top:18px}
+.state{border:1px solid var(--border);border-radius:10px;padding:12px 13px;background:var(--panel)}
+.state h4{font-size:11px;font-weight:500;margin-bottom:5px;display:flex;align-items:center;gap:7px}
+.state p{font-size:10.5px;line-height:1.7;color:var(--muted)}
+
+/* ══ resumen ══ */
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px}
+.tile{border:1px solid var(--border);border-radius:10px;padding:11px 12px;background:var(--panel)}
+.tile .k{display:block;margin-bottom:6px}
+.tile .v{font-size:17px;font-weight:500;letter-spacing:-.01em}
+.tile .v small{font-size:10px;color:var(--subtle);font-weight:400;margin-left:3px}
+.tile .sub{font-size:9.5px;color:var(--subtle);margin-top:3px}
+.spark{height:20px;display:flex;align-items:flex-end;gap:2px;margin-top:8px}
+.spark i{flex:1;background:var(--elevated);border-radius:1px;animation:fill .7s var(--expo) both}
+
+table{width:100%;border-collapse:collapse;margin-top:16px;font-size:11px}
+th{text-align:left;font-weight:500;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--subtle);padding:0 10px 7px 0;border-bottom:1px solid var(--border)}
+td{padding:8px 10px 8px 0;border-bottom:1px solid var(--border);color:var(--muted);vertical-align:top;
+  line-height:1.6}
+td b{font-weight:400;color:var(--fg)}
+</style>
+</head>
+<body>
+
+<h1 class="an">3a · El chasis del panel, y la gestión de modelos</h1>
+<p class="lede an an1">
+  El 5b y el 5c dejaron el motor implementado y <b>sin poder cargar un solo peso</b>: cuatro registros
+  que se editan a mano, hashes vacíos, licencias que hay que colocar tú en disco y un reinicio del daemon
+  para que se entere. Este ciclo cierra ese hueco — y como esa pantalla necesita un sitio donde vivir,
+  construye también <b>el armazón del panel</b>: la barra lateral y la navegación que hoy es un botón que
+  alterna entre dos vistas.
+</p>
+<p class="note an an2">
+  Tokens reales de <b>client/tailwind.config.ts</b>. Sin verde en ninguna parte —lo hecho es blanco—,
+  mono para lo que produce una máquina, ningún icono metido en una caja de color, y todas las curvas de
+  movimiento son la expo-out que el cliente ya usa. Con <span class="mono">prefers-reduced-motion</span>
+  no se mueve nada.
+</p>
+
+<h2>1 · El chasis: barra lateral y navegación</h2>
+<p class="note">
+  Hoy <span class="mono">AdminPanel.tsx</span> es una pila de filas con un botón que alterna entre
+  «Solicitudes» y «Usuarios», y todo lo demás apilado debajo. La barra lateral le da sitio a lo que este
+  ciclo trae y <b>declara el hueco</b> de lo que traerán el 3b y el 3c: se ven atenuados con la palabra
+  «pronto», en vez de aparecer de golpe dentro de tres meses. Es la regla de la matriz de capacidades
+  aplicada a la navegación — nada se esconde, todo lleva su causa.
+</p>
+
+<div class="win an an3">
+  <header>
+    <span class="dot"></span><span class="ttl">Lumi Station · Administración</span>
+    <span class="right"><span class="chip on">READY</span><span class="chip">7717</span></span>
+  </header>
+  <div class="shell">
+    <aside class="side">
+      <div class="who">
+        <span class="av">◈</span>
+        <span class="nm">nickespro<small>propietario</small></span>
+      </div>
+      <nav class="nav stagger">
+        <div class="grp">Servidor</div>
+        <a href="#" class="on">Resumen</a>
+        <a href="#">Modelos<span class="cnt amber">4</span></a>
+        <a href="#">Índices<span class="cnt">3</span></a>
+        <div class="grp">Personas</div>
+        <a href="#">Solicitudes<span class="cnt amber">2</span></a>
+        <a href="#">Usuarios<span class="cnt">11</span></a>
+        <div class="grp">Operación</div>
+        <a href="#">Cola<span class="cnt">1</span></a>
+        <a href="#" class="soon">Mantenimiento<span class="cnt">pronto</span></a>
+        <a href="#" class="soon">Notificaciones<span class="cnt">pronto</span></a>
+        <a href="#" class="soon">Hardware<span class="cnt">pronto</span></a>
+      </nav>
+      <div class="foot">
+        <div class="ln"><span>huella</span><b class="mono">3f9a…c17d</b></div>
+        <div class="ln"><span>versión</span><b class="mono">2.0.0</b></div>
+      </div>
+    </aside>
+
+    <div class="main">
+      <div class="phead an">
+        <h3>Resumen</h3>
+        <span class="sum mono">en marcha desde hace 6 d 04 h</span>
+      </div>
+      <div class="tiles stagger">
+        <div class="tile">
+          <span class="k">Niveles listos</span>
+          <div class="v">2 <small>de 3</small></div>
+          <div class="sub">Vision incompleto</div>
+          <div class="spark">
+            <i style="height:100%"></i><i style="height:100%"></i><i style="height:38%"></i>
+          </div>
+        </div>
+        <div class="tile">
+          <span class="k">Pesos en disco</span>
+          <div class="v mono">18,4 <small>GiB</small></div>
+          <div class="sub">13 de 21 instalados</div>
+          <div class="spark">
+            <i style="height:24%"></i><i style="height:41%"></i><i style="height:63%"></i>
+            <i style="height:63%"></i><i style="height:88%"></i><i style="height:88%"></i>
+          </div>
+        </div>
+        <div class="tile">
+          <span class="k">Análisis hoy</span>
+          <div class="v mono">47</div>
+          <div class="sub">1 en cola</div>
+          <div class="spark">
+            <i style="height:31%"></i><i style="height:52%"></i><i style="height:22%"></i>
+            <i style="height:74%"></i><i style="height:96%"></i><i style="height:44%"></i>
+          </div>
+        </div>
+        <div class="tile">
+          <span class="k">Pendiente de ti</span>
+          <div class="v">2 <small>solicitudes</small></div>
+          <div class="sub">la más antigua, hace 3 d</div>
+          <div class="spark"><i style="height:14%"></i><i style="height:14%"></i></div>
+        </div>
+      </div>
+      <p class="note">
+        Las cuatro fichas son lo que un dueño mira en cinco segundos: <b>qué puede correr</b>, cuánto
+        ocupa, cuánto se usa y qué espera por él. Nada de gráficas de CPU aquí — eso es el 3c, y la franja
+        de telemetría del 6 ya las tiene arriba, siempre visibles.
+      </p>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn">Ver modelos</button>
+        <button class="btn">Resolver solicitudes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>2 · Modelos, agrupados por nivel</h2>
+<p class="note">
+  Un dueño de servidor no piensa en «ocho recuperadores y cinco verificadores», piensa en
+  <b>qué niveles puede ofrecer</b>. Así que la lista se agrupa por nivel, cada uno plegado con su medidor,
+  y se despliega el que te importe.
+</p>
+<p class="note">
+  <b>Los niveles no anidan, y eso se ve.</b> Mini corre con CosPlace y tiny-RoMa; Pro no usa ninguno de
+  los dos, sino otros cuatro recuperadores y otros dos verificadores; Vision reutiliza los cuatro de Pro
+  y añade tres más, y recupera CosPlace — pero no tiny-RoMa. Instalar Pro <b>no</b> te deja Mini instalado,
+  y agrupar por nivel es la única forma de que eso salte a la vista antes de descargar seis gigas.
+  Lo que ya tienes por otro nivel se marca <span class="chip">compartido</span> y no se cobra dos veces
+  en el total.
+</p>
+
+<div class="win an an4">
+  <header>
+    <span class="dot"></span><span class="ttl">Lumi Station · Administración · Modelos</span>
+    <span class="right"><span class="chip">18,4 GiB en disco</span></span>
+  </header>
+  <div class="body">
+    <div class="phead">
+      <h3>Modelos e inferencia</h3>
+      <span class="sum mono">/srv/lumi/runtime/pesos</span>
+    </div>
+    <p class="note" style="margin-top:6px">
+      Lo que falte no apaga el producto: cada consulta corre con el nivel que quepa y el informe lo dice.
+    </p>
+
+    <div class="stagger">
+
+      <div class="lvl">
+        <header>
+          <div>
+            <h4>Lumi Mini <span class="chip on">listo</span></h4>
+            <div class="comp">1 recuperador · 1 verificador · 4 agentes</div>
+            <div class="meter"><i style="width:100%"></i></div>
+          </div>
+          <div class="act">
+            <span class="sz mono">1,3 GiB</span>
+            <button class="btn small">Revisar</button>
+          </div>
+        </header>
+      </div>
+
+      <div class="lvl">
+        <header>
+          <div>
+            <h4>Lumi Pro <span class="chip on">listo</span></h4>
+            <div class="comp">4 recuperadores · 2 verificadores · 10 agentes</div>
+            <div class="meter"><i style="width:100%"></i></div>
+          </div>
+          <div class="act">
+            <span class="sz mono">12,1 GiB</span>
+            <button class="btn small">Revisar</button>
+          </div>
+        </header>
+      </div>
+
+      <div class="lvl open">
+        <header>
+          <div>
+            <h4>Lumi Vision <span class="chip amber">falta 1 · 1 tras la puerta</span></h4>
+            <div class="comp">8 recuperadores · 4 verificadores · todos los agentes</div>
+            <div class="meter"><i class="part" style="width:74%"></i></div>
+          </div>
+          <div class="act">
+            <span class="sz mono">+ 4,3 GiB</span>
+            <button class="btn primary small">Completar Vision</button>
+          </div>
+        </header>
+
+        <div class="det">
+          <div class="cols">
+            <div class="col">
+              <div class="k"><span>Recuperación</span><span>7 de 8</span></div>
+              <ul class="stagger">
+                <li class="share">MegaLoc <span class="st chip">compartido</span></li>
+                <li class="share">BoQ-DINOv2 <span class="st chip">compartido</span></li>
+                <li class="share">EigenPlaces <span class="st chip amber">solo contra sí mismo</span></li>
+                <li class="share">MixVPR <span class="st chip">compartido</span></li>
+                <li>SALAD <span class="st chip on">hash conocido</span></li>
+                <li>CliqueMining
+                  <span class="st chip live"><span class="sp"></span>descargando</span>
+                </li>
+                <li class="share">CosPlace <span class="st chip">compartido con Mini</span></li>
+                <li class="miss">AnyLoc <small>2,3 GiB</small> <span class="st chip">falta</span></li>
+              </ul>
+              <div class="dl">
+                <div class="bar"><i></i></div>
+                <span class="pc mono">712 / 1148 MiB</span>
+              </div>
+            </div>
+
+            <div class="col">
+              <div class="k"><span>Verificadores</span><span>3 de 4</span></div>
+              <ul class="stagger">
+                <li class="share">RoMa <span class="st chip">compartido</span></li>
+                <li class="share">LightGlue + ALIKED <span class="st chip">compartido</span></li>
+                <li>Efficient-LoFTR <span class="st chip amber">solo contra sí mismo</span></li>
+                <li class="miss">RoMa v2 <small>1,9 GiB</small>
+                  <span class="st chip blue">puerta</span>
+                </li>
+              </ul>
+              <p class="note" style="margin-top:9px">
+                tiny-RoMa es <b>solo de Mini</b>: Vision no lo usa. Por eso está en su nivel y no aquí.
+              </p>
+            </div>
+
+            <div class="col">
+              <div class="k"><span>Agentes · motores</span><span>2 de 3</span></div>
+              <ul class="stagger">
+                <li class="share">Qwen3-VL <small>9 agentes</small> <span class="st chip">compartido</span></li>
+                <li class="share">PaddleOCR <small>2 agentes</small> <span class="st chip">compartido</span></li>
+                <li class="miss">Depth Anything V2 Small <small>99 MiB</small>
+                  <span class="st chip">falta</span></li>
+              </ul>
+              <div class="k" style="padding:13px 0 7px">Datos geográficos</div>
+              <ul class="stagger">
+                <li class="share">Natural Earth · países <span class="st chip on">hash conocido</span></li>
+                <li class="miss">Köppen-Geiger 0,5° <small>253 KiB</small>
+                  <span class="st chip">falta</span></li>
+              </ul>
+            </div>
+          </div>
+
+          <p class="note" style="margin-top:14px">
+            Sin Köppen, los dos agentes que acotan por clima <b>se abstienen</b> en vez de fallar: aparecen
+            en el informe diciendo que no tuvieron señal suficiente. Nada de esto rompe un análisis.
+          </p>
+        </div>
+      </div>
+
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:18px;align-items:center">
+      <button class="btn primary">Instalar todo lo que falta · 4,3 GiB</button>
+      <button class="btn">Revisar integridad</button>
+      <span class="note" style="margin:0 0 0 6px">Nada sale a la red hasta que aceptes las licencias.</span>
+    </div>
+  </div>
+</div>
+
+<div class="states stagger">
+  <div class="state">
+    <h4><span class="chip on">hash conocido</span></h4>
+    <p>El proyecto descargó ese peso una vez y anotó su <span class="mono">sha256</span> en el registro.
+      Lo instalado coincide con ese número. Es la única afirmación fuerte del panel.</p>
+  </div>
+  <div class="state">
+    <h4><span class="chip amber">solo contra sí mismo</span></h4>
+    <p>El registro no traía hash, así que se guardó el de lo que bajó. Detecta corrupción y cambios
+      posteriores; <b>no</b> dice que el fichero sea el correcto. Se muestra en ámbar y con esas palabras.</p>
+  </div>
+  <div class="state">
+    <h4><span class="chip blue">puerta</span></h4>
+    <p>Quien publica el peso exige aceptar en su sitio y usar un token. Lumi no puede aceptar por ti:
+      te da el token como opción y la guía manual como alternativa.</p>
+  </div>
+  <div class="state">
+    <h4><span class="chip">compartido</span></h4>
+    <p>Ya está en disco porque otro nivel lo usa. No se descarga otra vez y no suma en el total —
+      un peso es un fichero, aunque tres niveles lo nombren.</p>
+  </div>
+</div>
+
+<h2>3 · Aceptar las licencias, antes de tocar la red</h2>
+<p class="note">
+  Se enseñan <b>todas</b> las de lo que vas a instalar, agrupadas por texto —MIT sale una vez aunque la
+  usen dos modelos—, cada una diciendo de quién es. Un solo gesto al final, y hasta que no lo des no sale
+  ni una petición. Al aceptar, Lumi escribe el texto como <span class="mono">LICENCIA.txt</span> junto a
+  cada peso, con lo que la comprobación que <span class="mono">lumi_pesos._licencia</span> ya hace deja de
+  ser trabajo manual y pasa a cumplirse sola.
+</p>
+
+<div class="win an an5">
+  <header>
+    <span class="dot"></span><span class="ttl">Completar Vision · licencias</span>
+  </header>
+  <div class="body">
+    <div class="phead">
+      <h3>Cuatro descargas, tres licencias</h3>
+      <span class="sum">AnyLoc · Depth Anything V2 Small · Köppen-Geiger · CliqueMining</span>
+    </div>
+
+    <div class="lics stagger">
+      <div class="lic-item">
+        <header>
+          <h4>MIT License</h4>
+          <span class="who">AnyLoc · CliqueMining</span>
+          <span class="src mono">github.com/AnyLoc/AnyLoc/blob/main/LICENSE</span>
+        </header>
+        <div class="lic-body mono">Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies…</div>
+      </div>
+      <div class="lic-item">
+        <header>
+          <h4>Apache License 2.0</h4>
+          <span class="who">Depth Anything V2 Small</span>
+          <span class="src mono">apache.org/licenses/LICENSE-2.0.txt</span>
+        </header>
+        <div class="lic-body mono">Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0. Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND…</div>
+      </div>
+      <div class="lic-item">
+        <header>
+          <h4>Creative Commons Attribution 4.0</h4>
+          <span class="who">Köppen-Geiger · Beck et al. 2018</span>
+          <span class="src mono">creativecommons.org/licenses/by/4.0/legalcode.txt</span>
+        </header>
+        <div class="lic-body mono">You are free to: Share — copy and redistribute the material in any medium or format. Adapt — remix, transform, and build upon the material for any purpose, even commercially. Under the following terms: Attribution — You must give appropriate credit, provide a link to the license, and indicate if changes were made…</div>
+      </div>
+    </div>
+
+    <div class="accept">
+      <span class="box">✓</span>
+      <p>Acepto los términos de las <b>tres licencias</b> en nombre de este servidor.
+        Lumi guardará qué se aceptó, cuándo y con qué cuenta, y dejará cada texto junto a sus pesos.</p>
+      <span class="go"><button class="btn primary">Aceptar y descargar · 4,3 GiB</button></span>
+    </div>
+
+    <p class="note">
+      La atribución que la CC BY 4.0 exige no se queda aquí: entra en la sección de modelos de la web del
+      subsistema 9, junto al «Built with DINOv3» que ya debe RoMa v2.
+    </p>
+  </div>
+</div>
+
+<h2>4 · La descarga es una tarea del servidor</h2>
+<p class="note">
+  No es un botón que bloquea una ventana: es una <b>tarea</b> del mismo runner que instala el runtime de
+  torch, con su log por SSE. Puedes cerrar la app y al volver te reenganchas. Corre en el servidor, que es
+  donde los pesos tienen que aterrizar — y no en tu portátil.
+</p>
+
+<div class="win an an6">
+  <header>
+    <span class="dot"></span><span class="ttl">Tarea · descarga de pesos</span>
+    <span class="right"><span class="chip live"><span class="sp"></span>3 de 4</span></span>
+  </header>
+  <div class="body">
+    <div class="phead">
+      <h3>Descargando CliqueMining</h3>
+      <span class="sum mono">712 / 1148 MiB · 18,4 MiB/s · quedan ~24 s</span>
+    </div>
+    <div class="dl" style="margin-top:11px">
+      <div class="bar"><i></i></div>
+      <span class="pc mono">62%</span>
+    </div>
+<pre class="log">[1/4] anyloc          <b>2,3 GiB</b>  sha256 ok  <b>hash conocido</b>
+      <u>licencia MIT escrita en pesos/anyloc/LICENCIA.txt</u>
+[2/4] depth-anything-v2-small  <b>99 MiB</b>  sha256 ok  <b>hash conocido</b>
+      <u>licencia Apache-2.0 escrita en pesos/depth-anything-v2-small/LICENCIA.txt</u>
+[3/4] koppen-geiger   <b>253 KiB</b>  <i>el registro no traia sha256; se anota el de lo descargado</i>
+      <i>verificado solo contra si mismo</i>
+      <u>licencia CC BY 4.0 escrita en registros/geo/LICENCIA.txt</u>
+[4/4] cliquemining    descargando 712/1148 MiB…</pre>
+    <div style="display:flex;gap:8px;margin-top:14px;align-items:center">
+      <button class="btn">Cancelar lo que queda</button>
+      <span class="note" style="margin:0 0 0 6px">
+        Lo ya descargado y verificado se queda. Cancelar no deshace los tres primeros.
+      </span>
+    </div>
+  </div>
+</div>
+
+<p class="note">
+  <b>Si un hash no cuadra, el fichero se borra.</b> No se guarda «por si acaso» ni se ofrece un «usar de
+  todas formas»: es la misma postura que el aprovisionamiento de Qdrant del subsistema 1 y que la huella
+  del certificado en la vinculación. Un peso que no es el que dice ser no entra en disco.
+</p>
+
+<h2>5 · Cuando el proveedor pone la puerta</h2>
+
+<div class="win an">
+  <header>
+    <span class="dot"></span><span class="ttl">RoMa v2 · verificador geométrico</span>
+    <span class="right"><span class="chip blue">puerta del proveedor</span></span>
+  </header>
+  <div class="body">
+    <div class="gate">
+      <h4>Este peso no se puede descargar sin tu intervención</h4>
+      <p>
+        RoMa v2 se apoya en DINOv3, y su licencia obliga a aceptarla en el sitio del proveedor y a usar un
+        token propio para descargar. Lumi no acepta términos en tu nombre y no tiene ninguna cuenta ahí.
+      </p>
+      <ol>
+        <li><b>Acepta la licencia</b> en la página del proveedor, con tu cuenta.</li>
+        <li><b>Pega aquí tu token</b> y Lumi baja el peso, lo verifica y coloca la licencia — o bien
+          <b>descarga el fichero tú</b> y déjalo en <span class="mono">pesos/roma-v2/pesos.pth</span> junto
+          a su <span class="mono">LICENCIA.txt</span>; Lumi lo detecta y lo verifica igual.</li>
+      </ol>
+      <div class="field">
+        <span class="input">token del proveedor · se guarda cifrado y se redacta en los logs</span>
+        <button class="btn small">Guardar y descargar</button>
+      </div>
+    </div>
+
+    <div class="states" style="grid-template-columns:1fr">
+      <div class="state">
+        <h4>Y si decides no instalarlo</h4>
+        <p>No pasa nada malo. Vision corre con los tres verificadores que sí tengas y el análisis lo dice.
+          Es la degradación por nivel que el 5b ya construyó: <b>nunca se esconde una capacidad, se explica
+          por qué no está</b>.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>6 · Dónde vive, y qué pasa al terminar</h2>
+
+<table>
+  <tr><th style="width:150px">Sitio</th><th>Qué se ve</th></tr>
+  <tr>
+    <td><b>Asistente, paso nuevo</b></td>
+    <td>Justo después de «Instalar runtime», que es cuando el venv de torch ya existe y bajar pesos tiene
+      sentido. Con un <b>mínimo</b>: completar Mini basta para pasar de paso. Lo demás se puede dejar para
+      luego sin bloquear el primer arranque. Se muestran los tres niveles con su medidor, igual que en el panel.</td>
+  </tr>
+  <tr>
+    <td><b>Panel de administración</b></td>
+    <td>La misma pantalla, en su entrada de la barra lateral, siempre disponible. Es donde vuelves a añadir
+      Vision seis meses después, o a revisar integridad cuando un disco te dio un susto.</td>
+  </tr>
+  <tr>
+    <td><b>Al terminar una descarga</b></td>
+    <td>El daemon <b>recarga los cuatro registros y los datos geográficos sin reiniciar</b>. Hoy se cargan
+      una vez al arrancar; pasan a poder releerse en caliente, que es la diferencia entre «instalar un
+      modelo» y «instalar un modelo y reiniciar el servidor a mano por SSH».</td>
+  </tr>
+</table>
+
+<h2>7 · Movimiento: qué se mueve y por qué</h2>
+<table>
+  <tr><th style="width:170px">Gesto</th><th>Regla</th></tr>
+  <tr><td><b>Entrada escalonada</b></td>
+    <td>Filas y fichas suben 7 px con expo-out y ~50 ms de desfase entre hermanas. Dice «esto acaba de
+      cargar» y da orden de lectura. Nunca más de nueve escalones: a partir de ahí la última fila tarda
+      medio segundo en existir y eso ya es una espera, no una entrada.</td></tr>
+  <tr><td><b>Barra de descarga</b></td>
+    <td>Avanza con el dato real, y lleva un barrido claro encima que se repite. El barrido no representa
+      progreso — representa que <b>el proceso sigue vivo</b>, que es distinto y es lo que un log parado no
+      te dice.</td></tr>
+  <tr><td><b>Latido del chip «descargando»</b></td>
+    <td>Opacidad entre .42 y 1 cada 2,1 s. Es el único elemento que se mueve en bucle sin barra, y solo
+      mientras de verdad haya algo en curso.</td></tr>
+  <tr><td><b>Barra lateral</b></td>
+    <td>El indicador de la entrada activa entra deslizándose 9 px; al pasar por encima, la entrada se
+      desplaza 3 px a la derecha. Sin cambios de color de fondo bruscos: transición de 340 ms.</td></tr>
+  <tr><td><b>Medidor de nivel</b></td>
+    <td>Se rellena desde cero una vez al aparecer. Nunca se re-anima al cambiar de pestaña: repetir la
+      animación cada vez que miras convierte información en ruido.</td></tr>
+  <tr><td><b><span class="mono">prefers-reduced-motion</span></b></td>
+    <td>Todo lo anterior se apaga. No es un detalle de accesibilidad opcional: es una herramienta que se
+      usa durante horas.</td></tr>
+</table>
+
+<p class="note" style="margin-top:22px">
+  <b>Lo que este ciclo NO hace, a propósito:</b> no rediseña solicitudes, usuarios ni la fila del mapa
+  —solo les da su sitio en la barra lateral, con el contenido provisional que ya tienen— y no toca
+  hardware, monitorización, mantenimiento ni notificaciones, que aparecen atenuados con su «pronto».
+  No entrena, convierte ni cuantiza nada: instala pesos que otros publicaron, comprueba que son los que
+  dicen ser, y deja escrito bajo qué licencia entraron.
+</p>
+
+</body>
+</html>
