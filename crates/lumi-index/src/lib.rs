@@ -14,6 +14,7 @@ pub mod embed;
 pub mod ficha;
 pub mod filter;
 pub mod fusion;
+pub mod geo;
 pub mod grafo;
 pub mod legacy;
 pub mod manifest;
