@@ -583,7 +583,7 @@ impl Queue {
                 // confianza; las alternativas, la suya, tal como las mandó.
                 let principal = lumi_proto::worker::Hipotesis {
                     lat, lng, radio_m, peso: confianza, indice: String::new(), autor: String::new(),
-                    inliers: None, verificador: None,
+                    inliers: None, verificador: None, motivo_agente: None,
                 };
                 self.guardar_hipotesis(id, &principal, &alternativas, &[]);
                 self.soltar(&dispositivo, id);

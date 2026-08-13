@@ -138,6 +138,8 @@ pub fn hipotesis(cands: &[Candidato]) -> Vec<Hipotesis> {
             // conoce.
             inliers: None,
             verificador: None,
+            // Lo rellena `queue::mod`, que es quien tiene los veredictos.
+            motivo_agente: None,
         })
         .collect()
 }

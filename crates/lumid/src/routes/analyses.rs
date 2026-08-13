@@ -63,6 +63,10 @@ fn hypotheses(c: &rusqlite::Connection, analysis_id: i64) -> Vec<lumi_proto::wor
             autor: r.get(5)?,
             inliers: r.get::<_, Option<i64>>(6)?.map(|n| n as u32),
             verificador: r.get(7)?,
+            // ponytail: se completa en la tarea 9, cuando esta función
+            // adquiere la columna en el SELECT. Hasta entonces compila con la
+            // misma postura que `recuperar.rs`: sin rellenar, no aprobado.
+            motivo_agente: None,
         })
     })
     .map(|it| it.flatten().collect())

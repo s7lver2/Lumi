@@ -60,6 +60,10 @@ pub struct Hipotesis {
     pub inliers: Option<u32>,
     #[serde(default)]
     pub verificador: Option<String>,
+    /// Por qué un agente hundió esta hipótesis. `None` significa que ninguno
+    /// la tocó, no que la aprobaran.
+    #[serde(default)]
+    pub motivo_agente: Option<String>,
 }
 
 /// Lo que el trabajador contesta por `stdout`. Su `stderr` es el log y no
@@ -99,6 +103,25 @@ pub enum Msg {
         inliers: u32,
         lat: f64,
         lng: f64,
+    },
+    /// Un agente ha mirado la foto de consulta. **Una línea por agente**, no
+    /// una con los doce dentro: si el séptimo revienta, los seis primeros ya
+    /// están dichos y el fallo dice cuál fue. Es la misma razón por la que
+    /// `Vectores` va una por modelo.
+    ///
+    /// `confianza` no está acotada aquí y sí se compara contra el umbral del
+    /// agente en `lumi_index::agentes::aplicar`: un motor que devuelva 1,5 se
+    /// comporta como uno muy seguro, que es inofensivo, y no como una avería
+    /// que tumba un análisis.
+    Agente {
+        id: i64,
+        agente: String,
+        etiqueta: String,
+        confianza: f64,
+        /// Texto libre para el investigador: lo que leyó el OCR, la frase que
+        /// justifica la etiqueta. Se enseña tal cual y no se interpreta.
+        #[serde(default)]
+        detalle: String,
     },
     Resultado {
         id: i64,
@@ -217,5 +240,24 @@ mod tests {
         let s = serde_json::to_string(&j).unwrap();
         assert!(s.contains(r#""tipo":"trabajo""#), "{s}");
         assert_eq!(serde_json::from_str::<Job>(&s).unwrap(), j);
+
+        // Una línea de agente se parsea con `detalle` ausente, que es como la
+        // manda un motor que no tiene nada que añadir.
+        let ag: Msg = serde_json::from_str(
+            r#"{"tipo":"agente","id":3,"agente":"idioma","etiqueta":"griego","confianza":0.9}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            ag,
+            Msg::Agente {
+                id: 3,
+                agente: "idioma".into(),
+                etiqueta: "griego".into(),
+                confianza: 0.9,
+                detalle: String::new(),
+            }
+        );
+        // Y validar no tiene nada que decir de ella: no lleva coordenadas.
+        assert!(ag.validar().is_ok());
     }
 }

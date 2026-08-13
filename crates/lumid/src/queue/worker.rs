@@ -65,6 +65,15 @@ impl Evento {
                 id,
                 motivo: "un trabajador de embebido mandó un veredicto de verificación".into(),
             },
+            // ponytail: mismo caso que `Verificado` — `Msg::Agente` es del
+            // trabajador de agentes (`workers/lumi_agentes.py`), que
+            // `crate::agentar` habla por su propia tubería. Verlo aquí es un
+            // trabajador mal configurado, no un veredicto que ignorar.
+            Msg::Agente { id, .. } => Evento::Fallo {
+                dispositivo: d,
+                id,
+                motivo: "un trabajador de embebido mandó un veredicto de agente".into(),
+            },
         }
     }
 }
