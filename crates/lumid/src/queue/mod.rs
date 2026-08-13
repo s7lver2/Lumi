@@ -146,6 +146,11 @@ pub struct Queue {
     /// El registro de niveles, cargado una vez al arrancar: es datos, y datos
     /// que no cambian mientras el daemon vive.
     niveles: Vec<lumi_index::niveles::Nivel>,
+    /// El registro de agentes y los datasets geográficos, cargados una vez al
+    /// arrancar por la misma razón que los niveles: son datos, y datos que
+    /// cambian con un reinicio, no en caliente.
+    agentes: Vec<lumi_index::agentes::Agente>,
+    geo: lumi_index::geo::Datos,
     /// No se persiste: si el daemon se cae, el análisis se rehace.
     vectores: Mutex<VectoresPorAnalisis>,
 }
@@ -220,6 +225,8 @@ impl Queue {
             dir,
             eventos: tx_ev,
             niveles: lumi_index::registro::cargar_niveles(std::path::Path::new("registros/niveles")),
+            agentes: lumi_index::registro::cargar_agentes(std::path::Path::new("registros/agentes")),
+            geo: lumi_index::geo::Datos::cargar(std::path::Path::new("registros/geo")),
             vectores: Mutex::new(HashMap::new()),
         });
 
@@ -512,9 +519,15 @@ impl Queue {
                     Ok(c) if !c.is_empty() => {
                         let consulta = self.imagen_del_analisis(id).unwrap_or_default();
                         let rutas = self.rutas_de_candidatos(&c);
-                        let afinados =
-                            crate::verificar::afinar(&nivel, &consulta, c, &rutas).await
-                                .unwrap_or_default();
+                        // En paralelo con el verificador, no antes: un agente
+                        // equivocado no puede matar un candidato antes de que
+                        // RANSAC tenga ocasión de confirmarlo.
+                        let agentes_del_nivel = self.agentes_de(&nivel);
+                        let (afinados, dictamen) = tokio::join!(
+                            crate::verificar::afinar(&nivel, &consulta, c.clone(), &rutas),
+                            crate::agentar::preguntar(&agentes_del_nivel, &consulta),
+                        );
+                        let afinados = afinados.unwrap_or_default();
                         // Los que ningún verificador respaldó se caen. Si se
                         // caen todos, se contesta con la recuperación sin
                         // afinar y se dice — negarse escondería información
@@ -555,15 +568,48 @@ impl Queue {
                         } else {
                             vivos
                         };
+
+                        // Lo que los agentes tengan que decir de cada
+                        // candidato, con los atributos de su coordenada ya
+                        // resueltos offline y los inliers que lo protegen.
+                        let veredictos: Vec<lumi_index::agentes::Veredicto> =
+                            dictamen.iter().map(|(v, _)| v.clone()).collect();
+                        let para_aplicar: Vec<_> = usar
+                            .iter()
+                            .map(|c| {
+                                let at = self.geo.atributos(c.lat, c.lng);
+                                let inliers = respaldo_de.get(&clave(c.lat, c.lng)).map(|(i, _)| *i);
+                                (at, inliers)
+                            })
+                            .collect();
+                        let veredicto_final =
+                            lumi_index::agentes::aplicar(&self.agentes, &veredictos, &para_aplicar);
+                        let motivo_de: std::collections::HashMap<(i64, i64), String> = usar
+                            .iter()
+                            .zip(veredicto_final.ajustes.iter())
+                            .filter_map(|(c, a)| {
+                                Some((clave(c.lat, c.lng), a.motivo.clone()?))
+                            })
+                            .collect();
+                        let usar: Vec<_> = usar
+                            .iter()
+                            .zip(veredicto_final.ajustes.iter())
+                            .filter(|(_, a)| a.factor > 0.0)
+                            .map(|(c, _)| c.clone())
+                            .collect();
+
+                        self.guardar_agentes(id, &dictamen);
                         let h = crate::recuperar::hipotesis(&usar);
-                        let respaldo: Vec<(Option<u32>, Option<String>)> = h
+                        let respaldo: Vec<(Option<u32>, Option<String>, Option<String>)> = h
                             .iter()
                             .skip(1)
                             .map(|hip| {
-                                respaldo_de
-                                    .get(&clave(hip.lat, hip.lng))
+                                let k = clave(hip.lat, hip.lng);
+                                let (i, v) = respaldo_de
+                                    .get(&k)
                                     .map(|(i, v)| (Some(*i), Some(v.clone())))
-                                    .unwrap_or((None, None))
+                                    .unwrap_or((None, None));
+                                (i, v, motivo_de.get(&k).cloned())
                             })
                             .collect();
                         self.guardar_resultado(id, &h, &respaldo);
@@ -610,6 +656,17 @@ impl Queue {
         lumi_index::niveles::resolver(&self.niveles, pedido, &capas).cloned()
     }
 
+    /// Los agentes del nivel. **Vacío en el nivel significa «todos los del
+    /// registro»** —así está Vision—, y por eso esto no puede ser un simple
+    /// `clone` del campo.
+    fn agentes_de(&self, nivel: &lumi_index::niveles::Nivel) -> Vec<String> {
+        if nivel.agentes.is_empty() {
+            self.agentes.iter().map(|a| a.id.clone()).collect()
+        } else {
+            nivel.agentes.clone()
+        }
+    }
+
     /// La imagen de consulta del análisis, la primera de las que trae —hoy un
     /// análisis siempre es una sola. Reutiliza `rutas`, que ya sabe dónde vive
     /// cada imagen en disco (`{DATA}/projects/<id>/<imagen>`).
@@ -652,7 +709,7 @@ impl Queue {
         id: i64,
         principal: &lumi_proto::worker::Hipotesis,
         alternativas: &[lumi_proto::worker::Hipotesis],
-        respaldo: &[(Option<u32>, Option<String>)],
+        respaldo: &[(Option<u32>, Option<String>, Option<String>)],
     ) {
         let mut c = self.store.conn();
         let tx = match c.transaction() {
@@ -668,13 +725,16 @@ impl Queue {
         );
         let _ = tx.execute("DELETE FROM analysis_hypotheses WHERE analysis_id = ?1", [id]);
         for (i, h) in alternativas.iter().enumerate() {
-            let (inliers, verificador) = respaldo.get(i).cloned().unwrap_or((None, None));
+            let (inliers, verificador, motivo) =
+                respaldo.get(i).cloned().unwrap_or((None, None, None));
             let _ = tx.execute(
                 "INSERT INTO analysis_hypotheses
-                    (analysis_id, orden, lat, lng, radio_m, peso, indice, autor, inliers, verificador)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                    (analysis_id, orden, lat, lng, radio_m, peso, indice, autor, inliers,
+                     verificador, motivo_agente)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 rusqlite::params![
-                    id, i as i64, h.lat, h.lng, h.radio_m, h.peso, h.indice, h.autor, inliers, verificador
+                    id, i as i64, h.lat, h.lng, h.radio_m, h.peso, h.indice, h.autor, inliers,
+                    verificador, motivo
                 ],
             );
         }
@@ -688,11 +748,37 @@ impl Queue {
         &self,
         id: i64,
         hipotesis: &[lumi_proto::worker::Hipotesis],
-        respaldo: &[(Option<u32>, Option<String>)],
+        respaldo: &[(Option<u32>, Option<String>, Option<String>)],
     ) {
         let Some((principal, alternativas)) = hipotesis.split_first() else { return };
         self.guardar_hipotesis(id, principal, alternativas, respaldo);
         self.anunciar(id, "hecho");
+    }
+
+    /// Los veredictos, incluidos los que se abstuvieron. Un agente que no llegó
+    /// a su umbral aparece con la etiqueta `abstiene`: en el panel se ve que
+    /// corrió y que no vio suficiente, en vez de desaparecer sin explicación.
+    fn guardar_agentes(&self, id: i64, dictamen: &[(lumi_index::agentes::Veredicto, String)]) {
+        let c = self.store.conn();
+        let _ = c.execute("DELETE FROM analysis_agents WHERE analysis_id = ?1", [id]);
+        for (v, detalle) in dictamen {
+            let Some(a) = self.agentes.iter().find(|a| a.id == v.agente) else { continue };
+            let abstiene = v.confianza < a.umbral_confianza;
+            let _ = c.execute(
+                "INSERT OR REPLACE INTO analysis_agents
+                    (analysis_id, agente, nombre, etiqueta, confianza, tipo, detalle)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                rusqlite::params![
+                    id,
+                    &a.id,
+                    &a.nombre,
+                    if abstiene { "abstiene" } else { v.etiqueta.as_str() },
+                    v.confianza,
+                    &a.tipo,
+                    detalle,
+                ],
+            );
+        }
     }
 
     fn fallar(&self, id: i64, motivo: &str) {

@@ -183,6 +183,20 @@ CREATE TABLE IF NOT EXISTS analysis_hypotheses (
     autor       TEXT NOT NULL,
     PRIMARY KEY (analysis_id, orden)
 );
+-- Lo que dijeron los agentes de un análisis. Es a la vez el panel del cliente
+-- y el registro de auditoría: como Vision corre «todos los del registro», dos
+-- servidores pueden componerse distinto, y esta tabla es lo que hace que el
+-- informe diga exactamente de qué se compuso ESTE.
+CREATE TABLE IF NOT EXISTS analysis_agents (
+    analysis_id INTEGER NOT NULL,
+    agente      TEXT NOT NULL,
+    nombre      TEXT NOT NULL,
+    etiqueta    TEXT NOT NULL,
+    confianza   REAL NOT NULL,
+    tipo        TEXT NOT NULL,
+    detalle     TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (analysis_id, agente)
+);
 ";
 
 pub struct Store(Mutex<Connection>);
@@ -282,6 +296,9 @@ fn migrate(c: &Connection) {
         // respaldo. Es evidencia, no telemetría.
         ("analysis_hypotheses", "inliers", "INTEGER"),
         ("analysis_hypotheses", "verificador", "TEXT"),
+        // Por qué un agente hundió esta hipótesis. Nulo significa que ninguno
+        // la tocó, no que la aprobaran.
+        ("analysis_hypotheses", "motivo_agente", "TEXT"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }
