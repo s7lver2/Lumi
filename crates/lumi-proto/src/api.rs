@@ -419,8 +419,26 @@ pub struct Analysis {
     /// `None` significa «el que se pidió».
     #[serde(default)]
     pub nivel_efectivo: Option<String>,
+    /// Lo que los agentes dijeron de la imagen. Vacía y no `null` cuando no
+    /// corrió ninguno, para que el cliente no tenga dos casos donde hay uno.
+    #[serde(default)]
+    pub agentes: Vec<DichoDeAgente>,
     pub created_at: i64,
     pub finished_at: Option<i64>,
+}
+
+/// Un veredicto tal como se guardó. `etiqueta` vale `abstiene` cuando el
+/// agente no llegó a su umbral: corrió, y no vio suficiente.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DichoDeAgente {
+    pub agente: String,
+    pub nombre: String,
+    pub etiqueta: String,
+    pub confianza: f64,
+    /// `filtra` o `describe`.
+    pub tipo: String,
+    #[serde(default)]
+    pub detalle: String,
 }
 
 #[derive(Serialize, Deserialize)]

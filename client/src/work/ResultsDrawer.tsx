@@ -1,4 +1,4 @@
-import type { Analysis, Hipotesis, Image } from "../lib/api";
+import type { Analysis, DichoDeAgente, Hipotesis, Image } from "../lib/api";
 import { lumiUrl } from "../lib/bridge";
 import type { MenuEntry, MenuState } from "../ui/ContextMenu";
 import { menuAt } from "../ui/ContextMenu";
@@ -32,6 +32,7 @@ function HipotesisList({ a }: { a: Analysis }) {
     lat: a.result_lat, lng: a.result_lng, radio_m: a.result_radius_m ?? 0,
     peso: a.result_confidence ?? 0, indice: "", autor: "",
     inliers: null, verificador: null,
+    motivo_agente: null,
   };
   const todas = [principal, ...a.hypotheses];
   const maxPeso = Math.max(...todas.map((h) => h.peso), 1e-9);
@@ -71,10 +72,48 @@ function HipotesisList({ a }: { a: Analysis }) {
                   sin verificación geométrica · coordenada de recuperación
                 </p>
               )}
+              {h.motivo_agente && (
+                <p className="mt-0.5 text-[10px] leading-relaxed text-warning-fg">
+                  {h.motivo_agente}
+                </p>
+              )}
             </div>
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** Lo que la imagen dice de sí misma. Los abstenidos NO desaparecen: se ven
+ *  diciendo que no hubo señal suficiente, que es la misma regla que la matriz
+ *  de capacidades — nada se esconde, todo lleva su causa legible. */
+function AgentesPanel({ agentes }: { agentes: DichoDeAgente[] }) {
+  if (agentes.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1.5 rounded-[10px] border border-border p-[8px_9px]">
+      <p className="text-[9px] uppercase tracking-[.11em] text-subtle">Lo que dice la imagen</p>
+      {agentes.map((d) => {
+        const calla = d.etiqueta === "abstiene";
+        return (
+          <div key={d.agente} className="flex items-baseline gap-2">
+            <span className="w-[92px] shrink-0 truncate text-[10px] text-muted">{d.nombre}</span>
+            <span className={`flex-1 truncate text-[11px] ${calla ? "text-subtle" : "text-fg"}`}>
+              {calla ? "sin señal suficiente" : d.etiqueta}
+            </span>
+            {!calla && (
+              <span className="font-mono text-[9px] tabular-nums text-subtle">
+                {d.confianza.toFixed(2)}
+              </span>
+            )}
+          </div>
+        );
+      })}
+      {agentes.some((d) => d.detalle) && (
+        <p className="mt-0.5 border-t border-border pt-1.5 font-mono text-[9.5px] leading-relaxed text-subtle">
+          {agentes.filter((d) => d.detalle).map((d) => d.detalle).join(" · ")}
+        </p>
+      )}
     </div>
   );
 }
@@ -160,7 +199,18 @@ export function ResultsDrawer({
 
       {(() => {
         const shownA = analyses.find((a) => a.id === selected) ?? null;
-        return shownA && <HipotesisList a={shownA} />;
+        if (!shownA) return null;
+        return (
+          <>
+            <HipotesisList a={shownA} />
+            <AgentesPanel agentes={shownA.agentes} />
+            {shownA.state === "hecho" && shownA.agentes.length === 0 && (
+              <p className="text-[10px] leading-relaxed text-subtle">
+                Los agentes no llegaron a correr: sus modelos no están instalados en este servidor.
+              </p>
+            )}
+          </>
+        );
       })()}
 
       {/* El GPS declarado tiene sitio propio y color ámbar: no es una
@@ -173,17 +223,6 @@ export function ResultsDrawer({
           </div>
         </div>
       )}
-
-      <div className="mt-1 flex flex-col gap-1 opacity-[.55]">
-        {([["clock", "Hora estimada"], ["cloud", "Clima"], ["boxes", "Objetos"]] as const).map(([ic, l]) => (
-          <div key={ic} title="modelo no instalado"
-            className="flex items-center gap-2 rounded-[9px] border border-border p-[6px_9px]">
-            <Icon name={ic} size={12} className="text-subtle" />
-            <span className="flex-1 text-[11px] text-muted">{l}</span>
-            <Icon name="lock" size={11} className="text-subtle" />
-          </div>
-        ))}
-      </div>
 
       <div className="flex-1" />
       <button onClick={onAnalyze} disabled={busy}

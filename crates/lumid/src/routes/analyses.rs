@@ -39,6 +39,7 @@ fn row_to_analysis(r: &rusqlite::Row) -> rusqlite::Result<Analysis> {
         image_ids: vec![],
         hypotheses: vec![],
         nivel_efectivo: r.get(11)?,
+        agentes: vec![],
         created_at: r.get(9)?,
         finished_at: r.get(10)?,
     })
@@ -48,7 +49,7 @@ fn row_to_analysis(r: &rusqlite::Row) -> rusqlite::Result<Analysis> {
 /// hay ninguna: el cliente no debería tener dos casos donde hay uno.
 fn hypotheses(c: &rusqlite::Connection, analysis_id: i64) -> Vec<lumi_proto::worker::Hipotesis> {
     let Ok(mut q) = c.prepare(
-        "SELECT lat, lng, radio_m, peso, indice, autor, inliers, verificador
+        "SELECT lat, lng, radio_m, peso, indice, autor, inliers, verificador, motivo_agente
            FROM analysis_hypotheses WHERE analysis_id = ?1 ORDER BY orden",
     ) else {
         return vec![];
@@ -63,14 +64,33 @@ fn hypotheses(c: &rusqlite::Connection, analysis_id: i64) -> Vec<lumi_proto::wor
             autor: r.get(5)?,
             inliers: r.get::<_, Option<i64>>(6)?.map(|n| n as u32),
             verificador: r.get(7)?,
-            // ponytail: se completa en la tarea 9, cuando esta función
-            // adquiere la columna en el SELECT. Hasta entonces compila con la
-            // misma postura que `recuperar.rs`: sin rellenar, no aprobado.
-            motivo_agente: None,
+            motivo_agente: r.get(8)?,
         })
     })
     .map(|it| it.flatten().collect())
     .unwrap_or_default()
+}
+
+fn agentes(c: &rusqlite::Connection, analysis_id: i64) -> Vec<lumi_proto::api::DichoDeAgente> {
+    let Ok(mut q) = c.prepare(
+        "SELECT agente, nombre, etiqueta, confianza, tipo, detalle
+           FROM analysis_agents WHERE analysis_id = ?1 ORDER BY agente",
+    ) else {
+        return Vec::new();
+    };
+    let Ok(filas) = q.query_map([analysis_id], |r| {
+        Ok(lumi_proto::api::DichoDeAgente {
+            agente: r.get(0)?,
+            nombre: r.get(1)?,
+            etiqueta: r.get(2)?,
+            confianza: r.get(3)?,
+            tipo: r.get(4)?,
+            detalle: r.get(5)?,
+        })
+    }) else {
+        return Vec::new();
+    };
+    filas.flatten().collect()
 }
 
 pub async fn list(
@@ -93,6 +113,7 @@ pub async fn list(
     for a in &mut rows {
         a.image_ids = image_ids(&c, a.id);
         a.hypotheses = hypotheses(&c, a.id);
+        a.agentes = agentes(&c, a.id);
     }
     Ok(Json(rows))
 }
@@ -115,6 +136,7 @@ pub async fn get_one(
         .map_err(|_| missing())?;
     a.image_ids = image_ids(&c, id);
     a.hypotheses = hypotheses(&c, id);
+    a.agentes = agentes(&c, id);
     Ok(Json(a))
 }
 
@@ -209,6 +231,7 @@ pub async fn create(
         image_ids: req.image_ids,
         hypotheses: vec![],
         nivel_efectivo: None,
+        agentes: vec![],
         created_at: t,
         finished_at: None,
     }))

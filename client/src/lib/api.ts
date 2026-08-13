@@ -127,6 +127,17 @@ export interface Hipotesis {
    *  no pasó por verificación geométrica, no que sacara cero. */
   inliers: number | null;
   verificador: string | null;
+  /** Por qué un agente hundió esta hipótesis. `null` significa que ninguno la
+   *  tocó, no que la aprobaran. */
+  motivo_agente: string | null;
+}
+/** Un veredicto de agente tal como se guardó. `etiqueta` vale `"abstiene"`
+ *  cuando el agente corrió y no vio señal suficiente. */
+export interface DichoDeAgente {
+  agente: string; nombre: string; etiqueta: string;
+  confianza: number;
+  tipo: "filtra" | "describe";
+  detalle: string;
 }
 export interface Analysis {
   id: number; case_id: number; model: string;
@@ -139,6 +150,8 @@ export interface Analysis {
   /** El nivel que realmente corrió si hubo descenso por capas que faltaban.
    *  `null` significa «el que se pidió». */
   nivel_efectivo: string | null;
+  /** Lo que los agentes dijeron de la imagen. Vacía si no corrió ninguno. */
+  agentes: DichoDeAgente[];
   image_ids: number[]; created_at: number; finished_at: number | null;
 }
 export interface Usage { used_bytes: number; limit_gb: number; overridden: boolean }
