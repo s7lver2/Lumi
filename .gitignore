@@ -10,4 +10,5 @@ dist/
 client/src-tauri/target
 .superpowers/
 .claude/worktrees/
-recovery.txt
+recovery.txt__pycache__/
+*.pyc
