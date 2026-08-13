@@ -123,6 +123,10 @@ export interface Hipotesis {
   /** No es una probabilidad: cuánto pesa este grupo frente a los demás. */
   peso: number;
   indice: string; autor: string;
+  /** Cuántas correspondencias sostienen esta coordenada. `null` significa que
+   *  no pasó por verificación geométrica, no que sacara cero. */
+  inliers: number | null;
+  verificador: string | null;
 }
 export interface Analysis {
   id: number; case_id: number; model: string;
@@ -132,6 +136,9 @@ export interface Analysis {
   result_radius_m: number | null; result_confidence: number | null;
   /** Las alternativas. La principal NO está aquí, sigue en result_*. */
   hypotheses: Hipotesis[];
+  /** El nivel que realmente corrió si hubo descenso por capas que faltaban.
+   *  `null` significa «el que se pidió». */
+  nivel_efectivo: string | null;
   image_ids: number[]; created_at: number; finished_at: number | null;
 }
 export interface Usage { used_bytes: number; limit_gb: number; overridden: boolean }

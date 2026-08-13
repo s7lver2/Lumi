@@ -1,13 +1,24 @@
 import { useState } from "react";
 import { Icon } from "../ui/Icon";
 
-/** Lo poco que sabemos decir de cada modelo. El catálogo de verdad (descarga,
- *  VRAM, versiones) es el subsistema 5; aquí solo hay identificadores que el
- *  servidor ya ha concedido, así que se traduce lo conocido y se deja pasar
- *  tal cual lo que no. Inventar una ficha para un id desconocido sería peor
- *  que enseñar el id. */
+/** Los tres niveles, descritos por lo que llevan dentro — que es lo que el
+ *  investigador está eligiendo cuando elige. Antes solo se conocía `mini` y
+ *  para `pro` y `vision` se enseñaba «modelo habilitado por el servidor»: era
+ *  honesto cuando no había ficha, y deja de serlo ahora que sí la hay. Un id
+ *  desconocido sigue pasando tal cual: inventarle una ficha sería peor. */
 const CONOCIDOS: Record<string, { name: string; note: string }> = {
-  mini: { name: "lumi-mini", note: "rápido · geolocalización aproximada, cobertura global" },
+  mini: {
+    name: "Lumi Mini",
+    note: "1 recuperador · 1 verificador · rápido, aproximado, corre en un escritorio",
+  },
+  pro: {
+    name: "Lumi Pro",
+    note: "4 recuperadores · 2 verificadores · dos familias mezcladas, coste medio",
+  },
+  vision: {
+    name: "Lumi Vision",
+    note: "8 recuperadores · 4 verificadores · lo más preciso, y lo más caro de correr",
+  },
 };
 
 const ficha = (id: string) =>

@@ -31,6 +31,7 @@ function HipotesisList({ a }: { a: Analysis }) {
   const principal: Hipotesis = {
     lat: a.result_lat, lng: a.result_lng, radio_m: a.result_radius_m ?? 0,
     peso: a.result_confidence ?? 0, indice: "", autor: "",
+    inliers: null, verificador: null,
   };
   const todas = [principal, ...a.hypotheses];
   const maxPeso = Math.max(...todas.map((h) => h.peso), 1e-9);
@@ -58,6 +59,17 @@ function HipotesisList({ a }: { a: Analysis }) {
               </div>
               {h.indice && (
                 <p className="mt-1 truncate font-mono text-[9px] text-subtle">{h.indice} · @{h.autor}</p>
+              )}
+              {h.verificador && (
+                <p className="mt-0.5 text-[10px] text-subtle">
+                  verificado por {h.verificador} ·{" "}
+                  <span className="font-mono tabular-nums">{h.inliers}</span> correspondencias
+                </p>
+              )}
+              {!h.verificador && (
+                <p className="mt-0.5 text-[10px] text-subtle">
+                  sin verificación geométrica · coordenada de recuperación
+                </p>
               )}
             </div>
           </div>
@@ -134,6 +146,13 @@ export function ResultsDrawer({
               <div className="mt-[3px] text-[9px] uppercase tracking-[.11em] text-subtle">
                 {(a.result_confidence ?? 0).toFixed(2)} · {Math.round(a.result_radius_m ?? 0)} m
               </div>
+            )}
+            {a.nivel_efectivo && a.nivel_efectivo !== a.model && (
+              <p className="mt-1 flex items-start gap-2 text-[10.5px] leading-relaxed text-warning-fg">
+                <Icon name="alert" size={12} className="mt-px shrink-0" />
+                Se pidió {a.model} y corrió {a.nivel_efectivo}: a los índices instalados les
+                faltan capas de vectores de los modelos que {a.model} necesita.
+              </p>
             )}
           </button>
         );
