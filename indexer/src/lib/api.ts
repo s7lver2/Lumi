@@ -13,7 +13,10 @@ export interface Diagnostico {
   qdrant_puerto: number;
   estado: EstadoServicio[];
 }
-export interface Modelo { id: string; nombre: string; base: string; version: string; dims: number; pesos_url: string }
+export interface Modelo {
+  id: string; nombre: string; base: string; version: string; dims: number;
+  familia: string; licencia: string; pesos_url: string; sha256: string;
+}
 export interface Resumen { lote_id: number; aceptadas: number; saltadas: number; con_vector: number; motivos: string[] }
 
 export type Tipo = "calle" | "cenital" | "suelta";
@@ -243,6 +246,10 @@ export const api = {
   runtimeInstalar: () => invoke<void>("runtime_instalar"),
   ingestaCarpeta: (indiceId: number, ruta: string, tipo: string, fuente: string, licencia: string | null) =>
     invoke<Resumen>("ingesta_carpeta", { indiceId, ruta, tipo, fuente, licencia }),
+  /** Recorre las fotos que ya están en disco y les pide el vector del modelo
+   *  que les falta: no descarga nada ni gasta presupuesto. */
+  indiceReembeber: (indiceId: number, modelo: string) =>
+    invoke<number>("indice_reembeber", { indiceId, modelo }),
   ingestaLegacyArrancar: (indiceId: number, ruta: string, tipo: string, fuente: string, declarada: boolean) =>
     invoke<void>("ingesta_legacy_arrancar", { indiceId, ruta, tipo, fuente, declarada }),
   ingestaLegacyProgreso: () => invoke<ProgresoIngesta>("ingesta_legacy_progreso"),

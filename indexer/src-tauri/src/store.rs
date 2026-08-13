@@ -759,6 +759,21 @@ impl Almacen {
         Ok(filas)
     }
 
+    /// Marca como pendientes todas las imágenes de un índice para un modelo
+    /// que todavía no tiene capa. Devuelve cuántas se encolaron.
+    pub fn encolar_capa(&self, indice_id: i64, modelo: &str) -> Result<usize> {
+        let c = self.0.lock().unwrap();
+        let n = c.execute(
+            "INSERT OR IGNORE INTO vectores (imagen_id, modelo, estado)
+             SELECT i.id, ?2, 'pendiente' FROM imagenes i
+              WHERE i.indice_id = ?1
+                AND i.saltada_motivo IS NULL
+                AND (i.revision IS NULL OR i.revision <> 'rechazada')",
+            params![indice_id, modelo],
+        )?;
+        Ok(n)
+    }
+
     /// Índices con al menos una imagen sin vector de ESTE modelo. Es lo que
     /// arranca cada bucle de la cola: independiente de `lotes.estado`, que es
     /// una sola columna compartida entre todos los modelos y por eso nunca

@@ -20,6 +20,7 @@ mod publicar;
 mod qdrant;
 mod queue;
 mod red;
+mod reembeber;
 mod review;
 mod runtime;
 mod services;
@@ -302,6 +303,14 @@ fn ingesta_carpeta(
         &modelos,
     )
     .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn indice_reembeber(estado: tauri::State<'_, Estado>, indice_id: i64, modelo: String) -> Result<usize, String> {
+    // Un índice sellado no se puede reembeber: sus vectores están dentro de un
+    // paquete cerrado y su hash ya se publicó. Para eso está crear una versión.
+    exige_abierto(&estado, indice_id)?;
+    crate::reembeber::encolar(&estado.almacen, indice_id, &modelo).map_err(|e| e.to_string())
 }
 
 #[derive(serde::Serialize)]
@@ -1528,6 +1537,7 @@ pub fn run() {
             cola_pausar,
             indice_progreso_embebido,
             ingesta_carpeta,
+            indice_reembeber,
             ingesta_legacy_arrancar,
             ingesta_legacy_progreso,
             indice_crear,
