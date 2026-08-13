@@ -5,29 +5,25 @@ No embebe nada: devuelve vectores deterministas derivados de la ruta. Existe
 para que el contrato sea ejecutable y no solo un documento — la unica forma de
 saber si una frontera aguanta es cruzarla.
 
-El subsistema 7b y el 5 sustituyen `_cargar` y `_embeber` por la carga de pesos
-y la inferencia de verdad. No deberia hacer falta tocar nada mas de este
-archivo, y nada en absoluto de la aplicacion.
+El subsistema 5b sustituyo `_cargar` y `_vector` por la carga de pesos y la
+inferencia de verdad, en `lumi_pesos.py` — compartido con `lumi_geo.py`, para
+que Station y el Indexer produzcan EL MISMO VECTOR para el mismo modelo.
 
 Protocolo: una linea de JSON por mensaje. Entra por stdin, sale por stdout, el
 log va por stderr. Los VECTORES NO SALEN POR STDOUT: se escriben en un fichero
-temporal de float32 crudo y se contesta con su ruta. Sin dependencias.
+temporal de float32 crudo y se contesta con su ruta.
 """
-import hashlib
 import json
 import os
 import struct
 import sys
 import tempfile
-import time
 
 DISPOSITIVO = os.environ.get("LUMI_DEVICE", "cpu")
-CARGA_S = float(os.environ.get("LUMI_FAKE_LOAD_S", "0"))
-# Dimensiones de mentira, pequenas a proposito: el contrato no depende del
-# tamano y un fichero de 12288 flotantes por imagen no aporta nada a la prueba.
-DIMS = int(os.environ.get("LUMI_FAKE_DIMS", "64"))
+REGISTRO = os.environ.get("LUMI_REGISTRO", "registros/modelos")
+PESOS = os.environ.get("LUMI_PESOS", "pesos")
 
-_modelo = None
+_cargados = {}
 
 
 def _decir(msg):
@@ -41,26 +37,19 @@ def _log(txt):
 
 
 def _cargar(modelo):
-    """El subsistema 5 sustituye esto por la carga real de pesos."""
-    global _modelo
-    if _modelo == modelo:
-        return
+    if modelo in _cargados:
+        return _cargados[modelo]
+    import lumi_pesos
+
     _log("cargando modelo %s en %s" % (modelo, DISPOSITIVO))
-    time.sleep(CARGA_S)
-    _modelo = modelo
-    _decir({"tipo": "listo", "dispositivo": DISPOSITIVO, "modelo": _modelo})
+    e = lumi_pesos.cargar(modelo, REGISTRO, PESOS, DISPOSITIVO)
+    _cargados[modelo] = e
+    _decir({"tipo": "listo", "dispositivo": DISPOSITIVO, "modelo": modelo})
+    return e
 
 
-def _vector(ruta):
-    """El subsistema 5 sustituye esto por la inferencia real.
-
-    Determinista a partir de la ruta y normalizado a L2, que es la precondicion
-    del formato de fragmento: sin ella la escala fija de int8 no vale.
-    """
-    semilla = hashlib.sha256(ruta.encode("utf-8")).digest()
-    crudo = [((semilla[i % len(semilla)] / 255.0) - 0.5) for i in range(DIMS)]
-    norma = sum(x * x for x in crudo) ** 0.5
-    return [x / norma for x in crudo] if norma > 0 else crudo
+def _vector(modelo, ruta):
+    return _cargados[modelo].vector(ruta)
 
 
 def _embeber(job):
@@ -80,14 +69,15 @@ def _embeber(job):
     if not rutas:
         return None
 
+    dims = _cargados[job["modelo"]].dims
     fd, destino = tempfile.mkstemp(prefix="lumi-lote-%d-" % job["id"], suffix=".f32")
     with os.fdopen(fd, "wb") as f:
         for i, ruta in enumerate(rutas):
-            f.write(struct.pack("<%df" % DIMS, *_vector(ruta)))
+            f.write(struct.pack("<%df" % dims, *_vector(job["modelo"], ruta)))
             if (i + 1) % 16 == 0:
                 _decir({"tipo": "progreso", "id": job["id"],
                         "hechas": i + 1, "total": len(rutas)})
-    return {"tipo": "vectores", "id": job["id"], "dims": DIMS,
+    return {"tipo": "vectores", "id": job["id"], "dims": dims,
             "cuenta": len(rutas), "fichero": destino, "imagenes": rutas}
 
 

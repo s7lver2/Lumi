@@ -8,33 +8,27 @@ SQLite y este trabajador no tiene SQLite. Sale de `lumi_embed.py`, que ya
 hace exactamente esto para el Indexer; la diferencia es el tipo de mensaje
 de entrada ("trabajo", con una sola imagen, no "lote") y de salida.
 
-El subsistema 5b sustituye `_cargar` y `_vector` por la carga de pesos y la
-inferencia de verdad. No deberia hacer falta tocar nada mas de este archivo,
-y nada en absoluto del daemon.
+El subsistema 5b sustituyo `_cargar` y `_vector` por la carga de pesos y la
+inferencia de verdad, en `lumi_pesos.py`. Ese modulo si necesita el venv con
+torch; este script sigue arrancando en el interprete del sistema y solo
+importa `lumi_pesos` en cuanto llega el primer trabajo.
 
 Protocolo: una linea de JSON por mensaje. Entra por stdin, sale por stdout,
 el log va por stderr. Los VECTORES NO SALEN POR STDOUT: se escriben en un
 fichero temporal de float32 crudo y se contesta con su ruta, misma razon que
-en el Indexer. Sin dependencias: tiene que arrancar en el interprete del
-sistema, sin venv.
+en el Indexer.
 """
-import hashlib
 import json
 import os
 import struct
 import sys
 import tempfile
-import time
 
 DISPOSITIVO = os.environ.get("LUMI_DEVICE", "cpu")
-# Lo que tardaria en cargar pesos de verdad. Se puede subir a mano para probar
-# que el daemon aguanta un arranque lento sin dar el trabajador por muerto.
-CARGA_S = float(os.environ.get("LUMI_FAKE_LOAD_S", "0"))
-# Dimensiones de mentira, pequenas a proposito: el contrato no depende del
-# tamano y un fichero de 12288 flotantes no aporta nada a la prueba.
-DIMS = int(os.environ.get("LUMI_FAKE_DIMS", "64"))
+REGISTRO = os.environ.get("LUMI_REGISTRO", "registros/modelos")
+PESOS = os.environ.get("LUMI_PESOS", "pesos")
 
-_modelo = None
+_cargados = {}
 
 
 def _decir(msg):
@@ -48,45 +42,51 @@ def _log(txt):
 
 
 def _cargar(modelo):
-    """El subsistema 5b sustituye esto por la carga real de pesos."""
-    global _modelo
-    if _modelo == modelo:
-        return
+    """Carga de verdad, y cachea: cambiar de modelo cuesta leer pesos del
+    disco, y con ocho por analisis eso se paga ocho veces por trabajo si no se
+    guardan."""
+    if modelo in _cargados:
+        return _cargados[modelo]
+    import lumi_pesos
+
     _log("cargando modelo %s en %s" % (modelo, DISPOSITIVO))
-    time.sleep(CARGA_S)
-    _modelo = modelo
-    _decir({"tipo": "listo", "dispositivo": DISPOSITIVO, "modelo": _modelo})
-
-
-def _vector(ruta):
-    """El subsistema 5b sustituye esto por la inferencia real.
-
-    Determinista a partir de la ruta y normalizado a L2, que es la
-    precondicion del formato de fragmento (`lumi_index::vectors`): sin ella
-    la escala fija del int8 no vale.
-    """
-    semilla = hashlib.sha256(ruta.encode("utf-8")).digest()
-    crudo = [((semilla[i % len(semilla)] / 255.0) - 0.5) for i in range(DIMS)]
-    norma = sum(x * x for x in crudo) ** 0.5
-    return [x / norma for x in crudo] if norma > 0 else crudo
+    e = lumi_pesos.cargar(modelo, REGISTRO, PESOS, DISPOSITIVO)
+    _cargados[modelo] = e
+    _decir({"tipo": "listo", "dispositivo": DISPOSITIVO, "modelo": modelo})
+    return e
 
 
 def _embeber(job):
-    """La imagen de consulta es la primera del trabajo: un analisis hoy es
-    siempre una sola imagen (ver lumi_proto::api::Analysis)."""
+    """Una linea `vectores` POR MODELO. Si el tercero de ocho revienta, los dos
+    primeros ya salieron y el fallo dice cual fue.
+
+    La imagen de consulta es la primera del trabajo: un analisis hoy es siempre
+    una sola imagen (ver lumi_proto::api::Analysis)."""
     rutas = job["imagenes"]
     if not rutas:
-        return {"tipo": "fallo", "id": job["id"], "motivo": "el trabajo no trae ninguna imagen"}
+        return [{"tipo": "fallo", "id": job["id"], "motivo": "el trabajo no trae ninguna imagen"}]
     ruta = rutas[0]
     if not os.path.exists(ruta):
-        return {"tipo": "fallo", "id": job["id"], "motivo": "no existe la imagen %s" % ruta}
+        return [{"tipo": "fallo", "id": job["id"], "motivo": "no existe la imagen %s" % ruta}]
 
-    _decir({"tipo": "progreso", "id": job["id"], "fase": "embebiendo", "pct": 50})
-
-    fd, destino = tempfile.mkstemp(prefix="lumi-geo-%d-" % job["id"], suffix=".f32")
-    with os.fdopen(fd, "wb") as f:
-        f.write(struct.pack("<%df" % DIMS, *_vector(ruta)))
-    return {"tipo": "vectores", "id": job["id"], "dims": DIMS, "fichero": destino}
+    modelos = job.get("modelos") or [job["modelo"]]
+    fuera = []
+    for i, modelo in enumerate(modelos):
+        _decir({"tipo": "progreso", "id": job["id"], "fase": "embebiendo",
+                "pct": int(100 * i / len(modelos))})
+        try:
+            e = _cargar(modelo)
+            v = e.vector(ruta)
+        except Exception as err:
+            fuera.append({"tipo": "fallo", "id": job["id"],
+                          "motivo": "modelo %s: %s" % (modelo, err)})
+            continue
+        fd, destino = tempfile.mkstemp(prefix="lumi-geo-%d-" % job["id"], suffix=".f32")
+        with os.fdopen(fd, "wb") as f:
+            f.write(struct.pack("<%df" % e.dims, *v))
+        fuera.append({"tipo": "vectores", "id": job["id"], "modelo": modelo,
+                      "dims": e.dims, "fichero": destino})
+    return fuera
 
 
 def main():
@@ -104,16 +104,8 @@ def main():
             _log("orden desconocida, se ignora: %s" % job.get("tipo"))
             continue
         try:
-            _cargar(job["modelo"])
-        except Exception as e:
-            # No poder cargar el modelo es un fallo DE ESTE TRABAJO, no una
-            # averia del trabajador: se contesta y se sigue vivo esperando el
-            # siguiente, que puede pedir un modelo que si esta.
-            _decir({"tipo": "fallo", "id": job["id"],
-                    "motivo": "no se pudo cargar el modelo %s: %s" % (job["modelo"], e)})
-            continue
-        try:
-            _decir(_embeber(job))
+            for msg in _embeber(job):
+                _decir(msg)
         except Exception as e:
             _decir({"tipo": "fallo", "id": job["id"], "motivo": str(e)})
 
