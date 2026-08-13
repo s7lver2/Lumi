@@ -46,11 +46,23 @@ impl Evento {
         match m {
             Msg::Listo { modelo, .. } => Evento::Listo { dispositivo: d, modelo },
             Msg::Progreso { id, fase, pct } => Evento::Progreso { dispositivo: d, id, fase, pct },
-            Msg::Vectores { id, dims, fichero } => Evento::Vectores { dispositivo: d, id, dims, fichero },
+            Msg::Vectores { id, dims, fichero, modelo: _ } => {
+                Evento::Vectores { dispositivo: d, id, dims, fichero }
+            }
             Msg::Resultado { id, lat, lng, radio_m, confianza, alternativas } => {
                 Evento::Resultado { dispositivo: d, id, lat, lng, radio_m, confianza, alternativas }
             }
             Msg::Fallo { id, motivo } => Evento::Fallo { dispositivo: d, id, motivo },
+            // ponytail: `Verificado` es del trabajador de verificación
+            // geométrica (`workers/lumi_verify.py`), que `crate::verificar`
+            // habla por su propia tubería y no por este canal de embebido. Si
+            // apareciera aquí sería un trabajador mal configurado, no un caso
+            // normal — se registra como fallo en vez de silenciarlo.
+            Msg::Verificado { id, .. } => Evento::Fallo {
+                dispositivo: d,
+                id,
+                motivo: "un trabajador de embebido mandó un veredicto de verificación".into(),
+            },
         }
     }
 }

@@ -20,13 +20,27 @@ pub struct Job {
     /// futuro no rompa a un trabajador que solo entiende esta.
     pub tipo: String,
     pub id: i64,
+    /// Un solo modelo. Se conserva por los trabajadores que ya existen y que
+    /// solo saben leer esto.
     pub modelo: String,
+    /// Los N modelos del nivel. Vacío significa «usa `modelo`», que es cómo
+    /// un trabajador viejo sigue funcionando sin tocar una línea.
+    #[serde(default)]
+    pub modelos: Vec<String>,
     pub imagenes: Vec<String>,
 }
 
 impl Job {
     pub fn nuevo(id: i64, modelo: String, imagenes: Vec<String>) -> Self {
-        Self { tipo: "trabajo".into(), id, modelo, imagenes }
+        Self { tipo: "trabajo".into(), id, modelo, modelos: Vec::new(), imagenes }
+    }
+
+    /// Un trabajo de ensemble: el trabajador contesta una línea `vectores`
+    /// por cada modelo. `modelo` se rellena con el primero para que un
+    /// trabajador que solo entienda el campo viejo siga haciendo algo útil.
+    pub fn con_modelos(id: i64, modelos: Vec<String>, imagenes: Vec<String>) -> Self {
+        let modelo = modelos.first().cloned().unwrap_or_default();
+        Self { tipo: "trabajo".into(), id, modelo, modelos, imagenes }
     }
 }
 
@@ -56,7 +70,30 @@ pub enum Msg {
     Progreso { id: i64, fase: String, pct: u8 },
     /// El trabajador solo embebe: escribe el vector a un fichero y contesta su
     /// ruta. Los flotantes NO salen por stdout, misma razón que en el Indexer.
-    Vectores { id: i64, dims: u32, fichero: String },
+    ///
+    /// Con varios modelos se manda UNA LÍNEA POR MODELO y no una con todo
+    /// dentro: si el tercero de ocho revienta, los dos primeros ya están
+    /// escritos y el fallo dice cuál fue.
+    Vectores {
+        id: i64,
+        /// Vacío en un trabajador viejo: significa «el modelo del trabajo».
+        #[serde(default)]
+        modelo: String,
+        dims: u32,
+        fichero: String,
+    },
+    /// Un verificador geométrico ha mirado un candidato. Cuantas quiera: una
+    /// por (candidato, verificador). `inliers` es el respaldo con el que el
+    /// daemon arbitra; no hay peso ni confianza aquí, a propósito.
+    Verificado {
+        id: i64,
+        /// El `reference_images.id` del candidato mirado.
+        candidato: i64,
+        verificador: String,
+        inliers: u32,
+        lat: f64,
+        lng: f64,
+    },
     Resultado {
         id: i64,
         lat: f64,
