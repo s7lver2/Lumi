@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Lumi Station · 5b — recuperación en ensemble y verificadores compitiendo</title>
+<style>
+/* Los mismos tokens de client/tailwind.config.ts y del chrome del 6. Nada inventado. */
+:root{
+  --bg:#0e0f11; --surface:#15171a; --panel:#1a1b1e; --elevated:#202226;
+  --border:#26282c; --muted:#9a9a95; --subtle:#6a6c70; --fg:#e8e8e6;
+  --accent:#f2f3f5; --draw:#378add; --draw-fg:#85b7eb;
+  --warning:#ef9f27; --warning-fg:#efb968; --danger:#a33; --danger-fg:#e88f8f;
+  --expo:cubic-bezier(.16,1,.3,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#08090a;color:var(--fg);font:13px/1.5 Inter,system-ui,'Segoe UI',sans-serif;
+  -webkit-font-smoothing:antialiased;padding:34px 26px 90px;max-width:1240px;margin:0 auto}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+h1{font-size:19px;font-weight:500;letter-spacing:-.01em}
+h2{font-size:12px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--subtle);margin:58px 0 12px}
+.lede{color:var(--muted);font-size:12px;margin-top:8px;max-width:900px;line-height:1.7}
+.lede b{font-weight:400;color:var(--fg)}
+.note{font-size:11px;line-height:1.68;color:var(--subtle);max-width:900px;margin-top:12px}
+.note b{font-weight:400;color:var(--fg)}
+.k{font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--subtle)}
+
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px}
+.chip{border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-size:8.5px;
+  color:var(--subtle);letter-spacing:.04em;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
+.chip.on{border-color:rgba(255,255,255,.28);color:var(--fg)}
+.chip.amber{border-color:rgba(239,159,39,.42);color:var(--warning-fg)}
+.chip.red{border-color:rgba(163,51,51,.55);color:var(--danger-fg)}
+.chip.blue{border-color:rgba(55,138,221,.5);color:var(--draw-fg)}
+.hair{height:1px;background:var(--border)}
+
+/* ---- diagrama: el camino de una consulta ---- */
+.flow{display:flex;align-items:stretch;gap:0;margin-top:20px;overflow-x:auto;padding-bottom:6px}
+.stage{flex:none;width:196px;background:var(--panel);border:1px solid var(--border);
+  border-radius:10px;padding:11px 12px 12px}
+.stage.wide{width:236px}
+.stage h3{font-size:11.5px;font-weight:500;letter-spacing:.01em;margin-bottom:2px}
+.stage .who{font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--subtle);margin-bottom:9px}
+.stage p{font-size:10.5px;line-height:1.6;color:var(--muted)}
+.stage .stack{display:flex;flex-direction:column;gap:4px;margin-top:9px}
+.slot{border:1px solid var(--border);border-radius:6px;padding:4px 7px;background:var(--elevated);
+  display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.slot .n{font-size:10.5px;color:var(--fg)}
+.slot .d{font-size:9.5px;color:var(--subtle)}
+.slot.ghost{background:none;border-style:dashed;opacity:.55}
+.arrow{flex:none;width:34px;display:grid;place-items:center;color:#3a3e44}
+
+/* ---- tres niveles ---- */
+.tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:20px}
+.tier{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px}
+.tier.vision{border-color:rgba(255,255,255,.2)}
+.tier > header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:3px}
+.tier h3{font-size:13.5px;font-weight:500}
+.tier .cost{font-size:9.5px;color:var(--subtle)}
+.tier .sub{font-size:10.5px;color:var(--muted);line-height:1.55;min-height:34px}
+.grp{margin-top:13px}
+.grp > .k{display:flex;justify-content:space-between;align-items:baseline}
+.grp ul{list-style:none;margin-top:6px;display:flex;flex-direction:column;gap:3px}
+.grp li{font-size:10.5px;color:var(--fg);display:flex;align-items:baseline;justify-content:space-between;
+  gap:8px;padding:3px 7px;border:1px solid var(--border);border-radius:5px;background:var(--elevated)}
+.grp li span{font-size:9.5px;color:var(--subtle)}
+.grp li.pend{background:none;border-style:dashed;opacity:.5}
+
+/* ---- competencia de verificadores ---- */
+.moe{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px;align-items:start}
+.judge{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px}
+.vrow{display:grid;grid-template-columns:112px 1fr 64px;gap:10px;align-items:center;padding:7px 0}
+.vrow + .vrow{border-top:1px solid var(--border)}
+.vrow .nm{font-size:11px}
+.vrow .nm small{display:block;font-size:9px;color:var(--subtle);letter-spacing:.03em}
+.bar{height:5px;border-radius:3px;background:var(--elevated);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--fg)}
+.bar i.dim{background:var(--subtle)}
+.bar i.no{background:var(--danger)}
+.vrow .val{font-size:10.5px;text-align:right;color:var(--muted)}
+.vrow.win .nm{color:var(--fg)}
+.vrow.win .val{color:var(--fg)}
+.vrow.out{opacity:.5}
+
+table{border-collapse:collapse;width:100%;margin-top:16px;font-size:11px}
+th{text-align:left;font-weight:500;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--subtle);padding:0 12px 8px 0;border-bottom:1px solid var(--border)}
+td{padding:8px 12px 8px 0;border-bottom:1px solid var(--border);color:var(--muted);vertical-align:top}
+td.n{color:var(--fg)}
+tr.out td{opacity:.55}
+
+svg.i{display:block}
+.pill{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border);border-radius:999px;
+  padding:3px 9px;font-size:10px;color:var(--muted)}
+.legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+</style>
+</head>
+<body>
+
+<h1>Subsistema 5b — recuperación en ensemble y verificadores compitiendo</h1>
+<p class="lede">
+El 5a dejó el camino entero montado y dijo sin rodeos que <b>las coordenadas serían malas</b>, porque
+el embebedor era el de juguete. El 5b es el ciclo que las arregla: sustituye <span class="mono">_cargar</span> y
+<span class="mono">_vector</span> por modelos de verdad, monta varios recuperadores en paralelo en vez de uno, y
+mete detrás una capa nueva —<b>los verificadores geométricos compitiendo</b>— que hoy no existe.
+Los agentes (idioma, sombras, clima, estación) <b>no entran aquí</b>: van al 5c.
+</p>
+
+<h2>1 · El camino de una consulta</h2>
+<p class="note">
+Lo que ya existe está en trazo continuo; lo que el 5b añade, marcado. La frontera Rust↔Python no se mueve:
+el trabajador sigue siendo un proceso hijo con JSON por líneas, y la procedencia sigue viviendo en SQLite,
+en el daemon, porque el trabajador no tiene SQLite.
+</p>
+
+<div class="flow">
+  <div class="stage">
+    <h3>Imagen de consulta</h3>
+    <div class="who">cliente → cola (s4)</div>
+    <p>Un análisis nace <span class="mono">pendiente</span>. El planificador lo elige y se lo da al trabajador caliente de ese dispositivo.</p>
+    <div class="stack"><div class="slot"><span class="n">Sin cambios</span><span class="d">s4</span></div></div>
+  </div>
+  <div class="arrow"><svg class="i" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M3 9h11M10 5l4 4-4 4"/></svg></div>
+
+  <div class="stage wide">
+    <h3>Embebido en ensemble</h3>
+    <div class="who">python · lumi_geo.py</div>
+    <p>Antes: un vector de juguete de 64 dims. Ahora: <b>N modelos reales</b>, un vector por modelo, cada uno a su fichero temporal.</p>
+    <div class="stack">
+      <div class="slot"><span class="n">MegaLoc</span><span class="d mono">8448</span></div>
+      <div class="slot"><span class="n">BoQ + DINOv2</span><span class="d mono">12288</span></div>
+      <div class="slot"><span class="n">EigenPlaces</span><span class="d mono">2048</span></div>
+      <div class="slot ghost"><span class="n">…hasta 8 en Vision</span><span class="d mono">·</span></div>
+    </div>
+  </div>
+  <div class="arrow"><svg class="i" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M3 9h11M10 5l4 4-4 4"/></svg></div>
+
+  <div class="stage">
+    <h3>Recuperación</h3>
+    <div class="who">rust · lumid::recuperar</div>
+    <p>Una consulta a Qdrant <b>por colección</b> — una por <span class="mono">(modelo, versión)</span>. N listas de candidatos, no una.</p>
+    <div class="stack">
+      <div class="slot"><span class="n">N listas top-k</span><span class="d">Qdrant</span></div>
+      <div class="slot"><span class="n">Fusión por rango</span><span class="d">nuevo</span></div>
+    </div>
+  </div>
+  <div class="arrow"><svg class="i" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M3 9h11M10 5l4 4-4 4"/></svg></div>
+
+  <div class="stage wide">
+    <h3>Verificación geométrica</h3>
+    <div class="who">python · nuevo en el 5b</div>
+    <p>Cada verificador empareja la consulta contra las fotos candidatas y devuelve <b>inliers y una coordenada afinada</b>. Compiten; no se promedian.</p>
+    <div class="stack">
+      <div class="slot"><span class="n">RoMa</span><span class="d">denso</span></div>
+      <div class="slot"><span class="n">LightGlue + ALIKED</span><span class="d">disperso</span></div>
+      <div class="slot ghost"><span class="n">…hasta 4 en Vision</span><span class="d mono">·</span></div>
+    </div>
+  </div>
+  <div class="arrow"><svg class="i" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M3 9h11M10 5l4 4-4 4"/></svg></div>
+
+  <div class="stage">
+    <h3>Hipótesis</h3>
+    <div class="who">rust · agrupar + atribuir</div>
+    <p>Agrupación por vecindad de tesela, peso, y <b>de qué índice y de qué autor</b> sale cada foto. Una principal, el resto alternativas.</p>
+    <div class="stack">
+      <div class="slot"><span class="n">Tabla ya existente</span><span class="d">s5a</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  <span class="pill"><span class="chip on">nuevo en 5b</span> embebido múltiple, fusión, verificadores</span>
+  <span class="pill"><span class="chip">sin tocar</span> cola, contrato del trabajador, atribución, tabla de hipótesis</span>
+  <span class="pill"><span class="chip blue">5c</span> los agentes se enganchan entre recuperación e hipótesis</span>
+</div>
+
+<h2>2 · Los tres niveles</h2>
+<p class="note">
+La diferencia entre Mini, Pro y Vision <b>no es la arquitectura sino cuántos modelos corren dentro</b>. Eso ya estaba
+escrito en <span class="mono">ARCHITECTURE.md §4</span>; lo que el 5b hace es ponerle nombres concretos a las casillas.
+Mezclar familias importa más que sumar modelos: MegaLoc, SALAD, CliqueMining y BoQ son todos DINOv2 con una agregación
+distinta —ven casi lo mismo y se equivocan casi en lo mismo—, así que Pro entra con dos <i>foundation</i> y dos CNN
+clásicas en vez de cuatro primos hermanos.
+</p>
+
+<div class="tiers">
+
+  <div class="tier">
+    <header><h3>Lumi Mini</h3><span class="cost">escritorio · 8–12 GB</span></header>
+    <p class="sub">Un recuperador pequeño y un verificador ligero. Es el único nivel pensado para correr en un ordenador normal.</p>
+
+    <div class="grp">
+      <div class="k"><span>Recuperación</span><span class="mono">1</span></div>
+      <ul><li>CosPlace <span class="mono">512</span></li></ul>
+    </div>
+    <div class="grp">
+      <div class="k"><span>Geométricos</span><span class="mono">1</span></div>
+      <ul><li>tiny-RoMa <span>denso ligero</span></li></ul>
+    </div>
+    <div class="grp">
+      <div class="k"><span>Agentes</span><span class="mono">4</span></div>
+      <ul><li class="pend">pendiente <span>5c</span></li></ul>
+    </div>
+  </div>
+
+  <div class="tier">
+    <header><h3>Lumi Pro</h3><span class="cost">nube · coste medio</span></header>
+    <p class="sub">Dos familias de recuperación mezcladas, y dos verificadores con perfiles opuestos: uno preciso y lento, uno rápido y barato.</p>
+
+    <div class="grp">
+      <div class="k"><span>Recuperación</span><span class="mono">4</span></div>
+      <ul>
+        <li>MegaLoc <span class="mono">8448</span></li>
+        <li>BoQ + DINOv2 <span class="mono">12288</span></li>
+        <li>EigenPlaces <span class="mono">2048</span></li>
+        <li>MixVPR <span class="mono">4096</span></li>
+      </ul>
+    </div>
+    <div class="grp">
+      <div class="k"><span>Geométricos</span><span class="mono">2</span></div>
+      <ul>
+        <li>RoMa v1 <span>150–600 ms</span></li>
+        <li>LightGlue + ALIKED <span>40–70 ms</span></li>
+      </ul>
+    </div>
+    <div class="grp">
+      <div class="k"><span>Agentes</span><span class="mono">10</span></div>
+      <ul><li class="pend">pendiente <span>5c</span></li></ul>
+    </div>
+  </div>
+
+  <div class="tier vision">
+    <header><h3>Lumi Vision</h3><span class="cost">nube · problemas de cómputo reales</span></header>
+    <p class="sub">Todo lo de Pro más cuatro recuperadores y dos verificadores. La precisión sale de la competencia, no de un modelo mejor.</p>
+
+    <div class="grp">
+      <div class="k"><span>Recuperación</span><span class="mono">8</span></div>
+      <ul>
+        <li>los 4 de Pro <span class="mono">26 880</span></li>
+        <li>SALAD <span class="mono">8448</span></li>
+        <li>CliqueMining <span class="mono">8448</span></li>
+        <li>AnyLoc <span class="mono">49152</span></li>
+        <li>CosPlace <span class="mono">512</span></li>
+      </ul>
+    </div>
+    <div class="grp">
+      <div class="k"><span>Geométricos</span><span class="mono">4</span></div>
+      <ul>
+        <li>los 2 de Pro <span>denso + disperso</span></li>
+        <li>Efficient LoFTR <span>semi-denso</span></li>
+        <li>RoMa v2 <span>licencia asumida</span></li>
+      </ul>
+    </div>
+    <div class="grp">
+      <div class="k"><span>Agentes</span><span class="mono">20</span></div>
+      <ul><li class="pend">pendiente <span>5c</span></li></ul>
+    </div>
+  </div>
+</div>
+
+<h2>3 · Cómo compiten los verificadores</h2>
+<p class="note">
+Una mezcla de expertos solo vale si el árbitro es honesto. Aquí el árbitro <b>no es un peso aprendido</b>: es el número de
+correspondencias que sobreviven a RANSAC. Un verificador que dice «esto casa» y solo aporta nueve inliers pierde frente a
+uno que aporta cuatrocientos, y si <b>ninguno</b> pasa el umbral la respuesta no se inventa — el candidato se cae, y si se
+caen todos el análisis devuelve las hipótesis de recuperación sin afinar, diciéndolo.
+</p>
+
+<div class="moe">
+  <div class="judge">
+    <div class="k" style="margin-bottom:10px">Candidato #1 · <span class="mono">0311 2033 1122 30</span> · Bangkok</div>
+    <div class="vrow win">
+      <div class="nm">RoMa v2<small>denso</small></div>
+      <div class="bar"><i style="width:88%"></i></div>
+      <div class="val mono">412 in</div>
+    </div>
+    <div class="vrow">
+      <div class="nm">RoMa v1<small>denso</small></div>
+      <div class="bar"><i class="dim" style="width:71%"></i></div>
+      <div class="val mono">338 in</div>
+    </div>
+    <div class="vrow">
+      <div class="nm">Efficient LoFTR<small>semi-denso</small></div>
+      <div class="bar"><i class="dim" style="width:44%"></i></div>
+      <div class="val mono">207 in</div>
+    </div>
+    <div class="vrow out">
+      <div class="nm">LightGlue+ALIKED<small>disperso</small></div>
+      <div class="bar"><i class="no" style="width:6%"></i></div>
+      <div class="val mono">9 in</div>
+    </div>
+    <div class="hair" style="margin:12px 0 10px"></div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between">
+      <span class="k">Gana</span>
+      <span style="font-size:11px">RoMa v2 · <span class="mono">13.7563, 100.5018</span> · <span class="mono">±14 m</span></span>
+    </div>
+  </div>
+
+  <div class="judge">
+    <div class="k" style="margin-bottom:10px">Candidato #2 · <span class="mono">1320 0203 3122 01</span> · Kuala Lumpur</div>
+    <div class="vrow out">
+      <div class="nm">RoMa v2<small>denso</small></div>
+      <div class="bar"><i class="no" style="width:11%"></i></div>
+      <div class="val mono">17 in</div>
+    </div>
+    <div class="vrow out">
+      <div class="nm">RoMa v1<small>denso</small></div>
+      <div class="bar"><i class="no" style="width:8%"></i></div>
+      <div class="val mono">12 in</div>
+    </div>
+    <div class="vrow out">
+      <div class="nm">Efficient LoFTR<small>semi-denso</small></div>
+      <div class="bar"><i class="no" style="width:5%"></i></div>
+      <div class="val mono">8 in</div>
+    </div>
+    <div class="vrow out">
+      <div class="nm">LightGlue+ALIKED<small>disperso</small></div>
+      <div class="bar"><i class="no" style="width:3%"></i></div>
+      <div class="val mono">4 in</div>
+    </div>
+    <div class="hair" style="margin:12px 0 10px"></div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between">
+      <span class="k">Resultado</span>
+      <span style="font-size:11px;color:var(--warning-fg)">ninguno pasa el umbral · el candidato se cae</span>
+    </div>
+  </div>
+</div>
+
+<p class="note">
+Fíjate en lo que hace el disperso en el candidato bueno: nueve inliers donde el denso saca cuatrocientos doce. Eso no es un
+fallo del ensemble, es <b>exactamente para lo que sirve tenerlos distintos</b> — un matcher con detector se hunde en fachadas
+repetitivas y sin textura, y uno denso no. Un ensemble de cuatro verificadores de la misma familia se habría equivocado
+cuatro veces igual.
+</p>
+
+<h2>4 · Lo que esto le pide al Indexer</h2>
+<p class="note">
+Un vector <b>es</b> el modelo: no hay conversión entre uno y otro. Consultar con ocho recuperadores exige que el corpus
+traiga esas ocho capas, y quien las produce es el Indexer, no Station. El formato <span class="mono">.lumidx</span> ya lo soporta
+—un fichero por modelo dentro de cada fragmento— así que no hay que tocar el paquete; lo que cambia es <b>cuánto cuesta
+construirlo</b>. Y un índice publicado solo con las capas de Pro no se puede consultar con Vision: le faltan cuatro.
+</p>
+
+<table>
+  <thead><tr><th>Nivel</th><th>Dims por imagen</th><th>Vectores int8 · corpus de 9 000 fotos</th><th>Pases de embebido en el Indexer</th></tr></thead>
+  <tbody>
+    <tr><td class="n">Mini</td><td class="mono">512</td><td class="mono">4,4 MiB</td><td class="mono">1×</td></tr>
+    <tr><td class="n">Pro</td><td class="mono">26 880</td><td class="mono">231 MiB</td><td class="mono">4×</td></tr>
+    <tr><td class="n">Vision</td><td class="mono">93 440</td><td class="mono">802 MiB</td><td class="mono">8×</td></tr>
+  </tbody>
+</table>
+<p class="note">
+Las imágenes no se multiplican —siguen siendo los mismos 18 GB— pero los vectores pasan de <span class="mono">74 MiB</span> a
+<span class="mono">802 MiB</span>. Más de la mitad de eso <b>lo pone AnyLoc él solo</b>: 49 152 dimensiones de las 93 440, por ser el
+único que no está afinado para VPR y lo compensa con un descriptor enorme. Es la pieza a cuestionar primero si el número
+molesta.
+</p>
+
+<h2>5 · Licencias, que aquí son un filtro duro</h2>
+<p class="note">
+Lumi es abierta y autoalojada: el propietario del servidor pone sus GPUs y hace con la herramienta lo que quiera. Un peso
+no comercial rompe esa promesa para todos sus usuarios, no solo para el proyecto.
+</p>
+
+<table>
+  <thead><tr><th>Modelo</th><th>Papel</th><th>Licencia</th><th>Veredicto</th></tr></thead>
+  <tbody>
+    <tr><td class="n">MegaLoc · SALAD · CliqueMining · BoQ</td><td>recuperación</td><td class="mono">MIT</td><td>entra</td></tr>
+    <tr><td class="n">CosPlace · EigenPlaces · MixVPR · AnyLoc</td><td>recuperación</td><td class="mono">MIT</td><td>entra</td></tr>
+    <tr><td class="n">RoMa v1</td><td>geométrico</td><td class="mono">MIT + Apache-2.0 (DINOv2)</td><td>entra, limpio</td></tr>
+    <tr><td class="n">LightGlue + ALIKED</td><td>geométrico</td><td class="mono">Apache-2.0 + BSD-3</td><td>entra</td></tr>
+    <tr><td class="n">Efficient LoFTR</td><td>geométrico</td><td class="mono">Apache-2.0</td><td>entra</td></tr>
+    <tr><td class="n">RoMa v2</td><td>geométrico</td><td class="mono">MIT, pero DINOv3 con licencia propia</td><td><span class="chip amber">entra, con obligaciones</span></td></tr>
+    <tr class="out"><td class="n">MASt3R · DUSt3R</td><td>geométrico</td><td class="mono">CC BY-NC-SA 4.0</td><td><span class="chip red">fuera — no comercial</span></td></tr>
+    <tr class="out"><td class="n">SuperPoint</td><td>geométrico</td><td class="mono">restrictiva (Magic Leap)</td><td><span class="chip red">fuera — usar ALIKED</span></td></tr>
+  </tbody>
+</table>
+<p class="note">
+<span class="mono">ARCHITECTURE.md §1</span> dice hoy que el objetivo es «llevar modelos como RoMa o <b>M4ster</b> a una precisión muy
+por encima». Esa frase hay que corregirla: MASt3R no puede entrar en el producto con esa licencia. Si lo quieres igualmente,
+la única forma honesta es un complemento opcional que el propietario instala a sabiendas, fuera del árbol del proyecto.
+</p>
+
+<h2>6 · Lo que queda fuera, y dónde va</h2>
+<div class="tiers" style="grid-template-columns:1fr 1fr">
+  <div class="tier">
+    <header><h3>5c · Los agentes</h3><span class="cost">4 / 10 / 20</span></header>
+    <p class="sub" style="min-height:0">Idioma del cartel, hora por las sombras, dimensiones estimadas del edificio, clima, estación.
+    Regla acordada: <b>los que dan una restricción geográfica dura filtran y reponderan; los descriptivos solo se le enseñan
+    al investigador</b>. Los primeros necesitan que el corpus sepa de qué país y de qué estación es cada foto, y eso es trabajo
+    del Indexer — por eso van a su propio ciclo y no aquí.</p>
+  </div>
+  <div class="tier">
+    <header><h3>Reindexar</h3><span class="cost">la primera y la última vez</span></header>
+    <p class="sub" style="min-height:0">El corpus de hoy está hecho con el embebedor de juguete de 64 dims y se tira entero.
+    Para que no vuelva a pasar, el 5b deja montado el camino de <b>reembeber un índice ya descargado sin volver a pedir una sola
+    foto a la red</b>: las imágenes ya están en disco, y añadir una capa de modelo a un índice existente tiene que ser un pase de
+    GPU, no una campaña de descarga.</p>
+  </div>
+</div>
+
+</body>
+</html>
