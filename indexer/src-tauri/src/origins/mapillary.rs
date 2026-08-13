@@ -27,12 +27,11 @@ const CAMPOS: &str = "id,compass_angle,thumb_2048_url,captured_at,creator,comput
 /// pierde — solo el refinado.
 const CAMPOS_LIGERO: &str = "id,compass_angle,thumb_2048_url,captured_at,creator,geometry";
 
-/// Tope de fotos por tesela.
-///
-/// ponytail: la Graph API pagina y esto se queda con la primera página. El
-/// techo es que una tesela con más de 2000 fotos se indexa parcialmente; la
-/// salida, seguir `paging.next`. No se hace porque 2000 fotos en 2,4 km² ya es
-/// cobertura densa, y la segunda página rinde menos que bajar otra tesela.
+/// Tope de fotos por tesela, ahora alcanzado de verdad: se sigue `paging.next`
+/// hasta este techo o hasta que la Graph API deje de ofrecer página siguiente,
+/// lo que llegue antes. 2000 fotos en 2,4 km² sigue siendo cobertura densa de
+/// sobra; lo que cambiaba es que antes se pedía ese número y solo se recibía
+/// la primera página de camino a él.
 const LIMITE: u32 = 2000;
 /// La consulta de reintento tras un 500: un cuarto del límite y sin
 /// `computed_geometry`. Un centro urbano muy denso (Tokio, por ejemplo) puede
@@ -92,6 +91,12 @@ pub struct Foto {
 #[derive(Debug, Deserialize)]
 pub struct Respuesta {
     pub data: Vec<Foto>,
+    pub paging: Option<Paging>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Paging {
+    pub next: Option<String>,
 }
 
 /// `(lat, lng)`. GeoJSON las da al revés, y confundirlas coloca A Coruña en
@@ -257,7 +262,35 @@ impl Mapillary {
         if !r.status().is_success() {
             anyhow::bail!("Mapillary respondió {} a {}", r.status(), crate::keys::redactar(&url));
         }
-        Ok(r.json::<Respuesta>().await?.data)
+        let primera: Respuesta = r.json().await?;
+        self.seguir_paginas(primera).await
+    }
+
+    /// Sigue `paging.next` hasta `LIMITE` o hasta que la API deje de
+    /// ofrecer página siguiente. La Graph API sí pagina de verdad — quedarse
+    /// con `primera.data` era el bug: aquí es donde se pedía más y no se
+    /// recibía más que la primera página.
+    async fn seguir_paginas(&self, primera: Respuesta) -> Result<Vec<Foto>> {
+        let mut fuera = primera.data;
+        let mut siguiente = primera.paging.and_then(|p| p.next);
+        while let Some(url) = siguiente {
+            if fuera.len() >= LIMITE as usize {
+                break;
+            }
+            let r = self.pedir(&url).await?;
+            if !r.status().is_success() {
+                // Una página posterior que falla no invalida lo ya reunido:
+                // se para aquí con lo que hay, no se tira todo por un fallo
+                // a mitad de la lista.
+                log::warn!("mapillary: página siguiente respondió {}, se para con lo reunido", r.status());
+                break;
+            }
+            let pagina: Respuesta = r.json().await?;
+            fuera.extend(pagina.data);
+            siguiente = pagina.paging.and_then(|p| p.next);
+        }
+        fuera.truncate(LIMITE as usize);
+        Ok(fuera)
     }
 }
 

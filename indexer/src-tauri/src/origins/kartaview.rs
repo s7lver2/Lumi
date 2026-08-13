@@ -25,6 +25,14 @@ use super::{Ctx, OrigenDeRed};
 
 const HOST: &str = "https://api.openstreetcam.org";
 const RADIO_M: u32 = 20;
+/// Ítems por página que se piden explícitamente — sin esto, `nearby-photos`
+/// devuelve el tamaño de página por defecto de la API y nunca se sabía si
+/// hacía falta pedir una segunda.
+const IPP: u32 = 100;
+/// Por PUNTO de muestreo, no por tesela — cada punto es un radio de 20 m, así
+/// que más de esto en un solo punto ya es sospechoso de estar re-pidiendo lo
+/// mismo por un fallo de paginación, no cobertura real.
+const LIMITE_POR_PUNTO: u32 = 500;
 
 #[derive(Debug, Deserialize)]
 struct FotoKv {
@@ -51,9 +59,9 @@ impl KartaView {
         Self { ctx: Ctx::nuevo(None, stage, 4, 2) }
     }
 
-    async fn cerca_de(&self, p: Punto) -> Result<Vec<FotoKv>> {
+    async fn cerca_de_pagina(&self, p: Punto, pagina: u32) -> Result<Vec<FotoKv>> {
         let _g = self.ctx.limitador.permiso().await;
-        let cuerpo = format!("lat={}&lng={}&radius={RADIO_M}", p.lat, p.lng);
+        let cuerpo = format!("lat={}&lng={}&radius={RADIO_M}&page={pagina}&ipp={IPP}", p.lat, p.lng);
         let r = self
             .ctx
             .cliente
@@ -66,6 +74,25 @@ impl KartaView {
             anyhow::bail!("KartaView respondió {}", r.status());
         }
         Ok(r.json::<RespuestaKv>().await?.items)
+    }
+
+    /// Pagina mientras la página vuelva llena (indicio de que puede haber
+    /// más) hasta `LIMITE_POR_PUNTO`. Antes se pedía una sola página fija sin
+    /// mandar `page` en absoluto.
+    async fn cerca_de(&self, p: Punto) -> Result<Vec<FotoKv>> {
+        let mut fuera = Vec::new();
+        let mut pagina = 1;
+        loop {
+            let items = self.cerca_de_pagina(p, pagina).await?;
+            let llena = items.len() as u32 == IPP;
+            fuera.extend(items);
+            if !llena || fuera.len() >= LIMITE_POR_PUNTO as usize {
+                break;
+            }
+            pagina += 1;
+        }
+        fuera.truncate(LIMITE_POR_PUNTO as usize);
+        Ok(fuera)
     }
 }
 

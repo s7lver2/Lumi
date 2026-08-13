@@ -169,10 +169,25 @@ impl Descarga {
 
     /// Un origen contra su lista de teselas. Lo que ya está `hecho` ni se pide.
     async fn un_origen(&self, o: &Origen, teselas: &[String]) {
-        let pendientes = self
+        let mut pendientes = self
             .almacen
             .descargas_pendientes(self.indice_id, o.id(), teselas)
             .unwrap_or_default();
+        // Las que el sondeo ya marcó con más fotos van primero: si el
+        // presupuesto se agota a mitad de la lista, lo que se queda sin
+        // nutrir es lo que ya se sabía pobre, no lo que resultó estar bien
+        // surtido por azar del orden alfabético de quadkey. Sin sondeo (o
+        // caducado) ordena como 0 — al final, no al principio.
+        pendientes.sort_by_key(|qk| {
+            std::cmp::Reverse(
+                self.almacen
+                    .sondeo_leer(o.id(), qk, crate::probe::CADUCIDAD_DIAS)
+                    .ok()
+                    .flatten()
+                    .map(|(_, estimadas)| estimadas)
+                    .unwrap_or(0),
+            )
+        });
         {
             let mut p = self.progreso.lock().unwrap();
             p.teselas_total += pendientes.len() as u32;

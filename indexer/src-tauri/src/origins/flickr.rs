@@ -29,6 +29,11 @@ const API: &str = "https://api.flickr.com/services/rest/";
 /// de EEUU. Se dejan fuera 1, 2, 3 y 6 a propósito: son las NC y las ND.
 const LICENCIAS: &str = "4,5,7,9,10";
 const POR_PAGINA: u32 = 250;
+/// Tope total tras paginar, no por página — Flickr ya limita `per_page` a 250
+/// por petición; esto es cuántas páginas se siguen antes de parar. Cuatro
+/// páginas es generoso para una tesela de 2,4 km² sin encadenar peticiones
+/// sin fin en una zona anormalmente fotografiada.
+const LIMITE_TOTAL: u32 = POR_PAGINA * 4;
 
 /// La escala 1..16 de Flickr, en metros aproximados. Solo importan los
 /// tramos alrededor del umbral de 100 m del filtro, así que no hace falta
@@ -94,6 +99,8 @@ struct FotoFlickr {
 struct PaginaFlickr {
     #[serde(default)]
     photo: Vec<FotoFlickr>,
+    #[serde(default)]
+    pages: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -110,11 +117,11 @@ impl Flickr {
         Self { ctx: Ctx::nuevo(Some(clave), stage, 4, 2) }
     }
 
-    fn url(&self, tesela: &str) -> String {
+    fn url(&self, tesela: &str, pagina: u32) -> String {
         let b = bbox_de_tesela(tesela);
         format!(
             "{API}?method=flickr.photos.search&format=json&nojsoncallback=1\
-             &bbox={},{},{},{}&license={LICENCIAS}&per_page={POR_PAGINA}\
+             &bbox={},{},{},{}&license={LICENCIAS}&per_page={POR_PAGINA}&page={pagina}\
              &extras=geo,license,owner_name,date_taken,tags,url_l&api_key={}",
             b.oeste,
             b.sur,
@@ -124,14 +131,30 @@ impl Flickr {
         )
     }
 
-    async fn fotos(&self, tesela: &str) -> Result<Vec<FotoFlickr>> {
-        let url = self.url(tesela);
+    async fn pagina(&self, tesela: &str, pagina: u32) -> Result<PaginaFlickr> {
+        let url = self.url(tesela, pagina);
         let _g = self.ctx.limitador.permiso().await;
         let r = self.ctx.cliente.get(&url).send().await?;
         if !r.status().is_success() {
             anyhow::bail!("Flickr respondió {} a {}", r.status(), crate::keys::redactar(&url));
         }
-        Ok(r.json::<RespuestaFlickr>().await?.photos.map(|p| p.photo).unwrap_or_default())
+        Ok(r.json::<RespuestaFlickr>().await?.photos.unwrap_or(PaginaFlickr { photo: Vec::new(), pages: 1 }))
+    }
+
+    /// Pide la página 1, y si Flickr declara más (`pages > 1`) sigue pidiendo
+    /// hasta agotarlas o llegar a `LIMITE_TOTAL`, lo que llegue antes. Antes
+    /// se pedía una sola página aunque `pages` dijera que había más.
+    async fn fotos(&self, tesela: &str) -> Result<Vec<FotoFlickr>> {
+        let primera = self.pagina(tesela, 1).await?;
+        let total_paginas = primera.pages.max(1);
+        let mut fuera = primera.photo;
+        let mut n = 2;
+        while n <= total_paginas && fuera.len() < LIMITE_TOTAL as usize {
+            fuera.extend(self.pagina(tesela, n).await?.photo);
+            n += 1;
+        }
+        fuera.truncate(LIMITE_TOTAL as usize);
+        Ok(fuera)
     }
 }
 
