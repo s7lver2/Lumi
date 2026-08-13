@@ -20,7 +20,7 @@ forense y de investigación. Le das una foto y te dice dónde se tomó.
 
 Compite con GeoSpy y Raven, con dos diferencias: es abierta y es **autoalojada** — el
 propietario pone sus propias GPUs, nada sale a un servicio de terceros. El objetivo técnico
-es llevar modelos como RoMa o M4ster a una precisión muy por encima de lo que dan por
+es llevar modelos como RoMa o LightGlue a una precisión muy por encima de lo que dan por
 separado, encadenándolos y haciéndolos competir entre sí.
 
 Al ser una herramienta con la que se toman decisiones que afectan a personas reales, la
@@ -111,12 +111,14 @@ distintos corren dentro**:
 
 | Nombre | Composición | Coste |
 |---|---|---|
-| **Lumi Mini** | Un solo verificador geométrico (p. ej. RoMa) | Bajo |
-| **Lumi Pro** | Varios modelos en cadena | Medio |
-| **Lumi Vision** | Tres o cuatro verificadores compitiendo por acercarse más | Resultados muy superiores, problemas de cómputo reales |
+| **Lumi Mini** | 1 recuperador (CosPlace) + 1 verificador (tiny-RoMa) + 4 agentes | Bajo; corre en un escritorio |
+| **Lumi Pro** | 4 recuperadores + 2 verificadores + 10 agentes | Medio |
+| **Lumi Vision** | 8 recuperadores + 4 verificadores + 20 agentes | Resultados muy superiores, problemas de cómputo reales |
 
-La idea es que la precisión sale de la competencia entre verificadores, no de un modelo
-mejor. Eso es lo que justifica el soporte multi-GPU y el sistema de cola.
+La precisión sale de la competencia entre verificadores, no de un modelo mejor: el árbitro son
+los inliers que sobreviven a RANSAC. Los agentes —idioma, hora por las sombras, dimensiones del
+edificio, clima, estación— son el subsistema 5c. La composición exacta está en `registros/niveles/`,
+que es datos y no código.
 
 ---
 
@@ -131,7 +133,8 @@ spec → plan → implementación, y cada una debe producir software que funcion
 | **2** | **Auth, usuarios y permisos** | Solicitudes de acceso, creación de cuentas, roles, límites por usuario, dispositivos de confianza | **Terminado** |
 | **3** | **Panel de administración** | Hardware, monitorización, notificaciones, mantenimiento, gestión de modelos | Pendiente |
 | **4** | **Cola y planificador** | Cientos de usuarios, pausa por desconexión, prioridades, multi-GPU y GPU+CPU | **Terminado** |
-| **5** | **Motor de inferencia** | Lumi Mini / Pro / Vision, ensemble de verificadores geométricos | **5-0 y 5a terminados** (instalar un `.lumidx` en Station, y consulta → candidatos → hipótesis); **5b pendiente** (los modelos reales y los verificadores geométricos — el embebedor sigue siendo el de juguete) |
+| **5** | **Motor de inferencia** | Lumi Mini / Pro / Vision, ensemble de verificadores geométricos | **5-0, 5a y 5b terminados** (instalar un `.lumidx`; consulta → candidatos → hipótesis; modelos reales, ensemble de recuperación y verificadores geométricos compitiendo); **5c pendiente** (los agentes) |
+| **5c** | **Agentes** | Idioma, sombras, dimensiones, clima, estación. Los que dan restricción geográfica dura filtran; los descriptivos solo se muestran | Pendiente |
 | **6** | **Cliente y proyectos** | Workspaces tipo Burp/Caido, imágenes, historial, mapa | Esqueleto terminado |
 | **7a** | **Lumi Indexer · cimientos** | App Tauri aparte; las tres bases; el paquete de índice troceado; procedencia de imágenes y de trabajo; mapa, territorio y la regla de no indexar dos veces; orígenes locales | Terminado |
 | **7b** | **Lumi Indexer · orígenes de red** | Seis adaptadores tras un contrato por tesela (Mapillary, KartaView, Google, Mapbox Satellite, Commons, Flickr); disponibilidad en el mapa; estimar, confirmar y tope de gasto; descarga reanudable con atribución; qué se puede republicar | **Terminado** (la tabla llevaba treinta commits diciendo «con spec» en `master`) |

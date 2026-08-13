@@ -28,6 +28,14 @@ mantenimiento. No puede leer contraseñas: solo solicitar que se cambien.
 cuenta. Trabaja en **proyectos**: entornos de trabajo persistentes al estilo Burp Suite o
 Caido, donde quedan sus imágenes y análisis anteriores.
 
+Los tres niveles de análisis —Lumi Mini, Pro y Vision— se distinguen por cuántos modelos
+corren dentro, no por ser productos distintos: Mini es un recuperador y un verificador,
+Pro y Vision suman más de cada uno y los hacen competir. El investigador elige entre los
+niveles que el administrador le haya concedido, nunca todos por defecto. Un análisis puede
+correr a un nivel más bajo del pedido si a los índices instalados en el servidor les faltan
+capas de vectores para el nivel pedido — en cuyo caso el resultado dice con qué nivel corrió
+de verdad y por qué, nunca en silencio.
+
 ## Tono
 
 Español, minúscula en los subtítulos, frases cortas. Precisión sobre entusiasmo: es una

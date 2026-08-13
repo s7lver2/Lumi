@@ -296,3 +296,31 @@ repartir: un cambio dentro de `plan.rs`.
   por el operador; qué cuenta como baja calidad lo decide el 9. La asimetría es deliberada: la
   web puede QUITAR reclamos, nunca añadirlos, y por eso el producto sigue funcionando entero
   si la web no responde.
+
+## Motor de inferencia (subsistema 5b)
+
+### El fichero `LICENSE` que falta
+
+**El repositorio no tiene fichero `LICENSE`**, aunque `PRODUCT.md` dice «de código abierto». Con
+dependencias de licencia mixta dentro (MIT, Apache-2.0, BSD-3, y la licencia propia de DINOv3 vía
+RoMa v2) esto deja de ser un descuido menor. **Bloqueante antes de publicar la web del 9.**
+
+### «Built with DINOv3»
+
+**Mostrar «Built with DINOv3»** en la sección de modelos de la web (subsistema 9). Entra con RoMa
+v2 y no es opcional. La otra obligación de esa licencia —entregar el acuerdo junto con los pesos—
+ya la cumple `lumi_pesos._licencia`, que se niega a cargar unos pesos sin su `LICENCIA.txt` al lado.
+
+### AnyLoc con PCA a 4096 dims
+
+**AnyLoc con PCA a 4096 dims.** Pone él solo 49 152 de las 93 440 dimensiones de Vision. Reducirlo
+conservaría casi todo su recall, pero obliga a fijar la matriz PCA como parte del modelo, y eso es
+otra pieza que puede desincronizarse entre Indexer y Station sin que nada falle al compilar. Se
+revisa si el tamaño molesta con corpus grandes.
+
+### Los agentes (subsistema 5c)
+
+Idioma, hora por las sombras, dimensiones del edificio, clima, estación. Regla ya acordada:
+los que dan una restricción geográfica dura filtran y reponderan; los descriptivos solo se le
+enseñan al investigador. Los primeros exigen que el corpus sepa de qué país y de qué estación es
+cada foto, y eso es trabajo del Indexer.

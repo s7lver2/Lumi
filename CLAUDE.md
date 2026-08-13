@@ -171,9 +171,8 @@ reads them.
 Order: `1 (install/pairing) → 2 (auth) → 6 (client/projects skeleton) → 4 (queue) → 7a (indexer
 foundations) → 7b (indexer network origins) → 8 (index catalog) → 5 (inference engine) → 3 (admin
 panel) → 9 (website)`. 1/2/4/7a/7b/8 done; 6 is skeleton-only (no reverse geocoding, no project
-ownership transfer — see FUTURO.md); 5 is **5-0 and 5a done** (install a `.lumidx` into Station;
-query → candidates → hypotheses) **with 5b pending** (real models and geometric verifiers — the
-embedder is still the toy one, so coordinates are still bad); 3/9 not started.
+ownership transfer — see FUTURO.md); 5 is **5-0, 5a and 5b done** (real models, retrieval
+ensemble and competing geometric verifiers) **with 5c pending** (the agents); 3/9 not started.
 
 ## Conventions
 
