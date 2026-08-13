@@ -140,15 +140,18 @@ pub async fn desinstalar(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    let (modelo, version): (String, String) = app
-        .store
-        .conn()
-        .query_row(
-            "SELECT modelo, version FROM installed_indices WHERE paquete = ?1",
-            [&paquete],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        )
-        .unwrap_or_default();
+    let capas: Vec<(String, String)> = {
+        let c = app.store.conn();
+        let mut q = c
+            .prepare("SELECT modelo, version FROM installed_index_layers WHERE paquete = ?1")
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let filas = q
+            .query_map([&paquete], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .flatten()
+            .collect();
+        filas
+    };
     let ids: Vec<i64> = {
         let c = app.store.conn();
         let mut q = c
@@ -162,16 +165,20 @@ pub async fn desinstalar(
         filas
     };
 
-    if !ids.is_empty() && !modelo.is_empty() {
-        let coleccion = crate::qdrant::coleccion_de(&modelo, &version);
-        // Best effort: si Qdrant no responde, seguimos igual — dejar puntos
-        // huérfanos en una colección es peor que dejarlos, pero un índice que
-        // no se puede desinstalar nunca por una red caída sería peor todavía.
-        let _ = crate::qdrant::Cliente::nuevo().borrar(&coleccion, &ids).await;
+    if !ids.is_empty() {
+        let cliente = crate::qdrant::Cliente::nuevo();
+        for (modelo, version) in &capas {
+            let coleccion = crate::qdrant::coleccion_de(modelo, version);
+            // Best effort: si Qdrant no responde seguimos igual. Dejar puntos
+            // huérfanos es malo; un índice que no se puede desinstalar nunca
+            // por una red caída sería peor.
+            let _ = cliente.borrar(&coleccion, &ids).await;
+        }
     }
 
     let c = app.store.conn();
     let _ = c.execute("DELETE FROM reference_images WHERE paquete = ?1", [&paquete]);
+    let _ = c.execute("DELETE FROM installed_index_layers WHERE paquete = ?1", [&paquete]);
     drop(c);
 
     let carpeta = app.dir.join("indices").join(&paquete);

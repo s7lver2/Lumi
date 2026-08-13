@@ -150,6 +150,16 @@ CREATE TABLE IF NOT EXISTS installed_indices (
     completo     INTEGER NOT NULL DEFAULT 0,
     installed_at INTEGER NOT NULL
 );
+-- Un paquete puede traer varias capas de vectores, una por modelo. Las
+-- columnas `modelo`/`version` de `installed_indices` se quedan por lo ya
+-- instalado y pasan a significar la capa principal.
+CREATE TABLE IF NOT EXISTS installed_index_layers (
+    paquete TEXT NOT NULL,
+    modelo  TEXT NOT NULL,
+    version TEXT NOT NULL,
+    dims    INTEGER NOT NULL,
+    PRIMARY KEY (paquete, modelo, version)
+);
 CREATE TABLE IF NOT EXISTS reference_images (
     id      INTEGER PRIMARY KEY,
     paquete TEXT NOT NULL,

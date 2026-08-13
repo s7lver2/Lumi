@@ -202,6 +202,16 @@ async fn instalar_uno(app: &crate::App, http: &reqwest::Client, ficha: &Ficha, f
         ],
     )?;
 
+    // Todas las capas, no solo la primera: es lo que permite que
+    // `recuperar` sepa qué niveles puede correr contra este índice.
+    for capa in &ficha.capas {
+        app.store.conn().execute(
+            "INSERT OR IGNORE INTO installed_index_layers (paquete, modelo, version, dims)
+             VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![&ficha.paquete, &capa.modelo, &capa.version, capa.dims],
+        )?;
+    }
+
     let ya_hechos = hechos_de(app, &ficha.paquete);
     for a in assets {
         if ya_hechos.contains(&a.nombre) {

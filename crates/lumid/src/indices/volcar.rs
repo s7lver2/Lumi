@@ -48,25 +48,29 @@ pub async fn paquete(app: &crate::App, ficha: &Ficha, raiz: &Path) -> Result<usi
         }
     }
 
-    // Los vectores, del fragmento de cada tesela. Una capa por modelo; se toma
-    // la primera de la ficha, que es la del autor del cuerpo.
-    let Some(capa) = ficha.capas.first() else { return Ok(ids.len()) };
-    let coleccion = crate::qdrant::coleccion_de(&capa.modelo, &capa.version);
+    // Una colección por capa. Antes se tomaba `capas.first()` y las demás se
+    // perdían en silencio, que con un solo modelo no se notaba y con ocho
+    // habría dejado siete niveles imposibles sin decir por qué.
     let cliente = crate::qdrant::Cliente::nuevo();
-    cliente.asegurar_coleccion(&coleccion, capa.dims).await?;
+    let mut subidos = 0usize;
+    for capa in &ficha.capas {
+        let coleccion = crate::qdrant::coleccion_de(&capa.modelo, &capa.version);
+        cliente.asegurar_coleccion(&coleccion, capa.dims).await?;
 
-    let vectores = lumi_index::vectors::leer_fragmentos(
-        &raiz.join("fragmentos"),
-        &capa.modelo,
-        &capa.version,
-        capa.dims,
-    )?;
-    // ponytail: se asume que el orden de los vectores del fragmento es el de
-    // las filas de `indice.db`, que es como los escribe el sellado del 7a. Si
-    // alguna vez dejan de ir a la par, el paquete trae el orden explícito y
-    // habría que leerlo — no adivinarlo aquí.
-    let n = ids.len().min(vectores.len());
-    cliente.subir(&coleccion, &ids[..n], &vectores[..n]).await?;
+        let vectores = lumi_index::vectors::leer_fragmentos(
+            &raiz.join("fragmentos"),
+            &capa.modelo,
+            &capa.version,
+            capa.dims,
+        )?;
+        // ponytail: se asume que el orden de los vectores del fragmento es el
+        // de las filas de `indice.db`, que es como los escribe el sellado del
+        // 7a. Si alguna vez dejan de ir a la par, el paquete trae el orden
+        // explícito y habría que leerlo — no adivinarlo aquí.
+        let n = ids.len().min(vectores.len());
+        cliente.subir(&coleccion, &ids[..n], &vectores[..n]).await?;
+        subidos = subidos.max(n);
+    }
 
-    Ok(n)
+    Ok(subidos)
 }
