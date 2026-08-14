@@ -103,6 +103,7 @@ async fn correr(dir: &std::path::Path, en_curso: &EnCurso, modelo: &Modelo) -> R
 
     let mut lineas = BufReader::new(stdout).lines();
     let mut fatal = None;
+    let mut sha256_real = None;
     while let Ok(Some(l)) = lineas.next_line().await {
         if let Some(cuerpo) = l.strip_prefix("@progreso ") {
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(cuerpo) {
@@ -111,6 +112,15 @@ async fn correr(dir: &std::path::Path, en_curso: &EnCurso, modelo: &Modelo) -> R
                     p.mib = v.get("mib").and_then(|x| x.as_u64()).unwrap_or(0);
                     p.total_mib = v.get("total_mib").and_then(|x| x.as_u64()).unwrap_or(0);
                 }
+            }
+        } else if let Some(cuerpo) = l.strip_prefix("@sha256 ") {
+            // El hash de lo que de verdad se bajó, no el que el registro
+            // decía (que aquí estaba vacío) — es lo que hace falta escribir
+            // de vuelta para que `lumi_pesos._verificar` deje de negarse:
+            // esa comprobación es intencionadamente más estricta que la del
+            // propio descargador, que acepta bajar sin hash conocido.
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(cuerpo) {
+                sha256_real = v.get("sha256").and_then(|x| x.as_str()).map(str::to_string);
             }
         } else if l.starts_with("FATAL") {
             fatal = Some(l.clone());
@@ -121,6 +131,15 @@ async fn correr(dir: &std::path::Path, en_curso: &EnCurso, modelo: &Modelo) -> R
     }
 
     let salida = hijo.wait().await?;
+    if salida.success() {
+        if let Some(sha256) = sha256_real {
+            if let Err(e) = anotar_sha256(&modelo.id, &sha256) {
+                if let Some(p) = en_curso.lock().unwrap().as_mut() {
+                    p.registro.push(format!("no se pudo anotar el sha256 en el registro: {e}"));
+                }
+            }
+        }
+    }
     let mut g = en_curso.lock().unwrap();
     let p = g.get_or_insert_with(ProgresoPesos::default);
     p.terminado = true;
@@ -128,4 +147,28 @@ async fn correr(dir: &std::path::Path, en_curso: &EnCurso, modelo: &Modelo) -> R
         p.error = Some(fatal.unwrap_or_else(|| format!("terminó con {salida}")));
     }
     Ok(())
+}
+
+/// Reescribe `sha256` en el fichero del registro cuyo `id` coincide — el
+/// mismo registro que `models::cargar_registro` lee, para que la PRÓXIMA
+/// carga (de este proceso o del siguiente) ya no tenga el campo vacío. Sin
+/// esto, `lumi_bajar.py` puede haber bajado el fichero perfectamente y
+/// `lumi_pesos.py` seguiría rechazándolo por «sha256 vacío» para siempre.
+fn anotar_sha256(modelo_id: &str, sha256: &str) -> Result<()> {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../modelos");
+    for entrada in std::fs::read_dir(&dir)?.flatten() {
+        let ruta = entrada.path();
+        if ruta.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        let texto = std::fs::read_to_string(&ruta)?;
+        let mut valor: serde_json::Value = serde_json::from_str(&texto)?;
+        if valor.get("id").and_then(|v| v.as_str()) != Some(modelo_id) {
+            continue;
+        }
+        valor["sha256"] = serde_json::Value::String(sha256.to_string());
+        std::fs::write(&ruta, serde_json::to_string_pretty(&valor)?)?;
+        return Ok(());
+    }
+    bail!("no encontré «{modelo_id}» en {}", dir.display())
 }
