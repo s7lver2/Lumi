@@ -259,7 +259,7 @@ export default function App() {
           onSignedIn={() => setMode(useServer.getState().isAdmin ? "admin" : "picker")}
           onOwnerKey={(key) => { useServer.getState().setKey(key); setStep(0); setMode("wizard"); }} />
       ) : mode === "admin" ? (
-        <AdminPanel token={useServer.getState().token!} onClose={() => setMode("picker")} />
+        <AdminPanel token={useServer.getState().token!} />
       ) : mode === "wizard" ? (
         <Wizard step={step} title="Lumi Station" subtitle="vincular servidor"
           // Del paso 3 (runtime) no se puede volver al 2 (admin): la cuenta ya
