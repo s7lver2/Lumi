@@ -218,7 +218,9 @@ export default function App() {
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
-      <PlanetBackground dead={status !== "ok"} />
+      {/* El panel de administración tiene su propio fondo liso: el planeta
+          es la ambientación del trabajo de caso, no de mirar la máquina. */}
+      {mode !== "admin" && <PlanetBackground dead={status !== "ok"} />}
       {/* Una sola franja arriba para todo: migas, estado del servidor,
           notificaciones, cuenta y los botones de la ventana. La telemetría ya
           no es una franja permanente de 70 px — vive en su píldora. */}
@@ -237,7 +239,9 @@ export default function App() {
       <div className={`relative flex flex-1 overflow-hidden ${
         // El selector de proyectos también ocupa la ventana entera desde el
         // rediseño: centrarlo lo dejaba flotando con dos paneles a media asta.
-        mode === "project" || mode === "case" || mode === "picker"
+        // El panel de administración tampoco se centra: es una pantalla
+        // completa con su propia barra lateral, no una tarjeta flotante.
+        mode === "project" || mode === "case" || mode === "picker" || mode === "admin"
           ? "" : "items-center justify-center overflow-y-auto"
       } ${blockedByDisconnect ? "pointer-events-none opacity-50" : ""}`}>
       {resuming ? null : status !== "ok" && !blockedByDisconnect && mode !== "entry" ? (

@@ -32,7 +32,7 @@ export function AdminPanel({ token }: { token: string }) {
   }, [token]);
 
   return (
-    <div className="relative z-10 grid h-full grid-cols-[206px_1fr] overflow-hidden">
+    <div className="relative z-10 grid h-full w-full grid-cols-[206px_1fr] overflow-hidden bg-bg">
       <Sidebar actual={seccion} onIr={setSeccion} contadores={cuentas} />
       <div key={seccion} className="overflow-y-auto"
         style={{ animation: "jg-fade-rise .5s cubic-bezier(.16,1,.3,1) both" }}>
