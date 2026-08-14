@@ -16,9 +16,12 @@ deberia llegar aqui asi, porque esos quedan en modo guia y el gesto de
 "instalar" los excluye del lote antes de lanzar la tarea.
 """
 import hashlib
+import http.cookiejar
 import json
 import os
+import re
 import sys
+import urllib.parse
 import urllib.request
 
 
@@ -28,9 +31,39 @@ def progreso(item_id, hechos, total):
     print("@progreso " + linea, flush=True)
 
 
+def _id_de_drive(url):
+    m = re.search(r"/d/([a-zA-Z0-9_-]+)", url) or re.search(r"[?&]id=([a-zA-Z0-9_-]+)", url)
+    return m.group(1) if m else None
+
+
+def _abrir(url):
+    """Google Drive antepone una pagina de aviso ("no se puede analizar en
+    busca de virus") a cualquier fichero de mas de un centenar de MB, y sin
+    seguirla urllib.request guardaria esa pagina HTML como si fueran los
+    pesos. La pagina de aviso ya no basta con un `&confirm=` pegado a la
+    misma URL (el truco clasico de gdown): trae un <form> que apunta a OTRO
+    host (drive.usercontent.google.com) con un `uuid` de un solo uso, y hay
+    que enviar exactamente los campos de ese formulario. Cualquier otro host
+    se abre tal cual, sin este rodeo."""
+    file_id = _id_de_drive(url)
+    if not file_id or "drive.google.com" not in url:
+        return urllib.request.urlopen(url)
+    jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    resp = opener.open(f"https://drive.google.com/uc?export=download&id={file_id}")
+    if resp.headers.get_content_type() != "text/html":
+        return resp
+    cuerpo = resp.read().decode("utf-8", "replace")
+    accion = re.search(r'action="([^"]+)"', cuerpo)
+    campos = dict(re.findall(r'name="([^"]+)"\s+value="([^"]*)"', cuerpo))
+    if not accion or "confirm" not in campos:
+        raise ValueError(f"drive.google.com no dio el fichero ni una confirmacion reconocible para {file_id}")
+    return opener.open(accion.group(1) + "?" + urllib.parse.urlencode(campos))
+
+
 def descargar(url, destino, item_id):
     os.makedirs(os.path.dirname(destino), exist_ok=True)
-    with urllib.request.urlopen(url) as resp:
+    with _abrir(url) as resp:
         total = int(resp.headers.get("Content-Length", 0))
         h = hashlib.sha256()
         hechos = 0
