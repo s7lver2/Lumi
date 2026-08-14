@@ -65,6 +65,12 @@ pub struct Progreso {
     /// contador, ese reintento era invisible desde la interfaz y "atascado en
     /// 32" y "reintentando cada 5s con éxito eventual" se veían idénticos.
     pub guardado_fallos: u32,
+    /// El motivo del último `MsgEmbed::Fallo` de este modelo — típicamente
+    /// "no se pudo cargar el modelo": pesos o licencia que faltan en disco.
+    /// Sin esto, un modelo que SIEMPRE falla (nunca "muere": el trabajador
+    /// sigue vivo y contesta) se veía IDÉNTICO a uno que solo tarda: "lote
+    /// 0/32" para siempre, sin ninguna pista de por qué.
+    pub ultimo_fallo: Option<String>,
 }
 
 pub struct Cola {
@@ -274,7 +280,7 @@ impl Cola {
                     }
                 }
 
-                let vivo = self
+                let (vivo, fallo) = self
                     .resolver_indice(trabajador.as_mut().unwrap(), indice_id, &modelo, &coleccion, &qdrant)
                     .await;
                 if !vivo {
@@ -292,12 +298,37 @@ impl Cola {
                         ));
                         descartados.insert(indice_id);
                     }
+                } else if fallo {
+                    // El trabajador sigue vivo, pero el lote entero falló (el
+                    // caso típico: el modelo no cargó — pesos o licencia que
+                    // faltan). Sin esta espera y este mismo contador de
+                    // `reintentos`, el lote se repetía IDÉNTICO en el
+                    // siguiente tick sin ningún límite: giraba a toda
+                    // velocidad gastando CPU, no GPU, y "0/32 para siempre"
+                    // era indistinguible de estar cargando algo de verdad.
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    let n = reintentos.entry(indice_id).or_insert(0);
+                    *n += 1;
+                    if *n > REINTENTOS_MAX {
+                        self.log.apuntar(format!(
+                            "cola ({modelo}): el índice {indice_id} falla siempre con este modelo, se descarta por esta sesión"
+                        ));
+                        descartados.insert(indice_id);
+                    }
+                } else {
+                    reintentos.remove(&indice_id);
                 }
             }
         });
     }
 
-    /// Devuelve `false` si el trabajador se murió a mitad.
+    /// `(vivo, fallo)`: `vivo` es `false` si el trabajador se murió a mitad.
+    /// `fallo` es `true` si el trabajador siguió vivo pero el lote entero no
+    /// se pudo procesar (típicamente el modelo no cargó) — sin distinguir
+    /// esto de un éxito, la misma imagen se reintentaba instantáneamente para
+    /// siempre: nada moría, así que nada disparaba el descarte por
+    /// reintentos, y la cola giraba en un bucle apretado gastando CPU sin
+    /// que se notara desde fuera más que "0/32 no avanza nunca".
     async fn resolver_indice(
         &self,
         t: &mut Trabajador,
@@ -305,13 +336,13 @@ impl Cola {
         modelo: &str,
         coleccion: &str,
         qdrant: &Cliente,
-    ) -> bool {
+    ) -> (bool, bool) {
         let Ok(pendientes) = self.almacen.pendientes_de(indice_id, modelo, POR_LOTE) else {
-            return true;
+            return (true, false);
         };
         if pendientes.is_empty() {
             // Otro tick ya se lo llevó, o el operador lo canceló justo ahora.
-            return true;
+            return (true, false);
         }
         // De antes de este lote: el lote en sí ya lo cambia, así que esto es
         // "lo que llevaba el índice hasta ahora", no "lo que lleva después".
@@ -336,12 +367,12 @@ impl Cola {
             Lote::nuevo(indice_id, modelo.to_string(), pendientes.iter().map(|(_, r)| r.clone()).collect());
         let linea = format!("{}\n", serde_json::to_string(&orden).unwrap());
         if t.entrada.write_all(linea.as_bytes()).await.is_err() {
-            return false;
+            return (false, false);
         }
         let _ = t.entrada.flush().await;
 
         loop {
-            let Some(msg) = t.salida.recv().await else { return false };
+            let Some(msg) = t.salida.recv().await else { return (false, false) };
             match msg {
                 MsgEmbed::Listo { dispositivo, .. } => {
                     if let Some(p) = self.progreso.lock().unwrap().get_mut(modelo) {
@@ -368,7 +399,10 @@ impl Cola {
                 }
                 MsgEmbed::Fallo { motivo, .. } => {
                     self.log.apuntar(format!("cola ({modelo}): índice {indice_id}, {motivo}"));
-                    return true;
+                    if let Some(p) = self.progreso.lock().unwrap().get_mut(modelo) {
+                        p.ultimo_fallo = Some(motivo);
+                    }
+                    return (true, true);
                 }
                 MsgEmbed::Vectores { dims, cuenta, fichero, imagenes, .. } => {
                     let ok = self.guardar(qdrant, coleccion, &fichero, dims, cuenta, &imagenes, &por_ruta, modelo).await;
@@ -391,8 +425,12 @@ impl Cola {
                             p.guardado_fallos += 1;
                         }
                         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    } else if let Some(p) = self.progreso.lock().unwrap().get_mut(modelo) {
+                        // Un lote de verdad guardado: lo que fallara antes de
+                        // este modelo ya no describe su estado actual.
+                        p.ultimo_fallo = None;
                     }
-                    return true;
+                    return (true, false);
                 }
             }
         }

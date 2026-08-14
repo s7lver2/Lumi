@@ -178,6 +178,7 @@ export interface ProgresoCola {
   saltadas: number;
   reinicios: number;
   guardado_fallos: number;
+  ultimo_fallo: string | null;
 }
 export interface FichaResumen {
   paquete: string; nombre: string; autor: string; url: string;

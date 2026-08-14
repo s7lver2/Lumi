@@ -100,6 +100,12 @@ export function EmbedQueueView() {
                   {p.guardado_fallos > 0 && <span>{p.guardado_fallos} sin subir</span>}
                 </div>
               )}
+              {p.ultimo_fallo && (
+                // El trabajador sigue vivo y contesta — por eso "0/32" solo
+                // no lo distinguía de estar cargando algo de verdad. Esto es
+                // lo que faltaba: por qué falla, no solo que no avanza.
+                <p className="mt-1.5 text-[9.5px] leading-relaxed text-danger-fg">{p.ultimo_fallo}</p>
+              )}
             </div>
           );
         })}
