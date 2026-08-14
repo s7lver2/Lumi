@@ -264,6 +264,12 @@ impl Almacen {
             // fichero alterado". Persistir la clave del primer intento hace
             // que reanudar reutilice la misma.
             "ALTER TABLE indices ADD COLUMN clave_publicacion TEXT",
+            // Los niveles (mini/vision/pro) elegidos al crear el índice, por
+            // id y separados por coma. Fija qué modelos se embeben para él —
+            // sin esto, cada ingesta pedía TODOS los modelos registrados sin
+            // preguntar, y un índice nunca podía llegar a servir ni siquiera
+            // Mini de verdad si el operador no quería pagar el resto.
+            "ALTER TABLE indices ADD COLUMN niveles_elegidos TEXT",
         ] {
             let _ = c.execute(alter, []);
         }
@@ -351,6 +357,30 @@ impl Almacen {
         c.execute(
             "UPDATE indices SET clave_publicacion = ?2 WHERE id = ?1",
             params![indice_id, clave],
+        )?;
+        Ok(())
+    }
+
+    /// Los niveles (mini/vision/pro) que se eligieron al crear este índice.
+    /// Vacío para uno creado antes de que esto existiera — quien llama decide
+    /// qué hacer con "sin elegir" (ver `modelos_de_niveles`).
+    pub fn niveles_elegidos(&self, indice_id: i64) -> Result<Vec<String>> {
+        let c = self.0.lock().unwrap();
+        let crudo: Option<String> = c.query_row(
+            "SELECT niveles_elegidos FROM indices WHERE id = ?1",
+            params![indice_id],
+            |r| r.get(0),
+        )?;
+        Ok(crudo.unwrap_or_default().split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect())
+    }
+
+    /// Se fija una sola vez, al crear el índice: no tiene sentido cambiar de
+    /// niveles a mitad con imágenes ya embebidas bajo la elección anterior.
+    pub fn fijar_niveles_elegidos(&self, indice_id: i64, niveles: &[String]) -> Result<()> {
+        let c = self.0.lock().unwrap();
+        c.execute(
+            "UPDATE indices SET niveles_elegidos = ?2 WHERE id = ?1",
+            params![indice_id, niveles.join(",")],
         )?;
         Ok(())
     }

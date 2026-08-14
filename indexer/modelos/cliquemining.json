@@ -1,0 +1,11 @@
+{
+  "id": "cliquemining",
+  "nombre": "CliqueMining",
+  "base": "SALAD afinado (congelado)",
+  "version": "1.0",
+  "dims": 8448,
+  "familia": "foundation",
+  "licencia": "MIT",
+  "pesos_url": "https://github.com/serizba/salad",
+  "sha256": ""
+}

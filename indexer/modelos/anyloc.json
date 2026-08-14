@@ -1,0 +1,11 @@
+{
+  "id": "anyloc",
+  "nombre": "AnyLoc",
+  "base": "DINOv2 + VLAD sin afinar (congelado)",
+  "version": "1.0",
+  "dims": 49152,
+  "familia": "foundation",
+  "licencia": "MIT",
+  "pesos_url": "https://github.com/AnyLoc/AnyLoc",
+  "sha256": ""
+}

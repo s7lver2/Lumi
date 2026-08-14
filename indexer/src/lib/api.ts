@@ -17,6 +17,11 @@ export interface Modelo {
   id: string; nombre: string; base: string; version: string; dims: number;
   familia: string; licencia: string; pesos_url: string; sha256: string;
 }
+export interface Nivel {
+  id: string; nombre: string;
+  recuperacion: string[]; geometricos: string[]; agentes: string[];
+  cae_a: string | null;
+}
 export interface Resumen { lote_id: number; aceptadas: number; saltadas: number; con_vector: number; motivos: string[] }
 
 export type Tipo = "calle" | "cenital" | "suelta";
@@ -253,7 +258,8 @@ export const api = {
   ingestaLegacyArrancar: (indiceId: number, ruta: string, tipo: string, fuente: string, declarada: boolean) =>
     invoke<void>("ingesta_legacy_arrancar", { indiceId, ruta, tipo, fuente, declarada }),
   ingestaLegacyProgreso: () => invoke<ProgresoIngesta>("ingesta_legacy_progreso"),
-  indiceCrear: (nombre: string) => invoke<number>("indice_crear", { nombre }),
+  indiceCrear: (nombre: string, niveles: string[]) => invoke<number>("indice_crear", { nombre, niveles }),
+  nivelesLista: () => invoke<Nivel[]>("niveles_lista"),
   indicesLista: () => invoke<ResumenIndice[]>("indices_lista"),
   indiceDetalle: (id: number) => invoke<DetalleIndice>("indice_detalle", { id }),
   indiceLotes: (id: number) => invoke<LoteResumen[]>("indice_lotes", { id }),

@@ -11,6 +11,7 @@ mod identidad;
 mod ingest;
 mod keys;
 mod models;
+mod niveles;
 mod origins;
 mod package;
 mod perf;
@@ -45,6 +46,9 @@ pub struct Estado {
     /// pararlos, y en ese punto no se puede seguir prestando el estado.
     pub servicios: Arc<services::Servicios>,
     pub modelos: Vec<models::Modelo>,
+    /// Los niveles (mini/vision/pro), para resolver a qué modelos de
+    /// recuperación se embebe un índice según lo que se eligió al crearlo.
+    pub niveles: Vec<lumi_index::niveles::Nivel>,
     pub cola: Arc<queue::Cola>,
     /// La descarga de red en curso, si hay alguna. Se reemplaza entera al
     /// arrancar una nueva: solo hay una a la vez.
@@ -244,6 +248,25 @@ fn cola_pausar(estado: tauri::State<'_, Estado>, pausada: bool) {
     estado.cola.pausar(pausada);
 }
 
+/// Qué modelos se embeben para este índice: la unión de recuperación de los
+/// niveles que se eligieron al crearlo, acotada a lo que de verdad hay
+/// registrado — un nivel puede pedir un modelo que el operador todavía no
+/// tiene en `indexer/modelos/`. Un índice creado ANTES de que esto existiera
+/// no tiene niveles guardados; para no dejarlo huérfano, ese caso se
+/// resuelve como "todos los modelos registrados", que era el comportamiento
+/// de siempre.
+fn modelos_para(estado: &Estado, indice_id: i64) -> Vec<String> {
+    let elegidos = estado.almacen.niveles_elegidos(indice_id).unwrap_or_default();
+    if elegidos.is_empty() {
+        return estado.modelos.iter().map(|m| m.id.clone()).collect();
+    }
+    let disponibles: std::collections::HashSet<&str> = estado.modelos.iter().map(|m| m.id.as_str()).collect();
+    niveles::modelos_de_niveles(&estado.niveles, &elegidos)
+        .into_iter()
+        .filter(|id| disponibles.contains(id.as_str()))
+        .collect()
+}
+
 /// La guarda de «sellar es irreversible»: se llama al principio de todo
 /// comando que escribe contra un `indice_id` ya elegido, antes de tocar nada.
 fn exige_abierto(estado: &Estado, indice_id: i64) -> Result<(), String> {
@@ -292,7 +315,7 @@ fn ingesta_carpeta(
     licencia: Option<String>,
 ) -> Result<ingest::Resumen, String> {
     exige_abierto(&estado, indice_id)?;
-    let modelos: Vec<String> = estado.modelos.iter().map(|m| m.id.clone()).collect();
+    let modelos = modelos_para(&estado, indice_id);
     ingest::desde_carpeta(
         &estado.almacen,
         indice_id,
@@ -489,8 +512,21 @@ fn slug_de(nombre: &str) -> String {
 }
 
 #[tauri::command]
-fn indice_crear(estado: tauri::State<'_, Estado>, nombre: String) -> Result<i64, String> {
-    estado.almacen.crear_indice(&nombre, &slug_de(&nombre)).map_err(|e| e.to_string())
+fn indice_crear(estado: tauri::State<'_, Estado>, nombre: String, niveles: Vec<String>) -> Result<i64, String> {
+    if niveles.is_empty() {
+        return Err("elige al menos un nivel (mini, vision o pro) para saber contra qué modelos embeber".into());
+    }
+    let id = estado.almacen.crear_indice(&nombre, &slug_de(&nombre)).map_err(|e| e.to_string())?;
+    estado.almacen.fijar_niveles_elegidos(id, &niveles).map_err(|e| e.to_string())?;
+    Ok(id)
+}
+
+/// Los niveles disponibles (mini/vision/pro), para el checkbox de «Nuevo
+/// índice» — la interfaz no lee `registros/niveles/` directamente porque solo
+/// el backend sabe dónde vive ese directorio en esta instalación.
+#[tauri::command]
+fn niveles_lista(estado: tauri::State<'_, Estado>) -> Vec<lumi_index::niveles::Nivel> {
+    estado.niveles.clone()
 }
 
 /// Por índice, el mismo cálculo que `indice_detalle` pero solo de imágenes:
@@ -688,7 +724,7 @@ async fn descarga_arrancar(
         let _ = estado.almacen.guardar_ajuste(download::CLAVE_PLAN_PENDIENTE, &json);
     }
     let origenes = origenes_de(&estado);
-    let modelos: Vec<String> = estado.modelos.iter().map(|m| m.id.clone()).collect();
+    let modelos = modelos_para(&estado, indice_id);
     let d = std::sync::Arc::new(download::Descarga::nueva(
         estado.almacen.clone(),
         indice_id,
@@ -1366,8 +1402,9 @@ async fn ingesta_legacy_arrancar(
     declarada: bool,
 ) -> Result<(), String> {
     exige_abierto(&estado, indice_id)?;
-    let modelos_registro = estado.modelos.clone();
-    let modelos: Vec<String> = modelos_registro.iter().map(|m| m.id.clone()).collect();
+    let modelos = modelos_para(&estado, indice_id);
+    let modelos_registro: Vec<models::Modelo> =
+        estado.modelos.iter().filter(|m| modelos.contains(&m.id)).cloned().collect();
     let destino = estado.dir.join("imagenes").join(indice_id.to_string());
     let almacen = estado.almacen.clone();
     let ing = Arc::new(ingest::Ingesta::nueva());
@@ -1474,6 +1511,9 @@ pub fn run() {
     let modelos = models::cargar_registro(
         &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../modelos"),
     );
+    let niveles = niveles::cargar_registro(
+        &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../registros/niveles"),
+    );
     let cola = queue::Cola::nueva(dir.clone(), almacen.clone(), servicios.log.clone());
     // Un bucle por modelo registrado, no solo el primero: con lumi-2 y
     // lumi-preview activos a la vez, quedarse en `modelos.first()` significaba
@@ -1509,6 +1549,7 @@ pub fn run() {
             maestra,
             servicios,
             modelos,
+            niveles,
             cola,
             descarga: std::sync::Mutex::new(None),
             ingesta: std::sync::Mutex::new(None),
@@ -1541,6 +1582,7 @@ pub fn run() {
             ingesta_legacy_arrancar,
             ingesta_legacy_progreso,
             indice_crear,
+            niveles_lista,
             indices_lista,
             indice_detalle,
             indice_lotes,
