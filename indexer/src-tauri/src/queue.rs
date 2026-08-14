@@ -119,11 +119,23 @@ async fn arrancar(dir: &std::path::Path, log: Arc<Log>, dispositivo: &str, dims:
     if !script.exists() {
         bail!("no encuentro el trabajador en {}", script.display());
     }
+    // `LUMI_REGISTRO`/`LUMI_PESOS` son igual de obligatorios: sus valores por
+    // defecto en `lumi_embed.py` ("registros/modelos", "pesos") son relativos
+    // al directorio de trabajo del proceso, que no tiene por qué ser la raíz
+    // del repo — con el Indexer arrancado desde cualquier otro sitio (el
+    // caso normal fuera de desarrollo), el trabajador fallaba con "el sistema
+    // no puede encontrar la ruta especificada" para CUALQUIER modelo, no solo
+    // los nuevos. Ambos se fijan aquí, absolutos, sin depender de dónde se
+    // lanzó el proceso.
+    let registro = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../modelos");
+    let pesos = dir.join("pesos");
     let mut hijo = crate::proceso::cmd_async(&py)
         .arg("-u")
         .arg(&script)
         .env("LUMI_DEVICE", dispositivo)
         .env("LUMI_FAKE_DIMS", dims.to_string())
+        .env("LUMI_REGISTRO", &registro)
+        .env("LUMI_PESOS", &pesos)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
