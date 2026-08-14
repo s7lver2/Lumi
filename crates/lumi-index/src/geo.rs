@@ -147,6 +147,34 @@ impl Atributos {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RecursoGeo {
+    pub id: String,
+    pub nombre: String,
+    pub licencia: String,
+    #[serde(default)]
+    pub fichero_url: String,
+    #[serde(default)]
+    pub licencia_url: String,
+    #[serde(default)]
+    pub licencia_texto: String,
+    #[serde(default)]
+    pub puerta: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RegistroGeo {
+    recursos: Vec<RecursoGeo>,
+}
+
+pub fn cargar_recursos(dir: &Path) -> Vec<RecursoGeo> {
+    std::fs::read(dir.join("registro.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<RegistroGeo>(&b).ok())
+        .map(|r| r.recursos)
+        .unwrap_or_default()
+}
+
 /// Los tres datasets cargados una vez al arrancar el daemon. Cada uno por su
 /// lado: que falte la rejilla de Köppen no impide resolver el país.
 #[derive(Debug, Clone, Default)]

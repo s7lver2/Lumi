@@ -1,0 +1,11 @@
+{
+  "id": "paddleocr",
+  "nombre": "PaddleOCR",
+  "clase": "ocr",
+  "licencia": "Apache-2.0",
+  "fichero_url": "",
+  "licencia_url": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+  "licencia_texto": "",
+  "puerta": null,
+  "gestion_propia": true
+}
