@@ -251,11 +251,15 @@ impl Cola {
             }
             let mut trabajador: Option<Trabajador> = None;
             // En memoria, no en SQLite: un índice que revienta el trabajador
-            // más de la cuenta se descarta el resto de ESTA sesión para ESTE
-            // modelo. Sin esto, un lote envenenado reintentaría para siempre
-            // y ningún otro índice llegaría a procesarse.
+            // (o falla siempre) se aparta un rato para ESTE modelo, no para
+            // siempre. Descartarlo sin fecha de caducidad era peor que el
+            // bucle que evitaba: arreglar la causa real (bajar los pesos que
+            // faltaban, por ejemplo) no servía de nada hasta reiniciar la
+            // app entera, porque nada volvía a intentarlo jamás dentro de la
+            // misma sesión.
             let mut reintentos: HashMap<i64, u32> = HashMap::new();
-            let mut descartados: std::collections::HashSet<i64> = std::collections::HashSet::new();
+            let mut descartados: HashMap<i64, std::time::Instant> = HashMap::new();
+            const ENFRIAMIENTO: std::time::Duration = std::time::Duration::from_secs(60);
 
             loop {
                 if *self.pausada.lock().unwrap() {
@@ -267,7 +271,10 @@ impl Cola {
                     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                     continue;
                 };
-                let Some(indice_id) = indices.into_iter().find(|i| !descartados.contains(i)) else {
+                let Some(indice_id) = indices
+                    .into_iter()
+                    .find(|i| descartados.get(i).map_or(true, |t| t.elapsed() >= ENFRIAMIENTO))
+                else {
                     if let Some(p) = self.progreso.lock().unwrap().get_mut(&modelo) {
                         p.trabajando = false;
                     }
@@ -306,9 +313,11 @@ impl Cola {
                     *n += 1;
                     if *n > REINTENTOS_MAX {
                         self.log.apuntar(format!(
-                            "cola ({modelo}): el índice {indice_id} murió más veces de las permitidas, se descarta por esta sesión"
+                            "cola ({modelo}): el índice {indice_id} murió más veces de las permitidas, se aparta {}s",
+                            ENFRIAMIENTO.as_secs()
                         ));
-                        descartados.insert(indice_id);
+                        descartados.insert(indice_id, std::time::Instant::now());
+                        reintentos.remove(&indice_id);
                     }
                 } else if fallo {
                     // El trabajador sigue vivo, pero el lote entero falló (el
@@ -323,9 +332,11 @@ impl Cola {
                     *n += 1;
                     if *n > REINTENTOS_MAX {
                         self.log.apuntar(format!(
-                            "cola ({modelo}): el índice {indice_id} falla siempre con este modelo, se descarta por esta sesión"
+                            "cola ({modelo}): el índice {indice_id} falla siempre con este modelo, se aparta {}s",
+                            ENFRIAMIENTO.as_secs()
                         ));
-                        descartados.insert(indice_id);
+                        descartados.insert(indice_id, std::time::Instant::now());
+                        reintentos.remove(&indice_id);
                     }
                 } else {
                     reintentos.remove(&indice_id);
