@@ -1269,6 +1269,32 @@ impl Almacen {
         Ok(pedidas.iter().filter(|q| !hechas.contains(*q)).cloned().collect())
     }
 
+    /// Cuánto de lo pedido ya está `hecho` — teselas, imágenes y unidades —
+    /// para que reanudar una descarga arranque el contador desde donde de
+    /// verdad iba, no desde cero. `descargas_pendientes` ya sabe filtrar lo
+    /// que falta; esto es su complemento: lo que sobra.
+    pub fn descargas_hechas_resumen(
+        &self,
+        indice_id: i64,
+        fuente: &str,
+        pedidas: &[String],
+    ) -> Result<(u32, u32, u32)> {
+        if pedidas.is_empty() {
+            return Ok((0, 0, 0));
+        }
+        let c = self.0.lock().unwrap();
+        let marcadores = vec!["?"; pedidas.len()].join(",");
+        let sql = format!(
+            "SELECT COUNT(*), COALESCE(SUM(imagenes), 0), COALESCE(SUM(unidades), 0)
+               FROM descargas
+              WHERE indice_id = ? AND fuente = ? AND estado = 'hecho' AND quadkey IN ({marcadores})"
+        );
+        let mut q = c.prepare(&sql)?;
+        let mut params: Vec<&dyn rusqlite::ToSql> = vec![&indice_id, &fuente];
+        params.extend(pedidas.iter().map(|p| p as &dyn rusqlite::ToSql));
+        Ok(q.query_row(params.as_slice(), |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?)
+    }
+
     // ── Catálogo remoto ──────────────────────────────────────────────────
 
     pub fn ficha_remota_guardar(

@@ -188,16 +188,41 @@ impl Descarga {
                     .unwrap_or(0),
             )
         });
+        // Lo que ya está `hecho` de una ejecución anterior no se vuelve a
+        // pedir (arriba), pero el contador tiene que saber que existió: sin
+        // esto, reanudar una descarga a medias enseña "0 de 8" en vez de
+        // "12 de 20" — el trabajo real nunca se repitió, solo el contador
+        // olvidaba lo que ya llevaba hecho.
+        let (hechas_ya, imagenes_ya, unidades_ya) = self
+            .almacen
+            .descargas_hechas_resumen(self.indice_id, o.id(), teselas)
+            .unwrap_or((0, 0, 0));
+        let coste_ya = o.tarifa().coste_eur(unidades_ya);
         {
             let mut p = self.progreso.lock().unwrap();
-            p.teselas_total += pendientes.len() as u32;
+            p.teselas_total += pendientes.len() as u32 + hechas_ya;
+            p.teselas_hechas += hechas_ya;
+            p.imagenes += imagenes_ya;
+            // `p.gastado_eur` NO se siembra igual: más abajo se sobrescribe
+            // con `self.tope.gastado_eur()` en cuanto termina cualquier
+            // tesela, y `self.tope` (el `Presupuesto` de ESTA ejecución) no
+            // sabe nada de lo gastado en una ejecución anterior. Sembrarlo
+            // aquí solo daría un número correcto un instante, hasta el
+            // primer tile — y además tocar el presupuesto es una cuestión
+            // de política (¿reanudar da presupuesto fresco, o hereda el
+            // gastado?) que el reporte de este bug no pidió resolver.
             p.por_origen.push(LineaOrigen {
                 fuente: o.id().to_string(),
-                hechas: 0,
-                total: pendientes.len() as u32,
-                imagenes: 0,
-                coste_eur: 0.0,
+                hechas: hechas_ya,
+                total: pendientes.len() as u32 + hechas_ya,
+                imagenes: imagenes_ya,
+                coste_eur: coste_ya,
             });
+            for qk in teselas {
+                if !pendientes.contains(qk) {
+                    p.teselas.push(TeselaProgreso { quadkey: qk.clone(), fuente: o.id().to_string(), hecha: true });
+                }
+            }
             for qk in &pendientes {
                 p.teselas.push(TeselaProgreso { quadkey: qk.clone(), fuente: o.id().to_string(), hecha: false });
             }
@@ -408,10 +433,23 @@ mod tests {
         assert_eq!(d.progreso().teselas_hechas, 2);
 
         // Segunda pasada sobre las mismas: ni una petición ni un céntimo.
+        // `teselas_hechas` SÍ cuenta las dos — es la cuenta durable de lo que
+        // ya está hecho, sembrada desde SQLite, no lo que esta ejecución
+        // trabajó de nuevo. Ese es justo el bug que arregla: sin la siembra,
+        // reanudar una descarga a medias enseñaba "0 hechas" aunque el disco
+        // ya tuviera el trabajo real.
         let d2 = Descarga::nueva(a.clone(), i, 100.0, &[]);
         d2.un_origen(&o, &["AAA".into(), "BBB".into()]).await;
         assert_eq!(d2.progreso().gastado_eur, 0.0, "no se paga dos veces");
-        assert_eq!(d2.progreso().teselas_hechas, 0, "no había nada que hacer");
+        assert_eq!(d2.progreso().teselas_hechas, 2, "lo ya hecho se recuerda, no se olvida al reanudar");
+
+        // La fila por origen es justo lo que se veía en "Mapillary 0/0 · 0
+        // fotos" pese a haber fotos de verdad ya bajadas: sin la siembra,
+        // estos tres campos nacían en cero en cada `Descarga` nueva.
+        let linea = d2.progreso().por_origen.into_iter().find(|l| l.fuente == "caro").unwrap();
+        assert_eq!(linea.hechas, 2);
+        assert_eq!(linea.total, 2);
+        assert_eq!(linea.imagenes, 20);
     }
 
     /// El bug real: `un_origen` apagaba `trabajando` al terminar SU lista, así
