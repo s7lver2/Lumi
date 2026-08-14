@@ -12,7 +12,7 @@ use lumi_proto::api::{ItemDescarga, TaskKind, TaskStatus};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 pub fn log_path(dir: &Path, id: &str) -> PathBuf {
     dir.join("tasks").join(format!("{id}.log"))
@@ -32,7 +32,7 @@ fn now() -> i64 {
 /// configurado que vivan el venv y los pesos descargados; puede ser otro
 /// disco o volumen. Si no está configurado (arranque sin `lumi install`,
 /// p. ej. en desarrollo), cae a `dir/runtime`.
-fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>, payload: Option<&str>) -> (String, Vec<String>) {
+fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec<String>) {
     let base = models_dir.map(PathBuf::from).unwrap_or_else(|| dir.join("runtime"));
     let venv = base.join("venv");
     match kind {
@@ -63,9 +63,14 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>, payload: Option
             "/bin/sh".into(),
             vec!["-c".into(), "echo 'esquema aplicado por lumid al arrancar'".into()],
         ),
+        // El JSON viaja por stdin, no por argv: una licencia GPL de verdad
+        // mide decenas de KB, y Windows corta la línea de comandos completa
+        // en unos 32K caracteres — pasado ese tope, ni siquiera se llega a
+        // arrancar el proceso ("el nombre del archivo o la extensión es
+        // demasiado largo"). stdin no tiene ese límite.
         TaskKind::ModelDownload => (
             venv.join("bin").join("python3").to_string_lossy().into_owned(),
-            vec!["workers/lumi_bajar.py".into(), payload.unwrap_or("[]").into()],
+            vec!["workers/lumi_bajar.py".into()],
         ),
     }
 }
@@ -95,16 +100,16 @@ fn spawn_con_payload(app: &App, kind: TaskKind, payload: Option<String>) -> Resu
     }
 
     let models_dir = app.store.get_meta("models_dir");
-    let (bin, args) = command(kind, &app.dir, models_dir.as_deref(), payload.as_deref());
+    let (bin, args) = command(kind, &app.dir, models_dir.as_deref());
     let store = app.store.clone();
     let id2 = id.clone();
     tokio::spawn(async move {
-        let mut child = match tokio::process::Command::new(bin)
-            .args(args)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-        {
+        let mut cmd = tokio::process::Command::new(bin);
+        cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
+        if kind == TaskKind::ModelDownload {
+            cmd.stdin(Stdio::piped());
+        }
+        let mut child = match cmd.spawn() {
             Ok(c) => c,
             Err(e) => {
                 let _ = append(&path, &format!("FATAL no se pudo lanzar: {e}\n"));
@@ -112,6 +117,14 @@ fn spawn_con_payload(app: &App, kind: TaskKind, payload: Option<String>) -> Resu
                 return;
             }
         };
+        if kind == TaskKind::ModelDownload {
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(payload.unwrap_or_else(|| "[]".into()).as_bytes()).await;
+                // Soltar el handle cierra el extremo de escritura: es lo que
+                // convierte `for linea in sys.stdin` en un bucle que termina,
+                // no uno que se queda esperando más líneas para siempre.
+            }
+        }
         // stdout y stderr al mismo log, en orden de llegada: es lo que el
         // operador quiere leer, no dos flujos que casar a mano.
         let out = BufReader::new(child.stdout.take().unwrap());

@@ -82,7 +82,11 @@ def descargar(url, destino, item_id):
 
 
 def main():
-    items = json.loads(sys.argv[1])
+    # Por stdin, no por argv: una licencia real (GPL entera, por ejemplo)
+    # mide decenas de KB, y Windows corta la linea de comandos completa en
+    # unos 32K caracteres -- pasado ese tope ni siquiera se llega a arrancar
+    # el proceso. stdin no tiene ese limite.
+    items = json.loads(sys.stdin.read())
     total_n = len(items)
     for i, item in enumerate(items, 1):
         item_id = item["id"]

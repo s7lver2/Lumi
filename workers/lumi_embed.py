@@ -48,8 +48,7 @@ def _cargar(modelo):
     return e
 
 
-def _vector(modelo, ruta):
-    return _cargados[modelo].vector(ruta)
+POR_SUBLOTE = 8  # un forward por cada 8 imagenes, no uno por imagen
 
 
 def _embeber(job):
@@ -63,22 +62,35 @@ def _embeber(job):
             continue
         rutas.append(ruta)
 
+    if not rutas:
+        for ruta, motivo in saltadas:
+            _decir({"tipo": "saltada", "id": job["id"], "ruta": ruta, "motivo": motivo})
+        return None
+
+    modelo = _cargados[job["modelo"]]
+    dims = modelo.dims
+    hechas = []
+    for i in range(0, len(rutas), POR_SUBLOTE):
+        sublote = rutas[i:i + POR_SUBLOTE]
+        ok, fallidas = modelo.vectores(sublote)
+        hechas.extend(ok)
+        saltadas.extend(fallidas)
+        _decir({"tipo": "progreso", "id": job["id"],
+                "hechas": len(hechas) + len(saltadas), "total": len(rutas)})
+
     for ruta, motivo in saltadas:
         _decir({"tipo": "saltada", "id": job["id"], "ruta": ruta, "motivo": motivo})
 
-    if not rutas:
+    if not hechas:
         return None
 
-    dims = _cargados[job["modelo"]].dims
     fd, destino = tempfile.mkstemp(prefix="lumi-lote-%d-" % job["id"], suffix=".f32")
     with os.fdopen(fd, "wb") as f:
-        for i, ruta in enumerate(rutas):
-            f.write(struct.pack("<%df" % dims, *_vector(job["modelo"], ruta)))
-            if (i + 1) % 16 == 0:
-                _decir({"tipo": "progreso", "id": job["id"],
-                        "hechas": i + 1, "total": len(rutas)})
+        for _, vector in hechas:
+            f.write(struct.pack("<%df" % dims, *vector))
+    imagenes = [ruta for ruta, _ in hechas]
     return {"tipo": "vectores", "id": job["id"], "dims": dims,
-            "cuenta": len(rutas), "fichero": destino, "imagenes": rutas}
+            "cuenta": len(imagenes), "fichero": destino, "imagenes": imagenes}
 
 
 def main():

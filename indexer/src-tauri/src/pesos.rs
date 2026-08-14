@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{bail, Result};
 use serde::Serialize;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 use crate::models::Modelo;
 use crate::runtime::python_del_venv;
@@ -80,14 +80,22 @@ async fn correr(dir: &std::path::Path, en_curso: &EnCurso, modelo: &Modelo) -> R
         bail!("no encuentro el descargador en {}", script.display());
     }
 
+    // El JSON viaja por stdin, no por argv: una licencia real (GPL entera,
+    // por ejemplo) mide decenas de KB, y Windows corta la línea de comandos
+    // completa en unos 32K caracteres — pasado ese tope el proceso ni
+    // siquiera llega a arrancar.
     let mut hijo = crate::proceso::cmd_async(&py)
         .arg("-u")
         .arg(&script)
-        .arg(item.to_string())
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)
         .spawn()?;
+
+    let mut entrada = hijo.stdin.take().expect("stdin pedido");
+    entrada.write_all(item.to_string().as_bytes()).await?;
+    drop(entrada); // cierra stdin: es lo que hace terminar `sys.stdin.read()`
 
     let stdout = hijo.stdout.take().expect("stdout pedido");
     let stderr = hijo.stderr.take().expect("stderr pedido");

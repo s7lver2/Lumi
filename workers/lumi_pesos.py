@@ -81,6 +81,12 @@ def _reconstruir(modelo_id, dims):
         # ese sembrado no aporta nada a la hora de solo cargar y usar.
         import cosplace_network
         return cosplace_network.GeoLocalizationNet("ResNet50", dims)
+    if modelo_id in ("salad", "cliquemining"):
+        # cliquemining es SALAD afinado sobre el mismo backbone y la misma
+        # agregacion (serizba/salad) -- solo cambia el checkpoint, no la
+        # arquitectura que hay que reconstruir para cargarlo.
+        import salad_network
+        return salad_network.VPRModel("dinov2_vitb14", num_channels=768, num_clusters=64, cluster_dim=128, token_dim=256)
     raise ValueError(
         f"{modelo_id} trae un state_dict crudo y no se sabe reconstruir su arquitectura "
         "-- hace falta añadir su definición de red, igual que cosplace_network.py"
@@ -107,25 +113,59 @@ class Embebedor(object):
         self.red.eval()
         self.red.to(dispositivo)
 
-    def vector(self, ruta_imagen):
-        """Devuelve el descriptor normalizado a L2. La normalizacion es
-        PRECONDICION del formato de fragmento (`lumi_index::vectors`): sin ella
-        la escala fija del int8 no vale."""
-        import torch
-        from PIL import Image
+    def _prep(self):
         from torchvision import transforms
-
-        prep = transforms.Compose([
+        return transforms.Compose([
             transforms.Resize((322, 322)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
-        img = Image.open(ruta_imagen).convert("RGB")
-        lote = prep(img).unsqueeze(0).to(self.dispositivo)
+
+    def vector(self, ruta_imagen):
+        """Un solo vector. Existe para pruebas rapidas contra un fichero
+        suelto; el trabajador de verdad llama a `vectores()`, no a esto."""
+        ok, saltadas = self.vectores([ruta_imagen])
+        if saltadas:
+            raise ValueError(saltadas[0][1])
+        return ok[0][1]
+
+    def vectores(self, rutas_imagen):
+        """Un solo forward para todo el lote, no uno por imagen.
+
+        Antes cada imagen pasaba por la red en su propia llamada -- 32
+        lanzamientos de kernel de 1 imagen cada uno, en vez de 1 de 32. Con
+        modelos pequenos (ResNet18/50) el coste fijo de cada lanzamiento
+        domina sobre el trabajo real, y la GPU pasaba la mayor parte del
+        tiempo esperando a la CPU en vez de calculando: "usa poca grafica"
+        no era falta de trabajo, era como se estaba pidiendo.
+
+        Devuelve `(ok, saltadas)`: `ok` es `[(ruta, vector), ...]` en el
+        mismo orden que las que sí se pudieron decodificar; `saltadas` es
+        `[(ruta, motivo), ...]` para las que fallaron ANTES del forward
+        (fichero roto, vacío...) -- esas nunca deben tumbar el lote entero.
+        """
+        import torch
+        from PIL import Image
+
+        prep = self._prep()
+        tensores, buenas = [], []
+        saltadas = []
+        for ruta in rutas_imagen:
+            try:
+                img = Image.open(ruta).convert("RGB")
+                tensores.append(prep(img))
+                buenas.append(ruta)
+            except Exception as e:
+                saltadas.append((ruta, str(e)))
+        if not tensores:
+            return [], saltadas
+
+        lote = torch.stack(tensores).to(self.dispositivo)
         with torch.no_grad():
             d = self.red(lote)
-        d = torch.nn.functional.normalize(d.flatten(), p=2, dim=0)
-        return d.cpu().tolist()
+        d = torch.nn.functional.normalize(d.flatten(1), p=2, dim=1)
+        ok = list(zip(buenas, d.cpu().tolist()))
+        return ok, saltadas
 
 
 def cargar(modelo_id, registro_dir, pesos_dir, dispositivo):
