@@ -2,25 +2,9 @@ import { useEffect, useState } from "react";
 import { api, type AdminUser, type UserDetail } from "../lib/api";
 import { Icon } from "../ui/Icon";
 import { Seccion } from "./AdminPanel";
+import { UserTile } from "./UserTile";
 
 type Vista = "lista" | "foto" | "nombre";
-
-function UserTile({ nombre, conectado = false, size = 36 }: { nombre: string; conectado?: boolean; size?: number }) {
-  const inicial = nombre.trim().slice(0, 1).toUpperCase() || "?";
-  return (
-    <div className="relative shrink-0">
-      <div
-        className="flex items-center justify-center rounded-full bg-white/[.08] font-mono text-[10px] uppercase text-fg"
-        style={{ width: size, height: size, fontSize: size * 0.4 }}
-      >
-        {inicial}
-      </div>
-      {conectado && (
-        <span className="absolute -right-0.5 -top-0.5 block h-2 w-2 rounded-full bg-success-fg ring-2 ring-panel" />
-      )}
-    </div>
-  );
-}
 
 export function UsersView({ token }: { token: string }) {
   const [rows, setRows] = useState<AdminUser[]>([]);
@@ -63,97 +47,93 @@ export function UsersView({ token }: { token: string }) {
   if (detail) {
     const u = detail.user;
     return (
-      <>
-        <button onClick={() => setDetail(null)} className="mb-4 text-[11px] text-muted hover:text-fg">
-          ← Usuarios
-        </button>
-        <div className="rounded-card border border-white/[.13] bg-[rgba(16,19,25,.66)] p-5">
-          <div className="mb-3 flex items-center gap-2.5 text-xs">
-            <span className="text-fg">{u.username}</span>
-            {u.is_admin && (
-              <span className="rounded border border-border px-1.5 py-0.5 text-[10.5px] text-subtle">
-                administrador
-              </span>
-            )}
-            {u.blocked && (
-              <span className="rounded border border-danger-fg/40 px-1.5 py-0.5 text-[10.5px] text-danger-fg">
-                bloqueada
-              </span>
-            )}
-          </div>
+      <Seccion titulo={u.username} grupo="Personas"
+        accion={
+          <button onClick={() => setDetail(null)}
+            className="flex items-center gap-1.5 text-[11px] text-subtle transition-colors hover:text-fg">
+            <Icon name="back" size={12} /> Usuarios
+          </button>
+        }>
+        <div className="flex items-center gap-2">
+          <UserTile nombre={u.username} conectado={false} size={30} />
+          {u.is_admin && (
+            <span className="rounded-[5px] border border-border px-1.5 py-px text-[9.5px] tracking-[.03em] text-subtle">
+              administrador
+            </span>
+          )}
+          {u.blocked && (
+            <span className="rounded-[5px] border border-danger-fg/40 px-1.5 py-px text-[9.5px] tracking-[.03em] text-danger-fg">
+              bloqueada
+            </span>
+          )}
+        </div>
 
+        <div className="mt-4 rounded-[11px] border border-border bg-panel p-[13px_15px]">
           {u.is_admin ? (
             <p className="text-[11px] text-muted">Los administradores no tienen límites: se ignoran todos.</p>
           ) : (
-            <table className="w-full text-xs">
-              <tbody>
-                {LEVERS.map(([key, label]) => {
-                  const overridden = key in detail.overrides;
-                  const value = JSON.stringify((u.limits as unknown as Record<string, unknown>)[key]);
-                  const g = JSON.stringify((detail.global as unknown as Record<string, unknown>)[key]);
-                  return (
-                    <tr key={key} className="border-b border-border/60 last:border-0">
-                      <td className="py-2 text-muted">{label}</td>
-                      <td className="py-2 font-mono text-fg">{value}</td>
-                      <td className="py-2 text-[10.5px] text-subtle">
-                        {overridden ? `anulado · global ${g}` : "hereda del global"}
-                      </td>
-                      <td className="py-2 text-right">
-                        {overridden && (
-                          <button
-                            onClick={() => patch(u.id, { limits: { [key]: null } })}
-                            className="text-[10.5px] text-muted hover:text-fg"
-                          >
-                            quitar anulación
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="flex flex-col">
+              {LEVERS.map(([key, label]) => {
+                const overridden = key in detail.overrides;
+                const value = JSON.stringify((u.limits as unknown as Record<string, unknown>)[key]);
+                const g = JSON.stringify((detail.global as unknown as Record<string, unknown>)[key]);
+                return (
+                  <div key={key}
+                    className="flex items-center justify-between gap-3 border-b border-border py-[7px] text-[11px] last:border-none">
+                    <span className="text-subtle">{label}</span>
+                    <span className="font-mono text-fg">{value}</span>
+                    <span className="text-[10px] text-subtle">
+                      {overridden ? `anulado · global ${g}` : "hereda del global"}
+                    </span>
+                    <span className="w-[92px] text-right">
+                      {overridden && (
+                        <button onClick={() => patch(u.id, { limits: { [key]: null } })}
+                          className="text-[10px] text-muted hover:text-fg">
+                          quitar anulación
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           )}
+        </div>
 
-          <div className="my-4 h-px bg-border" />
-          <div className="mb-2 text-[11px] text-muted">Dispositivos y sesiones</div>
+        <div className="mt-4 rounded-[11px] border border-border bg-panel p-[13px_15px]">
+          <div className="mb-2 text-[8.5px] uppercase tracking-[.15em] text-subtle">Dispositivos y sesiones</div>
+          {detail.devices.length === 0 && detail.sessions.length === 0 && (
+            <p className="text-[11px] text-subtle">sin dispositivos registrados</p>
+          )}
           {detail.devices.map((d) => (
-            <div key={d.name + d.first_seen} className="py-1 text-xs text-muted">
+            <div key={d.name + d.first_seen} className="border-b border-border py-1.5 text-[11px] text-muted last:border-none">
               {d.name} · {d.os ?? "—"}
             </div>
           ))}
           {detail.sessions.map((s) => (
-            <div key={s.public_id} className="flex items-center gap-2 py-1 text-xs text-muted">
+            <div key={s.public_id}
+              className="flex items-center gap-2 border-b border-border py-1.5 text-[11px] text-muted last:border-none">
               <span className="font-mono text-[10.5px] text-subtle">{s.device_name ?? "sin equipo"}</span>
-              <button
-                onClick={() =>
-                  api.del(`/v1/sessions/${s.public_id}`, token).then(() => open(u.id))
-                }
-                className="ml-auto text-[10.5px] text-muted hover:text-fg"
-              >
+              <button onClick={() => api.del(`/v1/sessions/${s.public_id}`, token).then(() => open(u.id))}
+                className="ml-auto text-[10px] text-muted hover:text-fg">
                 revocar
               </button>
             </div>
           ))}
-
-          <div className="my-4 h-px bg-border" />
-          <div className="flex gap-2">
-            <button
-              onClick={() => patch(u.id, { blocked: !u.blocked })}
-              className="rounded-lg border border-white/15 px-3 py-1.5 text-[11px] text-fg active:translate-y-px"
-            >
-              {u.blocked ? "Desbloquear" : "Bloquear"}
-            </button>
-            <button
-              onClick={() => patch(u.id, { must_change_password: true })}
-              className="rounded-lg border border-white/15 px-3 py-1.5 text-[11px] text-fg active:translate-y-px"
-            >
-              Exigir cambio de contraseña
-            </button>
-          </div>
-          {error && <p className="mt-3 text-xs text-danger-fg">{error}</p>}
         </div>
-      </>
+
+        <div className="mt-4 flex gap-2">
+          <button onClick={() => patch(u.id, { blocked: !u.blocked })}
+            className="rounded-lg border border-white/15 px-3 py-1.5 text-[11px] text-fg active:translate-y-px">
+            {u.blocked ? "Desbloquear" : "Bloquear"}
+          </button>
+          <button onClick={() => patch(u.id, { must_change_password: true })}
+            className="rounded-lg border border-white/15 px-3 py-1.5 text-[11px] text-fg active:translate-y-px">
+            Exigir cambio de contraseña
+          </button>
+        </div>
+        {error && <p className="mt-3 text-xs text-danger-fg">{error}</p>}
+      </Seccion>
     );
   }
 
