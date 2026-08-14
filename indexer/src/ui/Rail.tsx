@@ -1,6 +1,6 @@
 import { Icon } from "./Icon";
 
-export type Destino = "indices" | "territorio" | "descarga" | "revision" | "ajustes";
+export type Destino = "indices" | "territorio" | "descarga" | "revision" | "ajustes" | "embebido";
 
 /** El carril de 44 px de `client/src/work/Rail.tsx`, mismo vocabulario: iconos
  *  sin etiqueta, translúcido, la pestaña de 2 px marcando el activo.
@@ -18,8 +18,8 @@ export type Destino = "indices" | "territorio" | "descarga" | "revision" | "ajus
  *  El punto naranja en «Descarga» mientras `descargaActiva` es distinto de
  *  estar en esa pestaña: es lo que dice, desde cualquier otro sitio, que algo
  *  sigue corriendo detrás y que ahí hay un "Detener" al alcance. */
-export function Rail({ activo, descargaActiva, onIr }: {
-  activo: Destino; descargaActiva?: boolean; onIr: (d: Destino) => void;
+export function Rail({ activo, descargaActiva, embebiendoActivo, onIr }: {
+  activo: Destino; descargaActiva?: boolean; embebiendoActivo?: boolean; onIr: (d: Destino) => void;
 }) {
   return (
     <nav className="absolute inset-y-0 left-0 z-30 flex w-11 flex-col items-center gap-[3px]
@@ -28,6 +28,13 @@ export function Rail({ activo, descargaActiva, onIr }: {
       <RailBtn icon="territorio" title="Territorio" on={activo === "territorio"} onClick={() => onIr("territorio")} />
       <RailBtn icon="check" title="Revisión" on={activo === "revision"} onClick={() => onIr("revision")} />
       <div className="flex-1" />
+      {/* Justo encima de «Descarga»: la cola de embebido vivía dentro del
+          detalle de cada índice, y esa pantalla depende de cuál esté
+          abierto — cualquier cambio ahí (borrar el índice, cerrar el
+          diálogo, sellar) se la llevaba por delante. Un destino propio en
+          el carril, como Descarga, no depende de nada de eso. */}
+      <RailBtn icon="embebido" title="Embebido" on={activo === "embebido"} activo={embebiendoActivo}
+        onClick={() => onIr("embebido")} />
       <RailBtn icon="ingesta" title="Descarga" on={activo === "descarga"} activo={descargaActiva}
         onClick={() => onIr("descarga")} />
       <RailBtn icon="ajustes" title="Ajustes" on={activo === "ajustes"} onClick={() => onIr("ajustes")} />
@@ -36,7 +43,7 @@ export function Rail({ activo, descargaActiva, onIr }: {
 }
 
 function RailBtn({ icon, title, on, activo, onClick }: {
-  icon: "layers" | "territorio" | "ingesta" | "ajustes" | "check";
+  icon: "layers" | "territorio" | "ingesta" | "ajustes" | "check" | "embebido";
   title: string; on: boolean; activo?: boolean; onClick: () => void;
 }) {
   return (

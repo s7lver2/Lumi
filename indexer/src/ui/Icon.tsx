@@ -119,6 +119,18 @@ const PATHS: Record<string, React.JSX.Element> = {
       <path d="M5 9 2 12l3 3M19 9l3 3-3 3M9 5l3-3 3 3M9 19l3 3 3-3" />
     </>
   ),
+  // Tres nodos conectados: un vector saliendo de una imagen. Es el icono de
+  // la cola de embebido, aparte de "ingesta" (la flecha de descarga) porque
+  // son destinos distintos ahora — bajar imágenes no es lo mismo que
+  // convertirlas en vectores.
+  embebido: (
+    <>
+      <circle cx="6" cy="6" r="2.1" />
+      <circle cx="18" cy="6" r="2.1" />
+      <circle cx="12" cy="18" r="2.1" />
+      <path d="M7.7 7.3 10.7 16M16.3 7.3 13.3 16M8.1 6h7.8" />
+    </>
+  ),
 };
 
 /** El candado es aparte: su arco se anima al abrirse. */

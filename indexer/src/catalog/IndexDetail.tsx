@@ -6,9 +6,7 @@ import { api, type DetalleIndice, type LoteResumen, type Modelo, type ProgresoIn
 import { PublishDialog } from "../publish/PublishDialog";
 import { estadoActual } from "../publish/publishTracker";
 import { SealDialog } from "../seal/SealDialog";
-import { EmbedToggle } from "../ui/EmbedToggle";
 import { Icon } from "../ui/Icon";
-import { IndexQueueBar } from "../ui/IndexQueueBar";
 import { Overlay } from "../ui/Overlay";
 import { IndexMapDialog } from "./IndexMapDialog";
 import { ProvenanceTable } from "./ProvenanceTable";
@@ -241,8 +239,6 @@ export function IndexDetail({ id, onVolver, onNuevaVersion, soloLectura = false 
               className="jg-press rounded-lg border border-border px-3 py-1.5 text-[11px] text-fg disabled:opacity-40">
               Abrir en mapa
             </button>
-            <span className="flex-1" />
-            <EmbedToggle />
           </div>
         )}
 
@@ -334,7 +330,6 @@ export function IndexDetail({ id, onVolver, onNuevaVersion, soloLectura = false 
           </div>
         </div>
       </div>
-      <IndexQueueBar indiceId={id} />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { IndexDetail } from "./catalog/IndexDetail";
 import { IndexList } from "./catalog/IndexList";
 import { IndexPicker } from "./catalog/IndexPicker";
 import { DownloadView } from "./download/DownloadView";
+import { EmbedQueueView } from "./embed/EmbedQueueView";
 import { api, type PlanPendiente, type Saludo } from "./lib/api";
 import { ReviewGrid } from "./review/ReviewGrid";
 import { DebugPanel } from "./settings/DebugPanel";
@@ -55,6 +56,18 @@ export function App() {
   // preguntar en cada arranque por algo opcional es exactamente el ruido que
   // el paso saltable existe para evitar.
   const [ofrecerIdentidad, setOfrecerIdentidad] = useState(false);
+  // Para el punto naranja de «Embebido» en el carril, igual que el de
+  // «Descarga»: se ve desde cualquier pantalla que algo sigue corriendo
+  // detrás, sin tener que entrar a comprobarlo.
+  const [embebiendoActivo, setEmbebiendoActivo] = useState(false);
+
+  useEffect(() => {
+    if (!dentro) return;
+    const tick = () => void api.colaProgreso().then((filas) => setEmbebiendoActivo(filas.some((f) => f.trabajando)));
+    tick();
+    const t = setInterval(tick, 3000);
+    return () => clearInterval(t);
+  }, [dentro]);
 
   async function traspasarServicios() {
     const sesion = await api.identidadLeer().catch(() => null);
@@ -143,6 +156,7 @@ export function App() {
             <Rail
               activo={destino}
               descargaActiva={descargaIndiceId !== null || pendiente !== null}
+              embebiendoActivo={embebiendoActivo}
               onIr={(d) => { setDestino(d); if (d !== "descarga" && d !== "revision") setIndiceAbierto(null); }}
             />
             <div className="absolute inset-y-0 left-11 right-0 flex flex-col">
@@ -176,6 +190,7 @@ export function App() {
                     }}
                   />
                 )}
+                {destino === "embebido" && <EmbedQueueView />}
                 {destino === "descarga" && (
                   descargaIndiceId === null
                     ? (
@@ -208,7 +223,7 @@ export function App() {
                           <p className="max-w-[280px] text-center text-[12px] leading-relaxed text-muted">
                             Aquí se ve el progreso mientras se está indexando. Primero tienes que
                             empezar una descarga desde <b className="font-normal text-fg">Territorio</b>.
-                            El progreso del embebido de fondo se ve dentro de cada índice.
+                            El progreso del embebido de fondo se ve en <b className="font-normal text-fg">Embebido</b>.
                           </p>
                         )}
                       </div>
