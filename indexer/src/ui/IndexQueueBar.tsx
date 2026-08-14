@@ -18,7 +18,10 @@ export function IndexQueueBar({ indiceId }: { indiceId: number }) {
     return () => clearInterval(t);
   }, [indiceId]);
 
-  const visibles = filas.filter((p) => p.total > 0);
+  // total > 0 no basta: una vez que un modelo tuvo algún vector, total no
+  // vuelve a bajar nunca, y la fila se quedaba ahí para siempre diciendo
+  // "100% · en espera de otro índice" aunque no quedara nada por hacer.
+  const visibles = filas.filter((p) => p.total > 0 && p.hechas < p.total);
   if (visibles.length === 0) return null;
 
   return (
