@@ -42,9 +42,21 @@ export function AdminPanel({ token }: { token: string }) {
               <RequestsView token={token} /></Seccion>
           : seccion === "usuarios" ? <UsersView token={token} />
           : seccion === "claves" ? <KeysView token={token} />
+          
           : seccion === "cola" ? <Seccion titulo="Cola" grupo="Operación">
               <QueueRow token={token} /></Seccion>
-          : <Seccion titulo="Índices instalados" grupo="Servidor">
+                    : <Seccion titulo="Índices instalados" grupo="Servidor"
+              accion={
+                <button disabled title="Abrirá el catálogo remoto; todavía no hace nada"
+                  className="inline-flex items-center gap-1.5 rounded-[8px] bg-accent px-2.5 py-1
+                    text-[10.5px] font-medium text-black opacity-40">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  Instalar índice
+                </button>
+              }>
               {capIndices?.state === "on" ? <IndicesPanel token={token} /> : (
                 <p className="mt-[19px] text-[11px] text-muted">{capIndices?.reason ?? "no disponible"}</p>
               )}
