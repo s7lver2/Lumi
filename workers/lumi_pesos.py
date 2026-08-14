@@ -71,6 +71,16 @@ def _reconstruir(modelo_id, dims):
     if modelo_id == "cosplace":
         import cosplace_network
         return cosplace_network.GeoLocalizationNet("ResNet18", dims)
+    if modelo_id == "eigenplaces":
+        # eigenplaces_network.GeoLocalizationNet_ (gmberton/EigenPlaces) es,
+        # capa por capa, la misma arquitectura que cosplace_network -- GeM +
+        # Flatten + L2Norm sobre un backbone de torchvision sin avgpool ni
+        # fc. La unica diferencia de EigenPlaces en su propio codigo es
+        # sembrar el backbone con pesos de CosPlace ANTES de entrenar; el
+        # checkpoint publicado ya trae el backbone entrenado entero, asi que
+        # ese sembrado no aporta nada a la hora de solo cargar y usar.
+        import cosplace_network
+        return cosplace_network.GeoLocalizationNet("ResNet50", dims)
     raise ValueError(
         f"{modelo_id} trae un state_dict crudo y no se sabe reconstruir su arquitectura "
         "-- hace falta añadir su definición de red, igual que cosplace_network.py"
