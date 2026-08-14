@@ -4,6 +4,7 @@ import { PlanetBackground } from "./ui/PlanetBackground";
 import { Wizard } from "./wizard/Wizard";
 import { PairStep } from "./wizard/PairStep";
 import { AdminStep } from "./wizard/AdminStep";
+import { ModelosStep } from "./wizard/ModelosStep";
 import { ProvisionStep } from "./wizard/ProvisionStep";
 import { TitleBar } from "./ui/TitleBar";
 import { ResizeHandles } from "./ui/WindowFrame";
@@ -30,6 +31,7 @@ export default function App() {
   const [mode, setMode] = useState<"entry" | "wizard" | "picker" | "project" | "case" | "admin">("entry");
   const [adminBusy, setAdminBusy] = useState(false);
   const [runtimeDone, setRuntimeDone] = useState(false);
+  const [modelosDone, setModelosDone] = useState(false);
   /** Resultados e invitar piden el mismo carril de la derecha, así que el
    *  estado es uno solo: abrir cualquiera de los dos recoge el otro. */
   const [drawer, setDrawer] = useState<DrawerId>(null);
@@ -272,22 +274,23 @@ export default function App() {
           onBack={step > 0 && step !== 2 ? () => setStep((s) => s - 1) : undefined}
           onNext={() => {
             if (step === 1) { document.getElementById("admin-submit")?.click(); return; }
-            // Datos y Modelos (subsistemas 3-5) todavía no existen: el paso 2
-            // (runtime) es el último construido, así que terminar de instalar
-            // lleva directo a la app en vez de a un paso vacío. El owner es
-            // admin, así que va al panel — igual que al reabrir la app.
-            if (step === 2) { setMode(useServer.getState().isAdmin ? "admin" : "picker"); return; }
+            // El paso 3 (modelos) es el último construido: terminarlo lleva
+            // directo a la app. El owner es admin, así que va al panel —
+            // igual que al reabrir la app.
+            if (step === 3) { setMode(useServer.getState().isAdmin ? "admin" : "picker"); return; }
             setStep((s) => s + 1);
           }}
           nextDisabled={
             (step === 0 && (!hello || hello.state !== "unclaimed")) ||
-            (step === 2 && !runtimeDone)
+            (step === 2 && !runtimeDone) ||
+            (step === 3 && !modelosDone)
           }
-          nextLabel={step === 2 ? "Terminar" : "Siguiente"}
+          nextLabel={step === 3 ? "Terminar" : "Siguiente"}
           nextBusy={step === 1 && adminBusy}>
           {step === 0 && <PairStep onDone={() => setStep(1)} />}
           {step === 1 && <AdminStep bootstrapToken={bootstrapToken} onDone={() => setStep(2)} onBusyChange={setAdminBusy} />}
-          {step === 2 && <ProvisionStep onDone={() => setMode("picker")} onStatusChange={setRuntimeDone} />}
+          {step === 2 && <ProvisionStep onDone={() => setStep(3)} onStatusChange={setRuntimeDone} />}
+          {step === 3 && <ModelosStep token={useServer.getState().token!} onStatusChange={setModelosDone} />}
         </Wizard>
       ) : mode === "picker" ? (
         <ProjectPicker refresh={projectsTick}
