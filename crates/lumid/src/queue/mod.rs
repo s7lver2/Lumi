@@ -1036,5 +1036,4 @@ impl Queue {
                 .collect(),
         )
     }
-    
 }
