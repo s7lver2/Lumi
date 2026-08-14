@@ -32,8 +32,10 @@ export async function announcePresence(token: string): Promise<void> {
 }
 
 /** El SSE de una instalación de índice en curso, reemitido como evento
- *  `indices-progress`. Se llama solo mientras el diálogo de instalar está
- *  abierto: a diferencia de la cola, no hay presencia que anunciar aquí. */
+ *  `indices-progress`. `IndexToast` la llama al montar el panel (para
+ *  descubrir una instalación ya en marcha) e `InstallFlow` al confirmar una
+ *  nueva — dos llamadas concurrentes no son un problema, cada una abre su
+ *  propia conexión SSE y ambas reciben la misma fotografía del servidor. */
 export const startIndicesEvents = (token: string) => invoke("start_indices_events", { token });
 
 export async function uploadPaths(caseId: number, paths: string[]): Promise<Image[]> {

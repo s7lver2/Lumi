@@ -28,7 +28,7 @@ export function ModelToasts({ token, onIr, licenciasPendientes }: {
   if (!tarea && !licenciasPendientes) return null;
 
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col gap-2.5" style={{ width: 308 }}>
+    <>
       {tarea && (
         <button onClick={() => onIr("modelos")}
           className="jg-press pointer-events-auto flex items-start gap-2.5 rounded-[11px] border border-white/[.14]
@@ -60,6 +60,6 @@ export function ModelToasts({ token, onIr, licenciasPendientes }: {
           </div>
         </button>
       )}
-    </div>
+    </>
   );
 }

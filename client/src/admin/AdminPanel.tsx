@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { useServer } from "../lib/store";
 import { Hueco } from "./Hueco";
+import { IndexToast } from "./IndexToast";
 import { IndicesPanel } from "./IndicesPanel";
 import { KeysView } from "./KeysView";
 import { ModelosView } from "./ModelosView";
@@ -65,7 +66,10 @@ export function AdminPanel({ token }: { token: string }) {
               )}
             </Seccion>}
       </div>
-      <ModelToasts token={token} onIr={setSeccion} licenciasPendientes={licenciasPendientes} />
+      <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col gap-2.5" style={{ width: 308 }}>
+        <ModelToasts token={token} onIr={setSeccion} licenciasPendientes={licenciasPendientes} />
+        <IndexToast token={token} onIr={setSeccion} />
+      </div>
     </div>
   );
 }

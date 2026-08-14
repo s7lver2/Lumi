@@ -1,5 +1,93 @@
-import { useMemo, useState } from "react";
-import { api, type MetaPeso } from "../lib/api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { api, type MetaPeso, type TaskStatus } from "../lib/api";
+
+/** La última línea `@progreso {...}` del log, si hay alguna — el mismo
+ *  prefijo que ya lee el servidor en `GET /v1/admin/model-task`, leído aquí
+ *  también porque el log SSE ya está en el cliente y no hace falta otra
+ *  petición para lo mismo. */
+function ultimoProgreso(log: string): { item: string; pct: number } | null {
+  const linea = log.split("\n").reverse().find((l) => l.startsWith("@progreso "));
+  if (!linea) return null;
+  try {
+    const v = JSON.parse(linea.slice("@progreso ".length));
+    return { item: v.item, pct: v.pct };
+  } catch {
+    return null;
+  }
+}
+
+function DescargaProgreso({ token, taskId, onCerrar }: {
+  token: string; taskId: string; onCerrar: () => void;
+}) {
+  const [log, setLog] = useState("");
+  const [running, setRunning] = useState(true);
+  const [exitCode, setExitCode] = useState<number | null>(null);
+  const box = useRef<HTMLPreElement>(null);
+
+  useEffect(() => {
+    const un = listen<string>("task-log", (e) => setLog((l) => l + e.payload));
+    void invoke("start_task_log", { id: taskId, from: 0, token });
+    return () => { un.then((f) => f()); };
+  }, [taskId, token]);
+
+  useEffect(() => { box.current?.scrollTo(0, box.current.scrollHeight); }, [log]);
+
+  useEffect(() => {
+    const i = setInterval(async () => {
+      try {
+        const s = await api.get<TaskStatus>(`/v1/tasks/${taskId}`, token);
+        setRunning(s.running);
+        setExitCode(s.exit_code);
+        if (!s.running) clearInterval(i);
+      } catch { /* red caída un instante: se reintenta en el próximo tick */ }
+    }, 1200);
+    return () => clearInterval(i);
+  }, [taskId, token]);
+
+  const progreso = ultimoProgreso(log);
+  const fallo = !running && exitCode !== null && exitCode !== 0;
+
+  // Las líneas @progreso/@sha256 son para la máquina (la barra de arriba, y
+  // el registro re-escrito en el servidor) — mostrarlas también en el log
+  // sería ruido de protocolo delante de quien solo quiere ver qué está pasando.
+  const lineasVisibles = log.split("\n").filter((l) => l && !l.startsWith("@"));
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between text-[11px]">
+        <span className="text-fg">
+          {running ? (progreso?.item ? `Descargando ${progreso.item}` : "Descargando…")
+            : fallo ? "La descarga falló" : "Instalado"}
+        </span>
+        {progreso && <span className="font-mono text-subtle">{progreso.pct}%</span>}
+      </div>
+      <div className="h-[3px] overflow-hidden rounded-sm bg-elevated">
+        <div className="h-full bg-fg transition-[width] duration-500 ease-expo"
+          style={{ width: `${progreso?.pct ?? (running ? 0 : 100)}%` }} />
+      </div>
+      <pre ref={box}
+        className="mt-3 max-h-[190px] overflow-auto whitespace-pre-wrap rounded-lg border border-border
+          bg-[#08090b] px-3 py-2.5 font-mono text-[10.5px] leading-[1.7] text-muted">
+        {lineasVisibles.join("\n") || "esperando al servidor…"}
+      </pre>
+      {fallo && (
+        <p className="mt-2 text-[11px] text-danger-fg">
+          código de salida {exitCode} — revisa el log de arriba.
+        </p>
+      )}
+      {!running && (
+        <div className="mt-3 flex justify-end">
+          <button onClick={onCerrar}
+            className="rounded-lg border border-white/15 px-3.5 py-2 text-[11.5px] text-fg">
+            Cerrar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function LicenciasGate({ token, items, onListo }: {
   token: string; items: MetaPeso[]; onListo: () => void;
@@ -22,6 +110,7 @@ export function LicenciasGate({ token, items, onListo }: {
   const [aceptando, setAceptando] = useState(false);
   const [tokenProveedor, setTokenProveedor] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [tareaId, setTareaId] = useState<string | null>(null);
 
   async function aceptarYDescargar() {
     setAceptando(true);
@@ -30,8 +119,8 @@ export function LicenciasGate({ token, items, onListo }: {
       const licencias: Record<string, string[]> = {};
       grupos.forEach((g) => { licencias[g.licencia] = g.para.map((p) => p.id); });
       await api.post("/v1/admin/models/accept-licenses", { licencias }, token);
-      await api.post("/v1/admin/models/download", { items: grupos.flatMap((g) => g.para.map((p) => p.id)) }, token);
-      onListo();
+      const t = await api.post<TaskStatus>("/v1/admin/models/download", { items: grupos.flatMap((g) => g.para.map((p) => p.id)) }, token);
+      setTareaId(t.id);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -45,11 +134,15 @@ export function LicenciasGate({ token, items, onListo }: {
       if (tokenProveedor) {
         await api.patch("/v1/admin/models/provider-token", { token: tokenProveedor }, token);
       }
-      await api.post("/v1/admin/models/download", { items: [item.id] }, token);
-      onListo();
+      const t = await api.post<TaskStatus>("/v1/admin/models/download", { items: [item.id] }, token);
+      setTareaId(t.id);
     } catch (e) {
       setError(String(e));
     }
+  }
+
+  if (tareaId) {
+    return <DescargaProgreso token={token} taskId={tareaId} onCerrar={onListo} />;
   }
 
   return (
