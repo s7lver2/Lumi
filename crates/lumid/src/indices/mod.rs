@@ -70,43 +70,48 @@ pub async fn instalar(app: crate::App, url: String) -> Result<()> {
     }
     let grafo = lumi_index::grafo::resolver(&raiz_ficha, &|p| conocidas.get(p).cloned());
 
-    {
-        let mut g = app.indices_en_curso.lock().unwrap();
-        *g = Some(Progreso {
-            paquete: raiz_ficha.paquete.clone(),
-            total: grafo.nodos.len(),
-            rotas: grafo.rotas.clone(),
-            ..Default::default()
-        });
-    }
-
     // De las hojas hacia la raíz: si se corta a la mitad, lo que queda
     // instalado son dependencias completas y no una raíz que apunta al vacío.
     let mut nodos = grafo.nodos.clone();
     nodos.sort_by_key(|n| std::cmp::Reverse(n.profundidad));
 
+    let ficha_de = |paquete: &str| -> Option<Ficha> {
+        if paquete == raiz_ficha.paquete { Some(raiz_ficha.clone()) } else { conocidas.get(paquete).cloned() }
+    };
+
+    // El total cuenta ASSETS a lo largo de todo el grafo, no paquetes: con "un
+    // paquete = un peldaño" un paquete sin dependencias (el caso más común)
+    // se queda en 0% durante TODA su instalación y salta a 100% de golpe al
+    // terminar — que es justo lo que parece "se ha quedado colgado".
+    let total: usize = nodos
+        .iter()
+        .filter(|n| !n.roto)
+        .map(|n| ficha_de(&n.paquete).map(|f| assets_de(&f)).unwrap_or(0))
+        .sum();
+
+    {
+        let mut g = app.indices_en_curso.lock().unwrap();
+        *g = Some(Progreso {
+            paquete: raiz_ficha.paquete.clone(),
+            total: total.max(1),
+            rotas: grafo.rotas.clone(),
+            ..Default::default()
+        });
+    }
+
     for nodo in nodos {
         if nodo.roto {
             anotar(&app, format!("{} no está disponible, se instala sin esa zona", nodo.paquete));
-            avanzar(&app);
             continue;
         }
-        let ficha = if nodo.paquete == raiz_ficha.paquete {
-            raiz_ficha.clone()
-        } else {
-            match conocidas.get(&nodo.paquete) {
-                Some(f) => f.clone(),
-                None => continue,
-            }
-        };
+        let Some(ficha) = ficha_de(&nodo.paquete) else { continue };
         if ya_instalado(&app, &ficha.paquete) {
             anotar(&app, format!("{} ya estaba instalado", ficha.paquete));
-            avanzar(&app);
+            avanzar(&app, assets_de(&ficha));
             continue;
         }
         let ficha_url = urls.get(&ficha.paquete).cloned().unwrap_or_default();
         instalar_uno(&app, &http, &ficha, &ficha_url).await?;
-        avanzar(&app);
     }
 
     if let Some(p) = app.indices_en_curso.lock().unwrap().as_mut() {
@@ -174,10 +179,16 @@ fn anotar(app: &crate::App, linea: String) {
     }
 }
 
-fn avanzar(app: &crate::App) {
+fn avanzar(app: &crate::App, n: usize) {
     if let Some(p) = app.indices_en_curso.lock().unwrap().as_mut() {
-        p.hechos += 1;
+        p.hechos += n;
     }
+}
+
+/// Cuántos assets tiene un paquete: cuerpos más los de cada capa. Es la
+/// unidad real de progreso — ver `total` en `instalar()`.
+fn assets_de(ficha: &Ficha) -> usize {
+    ficha.cuerpos.len() + ficha.capas.iter().map(|c| c.assets.len()).sum::<usize>()
 }
 
 async fn instalar_uno(app: &crate::App, http: &reqwest::Client, ficha: &Ficha, ficha_url: &str) -> Result<()> {
@@ -216,6 +227,7 @@ async fn instalar_uno(app: &crate::App, http: &reqwest::Client, ficha: &Ficha, f
     for a in assets {
         if ya_hechos.contains(&a.nombre) {
             anotar(app, format!("{} ya estaba en disco", a.nombre));
+            avanzar(app, 1);
             continue;
         }
         anotar(app, format!("bajando {}", a.nombre));
@@ -224,6 +236,7 @@ async fn instalar_uno(app: &crate::App, http: &reqwest::Client, ficha: &Ficha, f
         }
         paquete::traer_y_abrir(http, &url_de(ficha_url, &a.nombre), &a.sha256, &clave, &raiz).await?;
         marcar_hecho(app, &ficha.paquete, &a.nombre)?;
+        avanzar(app, 1);
     }
 
     let cuantas = volcar::paquete(app, ficha, &raiz).await?;
