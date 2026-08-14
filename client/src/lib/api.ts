@@ -39,6 +39,9 @@ export interface Limits {
 export interface AccessStatus { status: "pending" | "approved" | "rejected"; display_name: string; reason: string | null }
 export interface AdminRequest {
   id: number; display_name: string; message: string; source_ip: string;
+  /** Lo que declaró el cliente al pedir acceso. `null` en las anteriores a
+   *  que esto existiera. */
+  device: string | null;
   external: boolean; status: string; reason: string | null;
   created_at: number; expires_at: number;
 }
@@ -58,10 +61,37 @@ export interface UserDetail {
 }
 export interface TaskStatus {
   id: string;
-  kind: "inference_runtime" | "database";
+  kind: "inference_runtime" | "database" | "model_download";
   running: boolean;
   exit_code: number | null;
   log_len: number;
+}
+export interface ProviderTokenState {
+  has_token: boolean;
+}
+export interface Resolucion {
+  recuperacion_instalados: number;
+  recuperacion_total: number;
+  geometricos_instalados: number;
+  geometricos_total: number;
+  faltan: string[];
+}
+export interface NivelEstado {
+  id: string;
+  nombre: string;
+  resolucion: Resolucion;
+}
+export interface MetaPeso {
+  id: string;
+  nombre: string;
+  licencia: string;
+  licencia_texto: string;
+  puerta: string | null;
+}
+export interface TareaModelo {
+  id: string;
+  item_actual: string | null;
+  pct: number | null;
 }
 export interface Hello {
   version: string;
@@ -194,6 +224,22 @@ export interface QueueView { pendientes: number; en_curso: number; trabajadores:
 export type Cambio =
   | { tipo: "estado"; analysis_id: number; case_id: number; estado: Analysis["state"] }
   | { tipo: "progreso"; analysis_id: number; fase: string; pct: number };
+
+export interface Resumen {
+  solicitudes_pendientes: number;
+  /** Epoch de la más antigua sin resolver. `null` si no hay ninguna. */
+  solicitud_mas_antigua: number | null;
+  usuarios: number;
+  usuarios_conectados: number;
+  analisis_hoy: number;
+  analisis_en_cola: number;
+  /** Siete días, el más reciente al final. */
+  analisis_serie: number[];
+  indices: number;
+  indices_bytes: number;
+  teselas: number;
+  arrancado_en: number;
+}
 
 const call = (method: string, path: string, body: unknown, token?: string, ticket?: string) =>
   invoke<string>("request", {

@@ -143,14 +143,15 @@ pub struct Queue {
     script: PathBuf,
     dir: PathBuf,
     eventos: mpsc::UnboundedSender<Evento>,
-    /// El registro de niveles, cargado una vez al arrancar: es datos, y datos
-    /// que no cambian mientras el daemon vive.
-    niveles: Vec<lumi_index::niveles::Nivel>,
-    /// El registro de agentes y los datasets geográficos, cargados una vez al
-    /// arrancar por la misma razón que los niveles: son datos, y datos que
-    /// cambian con un reinicio, no en caliente.
-    agentes: Vec<lumi_index::agentes::Agente>,
-    geo: lumi_index::geo::Datos,
+    pub(crate) niveles: Mutex<Vec<lumi_index::niveles::Nivel>>,
+    agentes: Mutex<Vec<lumi_index::agentes::Agente>>,
+    geo: Mutex<lumi_index::geo::Datos>,
+    // `pub(crate)`: sus lectores son las rutas de gestión de modelos, en
+    // `crate::routes::models`, no este módulo.
+    pub(crate) modelos: Mutex<Vec<lumi_index::registro::Modelo>>,
+    pub(crate) verificadores: Mutex<Vec<lumi_index::registro::Verificador>>,
+    pub(crate) motores: Mutex<Vec<lumi_index::registro::Motor>>,
+    pub(crate) recursos_geo: Mutex<Vec<lumi_index::geo::RecursoGeo>>,
     /// No se persiste: si el daemon se cae, el análisis se rehace.
     vectores: Mutex<VectoresPorAnalisis>,
 }
@@ -224,9 +225,13 @@ impl Queue {
             script,
             dir,
             eventos: tx_ev,
-            niveles: lumi_index::registro::cargar_niveles(std::path::Path::new("registros/niveles")),
-            agentes: lumi_index::registro::cargar_agentes(std::path::Path::new("registros/agentes")),
-            geo: lumi_index::geo::Datos::cargar(std::path::Path::new("registros/geo")),
+            niveles: Mutex::new(lumi_index::registro::cargar_niveles(std::path::Path::new("registros/niveles"))),
+            agentes: Mutex::new(lumi_index::registro::cargar_agentes(std::path::Path::new("registros/agentes"))),
+            geo: Mutex::new(lumi_index::geo::Datos::cargar(std::path::Path::new("registros/geo"))),
+            modelos: Mutex::new(lumi_index::registro::cargar_modelos(std::path::Path::new("registros/modelos"))),
+            verificadores: Mutex::new(lumi_index::registro::cargar_verificadores(std::path::Path::new("registros/verificadores"))),
+            motores: Mutex::new(lumi_index::registro::cargar_motores(std::path::Path::new("registros/motores"))),
+            recursos_geo: Mutex::new(lumi_index::geo::cargar_recursos(std::path::Path::new("registros/geo"))),
             vectores: Mutex::new(HashMap::new()),
         });
 
@@ -235,6 +240,29 @@ impl Queue {
         // trabajador, y por tanto un solo sitio donde equivocarse.
         tokio::spawn(cola.clone().bucle(rx_avisos, rx_ev));
         cola
+    }
+
+    /// Sustituye los seis registros ENTEROS, no los parchea: un análisis en
+    /// curso sigue viendo los que tenía cuando empezó, porque su `Arc` a los
+    /// datos viejos (si los hubiera capturado) no se toca por esto. Se llama
+    /// al terminar una tarea de descarga — nunca automáticamente en un
+    /// temporizador, porque "recién descargado" es el único momento en que
+    /// releer tiene sentido.
+    pub fn recargar(&self) {
+        *self.niveles.lock().unwrap() =
+            lumi_index::registro::cargar_niveles(std::path::Path::new("registros/niveles"));
+        *self.agentes.lock().unwrap() =
+            lumi_index::registro::cargar_agentes(std::path::Path::new("registros/agentes"));
+        *self.geo.lock().unwrap() = lumi_index::geo::Datos::cargar(std::path::Path::new("registros/geo"));
+        *self.modelos.lock().unwrap() =
+            lumi_index::registro::cargar_modelos(std::path::Path::new("registros/modelos"));
+        *self.verificadores.lock().unwrap() =
+            lumi_index::registro::cargar_verificadores(std::path::Path::new("registros/verificadores"));
+        *self.motores.lock().unwrap() =
+            lumi_index::registro::cargar_motores(std::path::Path::new("registros/motores"));
+        *self.recursos_geo.lock().unwrap() =
+            lumi_index::geo::cargar_recursos(std::path::Path::new("registros/geo"));
+        tracing::info!("registros de modelos recargados en caliente");
     }
 
     /// «Ha cambiado algo, mira a ver si puedes repartir». No bloquea nunca.
@@ -253,6 +281,13 @@ impl Queue {
         // Llegar puede desbloquear trabajo propio que estaba pausado.
         self.avisar();
         Presencia { uid, cola: self.clone() }
+    }
+
+    /// Cuántos usuarios distintos tienen al menos un flujo SSE abierto.
+    /// `presentes` es privado y vive tras el mutex del estado; esto es la
+    /// única forma legítima de preguntarlo desde fuera.
+    pub fn conectados(&self) -> i64 {
+        self.estado.lock().map(|e| e.presentes.len() as i64).unwrap_or(0)
     }
 
     pub fn profundidad(&self) -> u32 {
@@ -577,13 +612,14 @@ impl Queue {
                         let para_aplicar: Vec<_> = usar
                             .iter()
                             .map(|c| {
-                                let at = self.geo.atributos(c.lat, c.lng);
+                                let at = self.geo.lock().unwrap().atributos(c.lat, c.lng);
                                 let inliers = respaldo_de.get(&clave(c.lat, c.lng)).map(|(i, _)| *i);
                                 (at, inliers)
                             })
                             .collect();
-                        let veredicto_final =
-                            lumi_index::agentes::aplicar(&self.agentes, &veredictos, &para_aplicar);
+                        let veredicto_final = lumi_index::agentes::aplicar(
+                            &self.agentes.lock().unwrap(), &veredictos, &para_aplicar,
+                        );
                         let motivo_de: std::collections::HashMap<(i64, i64), String> = usar
                             .iter()
                             .zip(veredicto_final.ajustes.iter())
@@ -653,7 +689,7 @@ impl Queue {
     /// debajo cuyas capas estén todas instaladas.
     fn nivel_de(&self, pedido: &str) -> Option<lumi_index::niveles::Nivel> {
         let capas = crate::recuperar::capas_instaladas(&self.store);
-        lumi_index::niveles::resolver(&self.niveles, pedido, &capas).cloned()
+        lumi_index::niveles::resolver(&self.niveles.lock().unwrap(), pedido, &capas).cloned()
     }
 
     /// Los agentes del nivel. **Vacío en el nivel significa «todos los del
@@ -661,7 +697,7 @@ impl Queue {
     /// `clone` del campo.
     fn agentes_de(&self, nivel: &lumi_index::niveles::Nivel) -> Vec<String> {
         if nivel.agentes.is_empty() {
-            self.agentes.iter().map(|a| a.id.clone()).collect()
+            self.agentes.lock().unwrap().iter().map(|a| a.id.clone()).collect()
         } else {
             nivel.agentes.clone()
         }
@@ -761,8 +797,9 @@ impl Queue {
     fn guardar_agentes(&self, id: i64, dictamen: &[(lumi_index::agentes::Veredicto, String)]) {
         let c = self.store.conn();
         let _ = c.execute("DELETE FROM analysis_agents WHERE analysis_id = ?1", [id]);
+        let agentes = self.agentes.lock().unwrap();
         for (v, detalle) in dictamen {
-            let Some(a) = self.agentes.iter().find(|a| a.id == v.agente) else { continue };
+            let Some(a) = agentes.iter().find(|a| a.id == v.agente) else { continue };
             let abstiene = v.confianza < a.umbral_confianza;
             let _ = c.execute(
                 "INSERT OR REPLACE INTO analysis_agents

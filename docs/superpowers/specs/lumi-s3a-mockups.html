@@ -137,11 +137,15 @@ h2{font-size:12px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;
 .col ul{list-style:none;display:flex;flex-direction:column;gap:3px}
 .col li{display:flex;align-items:center;gap:7px;padding:4px 7px;border:1px solid var(--border);
   border-radius:6px;background:var(--elevated);font-size:10.5px;color:var(--fg);
-  transition:border-color .3s var(--expo)}
+  transition:border-color .3s var(--expo),opacity .3s var(--expo)}
 .col li .st{margin-left:auto}
-.col li.miss{background:none;border-style:dashed;color:var(--muted)}
 .col li.share{border-color:rgba(255,255,255,.06)}
 .col li small{font-size:9px;color:var(--subtle)}
+/* No instalado = apagado, no solo "distinto": el mismo lenguaje que un
+   capability off, para que "falta" se lea de un vistazo sin leer el chip. */
+.col li.miss{background:none;border-style:dashed;color:var(--subtle);opacity:.5}
+.col li .dot{width:5px;height:5px;border-radius:50%;background:var(--fg);flex:none}
+.col li.miss .dot{background:none;border:1px solid var(--subtle)}
 
 /* barra en fila de descarga */
 .dl{display:flex;align-items:center;gap:9px;margin-top:6px}
@@ -152,18 +156,30 @@ h2{font-size:12px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;
   animation:sweep 1.9s linear infinite}
 .dl .pc{font-size:9.5px;color:var(--subtle);white-space:nowrap;font-variant-numeric:tabular-nums}
 
-/* ══ licencias ══ */
-.lics{display:flex;flex-direction:column;margin-top:14px;max-height:300px;overflow:auto;
-  border:1px solid var(--border);border-radius:10px;background:var(--panel)}
-.lic-item{padding:11px 13px}
-.lic-item + .lic-item{border-top:1px solid var(--border)}
-.lic-item > header{display:flex;align-items:baseline;gap:9px;margin-bottom:6px}
-.lic-item h4{font-size:11.5px;font-weight:500}
-.lic-item .who{font-size:9.5px;color:var(--subtle)}
-.lic-item .src{margin-left:auto;font-size:9px;color:var(--subtle)}
-.lic-body{font-size:10px;line-height:1.72;color:var(--muted);max-height:56px;overflow:hidden;position:relative}
-.lic-body:after{content:'';position:absolute;left:0;right:0;bottom:0;height:24px;
-  background:linear-gradient(to bottom,transparent,var(--panel))}
+/* ══ licencias: grid seleccionable + lectura ══
+   Antes eran tres cuerpos apilados y cortados con un degradado — se leían
+   igual de mal las tres. Ahora es una rejilla de tarjetas que se eligen, y
+   una sola se lee entera a la vez: es la misma idea de maestro/detalle que
+   ya usa Solicitudes con su fila desplegable. */
+.lic-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:14px}
+.lic-card{text-align:left;padding:11px 12px;border:1px solid var(--border);border-radius:10px;
+  background:var(--panel);cursor:default;transition:border-color .3s var(--expo),background-color .3s var(--expo)}
+.lic-card:hover{border-color:rgba(255,255,255,.22)}
+.lic-card.sel{border-color:rgba(255,255,255,.34);background:var(--elevated)}
+.lic-card h4{font-size:11.5px;font-weight:500;display:flex;align-items:center;gap:7px}
+.lic-card h4:before{content:'';width:5px;height:5px;border-radius:50%;flex:none;
+  border:1px solid var(--subtle);transition:background-color .3s var(--expo),border-color .3s var(--expo)}
+.lic-card.sel h4:before{background:var(--fg);border-color:var(--fg)}
+.lic-card .who{display:block;margin-top:4px;font-size:9.5px;color:var(--subtle)}
+.lic-card .rd{display:block;margin-top:7px;font-size:9px;color:var(--subtle);letter-spacing:.03em}
+.lic-card.sel .rd{color:var(--fg)}
+.lic-reader{margin-top:9px;border:1px solid var(--border);border-radius:10px;background:var(--panel);
+  padding:13px 15px}
+.lic-reader > header{display:flex;align-items:baseline;gap:9px;margin-bottom:8px;
+  border-bottom:1px solid var(--border);padding-bottom:9px}
+.lic-reader h4{font-size:12.5px;font-weight:500}
+.lic-reader .src{margin-left:auto;font-size:9px;color:var(--subtle)}
+.lic-body{font-size:10.5px;line-height:1.75;color:var(--muted);max-height:150px;overflow:auto}
 .accept{display:flex;align-items:center;gap:11px;margin-top:14px;padding:12px 13px;
   border:1px solid rgba(255,255,255,.16);border-radius:10px;background:var(--panel)}
 .box{width:14px;height:14px;border:1px solid var(--fg);border-radius:3px;flex:none;
@@ -193,6 +209,27 @@ pre.log u{text-decoration:none;color:var(--subtle)}
 .input{flex:1;border:1px solid var(--border);border-radius:7px;background:var(--elevated);
   padding:6px 9px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   font-size:10.5px;color:var(--subtle)}
+
+/* ══ toasts: la descarga no vive en la pestaña de Modelos ══
+   Un fondo de pantalla simulado, para dejar claro que esto no es un mockup
+   de la sección de Modelos: es cualquier otra pantalla, con la pila de
+   toasts flotando encima porque la tarea corre en el servidor, no en esta
+   vista montada. */
+.desk{position:relative;background:var(--bg);border:1px solid var(--border);border-radius:12px;
+  min-height:230px;padding:16px;overflow:hidden;margin-top:18px}
+.desk .ghost{opacity:.5}
+.toasts{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;gap:9px;width:308px}
+.toast{display:flex;gap:10px;align-items:flex-start;padding:11px 12px;border-radius:11px;
+  border:1px solid rgba(255,255,255,.14);background:rgba(20,22,26,.97);backdrop-filter:blur(14px);
+  box-shadow:0 10px 30px rgba(0,0,0,.4);cursor:default}
+.toast .ic{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+  color:var(--muted);margin-top:1px}
+.toast.warn .ic{color:var(--warning-fg)}
+.toast .bd{min-width:0;flex:1}
+.toast .ttl{font-size:11px;color:var(--fg)}
+.toast .sub{font-size:9.5px;color:var(--subtle);margin-top:2px}
+.toast .dl{margin-top:7px}
+.toast .go{margin-top:8px;font-size:9.5px;color:var(--draw-fg);letter-spacing:.02em}
 
 /* ══ estados ══ */
 .states{display:grid;grid-template-columns:repeat(2,1fr);gap:13px;margin-top:18px}
@@ -404,16 +441,16 @@ td b{font-weight:400;color:var(--fg)}
             <div class="col">
               <div class="k"><span>Recuperación</span><span>7 de 8</span></div>
               <ul class="stagger">
-                <li class="share">MegaLoc <span class="st chip">compartido</span></li>
-                <li class="share">BoQ-DINOv2 <span class="st chip">compartido</span></li>
-                <li class="share">EigenPlaces <span class="st chip amber">solo contra sí mismo</span></li>
-                <li class="share">MixVPR <span class="st chip">compartido</span></li>
-                <li>SALAD <span class="st chip on">hash conocido</span></li>
-                <li>CliqueMining
+                <li class="share"><span class="dot"></span>MegaLoc <span class="st chip">compartido</span></li>
+                <li class="share"><span class="dot"></span>BoQ-DINOv2 <span class="st chip">compartido</span></li>
+                <li class="share"><span class="dot"></span>EigenPlaces <span class="st chip amber">solo contra sí mismo</span></li>
+                <li class="share"><span class="dot"></span>MixVPR <span class="st chip">compartido</span></li>
+                <li><span class="dot"></span>SALAD <span class="st chip on">hash conocido</span></li>
+                <li><span class="dot"></span>CliqueMining
                   <span class="st chip live"><span class="sp"></span>descargando</span>
                 </li>
-                <li class="share">CosPlace <span class="st chip">compartido con Mini</span></li>
-                <li class="miss">AnyLoc <small>2,3 GiB</small> <span class="st chip">falta</span></li>
+                <li class="share"><span class="dot"></span>CosPlace <span class="st chip">compartido con Mini</span></li>
+                <li class="miss"><span class="dot"></span>AnyLoc <small>2,3 GiB</small> <span class="st chip">falta</span></li>
               </ul>
               <div class="dl">
                 <div class="bar"><i></i></div>
@@ -424,10 +461,10 @@ td b{font-weight:400;color:var(--fg)}
             <div class="col">
               <div class="k"><span>Verificadores</span><span>3 de 4</span></div>
               <ul class="stagger">
-                <li class="share">RoMa <span class="st chip">compartido</span></li>
-                <li class="share">LightGlue + ALIKED <span class="st chip">compartido</span></li>
-                <li>Efficient-LoFTR <span class="st chip amber">solo contra sí mismo</span></li>
-                <li class="miss">RoMa v2 <small>1,9 GiB</small>
+                <li class="share"><span class="dot"></span>RoMa <span class="st chip">compartido</span></li>
+                <li class="share"><span class="dot"></span>LightGlue + ALIKED <span class="st chip">compartido</span></li>
+                <li><span class="dot"></span>Efficient-LoFTR <span class="st chip amber">solo contra sí mismo</span></li>
+                <li class="miss"><span class="dot"></span>RoMa v2 <small>1,9 GiB</small>
                   <span class="st chip blue">puerta</span>
                 </li>
               </ul>
@@ -439,15 +476,15 @@ td b{font-weight:400;color:var(--fg)}
             <div class="col">
               <div class="k"><span>Agentes · motores</span><span>2 de 3</span></div>
               <ul class="stagger">
-                <li class="share">Qwen3-VL <small>9 agentes</small> <span class="st chip">compartido</span></li>
-                <li class="share">PaddleOCR <small>2 agentes</small> <span class="st chip">compartido</span></li>
-                <li class="miss">Depth Anything V2 Small <small>99 MiB</small>
+                <li class="share"><span class="dot"></span>Qwen3-VL <small>9 agentes</small> <span class="st chip">compartido</span></li>
+                <li class="share"><span class="dot"></span>PaddleOCR <small>2 agentes</small> <span class="st chip">compartido</span></li>
+                <li class="miss"><span class="dot"></span>Depth Anything V2 Small <small>99 MiB</small>
                   <span class="st chip">falta</span></li>
               </ul>
               <div class="k" style="padding:13px 0 7px">Datos geográficos</div>
               <ul class="stagger">
-                <li class="share">Natural Earth · países <span class="st chip on">hash conocido</span></li>
-                <li class="miss">Köppen-Geiger 0,5° <small>253 KiB</small>
+                <li class="share"><span class="dot"></span>Natural Earth · países <span class="st chip on">hash conocido</span></li>
+                <li class="miss"><span class="dot"></span>Köppen-Geiger 0,5° <small>253 KiB</small>
                   <span class="st chip">falta</span></li>
               </ul>
             </div>
@@ -501,6 +538,11 @@ td b{font-weight:400;color:var(--fg)}
   cada peso, con lo que la comprobación que <span class="mono">lumi_pesos._licencia</span> ya hace deja de
   ser trabajo manual y pasa a cumplirse sola.
 </p>
+<p class="note">
+  <b>Se eligen para leerse, no se leen las tres a la vez.</b> La rejilla es el índice — cada tarjeta dice
+  de qué licencia es y a qué pesos cubre; tocar una la marca y trae su texto completo abajo, una detrás de
+  otra. Aceptar sigue siendo un solo gesto para las tres, léidas o no: leer no es requisito, solo ayuda.
+</p>
 
 <div class="win an an5">
   <header>
@@ -512,31 +554,30 @@ td b{font-weight:400;color:var(--fg)}
       <span class="sum">AnyLoc · Depth Anything V2 Small · Köppen-Geiger · CliqueMining</span>
     </div>
 
-    <div class="lics stagger">
-      <div class="lic-item">
-        <header>
-          <h4>MIT License</h4>
-          <span class="who">AnyLoc · CliqueMining</span>
-          <span class="src mono">github.com/AnyLoc/AnyLoc/blob/main/LICENSE</span>
-        </header>
-        <div class="lic-body mono">Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies…</div>
+    <div class="lic-grid stagger">
+      <div class="lic-card">
+        <h4>MIT License</h4>
+        <span class="who">AnyLoc · CliqueMining</span>
+        <span class="rd">leer →</span>
       </div>
-      <div class="lic-item">
-        <header>
-          <h4>Apache License 2.0</h4>
-          <span class="who">Depth Anything V2 Small</span>
-          <span class="src mono">apache.org/licenses/LICENSE-2.0.txt</span>
-        </header>
-        <div class="lic-body mono">Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0. Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND…</div>
+      <div class="lic-card sel">
+        <h4>Apache License 2.0</h4>
+        <span class="who">Depth Anything V2 Small</span>
+        <span class="rd">leyendo</span>
       </div>
-      <div class="lic-item">
-        <header>
-          <h4>Creative Commons Attribution 4.0</h4>
-          <span class="who">Köppen-Geiger · Beck et al. 2018</span>
-          <span class="src mono">creativecommons.org/licenses/by/4.0/legalcode.txt</span>
-        </header>
-        <div class="lic-body mono">You are free to: Share — copy and redistribute the material in any medium or format. Adapt — remix, transform, and build upon the material for any purpose, even commercially. Under the following terms: Attribution — You must give appropriate credit, provide a link to the license, and indicate if changes were made…</div>
+      <div class="lic-card">
+        <h4>Creative Commons BY 4.0</h4>
+        <span class="who">Köppen-Geiger · Beck et al. 2018</span>
+        <span class="rd">leer →</span>
       </div>
+    </div>
+
+    <div class="lic-reader">
+      <header>
+        <h4>Apache License 2.0</h4>
+        <span class="src mono">apache.org/licenses/LICENSE-2.0.txt</span>
+      </header>
+      <div class="lic-body mono">Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0. Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.</div>
     </div>
 
     <div class="accept">
@@ -631,10 +672,72 @@ td b{font-weight:400;color:var(--fg)}
           por qué no está</b>.</p>
       </div>
     </div>
+
+    <p class="note" style="margin-top:16px">
+      La puerta no espera a que la mires: si arrancas la descarga de Vision y RoMa v2 es lo único que
+      falta, el toast lo dice <b>en cuanto lo sabe</b>, con el mismo lenguaje ámbar que un toast de
+      licencias — «hace falta tu token», no un progreso que nunca avanza y te deja adivinando por qué.
+    </p>
+    <div style="position:relative;margin-top:9px">
+      <div class="toast warn an">
+        <span class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+        <div class="bd">
+          <div class="ttl">RoMa v2 espera tu token</div>
+          <div class="sub">El resto de Vision ya está — solo falta esto, y no se puede pedir por ti.</div>
+          <div class="go">completar en Modelos →</div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
-<h2>6 · Dónde vive, y qué pasa al terminar</h2>
+<h2>6 · Segundo plano: no hace falta estar en Modelos</h2>
+<p class="note">
+  La descarga es una tarea del <b>servidor</b> (sección 4): sigue corriendo esté quien esté mirando qué
+  pantalla. Los toasts son la otra mitad de esa idea — sin ellos, «corre en segundo plano» significaría
+  «desaparece de tu vista hasta que vuelvas a Modelos por curiosidad». Con ellos, te enteras estés donde
+  estés, y un clic te lleva justo a lo que hace falta.
+</p>
+
+<div class="desk an1">
+  <div class="ghost">
+    <div class="phead">
+      <h3>Usuarios</h3>
+      <span class="sum mono">11 con cuenta</span>
+    </div>
+    <p class="note" style="margin-top:8px;max-width:600px">
+      El administrador está resolviendo otra cosa por completo — ninguna de estas dos tareas de modelos
+      necesita que esta pestaña sea «Modelos» para seguir corriendo o para avisar.
+    </p>
+  </div>
+
+  <div class="toasts">
+    <div class="toast an">
+      <span class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13m0 0 4-4m-4 4-4-4M4 19h16"/></svg></span>
+      <div class="bd">
+        <div class="ttl">Descargando Vision</div>
+        <div class="sub mono">CliqueMining · 712/1148 MiB</div>
+        <div class="dl"><div class="bar"><i></i></div></div>
+        <div class="go">ver progreso →</div>
+      </div>
+    </div>
+    <div class="toast warn an an1">
+      <span class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4m5 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg></span>
+      <div class="bd">
+        <div class="ttl">Faltan 2 licencias por aceptar</div>
+        <div class="sub">Depth Anything V2 Small y Köppen-Geiger — la descarga no sigue sin esto.</div>
+        <div class="go">revisar licencias →</div>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="note">
+  <b>Un clic en cualquiera de los dos lleva a Modelos</b> con la pantalla correcta ya abierta — el
+  progreso al toast de arriba, las licencias pendientes al de abajo. No son un atajo genérico al panel:
+  cada toast sabe a qué sitio exacto pertenece.
+</p>
+
+<h2>7 · Dónde vive, y qué pasa al terminar</h2>
 
 <table>
   <tr><th style="width:150px">Sitio</th><th>Qué se ve</th></tr>
@@ -657,7 +760,7 @@ td b{font-weight:400;color:var(--fg)}
   </tr>
 </table>
 
-<h2>7 · Movimiento: qué se mueve y por qué</h2>
+<h2>8 · Movimiento: qué se mueve y por qué</h2>
 <table>
   <tr><th style="width:170px">Gesto</th><th>Regla</th></tr>
   <tr><td><b>Entrada escalonada</b></td>
@@ -677,6 +780,14 @@ td b{font-weight:400;color:var(--fg)}
   <tr><td><b>Medidor de nivel</b></td>
     <td>Se rellena desde cero una vez al aparecer. Nunca se re-anima al cambiar de pestaña: repetir la
       animación cada vez que miras convierte información en ruido.</td></tr>
+  <tr><td><b>Toast</b></td>
+    <td>Entra con el mismo <span class="mono">rise</span> que una fila, no un rebote propio: es una
+      notificación, no un anuncio. No se auto-cierra mientras la tarea siga viva — uno de progreso o de
+      licencia pendiente que desaparece solo es información que se pierde sin que nadie la leyera.</td></tr>
+  <tr><td><b>Tarjeta de licencia</b></td>
+    <td>Cambiar cuál está seleccionada cruza el punto y el borde en 300 ms; el lector de abajo no se
+      desmonta y se remonta, solo cambia su contenido — parpadear el marco entero cada clic sería ruido
+      por cada licencia que se hojea.</td></tr>
   <tr><td><b><span class="mono">prefers-reduced-motion</span></b></td>
     <td>Todo lo anterior se apaga. No es un detalle de accesibilidad opcional: es una herramienta que se
       usa durante horas.</td></tr>

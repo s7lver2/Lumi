@@ -36,7 +36,7 @@ pub async fn list_requests(
     );
     let mut q = c
         .prepare(
-            "SELECT id, display_name, message, source_ip, status, reason, created_at, expires_at
+            "SELECT id, display_name, message, source_ip, device, status, reason, created_at, expires_at
              FROM access_requests ORDER BY (status = 'pending') DESC, created_at DESC",
         )
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -49,10 +49,11 @@ pub async fn list_requests(
                 message: r.get(2)?,
                 external: is_external(&source_ip),
                 source_ip,
-                status: r.get(4)?,
-                reason: r.get(5)?,
-                created_at: r.get(6)?,
-                expires_at: r.get(7)?,
+                device: r.get(4)?,
+                status: r.get(5)?,
+                reason: r.get(6)?,
+                created_at: r.get(7)?,
+                expires_at: r.get(8)?,
             })
         })
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
@@ -264,4 +265,83 @@ pub async fn patch_limits(
         r.map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     }
     Ok(Json(crate::limits::global(&app.store)))
+}
+
+/// Los números del Resumen, de una vez.
+///
+/// Los estados de `access_requests` están en inglés (`pending`, `approved`,
+/// `rejected`, `expired`) y los de `analyses` en español (`pendiente`,
+/// `en_curso`, `hecho`, `error`). No es un descuido que se arregle aquí:
+/// cambiarlos es una migración de datos que no pinta en este ciclo.
+pub async fn resumen(
+    State(app): State<App>,
+    headers: HeaderMap,
+) -> Result<Json<lumi_proto::api::Resumen>, StatusCode> {
+    require_admin(&app, &bearer(&headers))?;
+    let c = app.store.conn();
+    let ahora = now();
+    // Medianoche UTC, no local: el daemon no sabe en qué huso está mirando el
+    // administrador, y elegir uno sería inventárselo.
+    let hoy = ahora - (ahora % 86_400);
+
+    let (pendientes, mas_antigua): (i64, Option<i64>) = c
+        .query_row(
+            "SELECT COUNT(*), MIN(created_at) FROM access_requests WHERE status = 'pending'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap_or((0, None));
+
+    let usuarios: i64 =
+        c.query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0)).unwrap_or(0);
+
+    let analisis_hoy: i64 = c
+        .query_row("SELECT COUNT(*) FROM analyses WHERE created_at >= ?1", [hoy], |r| r.get(0))
+        .unwrap_or(0);
+    let analisis_en_cola: i64 = c
+        .query_row(
+            "SELECT COUNT(*) FROM analyses WHERE state IN ('pendiente','en_curso')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+
+    // Siete cubos de un día. Se cuentan en Rust en vez de con siete consultas
+    // o un GROUP BY con huecos: los días sin ni un análisis tienen que salir
+    // como cero y no como ausencia, o la chispa mentiría sobre su forma.
+    let mut analisis_serie = vec![0i64; 7];
+    if let Ok(mut q) =
+        c.prepare("SELECT created_at FROM analyses WHERE created_at >= ?1")
+    {
+        let desde = hoy - 6 * 86_400;
+        if let Ok(filas) = q.query_map([desde], |r| r.get::<_, i64>(0)) {
+            for t in filas.flatten() {
+                let dia = ((t - desde) / 86_400).clamp(0, 6) as usize;
+                analisis_serie[dia] += 1;
+            }
+        }
+    }
+
+    let (indices, indices_bytes, teselas): (i64, i64, i64) = c
+        .query_row(
+            "SELECT COUNT(*), COALESCE(SUM(bytes),0), COALESCE(SUM(teselas),0)
+               FROM installed_indices WHERE completo = 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap_or((0, 0, 0));
+
+    Ok(Json(lumi_proto::api::Resumen {
+        solicitudes_pendientes: pendientes,
+        solicitud_mas_antigua: mas_antigua,
+        usuarios,
+        usuarios_conectados: app.queue.conectados(),
+        analisis_hoy,
+        analisis_en_cola,
+        analisis_serie,
+        indices,
+        indices_bytes,
+        teselas,
+        arrancado_en: app.arrancado_en,
+    }))
 }

@@ -8,7 +8,7 @@
 
 use crate::App;
 use anyhow::Result;
-use lumi_proto::api::{TaskKind, TaskStatus};
+use lumi_proto::api::{ItemDescarga, TaskKind, TaskStatus};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -32,7 +32,7 @@ fn now() -> i64 {
 /// configurado que vivan el venv y los pesos descargados; puede ser otro
 /// disco o volumen. Si no está configurado (arranque sin `lumi install`,
 /// p. ej. en desarrollo), cae a `dir/runtime`.
-fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec<String>) {
+fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>, payload: Option<&str>) -> (String, Vec<String>) {
     let base = models_dir.map(PathBuf::from).unwrap_or_else(|| dir.join("runtime"));
     let venv = base.join("venv");
     match kind {
@@ -63,10 +63,23 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec
             "/bin/sh".into(),
             vec!["-c".into(), "echo 'esquema aplicado por lumid al arrancar'".into()],
         ),
+        TaskKind::ModelDownload => (
+            venv.join("bin").join("python3").to_string_lossy().into_owned(),
+            vec!["workers/lumi_bajar.py".into(), payload.unwrap_or("[]").into()],
+        ),
     }
 }
 
 pub fn spawn(app: &App, kind: TaskKind) -> Result<String> {
+    spawn_con_payload(app, kind, None)
+}
+
+pub fn spawn_model_download(app: &App, items: Vec<ItemDescarga>) -> Result<String> {
+    let payload = serde_json::to_string(&items)?;
+    spawn_con_payload(app, TaskKind::ModelDownload, Some(payload))
+}
+
+fn spawn_con_payload(app: &App, kind: TaskKind, payload: Option<String>) -> Result<String> {
     let id = crate::routes::claim::new_token()[..12].to_string();
     std::fs::create_dir_all(app.dir.join("tasks"))?;
     let path = log_path(&app.dir, &id);
@@ -77,8 +90,12 @@ pub fn spawn(app: &App, kind: TaskKind) -> Result<String> {
         rusqlite::params![id, serde_json::to_string(&kind)?, now()],
     )?;
 
+    if kind == TaskKind::ModelDownload {
+        app.store.set_meta("model_task_id", &id)?;
+    }
+
     let models_dir = app.store.get_meta("models_dir");
-    let (bin, args) = command(kind, &app.dir, models_dir.as_deref());
+    let (bin, args) = command(kind, &app.dir, models_dir.as_deref(), payload.as_deref());
     let store = app.store.clone();
     let id2 = id.clone();
     tokio::spawn(async move {
@@ -91,7 +108,7 @@ pub fn spawn(app: &App, kind: TaskKind) -> Result<String> {
             Ok(c) => c,
             Err(e) => {
                 let _ = append(&path, &format!("FATAL no se pudo lanzar: {e}\n"));
-                finish(&store, &id2, Some(-1));
+                finish(&store, &id2, Some(-1), kind);
                 return;
             }
         };
@@ -116,7 +133,7 @@ pub fn spawn(app: &App, kind: TaskKind) -> Result<String> {
         let code = child.wait().await.ok().and_then(|s| s.code());
         let _ = a.await;
         let _ = b.await;
-        finish(&store, &id2, code);
+        finish(&store, &id2, code, kind);
     });
     Ok(id)
 }
@@ -128,11 +145,14 @@ fn append(path: &Path, line: &str) -> std::io::Result<()> {
         .write_all(line.as_bytes())
 }
 
-fn finish(store: &crate::store::Store, id: &str, code: Option<i32>) {
+fn finish(store: &crate::store::Store, id: &str, code: Option<i32>, kind: TaskKind) {
     let _ = store.conn().execute(
         "UPDATE tasks SET running = 0, exit_code = ?2 WHERE id = ?1",
         rusqlite::params![id, code],
     );
+    if kind == TaskKind::ModelDownload {
+        let _ = store.conn().execute("DELETE FROM meta WHERE k = 'model_task_id'", []);
+    }
 }
 
 pub fn status(app: &App, id: &str) -> Option<TaskStatus> {

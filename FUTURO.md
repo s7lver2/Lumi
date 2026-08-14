@@ -242,8 +242,7 @@ nadie ha tenido todavía.
 Es el subsistema 3 y está planificado, no aparcado. Se anota aquí solo lo que se le ha ido
 prometiendo por el camino: rediseñar desde cero las vistas provisionales de solicitudes y
 usuarios del subsistema 2, la fila de configuración del mapa del subsistema 6, las
-notificaciones redactadas por el admin, el modo mantenimiento, y una forma de rotar la clave
-del proveedor de mapas para un admin que no tenga shell en el servidor.
+notificaciones redactadas por el admin, el modo mantenimiento
 
 ### Recuperación de contraseña
 
@@ -339,3 +338,11 @@ todas, y también en la más fácil de equivocar: hay diez mil calles Mayor.
 El agente `dimensiones` se llama «forma del espacio» porque sin una referencia de escala conocida
 en la escena, Depth Anything no da metros. La salida, si algún día hacen falta, es detectar un
 objeto de tamaño conocido —una puerta, un coche, un peldaño— y escalar con él.
+
+### Gestión de versiones de un mismo modelo
+
+El 3a instala un modelo con la versión que diga su registro, y punto — que convivan dos versiones
+de un mismo recuperador (MegaLoc v1 y v2, por ejemplo) es un problema de Qdrant, que ya versiona
+colecciones por `(modelo, versión)`, y de las capas de índice del subsistema 8, que ya versionan
+por índice. Ninguno de los dos lados tiene hoy una pantalla que compare o migre entre versiones
+del mismo modelo; se aparca hasta que haya un caso real, no antes.

@@ -1,83 +1,88 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "../lib/api";
 import { useServer } from "../lib/store";
-import { Icon } from "../ui/Icon";
+import { Hueco } from "./Hueco";
 import { IndicesPanel } from "./IndicesPanel";
-import { MapRow } from "./MapRow";
+import { KeysView } from "./KeysView";
+import { ModelosView } from "./ModelosView";
+import { ModelToasts } from "./ModelToasts";
 import { QueueRow } from "./QueueRow";
 import { RequestsView } from "./RequestsView";
+import { ResumenView } from "./ResumenView";
+import { Sidebar, type Seccion } from "./Sidebar";
 import { UsersView } from "./UsersView";
 
-export function AdminPanel({ token, onClose }: { token: string; onClose: () => void }) {
-  const [tab, setTab] = useState<"requests" | "users">("requests");
-  const [copied, setCopied] = useState(false);
-  const addr = useServer((s) => s.addr);
-  const fingerprint = useServer((s) => s.hello?.fingerprint) ?? "";
-  const capIndices = useServer((s) => s.hello?.capabilities.find((c) => c.id === "indices"));
-  // La tarjeta pública, formada igual que ServerCard::Display en lumi-proto:
-  // lumi1s_<addr>_<huella>. Sin secreto: es lo que se reparte al equipo para
-  // que pidan acceso, y hasta ahora no se mostraba en ningún sitio de la app
-  // pese a que la spec lo prometía ("botón de copiar" en el panel de admin).
-  const card = `lumi1s_${addr}_${fingerprint}`;
+const PRONTO: Seccion[] = ["mantenimiento", "notificaciones", "hardware"];
 
-  function copy() {
-    navigator.clipboard.writeText(card);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1600);
-  }
+export function AdminPanel({ token }: { token: string }) {
+  const [seccion, setSeccion] = useState<Seccion>("resumen");
+  const [cuentas, setCuentas] = useState<Partial<Record<Seccion, { n: number; espera?: boolean }>>>({});
+  const [licenciasPendientes, setLicenciasPendientes] = useState(false);
+  const capIndices = useServer((s) => s.hello?.capabilities.find((c) => c.id === "indices"));
+
+  // Los contadores de la barra lateral salen del mismo Resumen que pinta la
+  // primera pantalla: una sola petición alimenta las dos cosas.
+  useEffect(() => {
+    api.get<import("../lib/api").Resumen>("/v1/admin/resumen", token)
+      .then((r) => setCuentas({
+        indices: { n: r.indices },
+        solicitudes: { n: r.solicitudes_pendientes, espera: r.solicitudes_pendientes > 0 },
+        usuarios: { n: r.usuarios },
+        cola: { n: r.analisis_en_cola },
+        claves: { n: 1, espera: true },
+      }))
+      .catch(() => setCuentas({}));
+  }, [token]);
 
   return (
-    <div className="relative z-10 mx-auto w-full max-w-3xl px-6 py-9">
-      <div className="mb-1 flex items-center gap-2.5" style={{ animation: "jg-fade-rise .7s both" }}>
-        <span className="text-fg">✦</span>
-        <span className="text-[17px] font-medium text-fg">
-          {tab === "requests" ? "Solicitudes de acceso" : "Usuarios"}
-        </span>
-        <div className="ml-auto flex gap-2">
-          <button onClick={() => setTab(tab === "requests" ? "users" : "requests")}
-            className="rounded-lg border border-white/15 px-3 py-1.5 text-[11px] text-fg">
-            {tab === "requests" ? "Usuarios" : "Solicitudes"}
-          </button>
-          <button onClick={onClose} className="rounded-lg border border-white/15 px-3 py-1.5 text-[11px] text-fg">
-            Cerrar
-          </button>
-        </div>
+    <div className="relative z-10 grid h-full w-full grid-cols-[206px_1fr] overflow-hidden bg-bg">
+      <Sidebar actual={seccion} onIr={setSeccion} contadores={cuentas} />
+      <div key={seccion} className="overflow-y-auto"
+        style={{ animation: "jg-fade-rise .5s cubic-bezier(.16,1,.3,1) both" }}>
+        {PRONTO.includes(seccion) ? <Hueco seccion={seccion} />
+          : seccion === "resumen" ? <ResumenView token={token} onIr={setSeccion} />
+          : seccion === "solicitudes" ? <Seccion titulo="Solicitudes de acceso" grupo="Personas">
+              <RequestsView token={token} /></Seccion>
+          : seccion === "usuarios" ? <UsersView token={token} />
+          : seccion === "claves" ? <KeysView token={token} />
+          : seccion === "modelos" ? <ModelosView token={token} onLicenciasPendientesChange={setLicenciasPendientes} />
+          : seccion === "cola" ? <Seccion titulo="Cola" grupo="Operación">
+              <QueueRow token={token} /></Seccion>
+                    : <Seccion titulo="Índices instalados" grupo="Servidor"
+              accion={
+                <button disabled title="Abrirá el catálogo remoto; todavía no hace nada"
+                  className="inline-flex items-center gap-1.5 rounded-[8px] bg-accent px-2.5 py-1
+                    text-[10.5px] font-medium text-black opacity-40">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  Instalar índice
+                </button>
+              }>
+              {capIndices?.state === "on" ? <IndicesPanel token={token} /> : (
+                <p className="mt-[19px] text-[11px] text-muted">{capIndices?.reason ?? "no disponible"}</p>
+              )}
+            </Seccion>}
       </div>
+      <ModelToasts token={token} onIr={setSeccion} licenciasPendientes={licenciasPendientes} />
+    </div>
+  );
+}
 
-      <div className="mb-5 flex items-center gap-2.5 rounded-lg border border-border bg-[rgba(16,19,25,.5)] px-3 py-2"
-        style={{ animation: "jg-fade-rise .75s .04s both" }}>
-        <span className="whitespace-nowrap text-[11px] text-muted">Tarjeta del servidor</span>
-        <span className="truncate font-mono text-[11px] text-fg">{card}</span>
-        <button onClick={copy}
-          className="ml-auto flex shrink-0 items-center gap-1.5 rounded border border-white/15 px-2 py-1 text-[10.5px] text-fg hover:border-white/30">
-          <Icon name={copied ? "check" : "clock"} size={11} />
-          {copied ? "copiada" : "copiar"}
-        </button>
+/** La cabecera común de una sección mudada. Existe para que las cinco vistas
+ *  que se mudan no tengan que aprender a pintar su propio título. */
+export function Seccion({ titulo, grupo, accion, children }: {
+  titulo: string; grupo: string; accion?: React.ReactNode; children: React.ReactNode;
+}) {
+  return (
+    <div className="px-6 pb-8 pt-5">
+      <span className="mb-1.5 block text-[8.5px] uppercase tracking-[.15em] text-subtle">{grupo}</span>
+      <div className="flex items-end gap-3 border-b border-border pb-[11px]">
+        <h2 className="text-[21px] font-medium leading-none tracking-[-.025em]">{titulo}</h2>
+        {accion && <span className="ml-auto pb-px">{accion}</span>}
       </div>
-
-      <div style={{ animation: "jg-fade-rise .8s .1s both" }}>
-        {tab === "requests" ? <RequestsView token={token} /> : <UsersView token={token} />}
-      </div>
-
-      <div className="mt-5" style={{ animation: "jg-fade-rise .85s .14s both" }}>
-        <QueueRow token={token} />
-      </div>
-
-      <div className="mt-5" style={{ animation: "jg-fade-rise .9s .18s both" }}>
-        <MapRow token={token} />
-      </div>
-
-      {/* Deshabilitado con el motivo cuando falta Qdrant: la regla del
-          proyecto es que un botón apagado siempre dice por qué. */}
-      <div className="mt-5" style={{ animation: "jg-fade-rise .95s .22s both" }}>
-        {capIndices?.state === "on" ? (
-          <IndicesPanel token={token} />
-        ) : (
-          <div className="rounded-card border border-border p-3.5 opacity-60">
-            <p className="text-[12.5px] text-fg">Índices</p>
-            <p className="mt-1 text-[11px] text-muted">{capIndices?.reason ?? "no disponible"}</p>
-          </div>
-        )}
-      </div>
+      <div className="mt-[19px]">{children}</div>
     </div>
   );
 }

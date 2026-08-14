@@ -197,6 +197,13 @@ CREATE TABLE IF NOT EXISTS analysis_agents (
     detalle     TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (analysis_id, agente)
 );
+CREATE TABLE IF NOT EXISTS model_licenses (
+    licencia     TEXT NOT NULL,
+    para         TEXT NOT NULL,
+    aceptada_por INTEGER NOT NULL,
+    aceptada_en  INTEGER NOT NULL,
+    PRIMARY KEY (licencia, para)
+);
 ";
 
 pub struct Store(Mutex<Connection>);
@@ -299,6 +306,10 @@ fn migrate(c: &Connection) {
         // Por qué un agente hundió esta hipótesis. Nulo significa que ninguno
         // la tocó, no que la aprobaran.
         ("analysis_hypotheses", "motivo_agente", "TEXT"),
+        // Lo que declaró el cliente al pedir acceso. Anulable a propósito: las
+        // solicitudes ya pendientes no lo tienen, y se enseñan con «no
+        // consta» en vez de con un dato inventado.
+        ("access_requests", "device", "TEXT"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }

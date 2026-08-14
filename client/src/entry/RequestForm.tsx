@@ -21,6 +21,7 @@ export function RequestForm({ server, onSent, onBack }: {
       await api.reconnect(server.addr, server.fingerprint);
       const res = await api.post<{ ticket: string }>("/v1/access-requests", {
         display_name: name.trim(), message: message.trim(),
+        device: navigator.userAgent,
       });
       // El ticket es lo único que prueba que esta solicitud es tuya, y solo se
       // entrega una vez: se persiste antes de cambiar de pantalla.

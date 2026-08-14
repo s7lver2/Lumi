@@ -4,6 +4,7 @@ import { PlanetBackground } from "./ui/PlanetBackground";
 import { Wizard } from "./wizard/Wizard";
 import { PairStep } from "./wizard/PairStep";
 import { AdminStep } from "./wizard/AdminStep";
+import { ModelosStep } from "./wizard/ModelosStep";
 import { ProvisionStep } from "./wizard/ProvisionStep";
 import { TitleBar } from "./ui/TitleBar";
 import { ResizeHandles } from "./ui/WindowFrame";
@@ -30,6 +31,7 @@ export default function App() {
   const [mode, setMode] = useState<"entry" | "wizard" | "picker" | "project" | "case" | "admin">("entry");
   const [adminBusy, setAdminBusy] = useState(false);
   const [runtimeDone, setRuntimeDone] = useState(false);
+  const [modelosDone, setModelosDone] = useState(false);
   /** Resultados e invitar piden el mismo carril de la derecha, así que el
    *  estado es uno solo: abrir cualquiera de los dos recoge el otro. */
   const [drawer, setDrawer] = useState<DrawerId>(null);
@@ -218,7 +220,9 @@ export default function App() {
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
-      <PlanetBackground dead={status !== "ok"} />
+      {/* El panel de administración tiene su propio fondo liso: el planeta
+          es la ambientación del trabajo de caso, no de mirar la máquina. */}
+      {mode !== "admin" && <PlanetBackground dead={status !== "ok"} />}
       {/* Una sola franja arriba para todo: migas, estado del servidor,
           notificaciones, cuenta y los botones de la ventana. La telemetría ya
           no es una franja permanente de 70 px — vive en su píldora. */}
@@ -237,7 +241,9 @@ export default function App() {
       <div className={`relative flex flex-1 overflow-hidden ${
         // El selector de proyectos también ocupa la ventana entera desde el
         // rediseño: centrarlo lo dejaba flotando con dos paneles a media asta.
-        mode === "project" || mode === "case" || mode === "picker"
+        // El panel de administración tampoco se centra: es una pantalla
+        // completa con su propia barra lateral, no una tarjeta flotante.
+        mode === "project" || mode === "case" || mode === "picker" || mode === "admin"
           ? "" : "items-center justify-center overflow-y-auto"
       } ${blockedByDisconnect ? "pointer-events-none opacity-50" : ""}`}>
       {resuming ? null : status !== "ok" && !blockedByDisconnect && mode !== "entry" ? (
@@ -259,7 +265,7 @@ export default function App() {
           onSignedIn={() => setMode(useServer.getState().isAdmin ? "admin" : "picker")}
           onOwnerKey={(key) => { useServer.getState().setKey(key); setStep(0); setMode("wizard"); }} />
       ) : mode === "admin" ? (
-        <AdminPanel token={useServer.getState().token!} onClose={() => setMode("picker")} />
+        <AdminPanel token={useServer.getState().token!} />
       ) : mode === "wizard" ? (
         <Wizard step={step} title="Lumi Station" subtitle="vincular servidor"
           // Del paso 3 (runtime) no se puede volver al 2 (admin): la cuenta ya
@@ -268,22 +274,23 @@ export default function App() {
           onBack={step > 0 && step !== 2 ? () => setStep((s) => s - 1) : undefined}
           onNext={() => {
             if (step === 1) { document.getElementById("admin-submit")?.click(); return; }
-            // Datos y Modelos (subsistemas 3-5) todavía no existen: el paso 2
-            // (runtime) es el último construido, así que terminar de instalar
-            // lleva directo a la app en vez de a un paso vacío. El owner es
-            // admin, así que va al panel — igual que al reabrir la app.
-            if (step === 2) { setMode(useServer.getState().isAdmin ? "admin" : "picker"); return; }
+            // El paso 3 (modelos) es el último construido: terminarlo lleva
+            // directo a la app. El owner es admin, así que va al panel —
+            // igual que al reabrir la app.
+            if (step === 3) { setMode(useServer.getState().isAdmin ? "admin" : "picker"); return; }
             setStep((s) => s + 1);
           }}
           nextDisabled={
             (step === 0 && (!hello || hello.state !== "unclaimed")) ||
-            (step === 2 && !runtimeDone)
+            (step === 2 && !runtimeDone) ||
+            (step === 3 && !modelosDone)
           }
-          nextLabel={step === 2 ? "Terminar" : "Siguiente"}
+          nextLabel={step === 3 ? "Terminar" : "Siguiente"}
           nextBusy={step === 1 && adminBusy}>
           {step === 0 && <PairStep onDone={() => setStep(1)} />}
           {step === 1 && <AdminStep bootstrapToken={bootstrapToken} onDone={() => setStep(2)} onBusyChange={setAdminBusy} />}
-          {step === 2 && <ProvisionStep onDone={() => setMode("picker")} onStatusChange={setRuntimeDone} />}
+          {step === 2 && <ProvisionStep onDone={() => setStep(3)} onStatusChange={setRuntimeDone} />}
+          {step === 3 && <ModelosStep token={useServer.getState().token!} onStatusChange={setModelosDone} />}
         </Wizard>
       ) : mode === "picker" ? (
         <ProjectPicker refresh={projectsTick}

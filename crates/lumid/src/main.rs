@@ -34,6 +34,9 @@ pub struct App {
     /// está sana y solo falta desbloquear.
     pub master: Arc<RwLock<Option<MasterKey>>>,
     pub dir: PathBuf,
+    /// Epoch de arranque. El panel lo resta para decir «en marcha desde hace
+    /// 6 d 04 h»; calcularlo en el cliente obligaría a confiar en su reloj.
+    pub arrancado_en: i64,
     /// `sysinfo` calcula el % de CPU por diferencia entre dos lecturas: un
     /// `System` nuevo en cada muestra siempre daría 0%, en cualquier
     /// plataforma. Se mantiene vivo entre muestras para que la diferencia
@@ -70,6 +73,10 @@ async fn main() -> anyhow::Result<()> {
         gpus,
         master: Arc::new(RwLock::new(master::load_at_boot(&dir))),
         dir: dir.clone(),
+        arrancado_en: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0),
         sysinfo: Arc::new(Mutex::new(sysinfo::System::new_all())),
         queue,
         indices_en_curso: Arc::new(Mutex::new(None)),
@@ -104,6 +111,13 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/users", get(routes::admin::list_users))
         .route("/v1/admin/users/:id", get(routes::admin::get_user).patch(routes::admin::patch_user))
         .route("/v1/admin/limits", get(routes::admin::get_limits).patch(routes::admin::patch_limits))
+        .route("/v1/admin/resumen", get(routes::admin::resumen))
+        .route("/v1/admin/models/accept-licenses", post(routes::models::accept_licenses))
+        .route("/v1/admin/models/download", post(routes::models::download))
+        .route("/v1/admin/model-task", get(routes::models::model_task))
+        .route("/v1/admin/models", get(routes::models::estado))
+        .route("/v1/admin/models/provider-token", get(routes::models::get_provider_token).patch(routes::models::set_provider_token))
+        .route("/v1/admin/models/metadata", get(routes::models::metadatos))
         .route("/v1/projects", get(routes::projects::list).post(routes::projects::create))
         .route(
             "/v1/projects/:id",
@@ -187,3 +201,4 @@ fn gpus() -> Vec<GpuInfo> {
         })
         .collect()
 }
+
