@@ -1,6 +1,8 @@
 # workflow/ es un repo aparte (ClaudeChan), clonado por el bootstrap
 workflow/
 
+recovery.txt
+
 node_modules/
 target/
 dist/
@@ -10,5 +12,6 @@ dist/
 client/src-tauri/target
 .superpowers/
 .claude/worktrees/
-recovery.txt__pycache__/
+recovery.txt
+__pycache__/
 *.pyc

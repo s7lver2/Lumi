@@ -31,7 +31,6 @@ export default function App() {
   const [mode, setMode] = useState<"entry" | "wizard" | "picker" | "project" | "case" | "admin">("entry");
   const [adminBusy, setAdminBusy] = useState(false);
   const [runtimeDone, setRuntimeDone] = useState(false);
-  const [modelosDone, setModelosDone] = useState(false);
   /** Resultados e invitar piden el mismo carril de la derecha, así que el
    *  estado es uno solo: abrir cualquiera de los dos recoge el otro. */
   const [drawer, setDrawer] = useState<DrawerId>(null);
@@ -282,15 +281,14 @@ export default function App() {
           }}
           nextDisabled={
             (step === 0 && (!hello || hello.state !== "unclaimed")) ||
-            (step === 2 && !runtimeDone) ||
-            (step === 3 && !modelosDone)
+            (step === 2 && !runtimeDone)
           }
           nextLabel={step === 3 ? "Terminar" : "Siguiente"}
           nextBusy={step === 1 && adminBusy}>
           {step === 0 && <PairStep onDone={() => setStep(1)} />}
           {step === 1 && <AdminStep bootstrapToken={bootstrapToken} onDone={() => setStep(2)} onBusyChange={setAdminBusy} />}
           {step === 2 && <ProvisionStep onDone={() => setStep(3)} onStatusChange={setRuntimeDone} />}
-          {step === 3 && <ModelosStep token={useServer.getState().token!} onStatusChange={setModelosDone} />}
+          {step === 3 && <ModelosStep token={useServer.getState().token!} />}
         </Wizard>
       ) : mode === "picker" ? (
         <ProjectPicker refresh={projectsTick}

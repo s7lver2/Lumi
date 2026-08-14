@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type MetaPeso, type NivelEstado } from "../lib/api";
+import { Icon } from "../ui/Icon";
 import { Seccion } from "./AdminPanel";
 import { LicenciasGate } from "./LicenciasGate";
 
@@ -87,9 +88,22 @@ export function ModelosView({ token, nivelInicial, onLicenciasPendientesChange }
       </div>
 
       {completando && (
-        <div className="mt-4">
-          <LicenciasGate token={token} items={completando.items}
-            onListo={() => { setCompletando(null); cargarNiveles(); }} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
+          onClick={(e) => { if (e.target === e.currentTarget) setCompletando(null); }}>
+          <div className="max-h-[86vh] w-full max-w-[640px] overflow-y-auto rounded-2xl
+            border border-white/[.13] bg-[rgba(16,19,25,.86)] p-[20px_22px] backdrop-blur-xl">
+            <div className="mb-4 flex items-baseline gap-3">
+              <h3 className="text-[15px] font-medium text-fg">
+                Completar {niveles?.find((n) => n.id === completando.nivel)?.nombre}
+              </h3>
+              <button onClick={() => setCompletando(null)}
+                className="ml-auto text-subtle transition-colors hover:text-fg">
+                <Icon name="x" size={13} />
+              </button>
+            </div>
+            <LicenciasGate token={token} items={completando.items}
+              onListo={() => { setCompletando(null); cargarNiveles(); }} />
+          </div>
         </div>
       )}
     </Seccion>

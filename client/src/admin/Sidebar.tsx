@@ -14,7 +14,7 @@ const GRUPOS: { grupo: string; items: { id: Seccion; label: string; pronto?: boo
     grupo: "Servidor",
     items: [
       { id: "resumen", label: "Resumen" },
-      { id: "modelos", label: "Modelos", pronto: true },
+      { id: "modelos", label: "Modelos" },
       { id: "indices", label: "Índices" },
       { id: "claves", label: "API Keys" },
     ],
