@@ -47,6 +47,16 @@ fn version_uno() -> u32 {
     1
 }
 
+/// `#[serde(default)]` arregla DESERIALIZAR una ficha antigua sin este campo,
+/// pero `canonico()` reserializa la ficha entera para comprobar la firma —
+/// sin esto, esa reserialización metería `"numero_version":1` donde el
+/// fichero original nunca lo tuvo, y la firma de CUALQUIER ficha publicada
+/// antes de este campo dejaría de verificar para siempre. Omitir el campo
+/// cuando vale 1 reproduce byte a byte el formato antiguo.
+fn es_version_uno(v: &u32) -> bool {
+    *v == 1
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Ficha {
     pub version: u32,
@@ -56,7 +66,7 @@ pub struct Ficha {
     /// Versión de CONTENIDO del índice — "Crear versión nueva" en el Indexer,
     /// no la versión de FORMATO de la ficha (`version`, arriba). `1` para
     /// cualquier ficha publicada antes de que esto existiera.
-    #[serde(default = "version_uno")]
+    #[serde(default = "version_uno", skip_serializing_if = "es_version_uno")]
     pub numero_version: u32,
     /// "github" o "huggingface". La firma no depende de esto, pero saber de
     /// dónde vino sirve para volver a pedirlo.
@@ -194,5 +204,22 @@ mod tests {
         j.as_object_mut().unwrap().remove("numero_version");
         let f: Ficha = serde_json::from_value(j).unwrap();
         assert_eq!(f.numero_version, 1);
+    }
+
+    // El caso real que rompía: una ficha firmada ANTES de que existiera
+    // numero_version se reserializaba con el campo de vuelta (valor 1,
+    // relleno por el default) y la firma dejaba de corresponder — la ficha
+    // no cambió, la comprobación sí. `skip_serializing_if` reproduce el
+    // formato antiguo byte a byte cuando el valor es 1.
+    #[test]
+    fn una_ficha_de_version_uno_firmada_antes_del_campo_sigue_verificando() {
+        let secreta = [7u8; 32];
+        let mut f = ficha_de_prueba();
+        f.firmar(&secreta).unwrap();
+        assert!(!serde_json::to_string(&f).unwrap().contains("numero_version"));
+
+        let j = serde_json::to_string(&f).unwrap();
+        let recibida: Ficha = serde_json::from_str(&j).unwrap();
+        assert!(recibida.comprobar().is_ok());
     }
 }
