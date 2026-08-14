@@ -95,9 +95,9 @@ pub struct UnsealReq {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskKind {
-    /// venv + torch + CUDA. El paso pesado que justifica el runner.
     InferenceRuntime,
     Database,
+    ModelDownload,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -189,6 +189,26 @@ pub struct AccessReq {
     /// una huella: sirve para decidir, no para identificar.
     #[serde(default)]
     pub device: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AcceptLicensesReq {
+    /// Una entrada por licencia distinta: `{"MIT": ["anyloc","cliquemining"], ...}`.
+    /// Agrupado por texto porque una licencia que cubre dos pesos se acepta
+    /// una vez, no dos.
+    pub licencias: std::collections::HashMap<String, Vec<String>>,
+}
+
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ItemDescarga {
+    pub id: String,
+    pub fichero_url: String,
+    pub destino: String,
+    pub licencia_texto: String,
+    pub sha256: String,
+    pub gestion_propia: bool,
 }
 
 /// El ticket se devuelve UNA sola vez. El servidor guarda su hash.

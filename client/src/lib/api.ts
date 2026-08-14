@@ -61,7 +61,7 @@ export interface UserDetail {
 }
 export interface TaskStatus {
   id: string;
-  kind: "inference_runtime" | "database";
+  kind: "inference_runtime" | "database" | "model_download";
   running: boolean;
   exit_code: number | null;
   log_len: number;
