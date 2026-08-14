@@ -127,25 +127,53 @@ export function EmbedQueueView({ indiceId, onCambiarIndice }: {
               {p.ultimo_fallo && (
                 <div className="mt-1.5">
                   <p className="text-[9.5px] leading-relaxed text-danger-fg">{p.ultimo_fallo}</p>
-                  {puedeDescargar && (
-                    descargando === p.modelo_id ? (
+                  {puedeDescargar && (() => {
+                    // `pesos` describe el ÚLTIMO intento de este modelo, no
+                    // solo el que está en curso ahora mismo — `descargando`
+                    // se limpia en cuanto `terminado` llega, y si el botón
+                    // dependiera de esa bandera el error/log recién llegado
+                    // desaparecía en el mismo instante en que aparecía: la
+                    // pantalla volvía al botón "Descargar pesos" de golpe,
+                    // sin dar tiempo a leer qué había pasado.
+                    const esteIntento = pesos?.modelo_id === p.modelo_id ? pesos : null;
+                    const enCurso = descargando === p.modelo_id;
+                    if (!esteIntento) {
+                      return (
+                        <button onClick={() => void descargarPesos(p.modelo_id)}
+                          className="jg-press mt-1.5 rounded-lg border border-border px-2.5 py-1 text-[10px] text-fg">
+                          Descargar pesos
+                        </button>
+                      );
+                    }
+                    return (
                       <div className="mt-1.5">
-                        <div className="h-[3px] overflow-hidden rounded-sm bg-elevated">
-                          <div className="h-full bg-fg transition-[width] duration-500"
-                            style={{ width: `${pesos?.pct ?? 0}%` }} />
-                        </div>
-                        <p className="mt-1 font-mono text-[9.5px] text-subtle">
-                          descargando pesos… {pesos?.mib ?? 0}/{pesos?.total_mib ?? "?"} MiB
-                        </p>
-                        {pesos?.error && <p className="mt-1 text-[9.5px] text-danger-fg">{pesos.error}</p>}
+                        {enCurso && (
+                          <>
+                            <div className="h-[3px] overflow-hidden rounded-sm bg-elevated">
+                              <div className="h-full bg-fg transition-[width] duration-500"
+                                style={{ width: `${esteIntento.pct}%` }} />
+                            </div>
+                            <p className="mt-1 font-mono text-[9.5px] text-subtle">
+                              descargando pesos… {esteIntento.mib}/{esteIntento.total_mib || "?"} MiB
+                            </p>
+                          </>
+                        )}
+                        {esteIntento.error && <p className="mt-1 text-[9.5px] text-danger-fg">{esteIntento.error}</p>}
+                        {!!esteIntento.registro.length && (
+                          <pre className="mt-1.5 max-h-[110px] overflow-auto whitespace-pre-wrap rounded-lg
+                            border border-border bg-[#08090b] px-2 py-1.5 font-mono text-[9px] text-muted">
+                            {esteIntento.registro.slice(-15).join("\n")}
+                          </pre>
+                        )}
+                        {esteIntento.terminado && (
+                          <button onClick={() => void descargarPesos(p.modelo_id)}
+                            className="jg-press mt-1.5 rounded-lg border border-border px-2.5 py-1 text-[10px] text-fg">
+                            {esteIntento.error ? "Reintentar" : "Descargar de nuevo"}
+                          </button>
+                        )}
                       </div>
-                    ) : (
-                      <button onClick={() => void descargarPesos(p.modelo_id)}
-                        className="jg-press mt-1.5 rounded-lg border border-border px-2.5 py-1 text-[10px] text-fg">
-                        Descargar pesos
-                      </button>
-                    )
-                  )}
+                    );
+                  })()}
                 </div>
               )}
             </div>
