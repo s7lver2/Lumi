@@ -29,6 +29,17 @@ pub struct Modelo {
     pub pesos_url: String,
     #[serde(default)]
     pub sha256: String,
+    /// URL directa del fichero de pesos, si se conoce — distinta de
+    /// `pesos_url`, que suele ser la página del repositorio, no el fichero.
+    /// Sin esto no hay de dónde descargar: el modelo se queda en modo guía.
+    #[serde(default)]
+    pub fichero_url: String,
+    #[serde(default)]
+    pub licencia_texto: String,
+    /// Si no es `None`, la licencia obliga a aceptarla en el sitio del
+    /// proveedor y a traer un token propio — no se descarga desde aquí.
+    #[serde(default)]
+    pub puerta: Option<String>,
 }
 
 /// Lee todos los `.json` del directorio. Un fichero ilegible o incompleto se

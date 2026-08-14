@@ -16,6 +16,11 @@ export interface Diagnostico {
 export interface Modelo {
   id: string; nombre: string; base: string; version: string; dims: number;
   familia: string; licencia: string; pesos_url: string; sha256: string;
+  fichero_url: string; licencia_texto: string; puerta: string | null;
+}
+export interface ProgresoPesos {
+  modelo_id: string; pct: number; mib: number; total_mib: number;
+  terminado: boolean; error: string | null; registro: string[];
 }
 export interface Nivel {
   id: string; nombre: string;
@@ -232,6 +237,7 @@ export interface ProgresoIndiceEmbed {
   lote_total: number;
   pausada: boolean;
   guardado_fallos: number;
+  ultimo_fallo: string | null;
 }
 
 export const api = {
@@ -248,6 +254,8 @@ export const api = {
   setupMarcarCompleto: () => invoke<void>("setup_marcar_completo"),
   setupReiniciar: () => invoke<void>("setup_reiniciar"),
   modelosLista: () => invoke<Modelo[]>("modelos_lista"),
+  modeloPesosDescargar: (modeloId: string) => invoke<void>("modelo_pesos_descargar", { modeloId }),
+  modeloPesosProgreso: () => invoke<ProgresoPesos | null>("modelo_pesos_progreso"),
   runtimeListo: () => invoke<boolean>("runtime_listo"),
   runtimeInstalar: () => invoke<void>("runtime_instalar"),
   ingestaCarpeta: (indiceId: number, ruta: string, tipo: string, fuente: string, licencia: string | null) =>

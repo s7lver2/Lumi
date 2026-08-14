@@ -166,7 +166,7 @@ export function App() {
                     ? <IndexList onAbrir={setIndiceAbierto} />
                     : <IndexDetail key={indiceAbierto} id={indiceAbierto} onVolver={() => setIndiceAbierto(null)}
                         onNuevaVersion={setIndiceAbierto}
-                        onIrAEmbebido={() => { setDestino("embebido"); setIndiceAbierto(null); }} />
+                        onIrAEmbebido={() => setDestino("embebido")} />
                 )}
                 {/* Territorio trabaja SIEMPRE sobre un índice: sin esto, el
                     carril deja llegar a la pantalla sin haber elegido uno, y
@@ -191,7 +191,12 @@ export function App() {
                     }}
                   />
                 )}
-                {destino === "embebido" && <EmbedQueueView />}
+                {destino === "embebido" && indiceAbierto === null && (
+                  <IndexPicker titulo="Ver embebido" onAbrir={setIndiceAbierto} />
+                )}
+                {destino === "embebido" && indiceAbierto !== null && (
+                  <EmbedQueueView indiceId={indiceAbierto} onCambiarIndice={() => setIndiceAbierto(null)} />
+                )}
                 {destino === "descarga" && (
                   descargaIndiceId === null
                     ? (

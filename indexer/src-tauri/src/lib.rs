@@ -15,6 +15,7 @@ mod niveles;
 mod origins;
 mod package;
 mod perf;
+mod pesos;
 mod proceso;
 mod probe;
 mod publicar;
@@ -71,6 +72,8 @@ pub struct Estado {
     pub identidad_en_curso: std::sync::Mutex<Option<(String, String)>>, // (proveedor, device_code)
     /// La publicación en curso, si hay alguna. Mismo patrón que `descarga`.
     pub publicacion: std::sync::Mutex<Option<Arc<publicar::Publicacion>>>,
+    /// La descarga de pesos de un modelo en curso, si hay alguna.
+    pub pesos: pesos::EnCurso,
 }
 
 /// Dónde vive todo. `LUMI_INDEXER_DATA` existe para poder correr una instancia
@@ -179,6 +182,24 @@ fn modelos_lista(estado: tauri::State<'_, Estado>) -> Vec<models::Modelo> {
     estado.modelos.clone()
 }
 
+/// Arranca la descarga de los pesos de un modelo — lo que falta para que
+/// `lumi_pesos._licencia`/`_verificar` dejen de rechazarlo al embeber.
+#[tauri::command]
+fn modelo_pesos_descargar(estado: tauri::State<'_, Estado>, modelo_id: String) -> Result<(), String> {
+    let modelo = estado
+        .modelos
+        .iter()
+        .find(|m| m.id == modelo_id)
+        .cloned()
+        .ok_or_else(|| format!("«{modelo_id}» no está en el registro"))?;
+    pesos::arrancar(estado.dir.clone(), estado.pesos.clone(), modelo).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn modelo_pesos_progreso(estado: tauri::State<'_, Estado>) -> Option<pesos::ProgresoPesos> {
+    estado.pesos.lock().unwrap().clone()
+}
+
 #[tauri::command]
 fn runtime_listo(estado: tauri::State<'_, Estado>) -> bool {
     runtime::esta_instalado(&estado.dir)
@@ -208,6 +229,7 @@ struct ProgresoIndiceEmbed {
     lote_total: u32,
     pausada: bool,
     guardado_fallos: u32,
+    ultimo_fallo: Option<String>,
 }
 
 /// El progreso de embebido de ESTE índice, por modelo — no el de cualquiera
@@ -238,6 +260,7 @@ fn indice_progreso_embebido(
                 lote_total: if activo { fila.map(|p| p.total).unwrap_or(0) } else { 0 },
                 pausada: fila.is_some_and(|p| p.pausada),
                 guardado_fallos: if activo { fila.map(|p| p.guardado_fallos).unwrap_or(0) } else { 0 },
+                ultimo_fallo: if activo { fila.and_then(|p| p.ultimo_fallo.clone()) } else { None },
             })
         })
         .collect()
@@ -1557,6 +1580,7 @@ pub fn run() {
             sellado: std::sync::Mutex::new(None),
             identidad_en_curso: std::sync::Mutex::new(None),
             publicacion: std::sync::Mutex::new(None),
+            pesos: Arc::new(std::sync::Mutex::new(None)),
         })
         .invoke_handler(tauri::generate_handler![
             saludo,
@@ -1583,6 +1607,8 @@ pub fn run() {
             ingesta_legacy_progreso,
             indice_crear,
             niveles_lista,
+            modelo_pesos_descargar,
+            modelo_pesos_progreso,
             indices_lista,
             indice_detalle,
             indice_lotes,
