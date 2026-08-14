@@ -332,3 +332,9 @@ Esperado: 3 tests en verde (`key`, `crypto`, `caps`).
 cargo build       # workspace completo: lumi-proto, lumid, lumi-cli
 cd client && npm run build   # frontend
 ```
+
+## Licencia
+
+AGPL-3.0-or-later (ver [LICENSE](LICENSE)). Al ser Lumi Station un servicio pensado para
+correr en un servidor propio, la AGPL cierra el hueco de la GPL normal: si alguien ofrece una
+versión modificada como servicio de red, también debe compartir su código fuente.
