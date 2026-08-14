@@ -1,10 +1,6 @@
 /** Una sección que todavía no existe. Una frase de qué será y en qué ciclo,
  *  y nada más: la pantalla no justifica decisiones, eso está en la spec. */
 const QUE: Record<string, { titulo: string; grupo: string; ciclo: string; que: string }> = {
-  modelos: {
-    titulo: "Modelos", grupo: "Servidor", ciclo: "ciclo 3a",
-    que: "Descargar pesos, aceptar sus licencias y verificar el sha256.",
-  },
   mantenimiento: {
     titulo: "Mantenimiento", grupo: "Operación", ciclo: "ciclo 3c",
     que: "Poner el servidor en MAINTENANCE sin pararlo.",

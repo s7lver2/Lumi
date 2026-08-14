@@ -66,6 +66,33 @@ export interface TaskStatus {
   exit_code: number | null;
   log_len: number;
 }
+export interface ProviderTokenState {
+  has_token: boolean;
+}
+export interface Resolucion {
+  recuperacion_instalados: number;
+  recuperacion_total: number;
+  geometricos_instalados: number;
+  geometricos_total: number;
+  faltan: string[];
+}
+export interface NivelEstado {
+  id: string;
+  nombre: string;
+  resolucion: Resolucion;
+}
+export interface MetaPeso {
+  id: string;
+  nombre: string;
+  licencia: string;
+  licencia_texto: string;
+  puerta: string | null;
+}
+export interface TareaModelo {
+  id: string;
+  item_actual: string | null;
+  pct: number | null;
+}
 export interface Hello {
   version: string;
   state: "unclaimed" | "claimed" | "provisioning" | "ready";

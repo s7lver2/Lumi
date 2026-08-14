@@ -4,17 +4,20 @@ import { useServer } from "../lib/store";
 import { Hueco } from "./Hueco";
 import { IndicesPanel } from "./IndicesPanel";
 import { KeysView } from "./KeysView";
+import { ModelosView } from "./ModelosView";
+import { ModelToasts } from "./ModelToasts";
 import { QueueRow } from "./QueueRow";
 import { RequestsView } from "./RequestsView";
 import { ResumenView } from "./ResumenView";
 import { Sidebar, type Seccion } from "./Sidebar";
 import { UsersView } from "./UsersView";
 
-const PRONTO: Seccion[] = ["modelos", "mantenimiento", "notificaciones", "hardware"];
+const PRONTO: Seccion[] = ["mantenimiento", "notificaciones", "hardware"];
 
 export function AdminPanel({ token }: { token: string }) {
   const [seccion, setSeccion] = useState<Seccion>("resumen");
   const [cuentas, setCuentas] = useState<Partial<Record<Seccion, { n: number; espera?: boolean }>>>({});
+  const [licenciasPendientes, setLicenciasPendientes] = useState(false);
   const capIndices = useServer((s) => s.hello?.capabilities.find((c) => c.id === "indices"));
 
   // Los contadores de la barra lateral salen del mismo Resumen que pinta la
@@ -42,7 +45,7 @@ export function AdminPanel({ token }: { token: string }) {
               <RequestsView token={token} /></Seccion>
           : seccion === "usuarios" ? <UsersView token={token} />
           : seccion === "claves" ? <KeysView token={token} />
-          
+          : seccion === "modelos" ? <ModelosView token={token} onLicenciasPendientesChange={setLicenciasPendientes} />
           : seccion === "cola" ? <Seccion titulo="Cola" grupo="Operación">
               <QueueRow token={token} /></Seccion>
                     : <Seccion titulo="Índices instalados" grupo="Servidor"
@@ -62,6 +65,7 @@ export function AdminPanel({ token }: { token: string }) {
               )}
             </Seccion>}
       </div>
+      <ModelToasts token={token} onIr={setSeccion} licenciasPendientes={licenciasPendientes} />
     </div>
   );
 }
