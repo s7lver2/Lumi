@@ -20,24 +20,16 @@ export function NewIndexDialog({ onCancelar, onCreado }: {
   const [creando, setCreando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [niveles, setNiveles] = useState<Nivel[]>([]);
-  const [elegidos, setElegidos] = useState<Set<string>>(new Set());
+  const [elegido, setElegido] = useState<string | null>(null);
 
   useEffect(() => { void api.nivelesLista().then(setNiveles); }, []);
 
-  function alternar(id: string) {
-    setElegidos((s) => {
-      const n = new Set(s);
-      if (n.has(id)) n.delete(id); else n.add(id);
-      return n;
-    });
-  }
-
   async function crear() {
-    if (!nombre.trim() || elegidos.size === 0) return;
+    if (!nombre.trim() || !elegido) return;
     setCreando(true);
     setError(null);
     try {
-      onCreado(await api.indiceCrear(nombre.trim(), [...elegidos]));
+      onCreado(await api.indiceCrear(nombre.trim(), [elegido]));
     } catch (e) {
       setError(String(e));
     } finally {
@@ -68,23 +60,21 @@ export function NewIndexDialog({ onCancelar, onCreado }: {
         </p>
       )}
 
-      <label className="mt-3.5 block text-[10.5px] text-subtle">Niveles a embeber</label>
+      <label className="mt-3.5 block text-[10.5px] text-subtle">Nivel a embeber</label>
       <p className="mt-0.5 text-[9.5px] leading-relaxed text-subtle">
-        Cada nivel pide sus propios modelos de recuperación: más niveles, más tiempo de GPU y
-        disco por imagen. Esto se fija al crear el índice y no se puede cambiar después.
+        Fija hasta qué nivel llega este índice — más alto pide más modelos de recuperación, más
+        tiempo de GPU y disco por imagen. Se fija al crear el índice y no se puede cambiar después.
       </p>
-      <div className="mt-2 flex flex-col gap-1.5">
+      <div className="mt-2 grid grid-cols-3 gap-1.5">
         {niveles.map((n) => (
-          <label key={n.id}
-            className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-border
-              bg-[#0b0d0f] px-3 py-2 has-[:checked]:border-draw">
-            <input type="checkbox" checked={elegidos.has(n.id)} onChange={() => alternar(n.id)}
-              className="accent-draw" />
-            <span className="flex-1 text-[11.5px] text-fg">{n.nombre}</span>
+          <button key={n.id} type="button" onClick={() => setElegido(n.id)}
+            className={`rounded-lg border px-3 py-2 text-left transition-colors
+              ${elegido === n.id ? "border-draw bg-draw/[.08]" : "border-border bg-[#0b0d0f] hover:border-white/25"}`}>
+            <span className="block text-[11.5px] text-fg">{n.nombre}</span>
             <span className="font-mono text-[9.5px] text-subtle">
               {n.recuperacion.length} {n.recuperacion.length === 1 ? "modelo" : "modelos"}
             </span>
-          </label>
+          </button>
         ))}
       </div>
       {error && <p className="mt-2 text-[10.5px] text-danger-fg">{error}</p>}
@@ -94,7 +84,7 @@ export function NewIndexDialog({ onCancelar, onCreado }: {
           className="jg-press rounded-lg border border-border px-4 py-2 text-[11.5px] text-fg">
           Cancelar
         </button>
-        <button onClick={() => void crear()} disabled={!nombre.trim() || elegidos.size === 0 || creando}
+        <button onClick={() => void crear()} disabled={!nombre.trim() || !elegido || creando}
           className="jg-press rounded-lg bg-accent px-4 py-2 text-[11.5px] font-medium text-black disabled:opacity-40">
           {creando ? "Creando…" : "Crear"}
         </button>
