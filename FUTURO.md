@@ -242,8 +242,7 @@ nadie ha tenido todavía.
 Es el subsistema 3 y está planificado, no aparcado. Se anota aquí solo lo que se le ha ido
 prometiendo por el camino: rediseñar desde cero las vistas provisionales de solicitudes y
 usuarios del subsistema 2, la fila de configuración del mapa del subsistema 6, las
-notificaciones redactadas por el admin, el modo mantenimiento, y una forma de rotar la clave
-del proveedor de mapas para un admin que no tenga shell en el servidor.
+notificaciones redactadas por el admin, el modo mantenimiento
 
 ### Recuperación de contraseña
 
