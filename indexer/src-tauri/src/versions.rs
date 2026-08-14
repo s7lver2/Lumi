@@ -35,9 +35,22 @@ pub async fn crear(estado: &Estado, padre_id: i64) -> Result<i64> {
     let slug_nuevo = format!("{slug}-v{numero_version}");
 
     let nueva_id = estado.almacen.crear_version(padre_id, &nombre, &slug_nuevo, numero_version)?;
-    let clon = estado.almacen.clonar_version(padre_id, nueva_id)?;
 
-    hardlinkear_ficheros(estado, padre_id, nueva_id, &clon)?;
+    // Clonar filas y hardlinkear ficheros son trabajo síncrono de disco/CPU —
+    // para un índice grande, minutos de una transacción SQLite gigante y
+    // miles de syscalls de hardlink. Hecho directamente en un comando async
+    // de Tauri, eso bloqueaba el runtime entero (y con él, cualquier otra
+    // ventana/comando) durante todo ese tiempo — lo que se veía como el
+    // ordenador entero congelándose, no solo esta pestaña.
+    let almacen = estado.almacen.clone();
+    let dir = estado.dir.clone();
+    let clon = tokio::task::spawn_blocking(move || -> Result<crate::store::ClonVersion> {
+        let clon = almacen.clonar_version(padre_id, nueva_id)?;
+        hardlinkear_ficheros(&almacen, &dir, padre_id, nueva_id, &clon)?;
+        Ok(clon)
+    })
+    .await??;
+
     duplicar_vectores(estado, &clon).await?;
 
     Ok(nueva_id)
@@ -49,13 +62,14 @@ pub async fn crear(estado: &Estado, padre_id: i64) -> Result<i64> {
 /// su ruta ya es la del operador, compartida sin que nadie tenga que
 /// enlazar nada — así que esas se dejan tal cual.
 fn hardlinkear_ficheros(
-    estado: &Estado,
+    almacen: &crate::store::Almacen,
+    dir: &Path,
     padre_id: i64,
     nueva_id: i64,
     clon: &crate::store::ClonVersion,
 ) -> Result<()> {
-    let dir_padre = estado.dir.join("imagenes").join(padre_id.to_string());
-    let dir_nueva = estado.dir.join("imagenes").join(nueva_id.to_string());
+    let dir_padre = dir.join("imagenes").join(padre_id.to_string());
+    let dir_nueva = dir.join("imagenes").join(nueva_id.to_string());
     for (_, nueva_imagen_id, ruta_vieja, _) in &clon.imagenes {
         let origen = Path::new(ruta_vieja);
         if !origen.starts_with(&dir_padre) {
@@ -77,7 +91,7 @@ fn hardlinkear_ficheros(
                 continue;
             }
         }
-        estado.almacen.actualizar_ruta_imagen(*nueva_imagen_id, &destino.display().to_string())?;
+        almacen.actualizar_ruta_imagen(*nueva_imagen_id, &destino.display().to_string())?;
     }
     Ok(())
 }

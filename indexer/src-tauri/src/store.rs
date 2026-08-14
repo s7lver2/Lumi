@@ -691,33 +691,38 @@ impl Almacen {
 
         let mut imagenes = Vec::with_capacity(filas_imgs.len());
         let mut vectores_hechos = Vec::new();
-        for f in &filas_imgs {
-            let nuevo_lote = *mapa_lotes.get(&f.1).unwrap_or(&f.1);
-            tx.execute(
+        // Las tres sentencias se preparan UNA vez fuera del bucle: con hasta
+        // ocho modelos por imagen (mini+vision+pro reunidos), volver a
+        // parsear y planificar el mismo SQL en cada iteración multiplicaba el
+        // coste de clonar una versión de un índice grande hasta el punto de
+        // colgar la máquina entera durante la transacción.
+        {
+            let mut ins_imagen = tx.prepare(
                 "INSERT INTO imagenes (indice_id, lote_id, ruta, sha256, lat, lng, quadkey, capturada_en,
                     ancho, alto, saltada_motivo, creada_en, revision, licencia, atribucion, id_origen, rumbo)
                  VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
-                params![
+            )?;
+            let mut sel_vectores = tx.prepare("SELECT modelo, estado FROM vectores WHERE imagen_id = ?1")?;
+            let mut ins_vector =
+                tx.prepare("INSERT INTO vectores (imagen_id, modelo, estado) VALUES (?1, ?2, ?3)")?;
+
+            for f in &filas_imgs {
+                let nuevo_lote = *mapa_lotes.get(&f.1).unwrap_or(&f.1);
+                ins_imagen.execute(params![
                     nueva_id, nuevo_lote, f.2, f.3, f.4, f.5, f.6, f.7, f.8, f.9, f.10, f.11,
                     f.12, f.13, f.14, f.15, f.16,
-                ],
-            )?;
-            let nueva_imagen_id = tx.last_insert_rowid();
-            imagenes.push((f.0, nueva_imagen_id, f.2.clone(), f.6.clone()));
+                ])?;
+                let nueva_imagen_id = tx.last_insert_rowid();
+                imagenes.push((f.0, nueva_imagen_id, f.2.clone(), f.6.clone()));
 
-            let vs: Vec<(String, String)> = {
-                let mut qv = tx.prepare("SELECT modelo, estado FROM vectores WHERE imagen_id = ?1")?;
-                let filas = qv.query_map(params![f.0], |r| Ok((r.get(0)?, r.get(1)?)))?
+                let vs: Vec<(String, String)> = sel_vectores
+                    .query_map(params![f.0], |r| Ok((r.get(0)?, r.get(1)?)))?
                     .collect::<rusqlite::Result<_>>()?;
-                filas
-            };
-            for (modelo, estado) in vs {
-                tx.execute(
-                    "INSERT INTO vectores (imagen_id, modelo, estado) VALUES (?1, ?2, ?3)",
-                    params![nueva_imagen_id, modelo, estado],
-                )?;
-                if estado == "hecho" {
-                    vectores_hechos.push((modelo, f.0, nueva_imagen_id));
+                for (modelo, estado) in vs {
+                    ins_vector.execute(params![nueva_imagen_id, modelo, estado])?;
+                    if estado == "hecho" {
+                        vectores_hechos.push((modelo, f.0, nueva_imagen_id));
+                    }
                 }
             }
         }
