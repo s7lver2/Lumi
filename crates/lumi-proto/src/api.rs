@@ -293,15 +293,15 @@ pub struct PatchLimitsReq {
 /// Lo que el panel enseña nada más entrar. Va en una sola respuesta y no en
 /// cuatro peticiones: pintar la pantalla a trozos daría cuatro estados de
 /// carga y cuatro de error para una sola pregunta.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Resumen {
     pub solicitudes_pendientes: i64,
     /// Epoch de la más antigua sin resolver. `None` si no hay ninguna.
     pub solicitud_mas_antigua: Option<i64>,
     pub usuarios: i64,
-    /// Con el mismo criterio que ya usa la cola: estar suscrito a
-    /// `/v1/queue/events` cuenta como estar conectado. Una segunda definición
-    /// de «conectado» sería una segunda verdad sobre el mismo hecho.
+    /// Con queue/events` cuenta como estar conectado. Una segunda definición
+    /// de «conectado»el mismo criterio que ya usa la cola: estar suscrito a
+    /// `/v1/ sería una segunda verdad sobre el mismo hecho.
     pub usuarios_conectados: i64,
     pub analisis_hoy: i64,
     pub analisis_en_cola: i64,
