@@ -13,3 +13,4 @@ pub mod projects;
 pub mod queue;
 pub mod tasks;
 pub mod telemetry;
+pub mod models;

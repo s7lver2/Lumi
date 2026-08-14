@@ -49,9 +49,38 @@ pub fn resolver<'a>(registro: &'a [Nivel], pedido: &str, disponibles: &[String])
     None
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Resolucion {
+    pub recuperacion_instalados: usize,
+    pub recuperacion_total: usize,
+    pub geometricos_instalados: usize,
+    pub geometricos_total: usize,
+    /// Ids que faltan y que ESTE nivel necesita descargar — no incluye lo
+    /// que otro nivel ya trajo, que se marca compartido en la interfaz
+    /// leyendo `instalados` directamente, no aquí.
+    pub faltan: Vec<String>,
+}
+
+/// `instalados` es el conjunto de ids con sha256 verificado en disco — lo
+/// calcula quien llama (el endpoint, con acceso al filesystem), no esta
+/// función: aquí solo hay aritmética de conjuntos, que es lo único que la
+/// prueba necesita fijar.
+pub fn resolver_composicion(nivel: &Nivel, instalados: &std::collections::HashSet<String>) -> Resolucion {
+    let todos: Vec<&String> = nivel.recuperacion.iter().chain(nivel.geometricos.iter()).collect();
+    let faltan: Vec<String> = todos.iter().filter(|id| !instalados.contains(id.as_str())).map(|s| s.to_string()).collect();
+    Resolucion {
+        recuperacion_instalados: nivel.recuperacion.iter().filter(|id| instalados.contains(id.as_str())).count(),
+        recuperacion_total: nivel.recuperacion.len(),
+        geometricos_instalados: nivel.geometricos.iter().filter(|id| instalados.contains(id.as_str())).count(),
+        geometricos_total: nivel.geometricos.len(),
+        faltan,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     fn registro() -> Vec<Nivel> {
         vec![
@@ -122,5 +151,22 @@ mod tests {
     #[test]
     fn sin_capas_disponibles_no_hay_nivel() {
         assert!(resolver(&registro(), "mini", &[]).is_none());
+    }
+
+    #[test]
+    fn compartido_no_se_cuenta_dos_veces_como_falta() {
+        let nivel = Nivel {
+            id: "vision".into(), nombre: "Vision".into(),
+            recuperacion: vec!["cosplace".into(), "salad".into()],
+            geometricos: vec!["roma".into()],
+            agentes: vec![], cae_a: Some("pro".into()),
+        };
+        let instalados: HashSet<String> = ["cosplace".into()].into_iter().collect();
+        let r = resolver_composicion(&nivel, &instalados);
+        assert_eq!(r.recuperacion_instalados, 1);
+        // cosplace ya está (compartido con Mini) y no cuenta como falta;
+        // salad y roma sí faltan, cada uno por su cuenta.
+        assert_eq!(r.faltan, vec!["salad".to_string(), "roma".to_string()]);
+        assert!(!r.faltan.contains(&"cosplace".to_string()));
     }
 }

@@ -197,6 +197,13 @@ CREATE TABLE IF NOT EXISTS analysis_agents (
     detalle     TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (analysis_id, agente)
 );
+CREATE TABLE IF NOT EXISTS model_licenses (
+    licencia     TEXT NOT NULL,
+    para         TEXT NOT NULL,
+    aceptada_por INTEGER NOT NULL,
+    aceptada_en  INTEGER NOT NULL,
+    PRIMARY KEY (licencia, para)
+);
 ";
 
 pub struct Store(Mutex<Connection>);

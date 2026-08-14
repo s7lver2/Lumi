@@ -94,6 +94,25 @@ pub struct Verificador {
     pub pesos_url: String,
     #[serde(default)]
     pub sha256: String,
+    /// La URL directa del peso — no la página del proyecto, que es
+    /// `pesos_url` y se conserva. Vacío significa «no se puede bajar solo»:
+    /// la pantalla pasa a modo guía en vez de a un botón que fallaría.
+    #[serde(default)]
+    pub fichero_url: String,
+    /// De dónde sale el texto de licencia que se enseña antes de aceptar.
+    #[serde(default)]
+    pub licencia_url: String,
+    /// El texto cacheado, para que la pantalla de aceptación funcione sin
+    /// red. Vacío significa «hay que ir a buscarlo» — se resuelve en la
+    /// Tarea 2, antes de tocar ningún peso.
+    #[serde(default)]
+    pub licencia_texto: String,
+    /// `None`, o `Some("token")` cuando el proveedor exige credencial propia
+    /// (hoy solo RoMa v2, por DINOv3). Ningún otro valor tiene sentido hoy;
+    /// se deja como `Option<String>` y no un booleano por si un proveedor
+    /// futuro exige algo distinto de un token.
+    #[serde(default)]
+    pub puerta: Option<String>,
 }
 
 fn leer_dir<T: serde::de::DeserializeOwned>(dir: &Path) -> Vec<T> {

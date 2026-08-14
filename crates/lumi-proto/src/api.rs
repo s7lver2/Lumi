@@ -171,6 +171,13 @@ impl Default for Limits {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TareaModelo {
+    pub id: String,
+    pub item_actual: Option<String>,
+    pub pct: Option<u32>,
+}
+
 /// Identidad del equipo desde el que se inicia sesión. Registro PASIVO: audita
 /// y permite revocar, NO autentica. Copiar el fichero del cliente copia la
 /// identidad, y eso es a propósito.
@@ -197,6 +204,19 @@ pub struct AcceptLicensesReq {
     /// Agrupado por texto porque una licencia que cubre dos pesos se acepta
     /// una vez, no dos.
     pub licencias: std::collections::HashMap<String, Vec<String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProviderTokenState {
+    pub has_token: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProviderTokenReq {
+    /// `None` no toca el token guardado — igual que `MapConfigReq.key`, para
+    /// poder guardar sin tener que volver a teclear uno que ya estaba.
+    /// `Some("")` sí lo borra: es la forma de quitarlo del todo.
+    pub token: Option<String>,
 }
 
 

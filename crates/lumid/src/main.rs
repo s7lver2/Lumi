@@ -112,6 +112,12 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/users/:id", get(routes::admin::get_user).patch(routes::admin::patch_user))
         .route("/v1/admin/limits", get(routes::admin::get_limits).patch(routes::admin::patch_limits))
         .route("/v1/admin/resumen", get(routes::admin::resumen))
+        .route("/v1/admin/models/accept-licenses", post(routes::models::accept_licenses))
+        .route("/v1/admin/models/download", post(routes::models::download))
+        .route("/v1/admin/model-task", get(routes::models::model_task))
+        .route("/v1/admin/models", get(routes::models::estado))
+        .route("/v1/admin/models/provider-token", get(routes::models::get_provider_token).patch(routes::models::set_provider_token))
+        .route("/v1/admin/models/metadata", get(routes::models::metadatos))
         .route("/v1/projects", get(routes::projects::list).post(routes::projects::create))
         .route(
             "/v1/projects/:id",
@@ -195,3 +201,4 @@ fn gpus() -> Vec<GpuInfo> {
         })
         .collect()
 }
+
