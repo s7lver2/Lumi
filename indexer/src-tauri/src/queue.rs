@@ -75,6 +75,15 @@ pub struct Cola {
     /// la primera vez que se llama para ese modelo.
     progreso: Mutex<HashMap<String, Progreso>>,
     pausada: Arc<Mutex<bool>>,
+    /// Un solo permiso, compartido por TODOS los modelos: cada bucle es
+    /// independiente (un modelo al 100% no espera a otro), pero eso significaba
+    /// que con ocho modelos con trabajo pendiente a la vez, ocho procesos de
+    /// Python se ponían a cargar pesos de varios GB y a pedir la misma GPU
+    /// EXACTAMENTE a la vez — disco y GPU compitiendo entre sí en vez de
+    /// repartirse, y ninguno avanzaba de verdad. Este permiso hace que solo
+    /// un modelo esté cargando pesos o embebiendo un lote en cada instante;
+    /// el resto espera su turno, no compite por él.
+    permiso_gpu: tokio::sync::Semaphore,
 }
 
 struct Trabajador {
@@ -160,6 +169,7 @@ impl Cola {
             // horas, así que arranca cuando el operador lo pide, no solo
             // porque la app se abrió. `cola_pausar(false)` es el arranque.
             pausada: Arc::new(Mutex::new(true)),
+            permiso_gpu: tokio::sync::Semaphore::new(1),
         })
     }
 
@@ -246,6 +256,12 @@ impl Cola {
                     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                     continue;
                 };
+
+                // Se coge ANTES de arrancar el trabajador y se suelta al
+                // terminar el lote: cargar pesos es la parte más pesada de
+                // disco y GPU, y es donde ocho modelos a la vez chocaban
+                // entre sí sin que ninguno avanzara de verdad.
+                let _turno = self.permiso_gpu.acquire().await;
 
                 if trabajador.is_none() {
                     match arrancar(&self.dir, self.log.clone(), "cuda:0", dims).await {
