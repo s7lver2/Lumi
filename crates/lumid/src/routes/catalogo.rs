@@ -3,10 +3,12 @@
 //! Station INSTALA; el Indexer PUBLICA. Esta es la única pieza del subsistema
 //! 8 que vive fuera del Indexer.
 
-use axum::{extract::Query, Json};
+use axum::{extract::Query, http::StatusCode, Json};
 use lumi_index::ficha::Ficha;
 use lumi_index::grafo::{resolver, Grafo};
 use serde::Deserialize;
+
+type Fail = (StatusCode, String);
 
 #[derive(Deserialize)]
 pub struct Peticion {
@@ -25,9 +27,21 @@ async fn traer(cliente: &reqwest::Client, url: &str) -> anyhow::Result<Ficha> {
     Ok(f)
 }
 
-pub async fn resolver_grafo(Query(p): Query<Peticion>) -> Result<Json<Grafo>, String> {
+pub async fn resolver_grafo(Query(p): Query<Peticion>) -> Result<Json<Grafo>, Fail> {
+    // `String` como error en axum responde 200 con el texto tal cual, así
+    // que un fallo de red se leía como un JSON.parse roto en el cliente en
+    // vez de como el error de verdad. `(StatusCode, String)` es el mismo
+    // contrato que ya usan el resto de rutas (routes::map, routes::models).
+    if !p.url.starts_with("http://") && !p.url.starts_with("https://") {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "esa URL no empieza por http:// ni https://".to_string(),
+        ));
+    }
     let cliente = reqwest::Client::new();
-    let raiz = traer(&cliente, &p.url).await.map_err(|e| e.to_string())?;
+    let raiz = traer(&cliente, &p.url)
+        .await
+        .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
 
     // Las dependencias se traen de golpe antes de resolver: `resolver` es
     // lógica pura y no puede esperar a la red, y así el corte de ciclos y el
