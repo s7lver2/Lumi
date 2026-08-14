@@ -19,8 +19,14 @@ import { TeselasPanel } from "./TeselasPanel";
  *  `onNuevaVersion` es cómo se navega tras "Crear versión nueva": la fila
  *  nueva ya existe y está abierta, y quedarse mirando el índice sellado del
  *  que salió sería el paso extra que nadie quiere dar. */
-export function IndexDetail({ id, onVolver, onNuevaVersion, soloLectura = false }: {
-  id: number; onVolver: () => void; onNuevaVersion?: (id: number) => void; soloLectura?: boolean;
+export function IndexDetail({ id, onVolver, onNuevaVersion, onIrAEmbebido, soloLectura = false }: {
+  id: number; onVolver: () => void; onNuevaVersion?: (id: number) => void;
+  /** «Añadir capa» encola el modelo entero para las imágenes del índice y
+   *  arranca de inmediato si la cola no está en pausa — no hay paso de
+   *  confirmación aparte. Sin llevar a quien lo pulsó a ver la cola, ese
+   *  trabajo de GPU quedaba invisible: parecía que no había pasado nada. */
+  onIrAEmbebido?: () => void;
+  soloLectura?: boolean;
 }) {
   const [detalle, setDetalle] = useState<DetalleIndice | null>(null);
   const [lotes, setLotes] = useState<LoteResumen[]>([]);
@@ -102,6 +108,7 @@ export function IndexDetail({ id, onVolver, onNuevaVersion, soloLectura = false 
     setReembebiendo(modeloId);
     try {
       await api.indiceReembeber(id, modeloId);
+      onIrAEmbebido?.();
     } finally {
       setReembebiendo(null);
     }
