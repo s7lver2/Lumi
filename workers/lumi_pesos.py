@@ -106,6 +106,13 @@ class Embebedor(object):
         _verificar(ruta, ficha.get("sha256", ""))
         crudo = torch.load(ruta, map_location=dispositivo, weights_only=False)
         if isinstance(crudo, dict):
+            # Un .ckpt de PyTorch Lightning no es el state_dict en si: es un
+            # sobre con el state_dict metido bajo la clave "state_dict",
+            # junto a epoch/optimizer/hparams que no son pesos de nada.
+            # cargarlo tal cual falla porque las claves no coinciden con
+            # ningun parametro real de la red.
+            if "state_dict" in crudo:
+                crudo = crudo["state_dict"]
             self.red = _reconstruir(self.id, self.dims)
             self.red.load_state_dict(crudo)
         else:
