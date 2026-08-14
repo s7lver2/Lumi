@@ -41,6 +41,13 @@ pub async fn instalar(
         // y la misma red no van más rápido, van peor.
         return Err(StatusCode::CONFLICT);
     }
+    // Se marca "en curso" AQUÍ, antes de soltar la petición, no dentro de la
+    // tarea lanzada más abajo: `crate::indices::instalar` tarda en traer la
+    // ficha por red antes de tocar `indices_en_curso`, y en ese hueco el
+    // cliente ya ha abierto el SSE — si lo encuentra en `None` (o con el
+    // `terminado` de la instalación anterior), `eventos()` cierra la conexión
+    // de inmediato y el aviso nunca llega a aparecer.
+    *app.indices_en_curso.lock().unwrap() = Some(crate::indices::Progreso::default());
     let a = app.clone();
     tokio::spawn(async move {
         if let Err(e) = crate::indices::instalar(a.clone(), p.url).await {
