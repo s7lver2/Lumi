@@ -491,12 +491,28 @@ pub async fn publicar(
     // Una sola clave para todo el paquete: la ofuscación es del alojamiento,
     // no un permiso por asset, y una clave por trozo solo añadiría formas de
     // perder la mitad de un índice.
-    let mut semilla = [0u8; 32];
-    {
-        use rand::RngCore;
-        rand::thread_rng().fill_bytes(&mut semilla);
-    }
-    let clave = cifrado::clave_nueva(semilla);
+    //
+    // Persistida desde el primer intento: `ya_subido` más abajo reutiliza
+    // assets que un intento anterior ya subió a GitHub sin volver a
+    // cifrarlos, así que reanudar con una clave NUEVA los deja huérfanos —
+    // bajan íntegros (el sha256 cuadra) pero no abren nunca, con "clave
+    // incorrecta o fichero alterado". Generarla al azar solo la primera vez
+    // que se publica este índice es lo que hace que reanudar reutilice la
+    // misma.
+    let clave: [u8; 32] = match almacen.clave_publicacion(indice_id)? {
+        Some(b64) => STANDARD
+            .decode(&b64)?
+            .try_into()
+            .map_err(|_| anyhow!("la clave de publicación guardada no mide 32 bytes"))?,
+        None => {
+            let mut semilla = [0u8; 32];
+            use rand::RngCore;
+            rand::thread_rng().fill_bytes(&mut semilla);
+            let clave = cifrado::clave_nueva(semilla);
+            almacen.fijar_clave_publicacion(indice_id, &STANDARD.encode(clave))?;
+            clave
+        }
+    };
 
     // Qué imagen vive en qué quadkey, por nombre de fichero: es como están
     // dentro del paquete sellado.

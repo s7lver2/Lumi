@@ -255,6 +255,15 @@ impl Almacen {
             // sellada del padre nunca se toca.
             "ALTER TABLE indices ADD COLUMN viene_de INTEGER REFERENCES indices(id)",
             "ALTER TABLE indices ADD COLUMN numero_version INTEGER NOT NULL DEFAULT 1",
+            // La clave AES de una publicación, en base64. Antes se generaba
+            // una nueva al azar en CADA llamada a `publicar()`, así que
+            // reanudar una subida cortada dejaba los assets ya subidos en un
+            // attempt anterior (reutilizados vía `ya_subido`, sha256 y todo)
+            // cifrados con una clave que la ficha final ya no llevaba —
+            // bajaban íntegros y luego no abrían: "clave incorrecta o
+            // fichero alterado". Persistir la clave del primer intento hace
+            // que reanudar reutilice la misma.
+            "ALTER TABLE indices ADD COLUMN clave_publicacion TEXT",
         ] {
             let _ = c.execute(alter, []);
         }
@@ -322,6 +331,28 @@ impl Almacen {
             params![indice_id],
             |r| Ok((r.get(0)?, r.get(1)?)),
         )?)
+    }
+
+    /// La clave AES (en base64) fijada para publicar este índice, si ya se
+    /// generó en un intento anterior — `None` la primera vez.
+    pub fn clave_publicacion(&self, indice_id: i64) -> Result<Option<String>> {
+        let c = self.0.lock().unwrap();
+        Ok(c.query_row(
+            "SELECT clave_publicacion FROM indices WHERE id = ?1",
+            params![indice_id],
+            |r| r.get(0),
+        )?)
+    }
+
+    /// Fija la clave de publicación de un índice. Solo se llama una vez por
+    /// índice — ver el comentario en la migración de `clave_publicacion`.
+    pub fn fijar_clave_publicacion(&self, indice_id: i64, clave: &str) -> Result<()> {
+        let c = self.0.lock().unwrap();
+        c.execute(
+            "UPDATE indices SET clave_publicacion = ?2 WHERE id = ?1",
+            params![indice_id, clave],
+        )?;
+        Ok(())
     }
 
     /// Crea la fila de una versión nueva: nace `abierto`, con `viene_de`
