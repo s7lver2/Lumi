@@ -31,7 +31,11 @@ pub fn esta_instalado(dir: &Path) -> bool {
     let py = python_del_venv(dir);
     py.exists()
         && crate::proceso::cmd(&py)
-            .args(["-c", "import torch"])
+            // torchvision se añadió después de que algunos venvs ya
+            // tuvieran torch instalado — comprobar solo torch decía "ya
+            // instalado, nada que hacer" y dejaba el venv a medias para
+            // siempre en esos casos, sin volver a intentar completarlo.
+            .args(["-c", "import torch, torchvision"])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
@@ -116,7 +120,7 @@ pub async fn instalar(dir: &Path, log: Arc<Log>) -> Result<()> {
         &vpy,
         &[
             "-m", "pip", "install", "--retries", "5", "--timeout", "60",
-            "torch", "--index-url", "https://download.pytorch.org/whl/cu126",
+            "torch", "torchvision", "--index-url", "https://download.pytorch.org/whl/cu126",
         ],
     )
     .await?;

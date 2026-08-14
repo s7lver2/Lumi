@@ -47,13 +47,13 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>, payload: Option
                 "-c".into(),
                 format!(
                     "set -e; \
-                     if {v}/bin/python3 -c 'import torch' 2>/dev/null; then \
+                     if {v}/bin/python3 -c 'import torch, torchvision' 2>/dev/null; then \
                        echo 'runtime ya instalado, nada que hacer'; \
                      else \
                        python3 -m venv {v}; \
                        {v}/bin/pip install --upgrade pip; \
                        {v}/bin/pip install --retries 5 --timeout 60 \
-                       torch --index-url https://download.pytorch.org/whl/cu126; \
+                       torch torchvision --index-url https://download.pytorch.org/whl/cu126; \
                      fi",
                     v = venv.display()
                 ),

@@ -59,6 +59,24 @@ def _verificar(ruta, esperado):
         raise ValueError("el sha256 de %s no coincide: %s" % (ruta, real))
 
 
+def _reconstruir(modelo_id, dims):
+    """Los .pth publicados no son todos iguales: algunos son un nn.Module
+    entero (torch.save(model, ...)) y ya traen con qué correr; otros son un
+    state_dict crudo (torch.save(model.state_dict(), ...)) que primero hay
+    que cargar sobre la arquitectura real, o no hay dónde meterlo. Un
+    diccionario que se intenta usar como modelo falla con un error de Python
+    ("'OrderedDict' object has no attribute 'eval'"), no con nada que
+    explique la causa -- por eso este mapa existe explícito en vez de
+    intentar adivinar la arquitectura desde las claves del propio dict."""
+    if modelo_id == "cosplace":
+        import cosplace_network
+        return cosplace_network.GeoLocalizationNet("ResNet18", dims)
+    raise ValueError(
+        f"{modelo_id} trae un state_dict crudo y no se sabe reconstruir su arquitectura "
+        "-- hace falta añadir su definición de red, igual que cosplace_network.py"
+    )
+
+
 class Embebedor(object):
     def __init__(self, ficha, pesos_dir, dispositivo):
         import torch
@@ -70,7 +88,12 @@ class Embebedor(object):
         ruta = os.path.join(directorio, "pesos.pth")
         _licencia(directorio)
         _verificar(ruta, ficha.get("sha256", ""))
-        self.red = torch.load(ruta, map_location=dispositivo, weights_only=False)
+        crudo = torch.load(ruta, map_location=dispositivo, weights_only=False)
+        if isinstance(crudo, dict):
+            self.red = _reconstruir(self.id, self.dims)
+            self.red.load_state_dict(crudo)
+        else:
+            self.red = crudo
         self.red.eval()
         self.red.to(dispositivo)
 
