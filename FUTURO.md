@@ -338,3 +338,11 @@ todas, y también en la más fácil de equivocar: hay diez mil calles Mayor.
 El agente `dimensiones` se llama «forma del espacio» porque sin una referencia de escala conocida
 en la escena, Depth Anything no da metros. La salida, si algún día hacen falta, es detectar un
 objeto de tamaño conocido —una puerta, un coche, un peldaño— y escalar con él.
+
+### Gestión de versiones de un mismo modelo
+
+El 3a instala un modelo con la versión que diga su registro, y punto — que convivan dos versiones
+de un mismo recuperador (MegaLoc v1 y v2, por ejemplo) es un problema de Qdrant, que ya versiona
+colecciones por `(modelo, versión)`, y de las capas de índice del subsistema 8, que ya versionan
+por índice. Ninguno de los dos lados tiene hoy una pantalla que compare o migre entre versiones
+del mismo modelo; se aparca hasta que haya un caso real, no antes.
