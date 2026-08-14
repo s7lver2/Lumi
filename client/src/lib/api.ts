@@ -198,6 +198,22 @@ export type Cambio =
   | { tipo: "estado"; analysis_id: number; case_id: number; estado: Analysis["state"] }
   | { tipo: "progreso"; analysis_id: number; fase: string; pct: number };
 
+export interface Resumen {
+  solicitudes_pendientes: number;
+  /** Epoch de la más antigua sin resolver. `null` si no hay ninguna. */
+  solicitud_mas_antigua: number | null;
+  usuarios: number;
+  usuarios_conectados: number;
+  analisis_hoy: number;
+  analisis_en_cola: number;
+  /** Siete días, el más reciente al final. */
+  analisis_serie: number[];
+  indices: number;
+  indices_bytes: number;
+  teselas: number;
+  arrancado_en: number;
+}
+
 const call = (method: string, path: string, body: unknown, token?: string, ticket?: string) =>
   invoke<string>("request", {
     method, path, body: body === undefined ? null : JSON.stringify(body), token, ticket,
