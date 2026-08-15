@@ -120,6 +120,11 @@ fn resolve_mapbox(url: &str) -> String {
 #[derive(Default)]
 struct Upstreams {
     tileset: Option<String>,
+    /// Un `url` que SÍ es una dirección real (no `mapbox://`): un TileJSON que
+    /// hay que resolver para saber la plantilla real de teselas. El nombre del
+    /// dataset de OpenFreeMap cambia con el tiempo (`.../planet/<fecha>_pt/...`)
+    /// — no es válido guardarlo a fuego una sola vez en el código.
+    tile_manifest: Option<String>,
     glyphs: Option<String>,
     sprite: Option<String>,
 }
@@ -231,12 +236,13 @@ fn rewrite(mut style: serde_json::Value, theme_id: &str) -> Result<(serde_json::
             // `mapbox://mapbox.foo,mapbox.bar` es un identificador de tileset,
             // no una URL real: hay que recordarlo para que `tile()` sepa contra
             // cuál pedir. Otros proveedores (OpenFreeMap) usan aquí un TileJSON
-            // real y ya resuelto — `tile()` ya sabe su dirección fija por
-            // proveedor, así que no hace falta identificar nada, solo apuntar
-            // el estilo a nuestra ruta.
+            // real que hay que resolver aparte — su plantilla de teselas no es
+            // fija, cambia con cada actualización del dataset.
             if let Some(id) = u.strip_prefix("mapbox://") {
                 up.tileset = Some(id.to_string());
-            } else if !u.starts_with("http://") && !u.starts_with("https://") {
+            } else if u.starts_with("http://") || u.starts_with("https://") {
+                up.tile_manifest = Some(u);
+            } else {
                 return Err(format!(
                     "la fuente `{name}` usa `url` con un esquema que no reconozco ({u})"
                 ));
@@ -326,6 +332,22 @@ pub async fn style(
     if let Some(t) = up.tileset {
         let _ = app.store.set_meta(&format!("map_tileset_{}", theme.id), &t);
     }
+    if let Some(manifest_url) = up.tile_manifest {
+        // El TileJSON del proveedor trae la plantilla real de teselas — para
+        // OpenFreeMap incluye un segmento de fecha que cambia con cada
+        // actualización del dataset (`.../planet/20260802_080001_pt/...`), así
+        // que no vale con guardarlo una vez: se resuelve en cada `style()`.
+        match outbound()?.get(&manifest_url).send().await {
+            Ok(res) => match res.json::<serde_json::Value>().await {
+                Ok(tilejson) => match tilejson["tiles"][0].as_str() {
+                    Some(tpl) => { let _ = app.store.set_meta(&format!("map_tile_tpl_{}", theme.id), tpl); }
+                    None => tracing::warn!("tema {}: el TileJSON de {manifest_url} no trae `tiles`", theme.id),
+                },
+                Err(e) => tracing::warn!("tema {}: el TileJSON de {manifest_url} no es JSON: {e}", theme.id),
+            },
+            Err(e) => tracing::warn!("tema {}: no se pudo resolver el TileJSON de {manifest_url}: {e}", theme.id),
+        }
+    }
     if let Some(g) = up.glyphs {
         let _ = app.store.set_meta(&format!("map_glyphs_{}", theme.id), &g);
     }
@@ -379,8 +401,17 @@ pub async fn tile(
                 .unwrap_or_else(|| "mapbox.mapbox-streets-v8".into());
             format!("https://api.mapbox.com/v4/{tileset}/{z}/{x}/{y}.vector.pbf?access_token={key}")
         }
-        "osm" => format!("https://tiles.openfreemap.org/data/planet/{z}/{x}/{y}.pbf"),
-        _ => return Err(err(StatusCode::SERVICE_UNAVAILABLE, "no hay tema de mapa elegido")),
+        // OpenFreeMap (y cualquier otro proveedor con `url` en vez de
+        // `tiles`) resuelve su plantilla real en `style()`, porque incluye un
+        // segmento que cambia con el dataset — no hay un formato fijo que
+        // guardar aquí a fuego.
+        _ => {
+            let tpl = app
+                .store
+                .get_meta(&format!("map_tile_tpl_{}", theme.id))
+                .ok_or_else(|| err(StatusCode::SERVICE_UNAVAILABLE, "todavía no se ha pedido el estilo, así que no se sabe de dónde salen las teselas"))?;
+            tpl.replace("{z}", &z.to_string()).replace("{x}", &x.to_string()).replace("{y}", &y.to_string())
+        }
     };
     let res = outbound()?
         .get(&upstream)
@@ -535,9 +566,10 @@ pub async fn patch_admin(
     // cambiar (clave o motor), y las vistas previas de los demás temas no
     // tienen por qué perder lo que ya sabían.
     let _ = app.store.conn().execute(
-        "DELETE FROM meta WHERE k IN (?1, ?2, ?3)",
+        "DELETE FROM meta WHERE k IN (?1, ?2, ?3, ?4)",
         rusqlite::params![
             format!("map_tileset_{}", theme.id),
+            format!("map_tile_tpl_{}", theme.id),
             format!("map_glyphs_{}", theme.id),
             format!("map_sprite_{}", theme.id),
         ],
@@ -603,6 +635,40 @@ mod tests {
         assert_eq!(up.tileset.as_deref(), Some("mapbox.mapbox-streets-v8,mapbox.mapbox-terrain-v2"));
         assert_eq!(up.glyphs.as_deref(), Some("https://api.mapbox.com/fonts/v1/mapbox/{fontstack}/{range}.pbf"));
         assert_eq!(up.sprite.as_deref(), Some("https://api.mapbox.com/styles/v1/mapbox/dark-v11/sprite"));
+    }
+
+    /// La forma real del estilo `liberty` de OpenFreeMap: dos fuentes (una
+    /// raster ya con `tiles`, otra vectorial con `url` apuntando a un TileJSON
+    /// real, no a `mapbox://`). Antes de este arreglo la segunda fuente hacía
+    /// fallar `rewrite()` entero — nadie había probado un tema que no fuera
+    /// Mapbox hasta que esta vista previa existió.
+    #[test]
+    fn un_url_que_no_es_mapbox_se_marca_para_resolver_aparte() {
+        let raw = serde_json::json!({
+            "version": 8,
+            "sources": {
+                "ne2_shaded": {
+                    "type": "raster", "tileSize": 256, "maxzoom": 6,
+                    "tiles": ["https://tiles.openfreemap.org/natural_earth/ne2sr/{z}/{x}/{y}.png"]
+                },
+                "openmaptiles": { "type": "vector", "url": "https://tiles.openfreemap.org/planet" }
+            },
+            "sprite": "https://tiles.openfreemap.org/sprites/ofm_f384/ofm",
+            "glyphs": "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+            "layers": [{ "id": "background", "type": "background" }]
+        });
+
+        let (fixed, up) = rewrite(raw, "osm-liberty").expect("el estilo de OpenFreeMap tiene que reescribirse");
+
+        assert_eq!(fixed["sources"]["openmaptiles"]["tiles"][0], "/v1/map/tiles/{z}/{x}/{y}?theme=osm-liberty");
+        assert!(fixed["sources"]["openmaptiles"].get("url").is_none());
+        assert_eq!(fixed["glyphs"], "/v1/map/glyphs/{fontstack}/{range}?theme=osm-liberty");
+        assert_eq!(fixed["sprite"], "/v1/map/sprite/osm-liberty/base");
+
+        // No es un tileset de Mapbox: no hay id que identificar, solo un
+        // TileJSON real que `style()` tiene que ir a buscar aparte.
+        assert!(up.tileset.is_none());
+        assert_eq!(up.tile_manifest.as_deref(), Some("https://tiles.openfreemap.org/planet"));
     }
 
     /// Un estilo sin tipografías se rechaza en el servidor. MapLibre no dibuja
