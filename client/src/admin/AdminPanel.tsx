@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../lib/api";
+import { api, type SecuritySettings } from "../lib/api";
 import { useServer } from "../lib/store";
 import { Hueco } from "./Hueco";
 import { IndexToast } from "./IndexToast";
@@ -23,7 +23,10 @@ export function AdminPanel({ token }: { token: string }) {
   const [cuentas, setCuentas] = useState<Partial<Record<Seccion, { n: number; espera?: boolean }>>>({});
   const [licenciasPendientes, setLicenciasPendientes] = useState(false);
   const capIndices = useServer((s) => s.hello?.capabilities.find((c) => c.id === "indices"));
-  const [mantenimiento, setMantenimiento] = useState<{ activo: boolean; mensaje: string } | null>(null);
+  // Vive aquí, no dentro de SecurityView, para que la tira de aviso (que se
+  // pinta fuera de esa vista) refleje un cambio en cuanto se guarda, sin
+  // esperar a otra petición propia — ambos leen y escriben el mismo estado.
+  const [seguridad, setSeguridad] = useState<SecuritySettings | null>(null);
 
   // Los contadores de la barra lateral salen del mismo Resumen que pinta la
   // primera pantalla: una sola petición alimenta las dos cosas.
@@ -40,16 +43,14 @@ export function AdminPanel({ token }: { token: string }) {
   }, [token]);
 
   useEffect(() => {
-    api.get<import("../lib/api").SecuritySettings>("/v1/admin/security", token)
-      .then((r) => setMantenimiento({ activo: r.maintenance, mensaje: r.maintenance_message }))
-      .catch(() => setMantenimiento(null));
+    api.get<SecuritySettings>("/v1/admin/security", token).then(setSeguridad).catch(() => setSeguridad(null));
   }, [token]);
 
   return (
     <div className="relative z-10 grid h-full w-full grid-cols-[206px_1fr] overflow-hidden bg-bg">
       <Sidebar actual={seccion} onIr={setSeccion} contadores={cuentas} />
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        {mantenimiento?.activo && <MantenimientoBanner mensaje={mantenimiento.mensaje} />}
+        {seguridad?.maintenance && <MantenimientoBanner mensaje={seguridad.maintenance_message} />}
         <div key={seccion} className="overflow-y-auto"
           style={{ animation: "jg-fade-rise .5s cubic-bezier(.16,1,.3,1) both" }}>
           {PRONTO.includes(seccion) ? <Hueco seccion={seccion} />
@@ -57,7 +58,7 @@ export function AdminPanel({ token }: { token: string }) {
             : seccion === "solicitudes" ? <Seccion titulo="Solicitudes de acceso" grupo="Personas">
                 <RequestsView token={token} /></Seccion>
             : seccion === "usuarios" ? <UsersView token={token} />
-            : seccion === "seguridad" ? <SecurityView token={token} />
+            : seccion === "seguridad" ? <SecurityView token={token} ajustes={seguridad} onCambiar={setSeguridad} />
             : seccion === "claves" ? <ApiKeysView token={token} onIr={setSeccion} />
             : seccion === "personalizacion" ? <CustomizacionView token={token} />
             : seccion === "modelos" ? <ModelosView token={token} onLicenciasPendientesChange={setLicenciasPendientes} />

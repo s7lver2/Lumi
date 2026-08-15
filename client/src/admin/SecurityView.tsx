@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import { api, type SecuritySettings } from "../lib/api";
 import { Seccion } from "./AdminPanel";
 
+/** `ajustes`/`onCambiar` vienen de `AdminPanel`, que es quien de verdad los
+ *  posee — así la tira de aviso de mantenimiento ve el cambio en cuanto se
+ *  guarda, sin esperar a que `AdminPanel` vuelva a pedirlos por su cuenta. */
+
 const SERVICIOS: { id: string; label: string }[] = [
   { id: "modelos", label: "Modelos" },
   { id: "indices", label: "Índices" },
@@ -18,13 +22,10 @@ const SERVICIOS: { id: string; label: string }[] = [
  *  activado, en vez de dejarlo ahí atenuado todo el tiempo. Las listas
  *  globales de IP viven en API Keys — junto a la tabla de claves que
  *  gobiernan, no aquí. */
-export function SecurityView({ token }: { token: string }) {
-  const [ajustes, setAjustes] = useState<SecuritySettings | null>(null);
+export function SecurityView({ token, ajustes, onCambiar }: {
+  token: string; ajustes: SecuritySettings | null; onCambiar: (s: SecuritySettings) => void;
+}) {
   const [mensaje, setMensaje] = useState("");
-
-  useEffect(() => {
-    void api.get<SecuritySettings>("/v1/admin/security", token).then(setAjustes);
-  }, [token]);
 
   useEffect(() => {
     if (ajustes) setMensaje(ajustes.maintenance_message);
@@ -35,7 +36,7 @@ export function SecurityView({ token }: { token: string }) {
     | "maintenance_block_login" | "maintenance_services"
   >>) {
     const r = await api.patch<SecuritySettings>("/v1/admin/security", patch, token);
-    setAjustes(r);
+    onCambiar(r);
   }
 
   async function alternarServicio(id: string, estaActivo: boolean) {
