@@ -255,6 +255,20 @@ prometiendo por el camino: rediseñar desde cero las vistas provisionales de sol
 usuarios del subsistema 2, la fila de configuración del mapa del subsistema 6, las
 notificaciones redactadas por el admin, el modo mantenimiento
 
+### mTLS o secreto de dispositivo por clave
+
+La comprobación de clase de dispositivo de una clave de API es hoy heurística (cabeceras
+User-Agent/Sec-CH-UA), no criptográfica — un cliente que las falsee la pasa igual. Certificados
+por dispositivo (mTLS) o un secreto de dispositivo emparejado a la clave son alternativas más
+fuertes, aparcadas hasta que la heurística demuestre que no basta: las dos exigen un paso de
+aprovisionamiento por dispositivo que hoy no se ha pedido.
+
+### Editar perfil desde Perfil y sesiones
+
+La pantalla nace solo con claves de API y sesiones activas. Editar nombre/avatar, o cambiar la
+contraseña desde ahí en vez del flujo forzado actual (`ChangePasswordForm.tsx`), es su extensión
+natural cuando haga falta.
+
 ### Recuperación de contraseña
 
 No hay correo en el sistema, así que hoy la única vía es que un admin marque el cambio o que

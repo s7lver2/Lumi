@@ -179,7 +179,8 @@ panel) → 9 (website)`. 1/2/4/7a/7b/8 done; 6 is skeleton-only (no reverse geoc
 ownership transfer — see FUTURO.md); 5 is **5-0, 5a, 5b and 5c done** (real models, retrieval
 ensemble, competing geometric verifiers, and the agents) **with 5d pending** (annotating the corpus
 with capture dates so season and time-of-day can filter instead of only describing); 3/9 not
-started.
+started. API Keys admite ahora emitir claves de programa (autoservicio o en nombre de otro) y
+un modo Zero Trust opcional (IP + clase de dispositivo).
 
 ## Conventions
 
