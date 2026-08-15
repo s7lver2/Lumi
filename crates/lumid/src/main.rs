@@ -3,6 +3,7 @@ mod assets;
 mod exif;
 mod agentar;
 mod indices;
+mod mantenimiento;
 mod master;
 mod projects;
 mod qdrant;
