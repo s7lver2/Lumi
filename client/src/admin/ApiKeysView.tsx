@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type ApiKeyInfo, type IssuedApiKey, type MapConfig, type ProviderTokenState, type SecuritySettings } from "../lib/api";
 import { Icon } from "../ui/Icon";
+import { IpInput } from "./IpInput";
 import { Seccion } from "./AdminPanel";
 import type { Seccion as SeccionId } from "./Sidebar";
 
@@ -109,10 +110,9 @@ export function ApiKeysView({ token, onIr }: { token: string; onIr: (s: SeccionI
         </p>
       )}
 
-      <div className="mt-6 flex items-baseline gap-3">
+      <div className="mb-2.5 mt-6 flex items-center gap-3">
         <h3 className="text-[12.5px] font-medium">Claves de API</h3>
-        <span className="ml-auto" />
-        <button onClick={() => setEmitiendo(true)} className="rounded-lg bg-accent px-3 py-1.5 text-[11px] font-medium text-black">
+        <button onClick={() => setEmitiendo(true)} className="ml-auto rounded-lg bg-accent px-3 py-1.5 text-[11px] font-medium text-black">
           + Emitir clave
         </button>
       </div>
@@ -134,7 +134,6 @@ export function ApiKeysView({ token, onIr }: { token: string; onIr: (s: SeccionI
 function ListaIp({ titulo, sub, valores, onAgregar, onQuitar }: {
   titulo: string; sub: string; valores: string[]; onAgregar: (ip: string) => void; onQuitar: (ip: string) => void;
 }) {
-  const [valor, setValor] = useState("");
   return (
     <div className="border-b border-border p-[13px_16px] last:border-b-0">
       <p className="mb-2 text-[11px] text-fg">{titulo} <span className="text-[9px] text-subtle">— {sub}</span></p>
@@ -147,12 +146,7 @@ function ListaIp({ titulo, sub, valores, onAgregar, onQuitar }: {
         ))}
         {valores.length === 0 && <span className="text-[10px] italic text-subtle">vacía</span>}
       </div>
-      <div className="flex gap-1.5">
-        <input value={valor} onChange={(e) => setValor(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { onAgregar(valor); setValor(""); } }}
-          placeholder="IP o rango" className="flex-1 rounded-lg border border-border bg-elevated px-2.5 py-1 font-mono text-[10.5px] text-fg outline-none focus:border-white/40" />
-        <button onClick={() => { onAgregar(valor); setValor(""); }} className="rounded-lg border border-border px-2.5 py-1 text-[9.5px] text-fg">Añadir</button>
-      </div>
+      <IpInput onAgregar={onAgregar} />
     </div>
   );
 }

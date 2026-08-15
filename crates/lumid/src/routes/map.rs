@@ -27,8 +27,11 @@ use lumi_proto::api::{MapConfig, MapConfigReq, MapTheme};
 pub struct ThemeQuery { theme: Option<String> }
 /// `tile()`/`glyphs()`/`sprite()` siempre reciben el id explícito que el
 /// propio `style()` dejó escrito en las URLs que genera — nunca adivinan.
+/// `src` solo lo usa `tile()`: qué fuente del estilo pidió esta tesela, para
+/// distinguir entre varias con tilesets y formatos distintos dentro del
+/// mismo tema (ver `Upstreams::tilesets`).
 #[derive(serde::Deserialize)]
-pub struct ThemeIdQuery { theme: String }
+pub struct ThemeIdQuery { theme: String, src: Option<String> }
 
 struct Theme {
     id: &'static str,
@@ -119,7 +122,13 @@ fn resolve_mapbox(url: &str) -> String {
 /// qué dirección del proveedor van.
 #[derive(Default)]
 struct Upstreams {
-    tileset: Option<String>,
+    /// (nombre de la fuente, id del tileset, es raster). Un estilo puede
+    /// combinar una fuente vectorial y otra raster bajo nombres distintos —
+    /// `satellite-streets-v12` trae `composite` (vectorial, calles) y
+    /// `mapbox-satellite` (raster, imagen) a la vez — y cada una necesita su
+    /// propio tileset y su propio formato de tesela; asumir uno solo por
+    /// tema rompía justo esa combinación.
+    tilesets: Vec<(String, String, bool)>,
     /// Un `url` que SÍ es una dirección real (no `mapbox://`): un TileJSON que
     /// hay que resolver para saber la plantilla real de teselas. El nombre del
     /// dataset de OpenFreeMap cambia con el tiempo (`.../planet/<fecha>_pt/...`)
@@ -223,7 +232,6 @@ pub async fn config(State(app): State<App>, headers: HeaderMap) -> Result<Json<M
 /// compuesto, y ESE identificador es justo lo que la API de teselas v4 de
 /// Mapbox acepta tal cual, sin tener que resolver el TileJSON aparte.
 fn rewrite(mut style: serde_json::Value, theme_id: &str) -> Result<(serde_json::Value, Upstreams), String> {
-    let tiles_url = format!("/v1/map/tiles/{{z}}/{{x}}/{{y}}?theme={theme_id}");
     let sources = style
         .get_mut("sources")
         .and_then(|s| s.as_object_mut())
@@ -232,6 +240,11 @@ fn rewrite(mut style: serde_json::Value, theme_id: &str) -> Result<(serde_json::
     let mut up = Upstreams::default();
     for (name, src) in sources.iter_mut() {
         let Some(obj) = src.as_object_mut() else { continue };
+        // `src` va en la propia URL, no solo `theme`: dos fuentes del mismo
+        // estilo pueden necesitar tilesets y formatos distintos (ver
+        // `Upstreams::tilesets`), y `tile()` necesita saber cuál pidió esta
+        // tesela para no mezclarlas.
+        let tiles_url = format!("/v1/map/tiles/{{z}}/{{x}}/{{y}}?theme={theme_id}&src={name}");
         if let Some(u) = obj.get("url").and_then(|v| v.as_str()).map(str::to_string) {
             // `mapbox://mapbox.foo,mapbox.bar` es un identificador de tileset,
             // no una URL real: hay que recordarlo para que `tile()` sepa contra
@@ -239,7 +252,8 @@ fn rewrite(mut style: serde_json::Value, theme_id: &str) -> Result<(serde_json::
             // real que hay que resolver aparte — su plantilla de teselas no es
             // fija, cambia con cada actualización del dataset.
             if let Some(id) = u.strip_prefix("mapbox://") {
-                up.tileset = Some(id.to_string());
+                let es_raster = obj.get("type").and_then(|v| v.as_str()) == Some("raster");
+                up.tilesets.push((name.clone(), id.to_string(), es_raster));
             } else if u.starts_with("http://") || u.starts_with("https://") {
                 up.tile_manifest = Some(u);
             } else {
@@ -295,11 +309,28 @@ fn rewrite(mut style: serde_json::Value, theme_id: &str) -> Result<(serde_json::
     Ok((style, up))
 }
 
+/// Dónde vive en disco cada pieza cacheada de un tema: la misma carpeta que ya
+/// usa `tile()`, así que "vaciar el caché del mapa" sigue siendo "borrar
+/// `{DATA}/tiles`" — una sola regla, no una por tipo de recurso.
+fn cache_dir(app: &App, theme_id: &str) -> std::path::PathBuf {
+    app.dir.join("tiles").join(theme_id)
+}
+
 pub async fn style(
     State(app): State<App>, Query(q): Query<ThemeQuery>, headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, Fail> {
     require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
     let theme = pick_theme(q.theme.as_deref(), &app)?;
+    // El estilo ya reescrito apunta solo a rutas nuestras — nada de lo que
+    // guarda en disco depende de la clave del proveedor, así que cachearlo no
+    // envejece cuando la clave rota. Evita la ida y vuelta entera al
+    // proveedor (y a resolver el TileJSON) en cada visita a la pantalla.
+    let style_cache = cache_dir(&app, theme.id).join("style.json");
+    if let Ok(bytes) = std::fs::read(&style_cache) {
+        if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+            return Ok(Json(v));
+        }
+    }
     let key = app.store.get_meta("map_key").unwrap_or_default();
     let full = with_key(&resolve_mapbox(theme.style), &key);
     let raw: serde_json::Value = outbound()?
@@ -323,20 +354,24 @@ pub async fn style(
             &format!("no se pudo reescribir el estilo y servirlo crudo filtraría la clave: {e}"),
         )
     })?;
-    // Se recuerda por tema, no en una sola clave global: dos temas de Mapbox
-    // pueden resolver a tilesets distintos, y una vista previa no puede pisar
-    // lo que el mapa activo ya tenía descubierto (ni al revés). Un estilo
-    // compuesto (varios tilesets separados por comas) es indistinguible del
-    // sencillo si no se guarda cuál era; lo mismo vale para tipografías e
+    // Se recuerda por tema Y por fuente, no en una sola clave global: dos
+    // temas de Mapbox pueden resolver a tilesets distintos, y dentro de un
+    // mismo tema dos fuentes pueden ser una vectorial y otra raster (ver
+    // `Upstreams::tilesets`). Una vista previa tampoco puede pisar lo que el
+    // mapa activo ya tenía descubierto. Lo mismo vale para tipografías e
     // iconos, cuyas rutas solo aparecen dentro del estilo.
-    if let Some(t) = up.tileset {
-        let _ = app.store.set_meta(&format!("map_tileset_{}", theme.id), &t);
+    for (fuente, id, es_raster) in &up.tilesets {
+        let valor = format!("{}:{id}", if *es_raster { "raster" } else { "vector" });
+        let _ = app.store.set_meta(&format!("map_tileset_{}_{fuente}", theme.id), &valor);
     }
     if let Some(manifest_url) = up.tile_manifest {
         // El TileJSON del proveedor trae la plantilla real de teselas — para
         // OpenFreeMap incluye un segmento de fecha que cambia con cada
-        // actualización del dataset (`.../planet/20260802_080001_pt/...`), así
-        // que no vale con guardarlo una vez: se resuelve en cada `style()`.
+        // actualización del dataset (`.../planet/20260802_080001_pt/...`).
+        // Con el caché de `style.json` de más abajo esto solo se resuelve una
+        // vez por tema (hasta que se borre `{DATA}/tiles`), igual que las
+        // teselas ya cacheadas nunca caducan por su cuenta — el mismo
+        // compromiso de siempre, no uno nuevo.
         match outbound()?.get(&manifest_url).send().await {
             Ok(res) => match res.json::<serde_json::Value>().await {
                 Ok(tilejson) => match tilejson["tiles"][0].as_str() {
@@ -354,6 +389,10 @@ pub async fn style(
     if let Some(s) = up.sprite {
         let _ = app.store.set_meta(&format!("map_sprite_{}", theme.id), &s);
     }
+    if let Some(parent) = style_cache.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&style_cache, serde_json::to_vec(&fixed).unwrap_or_default());
     Ok(Json(fixed))
 }
 
@@ -369,10 +408,16 @@ pub async fn tile(
     require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
     let theme = theme_by_id(&q.theme)
         .ok_or_else(|| err(StatusCode::BAD_REQUEST, "ese tema no existe en el catálogo"))?;
-    // El caché es por tema, no por proveedor: dos temas de Mapbox pueden
-    // resolver a tilesets distintos (ver `style()`), y compartir carpeta
-    // serviría teselas de uno bajo el nombre del otro.
-    let cached = app.dir.join("tiles").join(theme.id).join(z.to_string()).join(x.to_string());
+    // "composite" es el nombre de la fuente principal en casi todos los
+    // estilos de Mapbox Studio — el valor por defecto de siempre para
+    // peticiones que vengan sin `src` explícito (estilos ya cacheados antes
+    // de que este parámetro existiera).
+    let fuente = q.src.as_deref().unwrap_or("composite");
+    // El caché es por tema Y por fuente, no solo por tema: dos fuentes del
+    // mismo tema (una vectorial, otra raster — ver `style()`) pueden pedir la
+    // MISMA coordenada z/x/y con contenido distinto, y compartir carpeta
+    // serviría la tesela de una bajo el nombre de la otra.
+    let cached = app.dir.join("tiles").join(theme.id).join(fuente).join(z.to_string()).join(x.to_string());
     let file = cached.join(y.to_string());
     let ctype = |b: &[u8]| {
         // Vectoriales son protobuf comprimido; las rasterizadas, PNG.
@@ -391,15 +436,23 @@ pub async fn tile(
 
     let key = app.store.get_meta("map_key").unwrap_or_default();
     let upstream = match theme.provider {
-        // El tileset real es el que `style()` dejó anotado, por ESTE tema, al
-        // reescribir el estilo. Sin uno guardado (estilo aún no pedido) se cae
-        // al streets-v8 de siempre.
+        // El tileset real es el que `style()` dejó anotado, por ESTE tema Y
+        // ESTA fuente, al reescribir el estilo. Sin uno guardado (estilo aún
+        // no pedido) se cae al streets-v8 vectorial de siempre.
         "mapbox" => {
-            let tileset = app
-                .store
-                .get_meta(&format!("map_tileset_{}", theme.id))
-                .unwrap_or_else(|| "mapbox.mapbox-streets-v8".into());
-            format!("https://api.mapbox.com/v4/{tileset}/{z}/{x}/{y}.vector.pbf?access_token={key}")
+            let guardado = app.store.get_meta(&format!("map_tileset_{}_{fuente}", theme.id));
+            let (tileset, es_raster) = match guardado.as_deref().and_then(|v| v.split_once(':')) {
+                Some(("raster", id)) => (id.to_string(), true),
+                Some((_, id)) => (id.to_string(), false),
+                None => ("mapbox.mapbox-streets-v8".to_string(), false),
+            };
+            if es_raster {
+                // `mapbox.satellite` (imagen) no tiene forma vectorial: pedir
+                // `.vector.pbf` aquí es justo el 502 que se veía antes.
+                format!("https://api.mapbox.com/v4/{tileset}/{z}/{x}/{y}.png?access_token={key}")
+            } else {
+                format!("https://api.mapbox.com/v4/{tileset}/{z}/{x}/{y}.vector.pbf?access_token={key}")
+            }
         }
         // OpenFreeMap (y cualquier otro proveedor con `url` en vez de
         // `tiles`) resuelve su plantilla real en `style()`, porque incluye un
@@ -448,8 +501,19 @@ pub async fn tile(
 
 /// Descarga del proveedor y devuelve, con el tipo y el caché ya puestos. Las
 /// tipografías y los iconos son los mismos para todos y no cambian nunca; se
-/// dejan cachear en el webview un año, igual que las teselas.
-async fn passthrough(url: &str, ctype: &str) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), Fail> {
+/// cachean en disco (no solo en el webview) por la misma razón que las
+/// teselas — la primera visita a la pantalla ya tarda bastante pidiendo seis
+/// estilos y sus tipografías/iconos a la vez, y no hace falta repetirlo.
+async fn passthrough(url: &str, ctype: &str, cache_path: &std::path::Path) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), Fail> {
+    if let Ok(b) = std::fs::read(cache_path) {
+        return Ok((
+            [
+                (axum::http::header::CONTENT_TYPE, ctype.to_string()),
+                (axum::http::header::CACHE_CONTROL, "private, max-age=31536000".into()),
+            ],
+            b,
+        ));
+    }
     let res = outbound()?
         .get(url)
         .send()
@@ -465,6 +529,10 @@ async fn passthrough(url: &str, ctype: &str) -> Result<([(axum::http::HeaderName
         return Err(err(StatusCode::BAD_GATEWAY, &format!("el proveedor devolvió {code}: {cuerpo}")));
     }
     let bytes = res.bytes().await.map_err(|e| err(StatusCode::BAD_GATEWAY, &e.to_string()))?.to_vec();
+    if let Some(parent) = cache_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(cache_path, &bytes);
     Ok((
         [
             (axum::http::header::CONTENT_TYPE, ctype.to_string()),
@@ -505,7 +573,10 @@ pub async fn glyphs(
     let url = tpl
         .replace("{fontstack}", &fontstack.replace(' ', "%20"))
         .replace("{range}", &range);
-    passthrough(&with_key(&url, &key), "application/x-protobuf").await
+    // `safe_segment` ya garantizó que ninguno de los dos trae `/`, `..` ni
+    // espacios raros de ruta — sirven tal cual como nombre de fichero.
+    let cache = cache_dir(&app, &q.theme).join("glyphs").join(format!("{fontstack}-{range}.pbf"));
+    passthrough(&with_key(&url, &key), "application/x-protobuf", &cache).await
 }
 
 /// Iconos. MapLibre pide `base.json`, `base.png` y sus variantes `@2x` a
@@ -528,7 +599,8 @@ pub async fn sprite(
         .ok_or_else(|| err(StatusCode::SERVICE_UNAVAILABLE, "este tema no trae iconos"))?;
     let key = app.store.get_meta("map_key").unwrap_or_default();
     let ctype = if sufijo.ends_with(".png") { "image/png" } else { "application/json" };
-    passthrough(&with_key(&format!("{base}{sufijo}"), &key), ctype).await
+    let cache = cache_dir(&app, &theme_id).join("sprite").join(format!("base{sufijo}"));
+    passthrough(&with_key(&format!("{base}{sufijo}"), &key), ctype, &cache).await
 }
 
 /// Provisional en su interfaz, no en su ruta: el subsistema 3 rehace la
@@ -564,16 +636,23 @@ pub async fn patch_admin(
     }
     // Solo se invalida lo descubierto para ESTE tema: es lo que acaba de
     // cambiar (clave o motor), y las vistas previas de los demás temas no
-    // tienen por qué perder lo que ya sabían.
+    // tienen por qué perder lo que ya sabían. `map_tileset_<tema>_<fuente>`
+    // es una clave por fuente (pueden ser varias, ver `style()`), así que se
+    // borra por prefijo en vez de listar nombres de fuente que no se conocen
+    // aquí.
     let _ = app.store.conn().execute(
-        "DELETE FROM meta WHERE k IN (?1, ?2, ?3, ?4)",
+        "DELETE FROM meta WHERE k LIKE ?1 OR k IN (?2, ?3, ?4)",
         rusqlite::params![
-            format!("map_tileset_{}", theme.id),
+            format!("map_tileset_{}_%", theme.id),
             format!("map_tile_tpl_{}", theme.id),
             format!("map_glyphs_{}", theme.id),
             format!("map_sprite_{}", theme.id),
         ],
     );
+    // El `style.json` cacheado se apoya en lo que se acaba de invalidar
+    // arriba; dejarlo tal cual serviría un estilo que ya no coincide con lo
+    // recién descubierto.
+    let _ = std::fs::remove_file(cache_dir(&app, theme.id).join("style.json"));
     tracing::info!("tema de mapa: {}", theme.id);
     config(State(app), headers).await
 }
@@ -626,13 +705,16 @@ mod tests {
         // Y las tres piezas que MapLibre necesita para dibujar están puestas,
         // cada una con el tema explícito para que la respuesta no dependa de
         // cuál esté activo en el servidor cuando el cliente vuelva a pedirlas.
-        assert_eq!(fixed["sources"]["composite"]["tiles"][0], "/v1/map/tiles/{z}/{x}/{y}?theme=mapbox-dark");
+        assert_eq!(fixed["sources"]["composite"]["tiles"][0], "/v1/map/tiles/{z}/{x}/{y}?theme=mapbox-dark&src=composite");
         assert_eq!(fixed["glyphs"], "/v1/map/glyphs/{fontstack}/{range}?theme=mapbox-dark");
         assert_eq!(fixed["sprite"], "/v1/map/sprite/mapbox-dark/base");
         assert!(fixed["sources"]["composite"].get("url").is_none(), "la url del tileset sigue ahí");
 
         // Y lo que el daemon tiene que recordar para servir esas tres rutas.
-        assert_eq!(up.tileset.as_deref(), Some("mapbox.mapbox-streets-v8,mapbox.mapbox-terrain-v2"));
+        assert_eq!(
+            up.tilesets,
+            vec![("composite".to_string(), "mapbox.mapbox-streets-v8,mapbox.mapbox-terrain-v2".to_string(), false)],
+        );
         assert_eq!(up.glyphs.as_deref(), Some("https://api.mapbox.com/fonts/v1/mapbox/{fontstack}/{range}.pbf"));
         assert_eq!(up.sprite.as_deref(), Some("https://api.mapbox.com/styles/v1/mapbox/dark-v11/sprite"));
     }
@@ -660,15 +742,47 @@ mod tests {
 
         let (fixed, up) = rewrite(raw, "osm-liberty").expect("el estilo de OpenFreeMap tiene que reescribirse");
 
-        assert_eq!(fixed["sources"]["openmaptiles"]["tiles"][0], "/v1/map/tiles/{z}/{x}/{y}?theme=osm-liberty");
+        assert_eq!(fixed["sources"]["openmaptiles"]["tiles"][0], "/v1/map/tiles/{z}/{x}/{y}?theme=osm-liberty&src=openmaptiles");
         assert!(fixed["sources"]["openmaptiles"].get("url").is_none());
         assert_eq!(fixed["glyphs"], "/v1/map/glyphs/{fontstack}/{range}?theme=osm-liberty");
         assert_eq!(fixed["sprite"], "/v1/map/sprite/osm-liberty/base");
 
         // No es un tileset de Mapbox: no hay id que identificar, solo un
         // TileJSON real que `style()` tiene que ir a buscar aparte.
-        assert!(up.tileset.is_none());
+        assert!(up.tilesets.is_empty());
         assert_eq!(up.tile_manifest.as_deref(), Some("https://tiles.openfreemap.org/planet"));
+    }
+
+    /// `satellite-streets-v12` de verdad combina `composite` (vectorial,
+    /// `mapbox.mapbox-streets-v8`) y `mapbox-satellite` (raster,
+    /// `mapbox.satellite`) bajo el mismo estilo. Antes de este arreglo
+    /// `up.tileset` era un único valor que la segunda fuente pisaba sobre la
+    /// primera, y `tile()` pedía SIEMPRE `.vector.pbf` — un 502 garantizado
+    /// para la mitad raster.
+    #[test]
+    fn dos_fuentes_del_mismo_tema_no_se_pisan() {
+        let raw = serde_json::json!({
+            "version": 8,
+            "sprite": "mapbox://sprites/mapbox/satellite-streets-v12",
+            "glyphs": "mapbox://fonts/mapbox/{fontstack}/{range}.pbf",
+            "sources": {
+                "mapbox-satellite": { "url": "mapbox://mapbox.satellite", "type": "raster", "tileSize": 256 },
+                "composite": { "url": "mapbox://mapbox.mapbox-streets-v8", "type": "vector" }
+            },
+            "layers": [{ "id": "background", "type": "background" }]
+        });
+
+        let (fixed, up) = rewrite(raw, "mapbox-satellite").expect("satellite-streets-v12 tiene que reescribirse");
+
+        // Cada fuente lleva SU nombre en la URL, no una genérica compartida.
+        assert_eq!(fixed["sources"]["composite"]["tiles"][0], "/v1/map/tiles/{z}/{x}/{y}?theme=mapbox-satellite&src=composite");
+        assert_eq!(fixed["sources"]["mapbox-satellite"]["tiles"][0], "/v1/map/tiles/{z}/{x}/{y}?theme=mapbox-satellite&src=mapbox-satellite");
+
+        // Y las dos quedan recordadas por separado, con su tipo correcto —
+        // ninguna se pisa a la otra.
+        assert!(up.tilesets.contains(&("composite".to_string(), "mapbox.mapbox-streets-v8".to_string(), false)));
+        assert!(up.tilesets.contains(&("mapbox-satellite".to_string(), "mapbox.satellite".to_string(), true)));
+        assert_eq!(up.tilesets.len(), 2);
     }
 
     /// Un estilo sin tipografías se rechaza en el servidor. MapLibre no dibuja

@@ -49,16 +49,29 @@ fn leer_lista(app: &App, tabla: &str) -> Vec<String> {
     filas.flatten().collect()
 }
 
-/// ¿Cae `ip` dentro de esta entrada? Acepta una IP suelta o un CIDR
-/// (`a.b.c.d/n`).
+/// ¿Cae `ip` dentro de esta entrada? Acepta una IP suelta, un CIDR
+/// (`a.b.c.d/n`), o un comodín por octeto (`192.168.*.*`) — la forma que
+/// pide la interfaz para quien no piensa en máscaras de bits. No hace falta
+/// que los `*` vayan al final: `10.*.5.*` también vale, aunque no tenga
+/// CIDR equivalente.
 ///
-/// ponytail: solo IPv4 entiende rangos. Un IPv6 en la entrada se compara
-/// exacto — el día que haga falta un rango de IPv6 de verdad, se amplía
-/// aquí; hoy sería complejidad sin un caso real que la pida.
+/// ponytail: solo IPv4 entiende rangos y comodines. Un IPv6 en la entrada se
+/// compara exacto — el día que haga falta un rango de IPv6 de verdad, se
+/// amplía aquí; hoy sería complejidad sin un caso real que la pida.
 pub fn ip_matches(entrada: &str, ip: &IpAddr) -> bool {
     let IpAddr::V4(ip) = ip else {
         return entrada.parse::<IpAddr>().as_ref() == Ok(ip);
     };
+    if entrada.contains('*') {
+        let octetos_entrada: Vec<&str> = entrada.split('.').collect();
+        if octetos_entrada.len() != 4 {
+            return false;
+        }
+        let octetos_ip = ip.octets();
+        return octetos_entrada.iter().enumerate().all(|(i, o)| {
+            *o == "*" || o.parse::<u8>().is_ok_and(|v| v == octetos_ip[i])
+        });
+    }
     match entrada.split_once('/') {
         None => entrada.parse::<std::net::Ipv4Addr>().is_ok_and(|e| e == *ip),
         Some((base, bits)) => {
@@ -149,4 +162,32 @@ pub async fn zero_trust_gate(
         }
     }
     next.run(req).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ip(s: &str) -> IpAddr { s.parse().unwrap() }
+
+    #[test]
+    fn comodin_por_octeto() {
+        assert!(ip_matches("192.168.*.*", &ip("192.168.1.42")));
+        assert!(!ip_matches("192.168.*.*", &ip("192.169.1.42")));
+        // No hace falta que los comodines vayan al final.
+        assert!(ip_matches("10.*.5.*", &ip("10.99.5.7")));
+        assert!(!ip_matches("10.*.5.*", &ip("10.99.6.7")));
+    }
+
+    #[test]
+    fn comodin_exige_cuatro_octetos() {
+        assert!(!ip_matches("192.168.*", &ip("192.168.1.1")));
+    }
+
+    #[test]
+    fn cidr_y_exacta_siguen_igual() {
+        assert!(ip_matches("192.168.0.0/16", &ip("192.168.1.1")));
+        assert!(!ip_matches("192.168.0.0/16", &ip("192.169.1.1")));
+        assert!(ip_matches("10.0.0.1", &ip("10.0.0.1")));
+    }
 }

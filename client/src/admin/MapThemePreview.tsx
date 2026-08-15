@@ -35,15 +35,29 @@ export function MapThemePreview({ themeId }: { themeId: string }) {
           zoom: 8.5,
           interactive: false,
           attributionControl: false,
+          // El catálogo es cerrado y el daemon ya comprobó la forma del
+          // estilo al reescribirlo — el validador de MapLibre es más
+          // estricto que el propio Mapbox con campos de sus estilos
+          // oficiales (mismo motivo que `work/mapEngine.ts`).
+          validateStyle: false,
         });
-      } catch {
-        // Sin conexión al proveedor: la tarjeta se queda sin mapa de fondo,
-        // no es un error que reportar aquí.
+        // `on("error")` es la única forma de ver un fallo de tesela/glyph: esos
+        // pasan DENTRO del bucle de eventos de MapLibre, no como una excepción
+        // que este `try` pudiera atrapar.
+        mapa.on("error", (e) => console.error(`[preview ${themeId}]`, e.error));
+      } catch (e) {
+        console.error(`[preview ${themeId}] no se pudo montar`, e);
       }
     })();
 
     return () => { cancelado = true; mapa?.remove(); };
   }, [themeId]);
 
-  return <div ref={ref} className="absolute inset-0" />;
+  // Estilo en línea, no clase: `maplibre-gl.css` fuerza `.maplibregl-map {
+  // position: relative }` sobre este mismo elemento (MapLibre le añade esa
+  // clase), y con la misma especificidad que `.absolute` de Tailwind, la
+  // hoja que cargue después gana la cascada. Perder el `position: absolute`
+  // aquí deja `inset-0` sin efecto — el div (y el canvas de dentro) se sale
+  // del flujo normal y crece con un alto sin relación con la tarjeta.
+  return <div ref={ref} style={{ position: "absolute", inset: 0 }} />;
 }
