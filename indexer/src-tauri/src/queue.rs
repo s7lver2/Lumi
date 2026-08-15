@@ -90,6 +90,18 @@ pub struct Cola {
     /// un modelo esté cargando pesos o embebiendo un lote en cada instante;
     /// el resto espera su turno, no compite por él.
     permiso_gpu: tokio::sync::Semaphore,
+    /// El ÚNICO trabajador con pesos cargados en GPU en un instante dado,
+    /// compartido por todos los bucles. Antes cada modelo tenía su propio
+    /// `Option<Trabajador>` que, una vez arrancado, nunca se soltaba: con
+    /// varios modelos reales activos (cosplace, salad, cliquemining,
+    /// anyloc...) eso significaba varios contextos CUDA y varios juegos de
+    /// pesos residentes en la GPU A LA VEZ para siempre. En una GPU ya
+    /// compartida con otras aplicaciones eso desborda la VRAM disponible,
+    /// y Windows cae a "memoria de GPU compartida" (RAM del sistema de
+    /// respaldo) — ahí todo el escritorio se congela, no solo el embebido.
+    /// Un solo slot fuerza a soltar el modelo anterior (mata su proceso vía
+    /// `kill_on_drop`) antes de cargar el siguiente.
+    trabajador: tokio::sync::Mutex<Option<(String, Trabajador)>>,
 }
 
 struct Trabajador {
@@ -188,6 +200,7 @@ impl Cola {
             // porque la app se abrió. `cola_pausar(false)` es el arranque.
             pausada: Arc::new(Mutex::new(true)),
             permiso_gpu: tokio::sync::Semaphore::new(1),
+            trabajador: tokio::sync::Mutex::new(None),
         })
     }
 
@@ -249,7 +262,6 @@ impl Cola {
                     }
                 }
             }
-            let mut trabajador: Option<Trabajador> = None;
             // En memoria, no en SQLite: un índice que revienta el trabajador
             // (o falla siempre) se aparta un rato para ESTE modelo, no para
             // siempre. Descartarlo sin fecha de caducidad era peor que el
@@ -288,10 +300,23 @@ impl Cola {
                 // entre sí sin que ninguno avanzara de verdad.
                 let _turno = self.permiso_gpu.acquire().await;
 
-                if trabajador.is_none() {
+                let mut guard = self.trabajador.lock().await;
+                let es_de_otro_modelo = guard.as_ref().is_some_and(|(id, _)| id != &modelo);
+                if es_de_otro_modelo {
+                    // Soltar el `Trabajador` anterior mata su proceso
+                    // (`kill_on_drop`) y libera sus pesos de la GPU antes de
+                    // cargar los de este modelo — nunca dos a la vez.
+                    if let Some((id_anterior, _)) = guard.take() {
+                        self.log.apuntar(format!(
+                            "cola: cambiando la GPU de {id_anterior} a {modelo}"
+                        ));
+                    }
+                }
+                if guard.is_none() {
                     match arrancar(&self.dir, self.log.clone(), "cuda:0", dims).await {
-                        Ok(t) => trabajador = Some(t),
+                        Ok(t) => *guard = Some((modelo.clone(), t)),
                         Err(e) => {
+                            drop(guard);
                             self.log.apuntar(format!("cola ({modelo}): no arrancó el trabajador: {e}"));
                             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                             continue;
@@ -299,13 +324,15 @@ impl Cola {
                     }
                 }
 
+                let (_, trabajador_ref) = guard.as_mut().unwrap();
                 let (vivo, fallo) = self
-                    .resolver_indice(trabajador.as_mut().unwrap(), indice_id, &modelo, &coleccion, &qdrant)
+                    .resolver_indice(trabajador_ref, indice_id, &modelo, &coleccion, &qdrant)
                     .await;
                 if !vivo {
                     // El proceso murió: AVERÍA. El índice vuelve a la cola una
                     // vez; el contador impide el bucle infinito.
-                    trabajador = None;
+                    *guard = None;
+                    drop(guard);
                     if let Some(p) = self.progreso.lock().unwrap().get_mut(&modelo) {
                         p.reinicios += 1;
                     }

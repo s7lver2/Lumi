@@ -176,4 +176,17 @@ class Embebedor(object):
 
 
 def cargar(modelo_id, registro_dir, pesos_dir, dispositivo):
-    return Embebedor(_ficha(modelo_id, registro_dir), pesos_dir, dispositivo)
+    ficha = _ficha(modelo_id, registro_dir)
+    if modelo_id == "anyloc":
+        # No hay una red afinada que reconstruir aqui: el backbone es
+        # DINOv2-giant tal cual, sin afinar, y lo unico que descarga
+        # nuestro pesos/ es el vocabulario VLAD (un tensor de centros de
+        # cluster, no un state_dict) -- no encaja en el flujo generico
+        # de Embebedor, por eso tiene su propia clase.
+        directorio = os.path.join(pesos_dir, modelo_id)
+        ruta = os.path.join(directorio, "pesos.pth")
+        _licencia(directorio)
+        _verificar(ruta, ficha.get("sha256", ""))
+        import anyloc_network
+        return anyloc_network.Embebedor(ruta, dispositivo)
+    return Embebedor(ficha, pesos_dir, dispositivo)

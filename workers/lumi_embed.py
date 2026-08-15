@@ -93,7 +93,19 @@ def _embeber(job):
             "cuenta": len(imagenes), "fichero": destino, "imagenes": imagenes}
 
 
+def _limitar_hilos():
+    """Sin esto, torch coge TODOS los nucleos logicos para su propio
+    paralelismo interno (redimensionar/normalizar imagenes incluido), y ese
+    hilo de mas compite con la interfaz del sistema por CPU -- "el pc va
+    fatal" mientras embebe no era falta de GPU, era esto. Se deja al menos
+    la mitad de los nucleos libres para el resto de la maquina."""
+    import torch
+    nucleos = os.cpu_count() or 4
+    torch.set_num_threads(max(1, nucleos // 2))
+
+
 def main():
+    _limitar_hilos()
     _decir({"tipo": "listo", "dispositivo": DISPOSITIVO, "modelo": None})
     for linea in sys.stdin:
         linea = linea.strip()

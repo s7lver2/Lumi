@@ -211,6 +211,12 @@ pub struct Store(Mutex<Connection>);
 impl Store {
     pub fn open(dir: &Path) -> Result<Self> {
         let c = Connection::open(dir.join("lumi.db"))?;
+        // El instalador escribe la clave de vinculación en este mismo fichero
+        // justo después de arrancar el servicio (`lumi install`), y por
+        // defecto SQLite falla al instante con "database is locked" en vez de
+        // esperar -- busy_timeout hace que la conexión que llega segundo
+        // reintente unos segundos en vez de morir en esa carrera.
+        c.busy_timeout(std::time::Duration::from_secs(5))?;
         // ponytail: la sesión de bootstrap usa user_id = 0 como centinela (no
         // hay usuario con ese id todavía). El build bundled de SQLite activa
         // foreign_keys por defecto y rompería ese diseño; se desactiva

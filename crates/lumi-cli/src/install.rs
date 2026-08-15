@@ -217,7 +217,12 @@ pub fn run(auto: bool) -> Result<PairKey> {
 
     let addr = format!("{}:{}", local_ip().unwrap_or_else(|| "127.0.0.1".into()), lumi_proto::PORT);
     let key = PairKey::generate(&addr, &der);
+    // lumid.service acaba de arrancar (paso anterior) y abre este mismo
+    // fichero por su cuenta: sin busy_timeout, esta conexión puede llegar
+    // a la vez y morir al instante con "database is locked" en vez de
+    // esperar los segundos que tarda lumid en terminar su propio arranque.
     let db = rusqlite::Connection::open(format!("{DATA}/lumi.db"))?;
+    db.busy_timeout(std::time::Duration::from_secs(5))?;
     db.execute_batch(
         "CREATE TABLE IF NOT EXISTS pair_key (
             id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -500,7 +505,11 @@ pub fn reissue() -> Result<PairKey> {
         lumi_proto::PORT
     );
     let key = PairKey::generate(&addr, &der);
+    // lumid.service está corriendo (esto es un reissue en caliente, no una
+    // instalación) y tiene su propia conexión abierta al mismo fichero: el
+    // mismo busy_timeout que en `run()`, misma razón.
     let db = rusqlite::Connection::open(format!("{DATA}/lumi.db"))?;
+    db.busy_timeout(std::time::Duration::from_secs(5))?;
     db.execute(
         "INSERT OR REPLACE INTO pair_key (id, secret_phc, expires_at, consumed) VALUES (1, ?1, ?2, 0)",
         rusqlite::params![hash_password(&key.secret)?, now() + 24 * 3600],
