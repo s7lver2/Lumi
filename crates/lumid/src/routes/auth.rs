@@ -72,6 +72,15 @@ pub async fn login(
             "esta cuenta está bloqueada; habla con el administrador".into(),
         ));
     }
+    // Un admin siempre puede entrar, active o no este interruptor — si se
+    // quedara fuera también él, nadie podría revertir el modo salvo tocando
+    // la base de datos a mano.
+    if is_admin != 1 && crate::mantenimiento::activo(&app) && crate::mantenimiento::bloquea_login(&app) {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "el servidor está en mantenimiento; el login está temporalmente bloqueado".into(),
+        ));
+    }
 
     let device_id = req.device.as_ref().and_then(|d| upsert_device(&c, id, d));
     let token = new_token();
