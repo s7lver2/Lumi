@@ -248,12 +248,22 @@ nadie ha tenido todavía.
 
 ## Transversales
 
+### Sistema de actualización (cliente, `lumid`, Indexer)
+
+Ninguno de los tres se actualiza solo hoy: `lumi install` reinstala desde un checkout, el
+cliente y el Indexer son binarios de Tauri sin canal de release. Pedido explícitamente para
+más adelante, sin alcance decidido todavía — falta cubrir al menos: dónde vive el canal de
+versiones (¿el propio catálogo del subsistema 8, o uno aparte?), si `lumid` se actualiza solo o
+solo avisa y el owner decide, cómo migran los datos de SQLite entre versiones del esquema, y si
+el cliente/Indexer usan el actualizador nativo de Tauri o uno propio dado que ya hay un esquema
+de firma Ed25519 en `lumi-proto` que podría reusarse para firmar releases.
+
 ### Panel de administración real
 
 Es el subsistema 3 y está planificado, no aparcado. Se anota aquí solo lo que se le ha ido
 prometiendo por el camino: rediseñar desde cero las vistas provisionales de solicitudes y
 usuarios del subsistema 2, la fila de configuración del mapa del subsistema 6, las
-notificaciones redactadas por el admin, el modo mantenimiento
+notificaciones redactadas por el admin
 
 ### mTLS o secreto de dispositivo por clave
 

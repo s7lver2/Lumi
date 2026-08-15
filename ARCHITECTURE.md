@@ -374,7 +374,8 @@ UNCLAIMED ──canje──► CLAIMED ──aprovisionado──► READY
                         └────── PROVISIONING ─────┘
 
 LOCKED        ortogonal: activo tras reiniciar en modo sellado
-MAINTENANCE   ortogonal: lo introduce el subsistema 3c
+MAINTENANCE   ortogonal: interruptor de admin en Seguridad — bloquea todo salvo el núcleo fijo
+              y los servicios que el propio admin reactive (`crates/lumid/src/mantenimiento.rs`)
 ```
 
 ### Puerto
