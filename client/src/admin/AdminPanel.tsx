@@ -4,7 +4,8 @@ import { useServer } from "../lib/store";
 import { Hueco } from "./Hueco";
 import { IndexToast } from "./IndexToast";
 import { IndicesPanel } from "./IndicesPanel";
-import { KeysView } from "./KeysView";
+import { ApiKeysView } from "./ApiKeysView";
+import { SecurityView } from "./SecurityView";
 import { ModelosView } from "./ModelosView";
 import { ModelToasts } from "./ModelToasts";
 import { QueueRow } from "./QueueRow";
@@ -45,7 +46,8 @@ export function AdminPanel({ token }: { token: string }) {
           : seccion === "solicitudes" ? <Seccion titulo="Solicitudes de acceso" grupo="Personas">
               <RequestsView token={token} /></Seccion>
           : seccion === "usuarios" ? <UsersView token={token} />
-          : seccion === "claves" ? <KeysView token={token} />
+          : seccion === "seguridad" ? <SecurityView token={token} />
+          : seccion === "claves" ? <ApiKeysView token={token} onIr={setSeccion} />
           : seccion === "modelos" ? <ModelosView token={token} onLicenciasPendientesChange={setLicenciasPendientes} />
           : seccion === "cola" ? <Seccion titulo="Cola" grupo="Operación">
               <QueueRow token={token} /></Seccion>

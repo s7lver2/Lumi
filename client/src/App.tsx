@@ -8,6 +8,7 @@ import { ModelosStep } from "./wizard/ModelosStep";
 import { ProvisionStep } from "./wizard/ProvisionStep";
 import { TitleBar } from "./ui/TitleBar";
 import { ResizeHandles } from "./ui/WindowFrame";
+import { ProfileView } from "./profile/ProfileView";
 import { StatusOverlay } from "./ui/StatusOverlay";
 import { EntryScreen } from "./entry/EntryScreen";
 import { AdminPanel } from "./admin/AdminPanel";
@@ -28,7 +29,7 @@ import type { DrawerId } from "./work/Drawer";
 export default function App() {
   const [step, setStep] = useState(0);
   const [resuming, setResuming] = useState(true);
-  const [mode, setMode] = useState<"entry" | "wizard" | "picker" | "project" | "case" | "admin">("entry");
+  const [mode, setMode] = useState<"entry" | "wizard" | "picker" | "project" | "case" | "admin" | "profile">("entry");
   const [adminBusy, setAdminBusy] = useState(false);
   const [runtimeDone, setRuntimeDone] = useState(false);
   /** Resultados e invitar piden el mismo carril de la derecha, así que el
@@ -207,6 +208,8 @@ export default function App() {
       ? [{ label: "Lumi Station" }]
       : mode === "admin"
         ? [{ label: "Proyectos", onClick: () => setMode("picker") }, { label: "Administración" }]
+        : mode === "profile"
+          ? [{ label: "Proyectos", onClick: () => setMode("picker") }, { label: "Perfil y sesiones" }]
         : mode === "picker" || !proyectoActual
           ? [{ label: "Proyectos" }]
           : mode === "case" && casoActual
@@ -226,6 +229,7 @@ export default function App() {
           notificaciones, cuenta y los botones de la ventana. La telemetría ya
           no es una franja permanente de 70 px — vive en su píldora. */}
       <TitleBar crumbs={crumbs} onOpenAdmin={() => { leaveProject(); setMode("admin"); }}
+        onProfile={() => { leaveProject(); setMode("profile"); }}
         onSignOut={signOut} onProjectAccepted={() => setProjectsTick((t) => t + 1)} />
       <ResizeHandles />
       {/* Para app/admin, la desconexión es un banner + bloqueo, no una
@@ -265,6 +269,8 @@ export default function App() {
           onOwnerKey={(key) => { useServer.getState().setKey(key); setStep(0); setMode("wizard"); }} />
       ) : mode === "admin" ? (
         <AdminPanel token={useServer.getState().token!} />
+      ) : mode === "profile" ? (
+        <ProfileView token={useServer.getState().token!} onBack={() => setMode("picker")} />
       ) : mode === "wizard" ? (
         <Wizard step={step} title="Lumi Station" subtitle="vincular servidor"
           // Del paso 3 (runtime) no se puede volver al 2 (admin): la cuenta ya
