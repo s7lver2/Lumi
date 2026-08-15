@@ -127,6 +127,15 @@ async fn main() -> anyhow::Result<()> {
             "/v1/api-keys/:public_id",
             axum::routing::delete(routes::api_keys::revoke).patch(routes::api_keys::patch_ips),
         )
+        .route("/v1/admin/security", get(routes::security::get_security).patch(routes::security::patch_security))
+        .route(
+            "/v1/admin/security/allowlist",
+            post(routes::security::add_allow).delete(routes::security::remove_allow),
+        )
+        .route(
+            "/v1/admin/security/denylist",
+            post(routes::security::add_deny).delete(routes::security::remove_deny),
+        )
         .route("/v1/projects", get(routes::projects::list).post(routes::projects::create))
         .route(
             "/v1/projects/:id",
@@ -182,7 +191,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/map", axum::routing::patch(routes::map::patch_admin))
         .route("/v1/users/search", get(routes::projects::search_users));
 
-    let router = router.with_state(app);
+    let capa_zero_trust = axum::middleware::from_fn_with_state(app.clone(), zero_trust::zero_trust_gate);
+    let router = router.layer(capa_zero_trust).with_state(app);
 
     let port: u16 = std::env::var("LUMI_PORT")
         .ok()

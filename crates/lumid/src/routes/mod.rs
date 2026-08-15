@@ -12,6 +12,7 @@ pub mod indices;
 pub mod map;
 pub mod projects;
 pub mod queue;
+pub mod security;
 pub mod tasks;
 pub mod telemetry;
 pub mod models;
