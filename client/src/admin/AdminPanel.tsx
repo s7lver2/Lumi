@@ -16,7 +16,7 @@ import { CustomizacionView } from "./CustomizacionView";
 import { Sidebar, type Seccion } from "./Sidebar";
 import { UsersView } from "./UsersView";
 
-const PRONTO: Seccion[] = ["mantenimiento", "notificaciones", "hardware"];
+const PRONTO: Seccion[] = ["notificaciones", "hardware"];
 
 export function AdminPanel({ token }: { token: string }) {
   const [seccion, setSeccion] = useState<Seccion>("resumen");
