@@ -14,6 +14,7 @@ mod tasks;
 mod telemetry;
 mod tls;
 mod verificar;
+mod zero_trust;
 
 use axum::{routing::get, Router};
 use lumi_proto::api::GpuInfo;
