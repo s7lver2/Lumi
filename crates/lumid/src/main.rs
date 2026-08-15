@@ -120,6 +120,13 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/models", get(routes::models::estado))
         .route("/v1/admin/models/provider-token", get(routes::models::get_provider_token).patch(routes::models::set_provider_token))
         .route("/v1/admin/models/metadata", get(routes::models::metadatos))
+        .route("/v1/me/api-keys", get(routes::api_keys::list_mine))
+        .route("/v1/admin/api-keys", get(routes::api_keys::list_all))
+        .route("/v1/api-keys", post(routes::api_keys::create))
+        .route(
+            "/v1/api-keys/:public_id",
+            axum::routing::delete(routes::api_keys::revoke).patch(routes::api_keys::patch_ips),
+        )
         .route("/v1/projects", get(routes::projects::list).post(routes::projects::create))
         .route(
             "/v1/projects/:id",
