@@ -1,38 +1,40 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { useServer } from "../lib/store";
+import { Icon, type IconName } from "../ui/Icon";
 
 export type Seccion =
-  | "resumen" | "modelos" | "indices" | "claves"
+  | "resumen" | "modelos" | "indices" | "seguridad" | "claves"
   | "solicitudes" | "usuarios"
   | "cola" | "mantenimiento" | "notificaciones" | "hardware";
 
 /** Las que todavía no existen se ven, atenuadas, con su «pronto». Aparecer de
  *  la nada dentro de tres meses es peor que estar desde el principio diciendo
  *  que no estás — es la matriz de capacidades aplicada a la navegación. */
-const GRUPOS: { grupo: string; items: { id: Seccion; label: string; pronto?: boolean }[] }[] = [
+const GRUPOS: { grupo: string; items: { id: Seccion; label: string; icon: IconName; pronto?: boolean }[] }[] = [
   {
     grupo: "Servidor",
     items: [
-      { id: "resumen", label: "Resumen" },
-      { id: "modelos", label: "Modelos" },
-      { id: "indices", label: "Índices" },
-      { id: "claves", label: "API Keys" },
+      { id: "resumen", label: "Resumen", icon: "bars" },
+      { id: "modelos", label: "Modelos", icon: "layers" },
+      { id: "indices", label: "Índices", icon: "grid" },
+      { id: "seguridad", label: "Seguridad", icon: "shield" },
+      { id: "claves", label: "API Keys", icon: "key" },
     ],
   },
   {
     grupo: "Personas",
     items: [
-      { id: "solicitudes", label: "Solicitudes" },
-      { id: "usuarios", label: "Usuarios" },
+      { id: "solicitudes", label: "Solicitudes", icon: "inbox" },
+      { id: "usuarios", label: "Usuarios", icon: "users" },
     ],
   },
   {
     grupo: "Operación",
     items: [
-      { id: "cola", label: "Cola" },
-      { id: "mantenimiento", label: "Mantenimiento", pronto: true },
-      { id: "notificaciones", label: "Notificaciones", pronto: true },
-      { id: "hardware", label: "Hardware", pronto: true },
+      { id: "cola", label: "Cola", icon: "bars" },
+      { id: "mantenimiento", label: "Mantenimiento", icon: "wrench", pronto: true },
+      { id: "notificaciones", label: "Notificaciones", icon: "bell", pronto: true },
+      { id: "hardware", label: "Hardware", icon: "device", pronto: true },
     ],
   },
 ];
@@ -92,6 +94,7 @@ export function Sidebar({ actual, onIr, contadores }: {
                     text-[11.5px] transition-[background-color,color,padding-left] duration-[360ms]
                     ease-expo hover:bg-white/[.04] hover:pl-[11px] hover:text-fg
                     ${on ? "bg-white/[.06] text-fg" : "text-muted"} ${it.pronto ? "opacity-40" : ""}`}>
+                  <Icon name={it.icon} size={13} className={on ? "opacity-100" : "opacity-70"} />
                   {it.label}
                   {it.pronto ? (
                     <span className="ml-auto text-[8.5px] uppercase tracking-[.1em] text-subtle">
