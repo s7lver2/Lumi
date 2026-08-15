@@ -157,17 +157,24 @@ de despliegue (`grid-template-rows: 0fr → 1fr`) ya construido para "Autoservic
 - Una nota fija: "Todo lo demás queda en 503 con el mensaje de arriba. Nada se bloquea en
   silencio." — mismo criterio de la matriz de capacidades del proyecto (ningún recorte oculto).
 
-**Banner en el panel de administración**: una tira fija en la parte superior de `AdminPanel.tsx`
-(por encima del contenido de la sección activa, no del sidebar), visible solo cuando
-`SecuritySettings.maintenance` es `true`. Fondo con rayas diagonales en tono aviso que se deslizan
-despacio (`background-position` animado, ~14s por ciclo) — la lectura visual es "cinta de obra en
-movimiento", consistente con que el modo sigue activo. El mensaje configurado se muestra dentro;
-si el admin no escribió ninguno, cae a un texto genérico ("Servidor en mantenimiento."). El
-mockup aprobado vive en el historial de esta conversación de brainstorming (no se conserva como
-archivo versionado — `.superpowers/` está en `.gitignore`).
+**Banner para toda la app** (`client/src/ui/MantenimientoBanner.tsx`, montado por `App.tsx` junto
+a `TitleBar`, no solo por `AdminPanel.tsx`): revisión posterior al primer corte — un usuario
+normal bloqueado por el modo también tiene que enterarse de por qué, no solo el administrador que
+lo activó. Visible en cualquier `mode` (wizard, picker, proyecto, caso, admin, perfil) en cuanto
+hay sesión. Fondo con rayas diagonales en tono aviso que se deslizan despacio — la lectura visual
+es "cinta de obra en movimiento", consistente con que el modo sigue activo. El mensaje configurado
+se muestra dentro; si el admin no escribió ninguno, cae a un texto genérico ("Servidor en
+mantenimiento."). El mockup aprobado vive en el historial de la conversación de brainstorming (no
+se conserva como archivo versionado — `.superpowers/` está en `.gitignore`).
 
-Fuera de alcance explícito (no se construye aquí): banner para usuarios no-admin, o cualquier
-indicación de mantenimiento fuera del panel de administración.
+El transporte es la muestra de telemetría ya existente (`Sample`, por SSE cada segundo,
+reemitida como evento `"telemetry"` de Tauri) en vez de una petición aparte a
+`/v1/admin/security` — esa ruta exige ser administrador, así que un usuario normal no podría
+leerla, y la telemetría ya llega a toda sesión abierta sin depender de nada más (mismo criterio
+que "la telemetría sigue viva en `LOCKED`"). `Sample` gana `maintenance: bool` y
+`maintenance_message: String`; `/v1/telemetry` entra en el núcleo fijo del gateo (bloquearla
+apagaría el propio aviso). Esto también resuelve gratis la actualización en tiempo real: la tira
+aparece/desaparece con la siguiente muestra (≤1s), sin refrescar ni renavegar.
 
 **Eliminación de la entrada de sidebar**: `Sidebar.tsx` pierde `"mantenimiento"` del tipo
 `Seccion` y de `GRUPOS`; `AdminPanel.tsx` pierde `"mantenimiento"` de `PRONTO`; `Hueco.tsx` no
