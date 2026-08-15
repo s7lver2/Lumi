@@ -5,6 +5,7 @@ import { Hueco } from "./Hueco";
 import { IndexToast } from "./IndexToast";
 import { IndicesPanel } from "./IndicesPanel";
 import { ApiKeysView } from "./ApiKeysView";
+import { MantenimientoBanner } from "./MantenimientoBanner";
 import { SecurityView } from "./SecurityView";
 import { ModelosView } from "./ModelosView";
 import { ModelToasts } from "./ModelToasts";
@@ -22,6 +23,7 @@ export function AdminPanel({ token }: { token: string }) {
   const [cuentas, setCuentas] = useState<Partial<Record<Seccion, { n: number; espera?: boolean }>>>({});
   const [licenciasPendientes, setLicenciasPendientes] = useState(false);
   const capIndices = useServer((s) => s.hello?.capabilities.find((c) => c.id === "indices"));
+  const [mantenimiento, setMantenimiento] = useState<{ activo: boolean; mensaje: string } | null>(null);
 
   // Los contadores de la barra lateral salen del mismo Resumen que pinta la
   // primera pantalla: una sola petición alimenta las dos cosas.
@@ -37,38 +39,47 @@ export function AdminPanel({ token }: { token: string }) {
       .catch(() => setCuentas({}));
   }, [token]);
 
+  useEffect(() => {
+    api.get<import("../lib/api").SecuritySettings>("/v1/admin/security", token)
+      .then((r) => setMantenimiento({ activo: r.maintenance, mensaje: r.maintenance_message }))
+      .catch(() => setMantenimiento(null));
+  }, [token]);
+
   return (
     <div className="relative z-10 grid h-full w-full grid-cols-[206px_1fr] overflow-hidden bg-bg">
       <Sidebar actual={seccion} onIr={setSeccion} contadores={cuentas} />
-      <div key={seccion} className="overflow-y-auto"
-        style={{ animation: "jg-fade-rise .5s cubic-bezier(.16,1,.3,1) both" }}>
-        {PRONTO.includes(seccion) ? <Hueco seccion={seccion} />
-          : seccion === "resumen" ? <ResumenView token={token} onIr={setSeccion} />
-          : seccion === "solicitudes" ? <Seccion titulo="Solicitudes de acceso" grupo="Personas">
-              <RequestsView token={token} /></Seccion>
-          : seccion === "usuarios" ? <UsersView token={token} />
-          : seccion === "seguridad" ? <SecurityView token={token} />
-          : seccion === "claves" ? <ApiKeysView token={token} onIr={setSeccion} />
-          : seccion === "personalizacion" ? <CustomizacionView token={token} />
-          : seccion === "modelos" ? <ModelosView token={token} onLicenciasPendientesChange={setLicenciasPendientes} />
-          : seccion === "cola" ? <Seccion titulo="Cola" grupo="Operación">
-              <QueueRow token={token} /></Seccion>
-                    : <Seccion titulo="Índices instalados" grupo="Servidor"
-              accion={
-                <button disabled title="Abrirá el catálogo remoto; todavía no hace nada"
-                  className="inline-flex items-center gap-1.5 rounded-[8px] bg-accent px-2.5 py-1
-                    text-[10.5px] font-medium text-black opacity-40">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
-                  Instalar índice
-                </button>
-              }>
-              {capIndices?.state === "on" ? <IndicesPanel token={token} /> : (
-                <p className="mt-[19px] text-[11px] text-muted">{capIndices?.reason ?? "no disponible"}</p>
-              )}
-            </Seccion>}
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        {mantenimiento?.activo && <MantenimientoBanner mensaje={mantenimiento.mensaje} />}
+        <div key={seccion} className="overflow-y-auto"
+          style={{ animation: "jg-fade-rise .5s cubic-bezier(.16,1,.3,1) both" }}>
+          {PRONTO.includes(seccion) ? <Hueco seccion={seccion} />
+            : seccion === "resumen" ? <ResumenView token={token} onIr={setSeccion} />
+            : seccion === "solicitudes" ? <Seccion titulo="Solicitudes de acceso" grupo="Personas">
+                <RequestsView token={token} /></Seccion>
+            : seccion === "usuarios" ? <UsersView token={token} />
+            : seccion === "seguridad" ? <SecurityView token={token} />
+            : seccion === "claves" ? <ApiKeysView token={token} onIr={setSeccion} />
+            : seccion === "personalizacion" ? <CustomizacionView token={token} />
+            : seccion === "modelos" ? <ModelosView token={token} onLicenciasPendientesChange={setLicenciasPendientes} />
+            : seccion === "cola" ? <Seccion titulo="Cola" grupo="Operación">
+                <QueueRow token={token} /></Seccion>
+                      : <Seccion titulo="Índices instalados" grupo="Servidor"
+                accion={
+                  <button disabled title="Abrirá el catálogo remoto; todavía no hace nada"
+                    className="inline-flex items-center gap-1.5 rounded-[8px] bg-accent px-2.5 py-1
+                      text-[10.5px] font-medium text-black opacity-40">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                    Instalar índice
+                  </button>
+                }>
+                {capIndices?.state === "on" ? <IndicesPanel token={token} /> : (
+                  <p className="mt-[19px] text-[11px] text-muted">{capIndices?.reason ?? "no disponible"}</p>
+                )}
+              </Seccion>}
+        </div>
       </div>
       <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col gap-2.5" style={{ width: 308 }}>
         <ModelToasts token={token} onIr={setSeccion} licenciasPendientes={licenciasPendientes} />
