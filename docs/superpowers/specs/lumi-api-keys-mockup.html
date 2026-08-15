@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>API Keys — mockup v4 (iconos, menos texto)</title>
+<style>
+  :root {
+    --bg:#0e0f11; --surface:#15171a; --panel:#1a1b1e; --elevated:#202226;
+    --border:#26282c; --muted:#9a9a95; --subtle:#6a6c70; --fg:#e8e8e6;
+    --accent:#f2f3f5; --warning:#ef9f27; --warning-fg:#efb968;
+    --danger:#a33; --danger-fg:#e88f8f;
+    --expo: cubic-bezier(.16,1,.3,1);
+  }
+  * { box-sizing: border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg);
+    font-family: "Inter", system-ui, -apple-system, sans-serif; font-size:13px; }
+  ::-webkit-scrollbar { width:6px; height:6px; }
+  ::-webkit-scrollbar-thumb { background:rgba(255,255,255,.1); border-radius:3px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .app { display:flex; height:100vh; }
+
+  .rail { width:178px; flex-shrink:0; background:var(--surface); border-right:1px solid var(--border);
+    padding:13px 9px; display:flex; flex-direction:column; }
+  .rail-brand { display:flex; align-items:center; gap:10px; padding:0 8px 12px; }
+  .rail-brand .mark { width:26px; height:26px; border-radius:8px; border:1px solid var(--border);
+    background:var(--elevated); display:grid; place-items:center; color:var(--muted); }
+  .rail-brand span { font-size:11.5px; line-height:1.2; }
+  .rail-brand small { display:block; font-size:9px; letter-spacing:.03em; color:var(--subtle); }
+  .rail-group { padding:13px 8px 5px; font-size:8.5px; text-transform:uppercase; letter-spacing:.13em; color:var(--subtle); }
+  .rail-item { display:flex; align-items:center; gap:9px; padding:6.5px 8px; border-radius:7px;
+    font-size:11.5px; color:var(--muted); cursor:pointer; transition:background-color .3s var(--expo), color .3s var(--expo), padding-left .3s var(--expo); }
+  .rail-item svg { flex-shrink:0; opacity:.8; }
+  .rail-item:hover { background:rgba(255,255,255,.04); padding-left:11px; color:var(--fg); }
+  .rail-item.on { background:rgba(255,255,255,.06); color:var(--fg); }
+  .rail-item.on svg { opacity:1; }
+  .rail-item .tag { margin-left:auto; font-size:8.5px; text-transform:uppercase; letter-spacing:.1em; color:var(--subtle); }
+  .rail-item .zt-dot { margin-left:auto; width:5px; height:5px; border-radius:50%; background:var(--warning-fg); transition:background-color .3s var(--expo); }
+  .rail-item .zt-dot.on { background:var(--fg); }
+
+  .mockswitch { position:fixed; top:14px; right:18px; z-index:50; display:flex; gap:6px;
+    background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:3px; }
+  .mockswitch button { border:none; background:transparent; color:var(--subtle); font-size:10.5px;
+    padding:6px 11px; border-radius:8px; cursor:pointer; transition:background-color .3s var(--expo), color .3s var(--expo); font-family:inherit; }
+  .mockswitch button.on { background:var(--elevated); color:var(--fg); }
+
+  .main { flex:1; overflow-y:auto; }
+  .page { max-width:860px; margin:0 auto; padding:34px 32px 60px; }
+  .page.animate { animation: pagein .45s var(--expo); }
+  @keyframes pagein { from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+  h1 { font-size:15.5px; font-weight:500; margin:0; }
+  .crumb { font-size:10.5px; color:var(--subtle); margin-bottom:3px; }
+  .lede { font-size:11px; color:var(--muted); margin:5px 0 20px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .card + .card { margin-top:14px; }
+  .section-h { display:flex; align-items:baseline; gap:10px; margin:26px 0 10px; }
+  .section-h:first-child { margin-top:0; }
+  .section-h h2 { font-size:12.5px; font-weight:500; margin:0; }
+  .section-h .spacer { flex:1; }
+
+  .btn { font-family:inherit; border:1px solid rgba(255,255,255,.15); background:transparent; color:var(--fg);
+    border-radius:8px; padding:7px 13px; font-size:10.5px; cursor:pointer;
+    transition:transform .18s var(--expo), opacity .18s, border-color .3s var(--expo), background-color .3s var(--expo); }
+  .btn:hover { transform:scale(1.025); border-color:rgba(255,255,255,.3); }
+  .btn:active { transform:scale(.955); }
+  .btn.primary { background:var(--accent); color:#0e0f11; border-color:transparent; font-weight:500; }
+  .btn.danger { border-color:rgba(163,51,51,.4); color:var(--danger-fg); }
+  .btn.ghost { border-color:transparent; color:var(--subtle); }
+  .btn.ghost:hover { color:var(--fg); }
+  .btn.sm { padding:5px 10px; font-size:9.5px; border-radius:7px; }
+
+  .toggle-row { display:flex; align-items:center; gap:14px; padding:13px 16px; }
+  .toggle-row + .toggle-row { border-top:1px solid var(--border); }
+  .toggle-row.disabled { opacity:.45; }
+  .toggle-row .txt { flex:1; }
+  .toggle-row .txt .t { font-size:12px; color:var(--fg); }
+  .toggle-row .txt .s { font-size:10px; color:var(--subtle); margin-top:2px; }
+  .switch { width:36px; height:21px; border-radius:11px; background:var(--elevated); border:1px solid var(--border);
+    position:relative; cursor:pointer; flex-shrink:0; transition:background-color .3s var(--expo), border-color .3s var(--expo); }
+  .switch .knob { position:absolute; top:2px; left:2px; width:15px; height:15px; border-radius:50%;
+    background:var(--subtle); transition:transform .35s var(--expo), background-color .3s var(--expo); }
+  .switch.on { background:rgba(232,232,230,.14); border-color:rgba(255,255,255,.3); }
+  .switch.on .knob { transform:translateX(15px); background:var(--fg); }
+  .switch.locked { cursor:not-allowed; }
+  .badge-zt { font-size:8.5px; text-transform:uppercase; letter-spacing:.08em; padding:2px 7px; border-radius:5px;
+    border:1px solid rgba(239,159,39,.4); color:var(--warning-fg); transition:all .3s var(--expo); }
+  .badge-zt.active { border-color:rgba(255,255,255,.35); color:var(--fg); background:rgba(255,255,255,.06); }
+
+  .iplist-wrap { padding:13px 16px; }
+  .iplist-wrap + .iplist-wrap { border-top:1px solid var(--border); }
+  .iplist-head { display:flex; align-items:baseline; gap:7px; margin-bottom:8px; }
+  .iplist-head .t { font-size:11px; color:var(--fg); }
+  .iplist-head .s { font-size:9px; color:var(--subtle); }
+  .chiplist { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+  .chip { display:flex; align-items:center; gap:6px; background:var(--elevated); border:1px solid var(--border);
+    border-radius:7px; padding:4px 5px 4px 9px; font-size:10.5px; color:var(--fg); animation: chipin .3s var(--expo); }
+  .chip.deny { border-color:rgba(163,51,51,.35); }
+  @keyframes chipin { from{opacity:0; transform:scale(.9);} to{opacity:1; transform:scale(1);} }
+  .chip button { border:none; background:transparent; color:var(--subtle); cursor:pointer; padding:2px; display:flex; border-radius:4px; }
+  .chip button:hover { color:var(--danger-fg); background:rgba(255,255,255,.06); }
+  .addrow { display:flex; gap:6px; }
+  .addrow input { flex:1; }
+
+  .input { font-family:inherit; background:var(--elevated); border:1px solid var(--border); color:var(--fg);
+    border-radius:8px; padding:8px 10px; font-size:11.5px; outline:none;
+    transition:border-color .3s var(--expo); }
+  .input:focus { border-color:rgba(255,255,255,.4); }
+  .input.mono { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  .ip-collapsed { display:grid; grid-template-rows:0fr; transition:grid-template-rows .5s var(--expo); }
+  .ip-collapsed.open { grid-template-rows:1fr; }
+  .ip-collapsed > div { overflow:hidden; }
+  .zt-off-note { display:flex; align-items:center; gap:7px; padding:11px 16px; font-size:10.5px; color:var(--subtle); }
+  .zt-off-note a { color:var(--fg); text-decoration:underline; cursor:pointer; }
+  .zt-off-note svg { flex-shrink:0; opacity:.7; }
+
+  .credrow { display:grid; grid-template-columns:1fr auto auto; align-items:center; gap:14px; padding:13px 16px; }
+  .credrow + .credrow { border-top:1px solid var(--border); }
+  .credrow .label { font-size:12px; color:var(--fg); }
+  .credrow .sub { font-size:9.5px; color:var(--subtle); margin-top:1px; }
+  .credchip { display:flex; align-items:center; gap:7px; }
+  .credchip .val { font-size:10.5px; color:var(--muted); background:var(--elevated); border:1px solid var(--border);
+    border-radius:6px; padding:4px 8px; }
+  .credchip .none { font-size:10.5px; color:var(--subtle); font-style:italic; }
+  .dot-ok { width:5px; height:5px; border-radius:50%; background:var(--fg); opacity:.7; flex-shrink:0; }
+  .credexpand { display:grid; grid-template-rows:0fr; transition:grid-template-rows .5s var(--expo); }
+  .credexpand.open { grid-template-rows:1fr; }
+  .credexpand > div { overflow:hidden; }
+  .credexpand .inner { padding:0 16px 14px; display:flex; gap:8px; border-top:1px solid var(--border); padding-top:12px; margin-top:-1px; }
+  .credexpand .inner input { flex:1; }
+
+  .keyrow { display:grid; grid-template-columns:auto 1.3fr .9fr auto auto auto auto; align-items:center; gap:12px;
+    padding:11px 16px; transition:background-color .3s var(--expo); }
+  .keyrow + .keyrow { border-top:1px solid var(--border); }
+  .keyrow.entering { animation: rowin .55s var(--expo); }
+  @keyframes rowin { from { opacity:0; transform:translateY(-6px); background-color:rgba(255,255,255,.06);} to { opacity:1; transform:none; background-color:transparent; } }
+  .keyrow.leaving { animation: rowout .35s var(--expo) forwards; }
+  @keyframes rowout { to { opacity:0; transform:scale(.98); height:0; padding-top:0; padding-bottom:0; margin:0; overflow:hidden; } }
+  .who { display:flex; align-items:center; gap:9px; min-width:0; }
+  .avatar { width:24px; height:24px; border-radius:7px; background:var(--elevated); border:1px solid var(--border);
+    display:grid; place-items:center; font-size:9.5px; color:var(--muted); flex-shrink:0; }
+  .avatar.sys { background:transparent; border-style:dashed; }
+  .who .name { font-size:11.5px; color:var(--fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .who .kind { font-size:9px; color:var(--subtle); }
+  .kv .label2 { font-size:11.5px; color:var(--fg); }
+  .kv .val { font-size:10px; color:var(--subtle); margin-top:1px; }
+  .meta { font-size:10.5px; color:var(--muted); white-space:nowrap; }
+  .header-row { display:grid; grid-template-columns:auto 1.3fr .9fr auto auto auto auto; gap:12px; padding:9px 16px 8px; }
+  .header-row > span { font-size:9px; text-transform:uppercase; letter-spacing:.08em; color:var(--subtle); }
+  .empty-row { padding:26px; text-align:center; font-size:11px; color:var(--subtle); }
+
+  .devchips { display:flex; gap:3px; flex-wrap:wrap; max-width:120px; }
+  .devchip { width:22px; height:22px; border-radius:6px; background:var(--elevated); border:1px solid var(--border);
+    display:grid; place-items:center; color:var(--subtle); }
+  .devchip.on { color:var(--fg); border-color:rgba(255,255,255,.3); }
+  .ipbadge { font-size:9.5px; color:var(--subtle); background:var(--elevated); border:1px solid var(--border);
+    border-radius:6px; padding:3px 7px; white-space:nowrap; }
+  .ipbadge.any { font-style:italic; }
+  .ipbadge.restricted { color:var(--fg); border-color:rgba(255,255,255,.2); }
+
+  .confirm { display:flex; align-items:center; gap:8px; }
+  .confirm span { font-size:10.5px; color:var(--warning-fg); }
+
+  .backdrop { position:fixed; inset:0; background:rgba(0,0,0,.55); backdrop-filter:blur(6px);
+    display:flex; align-items:center; justify-content:center; z-index:100;
+    animation: backdropin .3s var(--expo); overflow-y:auto; padding:30px 0; }
+  @keyframes backdropin { from{opacity:0;} to{opacity:1;} }
+  .modal { width:100%; max-width:480px; background:rgba(20,22,26,.94); border:1px solid rgba(255,255,255,.13);
+    border-radius:16px; padding:22px 24px; animation: modalin .38s var(--expo); margin:auto; }
+  @keyframes modalin { from{opacity:0; transform:scale(.96);} to{opacity:1; transform:scale(1);} }
+  .modal h3 { font-size:14px; font-weight:500; margin:0 0 14px; }
+  .field { margin-bottom:13px; }
+  .field label { display:block; font-size:9.5px; color:var(--muted); margin-bottom:5px; text-transform:uppercase; letter-spacing:.06em; }
+  .field .fnote { font-size:9px; color:var(--subtle); margin-top:5px; }
+  .seg { display:flex; gap:6px; flex-wrap:wrap; }
+  .seg button { flex:1; font-family:inherit; border:1px solid var(--border); background:var(--elevated); color:var(--muted);
+    border-radius:8px; padding:8px 6px; font-size:10.5px; cursor:pointer; transition:all .3s var(--expo); white-space:nowrap; }
+  .seg button.on { border-color:rgba(255,255,255,.4); color:var(--fg); background:rgba(255,255,255,.06); }
+  .seg.devices button { flex:0 0 auto; display:flex; align-items:center; gap:6px; padding:7px 11px; }
+  .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:18px; }
+  .userpick { display:flex; flex-direction:column; gap:5px; max-height:130px; overflow-y:auto; }
+  .userpick .u { display:flex; align-items:center; gap:9px; padding:7px 9px; border-radius:8px; cursor:pointer;
+    border:1px solid transparent; transition:all .25s var(--expo); }
+  .userpick .u:hover { background:rgba(255,255,255,.04); }
+  .userpick .u.on { border-color:rgba(255,255,255,.3); background:rgba(255,255,255,.05); }
+  .userpick .u span { font-size:11px; }
+  .locked-note { display:flex; gap:6px; font-size:9.5px; color:var(--subtle); background:var(--elevated);
+    border:1px solid var(--border); border-radius:8px; padding:7px 9px; align-items:center; }
+
+  .reveal-box { background:var(--elevated); border:1px solid var(--border); border-radius:10px; padding:14px 16px;
+    display:flex; align-items:center; gap:10px; margin:14px 0; }
+  .reveal-box .k { flex:1; font-size:12px; word-break:break-all; color:var(--fg); }
+  .reveal-warn { display:flex; gap:7px; font-size:10px; color:var(--warning-fg); margin-bottom:2px; align-items:center; }
+  .copybtn { display:flex; align-items:center; gap:5px; }
+
+  .toast { position:fixed; left:50%; bottom:26px; transform:translate(-50%,0); background:var(--elevated);
+    border:1px solid var(--border); border-radius:10px; padding:9px 16px; font-size:11px; color:var(--fg);
+    animation: toastin .35s var(--expo); z-index:200; display:flex; align-items:center; gap:7px; }
+  @keyframes toastin { from{opacity:0; transform:translate(-50%,10px);} to{opacity:1; transform:translate(-50%,0);} }
+  svg.ic { flex-shrink:0; }
+</style>
+</head>
+<body>
+
+<div class="mockswitch">
+  <button class="on" data-view="admin" onclick="showView('admin', this)" data-choice="ver-admin">Panel admin</button>
+  <button data-view="perfil" onclick="showView('perfil', this)" data-choice="ver-perfil">Perfil y sesiones</button>
+</div>
+
+<div class="app">
+  <div class="rail">
+    <div class="rail-brand">
+      <span class="mark"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z"/></svg></span>
+      <span>ines<small>propietario</small></span>
+    </div>
+    <div class="rail-group">Servidor</div>
+    <div class="rail-item" id="ri-resumen">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-6"/></svg>Resumen</div>
+    <div class="rail-item" id="ri-modelos">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4-8 4-8-4 8-4z"/><path d="M4 12l8 4 8-4M4 16l8 4 8-4"/></svg>Modelos</div>
+    <div class="rail-item" id="ri-indices">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>Índices</div>
+    <div class="rail-item on" id="rail-seguridad" onclick="showAdminPage('seguridad')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/></svg>Seguridad<span class="zt-dot" id="rail-zt-dot"></span></div>
+    <div class="rail-item" id="rail-keys" onclick="showAdminPage('apikeys')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.5 12.5L20 3M16 7l3 3M13 10l3 3"/></svg>API Keys</div>
+    <div class="rail-group">Personas</div>
+    <div class="rail-item">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H7l-3 3V4z"/></svg>Solicitudes</div>
+    <div class="rail-item">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-4 3-6 7-6s7 2 7 6"/></svg>Usuarios</div>
+    <div class="rail-group">Operación</div>
+    <div class="rail-item">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Cola</div>
+    <div class="rail-item" style="opacity:.4">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 01-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 015.4-5.4l-2.5 2.5-2-2 2.5-2.5z"/></svg>Mantenimiento<span class="tag">pronto</span></div>
+  </div>
+
+  <div class="main">
+    <div id="view-admin">
+      <!-- ======================= PÁGINA: SEGURIDAD ======================= -->
+      <div class="page" id="page-seguridad">
+        <div class="crumb">Servidor</div>
+        <h1>Seguridad</h1>
+        <p class="lede">Quién puede llamar a la API, y desde dónde.</p>
+
+        <div class="section-h"><h2>Modo de acceso</h2><span class="spacer"></span>
+          <span class="badge-zt" id="zt-badge">zero trust · off</span>
+        </div>
+        <div class="card">
+          <div class="toggle-row">
+            <div class="switch" id="zt-switch" onclick="toggleZT()"><div class="knob"></div></div>
+            <div class="txt"><div class="t">Modo Zero Trust</div>
+              <div class="s">Solo IPs autorizadas por clave. Bloqueadas siempre ganan.</div></div>
+          </div>
+          <div class="toggle-row" id="self-row">
+            <div class="switch on locked" id="self-switch" onclick="toggleSelfIp()"><div class="knob"></div></div>
+            <div class="txt"><div class="t">Autoservicio de IP</div>
+              <div class="s" id="self-sub">Cada usuario gestiona la IP de sus propias claves.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======================= PÁGINA: API KEYS ======================= -->
+      <div class="page" id="page-apikeys" style="display:none">
+        <div class="crumb">Servidor</div>
+        <h1>API Keys</h1>
+        <p class="lede">Credenciales de terceros y claves para llamar a la API.</p>
+
+        <div class="section-h"><h2>Credenciales de terceros</h2></div>
+        <div class="card">
+          <div class="credrow">
+            <div><div class="label">Proveedor de mapas</div><div class="sub">Mapbox</div></div>
+            <div class="credchip"><span class="dot-ok"></span><span class="val mono" id="mapa-val">sk.eyJ1•••••••4f2a</span></div>
+            <button class="btn sm" onclick="toggleCred('mapa')">Rotar</button>
+          </div>
+          <div class="credexpand" id="mapa-expand"><div><div class="inner">
+            <input class="input mono" placeholder="nueva clave de Mapbox" id="mapa-input">
+            <button class="btn sm ghost" onclick="toggleCred('mapa')">Cancelar</button>
+            <button class="btn sm primary" onclick="guardarCred('mapa')">Guardar</button>
+          </div></div></div>
+          <div class="credrow">
+            <div><div class="label">Proveedor de pesos</div><div class="sub">modelos tras puerta</div></div>
+            <div class="credchip"><span class="none">sin configurar</span></div>
+            <button class="btn sm" onclick="toggleCred('pesos')">Añadir</button>
+          </div>
+          <div class="credexpand" id="pesos-expand"><div><div class="inner">
+            <input class="input mono" placeholder="token del proveedor de pesos" id="pesos-input">
+            <button class="btn sm ghost" onclick="toggleCred('pesos')">Cancelar</button>
+            <button class="btn sm primary" onclick="guardarCred('pesos')">Guardar</button>
+          </div></div></div>
+        </div>
+
+        <div class="section-h"><h2>Listas globales de IP</h2></div>
+        <div class="card">
+          <div class="ip-collapsed" id="ip-lists-collapsed"><div><div>
+            <div class="iplist-wrap">
+              <div class="iplist-head"><span class="t">Blanca</span><span class="s">siempre permitida</span></div>
+              <div class="chiplist" id="allow-chips"></div>
+              <div class="addrow">
+                <input class="input mono" placeholder="IP o rango" id="allow-input" onkeydown="if(event.key==='Enter')addIp('allow')">
+                <button class="btn sm" onclick="addIp('allow')">Añadir</button>
+              </div>
+            </div>
+            <div class="iplist-wrap">
+              <div class="iplist-head"><span class="t">Negra</span><span class="s">siempre bloqueada</span></div>
+              <div class="chiplist" id="deny-chips"></div>
+              <div class="addrow">
+                <input class="input mono" placeholder="IP o rango" id="deny-input" onkeydown="if(event.key==='Enter')addIp('deny')">
+                <button class="btn sm" onclick="addIp('deny')">Añadir</button>
+              </div>
+            </div>
+          </div></div></div>
+          <div class="zt-off-note" id="zt-off-note">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L2.7 18a2 2 0 001.7 3h15.2a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+            <span>Requiere Zero Trust. <a onclick="showAdminPage('seguridad')">Activarlo →</a></span>
+          </div>
+        </div>
+
+        <div class="section-h"><h2>Claves de API</h2><span class="spacer"></span>
+          <button class="btn primary" onclick="openIssue()" data-choice="emitir-clave">+ Emitir clave</button>
+        </div>
+        <div class="card">
+          <div class="header-row"><span></span><span>Clave</span><span>Dueño</span><span>IP</span><span>Dispositivo</span><span>Uso</span><span></span></div>
+          <div id="admin-keys-body"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================= VISTA PERFIL ======================= -->
+    <div class="page" id="view-perfil" style="display:none">
+      <div class="crumb">Tu cuenta</div>
+      <h1>Perfil y sesiones</h1>
+      <p class="lede">Tus claves de API y tus sesiones activas.</p>
+      <div class="section-h"><h2>Mis claves de API</h2><span class="spacer"></span>
+        <button class="btn primary" onclick="openIssue(true)" data-choice="crear-mi-clave">+ Crear clave</button>
+      </div>
+      <div class="card">
+        <div class="header-row" style="grid-template-columns:1.3fr .9fr auto auto auto auto;">
+          <span>Clave</span><span>IP</span><span>Dispositivo</span><span>Uso</span><span></span>
+        </div>
+        <div id="my-keys-body"></div>
+      </div>
+      <div class="section-h"><h2>Sesiones activas</h2></div>
+      <div class="card" id="sessions-body"></div>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modal" style="display:none"><div class="modal" id="modal-inner"></div></div>
+<div id="toast-slot"></div>
+
+<script>
+const ic = {
+  sys: '<svg class="ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h.01M15 9h.01M9 15h6"/></svg>',
+  alert: '<svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L2.7 18a2 2 0 001.7 3h15.2a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>',
+  copy: '<svg class="ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V5a1 1 0 011-1h11"/></svg>',
+  check: '<svg class="ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+  x: '<svg class="ic" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+  laptop: '<svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/></svg>',
+  browser: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>',
+  cli: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5l6 6-6 6"/><path d="M12 17h8"/></svg>',
+  server: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg>',
+  mobile: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>',
+};
+const deviceDefs = [ {id:'browser', label:'Navegador'}, {id:'cli', label:'CLI'}, {id:'server', label:'Servidor'}, {id:'mobile', label:'Móvil'} ];
+
+function showView(v, btn) {
+  document.querySelectorAll('.mockswitch button').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('view-admin').style.display = v==='admin' ? '' : 'none';
+  document.getElementById('view-perfil').style.display = v==='perfil' ? '' : 'none';
+}
+function showAdminPage(which) {
+  document.getElementById('rail-seguridad').classList.toggle('on', which==='seguridad');
+  document.getElementById('rail-keys').classList.toggle('on', which==='apikeys');
+  const seg = document.getElementById('page-seguridad'), keys = document.getElementById('page-apikeys');
+  seg.style.display = which==='seguridad' ? '' : 'none';
+  keys.style.display = which==='apikeys' ? '' : 'none';
+  const el = which==='seguridad'?seg:keys;
+  el.classList.remove('animate'); void el.offsetWidth; el.classList.add('animate');
+}
+
+// ---- Zero trust ----
+let zt = false;
+let selfIpAllowed = true;
+let allowList = ['198.51.100.0/24'];
+let denyList = ['203.0.113.66'];
+
+function toggleZT() {
+  zt = !zt;
+  document.getElementById('zt-switch').classList.toggle('on', zt);
+  document.getElementById('zt-badge').textContent = 'zero trust · ' + (zt ? 'on' : 'off');
+  document.getElementById('zt-badge').classList.toggle('active', zt);
+  document.getElementById('rail-zt-dot').classList.toggle('on', zt);
+  document.getElementById('ip-lists-collapsed').classList.toggle('open', zt);
+  document.getElementById('zt-off-note').style.display = zt ? 'none' : 'flex';
+
+  const selfRow = document.getElementById('self-row');
+  const selfSwitch = document.getElementById('self-switch');
+  selfRow.classList.toggle('disabled', !zt);
+  selfSwitch.classList.toggle('locked', !zt);
+  document.getElementById('self-sub').textContent = zt
+    ? (selfIpAllowed ? 'Cada usuario gestiona la IP de sus propias claves.' : 'Solo un admin puede tocarla.')
+    : 'Se activa junto con Zero Trust.';
+
+  toast(zt ? 'Zero Trust activado' : 'Zero Trust desactivado');
+}
+function toggleSelfIp() {
+  if (!zt) return; // depende de zero trust: sin él, este switch no hace nada
+  selfIpAllowed = !selfIpAllowed;
+  document.getElementById('self-switch').classList.toggle('on', selfIpAllowed);
+  document.getElementById('self-sub').textContent = selfIpAllowed ? 'Cada usuario gestiona la IP de sus propias claves.' : 'Solo un admin puede tocarla.';
+  toast(selfIpAllowed ? 'Autoservicio activado' : 'Autoservicio desactivado');
+}
+function renderChips(id, list, deny) {
+  document.getElementById(id).innerHTML = list.map((ip,i) => `
+    <div class="chip ${deny?'deny':''}"><span class="mono">${ip}</span>
+      <button onclick="removeIp('${id}',${i})">${ic.x}</button></div>`).join('')
+    || '<span style="font-size:10px;color:var(--subtle);font-style:italic">vacía</span>';
+}
+function addIp(kind) {
+  const input = document.getElementById(kind+'-input');
+  const v = input.value.trim();
+  if (!v) return;
+  (kind==='allow'?allowList:denyList).push(v);
+  input.value = '';
+  renderChips(kind==='allow'?'allow-chips':'deny-chips', kind==='allow'?allowList:denyList, kind==='deny');
+}
+function removeIp(chipsId, i) {
+  if (chipsId==='allow-chips') { allowList.splice(i,1); renderChips('allow-chips', allowList, false); }
+  else { denyList.splice(i,1); renderChips('deny-chips', denyList, true); }
+}
+
+function toggleCred(id) { document.getElementById(id+'-expand').classList.toggle('open'); }
+function guardarCred(id) {
+  const input = document.getElementById(id+'-input');
+  if (!input.value.trim()) return;
+  toggleCred(id);
+  const masked = input.value.slice(0,6) + '•••••••' + input.value.slice(-4);
+  if (id === 'mapa') document.getElementById('mapa-val').textContent = masked;
+  else document.querySelector('#pesos-expand').previousElementSibling.querySelector('.credchip').innerHTML =
+      '<span class="dot-ok"></span><span class="val mono">'+masked+'</span>';
+  input.value = '';
+  toast('Guardada');
+}
+
+let seq = 100;
+let adminKeys = [
+  {id:1, owner:'ines', kind:'user', label:'CLI de campo', prefix:'lumi_ak_9f83…c1e2', lastUsed:'2 h', ips:['198.51.100.20'], devices:['cli']},
+  {id:2, owner:'n8n-ingesta', kind:'sys', label:'Automatización', prefix:'lumi_ak_2b71…a90f', lastUsed:'6 min', ips:[], devices:['server']},
+  {id:3, owner:'marcos', kind:'user', label:'Exportación', prefix:'lumi_ak_5cd0…33fa', lastUsed:'41 d', ips:['10.20.0.4','10.20.0.5'], devices:['cli','server']},
+];
+let myKeys = [
+  {id:1, label:'CLI de campo', prefix:'lumi_ak_9f83…c1e2', lastUsed:'2 h', ips:['198.51.100.20'], devices:['cli']},
+];
+let sessions = [
+  {device:'Este equipo · Windows', lastSeen:'ahora', current:true},
+  {device:'iPhone · iOS', lastSeen:'3 h', current:false},
+  {device:'portátil-campo · Ubuntu', lastSeen:'2 d', current:false},
+];
+const users = ['ines','marcos','laura','david'];
+
+function ipBadgeHtml(k) {
+  if (!k.ips.length) return `<span class="ipbadge any">cualquiera</span>`;
+  return `<span class="ipbadge restricted" title="${k.ips.join(', ')}">${k.ips.length} IP${k.ips.length>1?'s':''}</span>`;
+}
+function devChipsHtml(k) {
+  return `<div class="devchips">${deviceDefs.map(d=>`
+    <div class="devchip ${k.devices.includes(d.id)?'on':''}" title="${d.label}">${ic[d.id]}</div>`).join('')}</div>`;
+}
+function renderAdminKeys() {
+  const body = document.getElementById('admin-keys-body');
+  if (!adminKeys.length) { body.innerHTML = '<div class="empty-row">Sin claves.</div>'; return; }
+  body.innerHTML = adminKeys.map(k => `
+    <div class="keyrow ${k.entering?'entering':''}" id="key-${k.id}">
+      <div class="avatar ${k.kind==='sys'?'sys':''}">${k.kind==='sys'?ic.sys:k.owner.slice(0,2).toUpperCase()}</div>
+      <div class="kv"><div class="label2">${k.label}</div><div class="val mono">${k.prefix}</div></div>
+      <div class="who"><span class="name">${k.owner}</span></div>
+      <div>${ipBadgeHtml(k)}</div>
+      <div>${devChipsHtml(k)}</div>
+      <div class="meta">${k.lastUsed}</div>
+      <div id="actions-${k.id}"><button class="btn sm danger" onclick="confirmRevoke(${k.id}, true)">Revocar</button></div>
+    </div>`).join('');
+}
+function renderMyKeys() {
+  const body = document.getElementById('my-keys-body');
+  if (!myKeys.length) { body.innerHTML = '<div class="empty-row">Sin claves.</div>'; return; }
+  body.innerHTML = myKeys.map(k => `
+    <div class="keyrow ${k.entering?'entering':''}" style="grid-template-columns:1.3fr .9fr auto auto auto auto" id="my-key-${k.id}">
+      <div class="kv"><div class="label2">${k.label}</div><div class="val mono">${k.prefix}</div></div>
+      <div>${ipBadgeHtml(k)}</div>
+      <div>${devChipsHtml(k)}</div>
+      <div class="meta">${k.lastUsed}</div>
+      <div id="actions-${k.id}"><button class="btn sm danger" onclick="confirmRevoke(${k.id}, false)">Revocar</button></div>
+    </div>`).join('');
+}
+function renderSessions() {
+  document.getElementById('sessions-body').innerHTML = sessions.map((s,i) => `
+    <div class="credrow">
+      <div style="display:flex;align-items:center;gap:10px">${ic.laptop}
+        <div><div class="label">${s.device}</div><div class="sub">${s.lastSeen}</div></div></div>
+      <div>${s.current ? '<span class="meta">este equipo</span>' : ''}</div>
+      ${s.current ? '<button class="btn sm ghost" disabled style="opacity:.35">Cerrar</button>'
+        : `<button class="btn sm danger" onclick="cerrarSesion(${i})">Cerrar</button>`}
+    </div>`).join('');
+}
+function confirmRevoke(id, admin) {
+  const el = document.getElementById('actions-'+id);
+  el.innerHTML = `<div class="confirm"><span>${ic.alert}¿Seguro?</span>
+    <button class="btn sm ghost" onclick="${admin?'renderAdminKeys()':'renderMyKeys()'}">No</button>
+    <button class="btn sm danger" onclick="doRevoke(${id}, ${admin})">Sí</button></div>`;
+}
+function doRevoke(id, admin) {
+  const row = document.getElementById(admin ? 'key-'+id : 'my-key-'+id);
+  row.classList.add('leaving');
+  setTimeout(() => {
+    if (admin) { adminKeys = adminKeys.filter(k=>k.id!==id); renderAdminKeys(); }
+    else { myKeys = myKeys.filter(k=>k.id!==id); renderMyKeys(); }
+    toast('Clave revocada');
+  }, 340);
+}
+function cerrarSesion(i) { sessions.splice(i,1); renderSessions(); toast('Sesión cerrada'); }
+
+let issueCtx = { forSelf:false, target:null, targetKind:'user', expiry:'90', ips:[], devices:[] };
+function openIssue(forSelf) {
+  issueCtx = { forSelf: !!forSelf, target: forSelf ? 'ines' : null, targetKind:'user', expiry:'90', ips:[], devices:[] };
+  document.getElementById('modal').style.display = 'flex';
+  renderIssueStep1();
+}
+function closeModal() { document.getElementById('modal').style.display = 'none'; }
+function ipEditAllowed() { return zt && (!issueCtx.forSelf || selfIpAllowed); }
+
+function renderIssueStep1() {
+  const m = document.getElementById('modal-inner');
+  const canIp = ipEditAllowed();
+  m.innerHTML = `
+    <h3>Emitir clave de API</h3>
+    ${issueCtx.forSelf ? '' : `
+    <div class="field"><label>Para</label>
+      <div class="seg">
+        <button class="${issueCtx.targetKind==='user'?'on':''}" onclick="setTargetKind('user')">Usuario</button>
+        <button class="${issueCtx.targetKind==='sys'?'on':''}" onclick="setTargetKind('sys')">Sistema</button>
+      </div></div>
+    <div class="field" id="target-field"></div>`}
+    <div class="field"><label>Etiqueta</label><input class="input" id="issue-label" placeholder="p.ej. CLI de campo" style="width:100%"></div>
+    <div class="field"><label>Caduca</label>
+      <div class="seg">
+        <button class="${issueCtx.expiry==='90'?'on':''}" onclick="setExpiry('90')">90 días</button>
+        <button class="${issueCtx.expiry==='365'?'on':''}" onclick="setExpiry('365')">1 año</button>
+        <button class="${issueCtx.expiry==='never'?'on':''}" onclick="setExpiry('never')">Nunca</button>
+      </div></div>
+    <div class="field"><label>Dispositivos</label>
+      <div class="seg devices">${deviceDefs.map(d=>`<button class="${issueCtx.devices.includes(d.id)?'on':''}" onclick="toggleDevice('${d.id}')">${ic[d.id]} ${d.label}</button>`).join('')}</div>
+      <div class="fnote">Se comprueba por cabeceras, no es criptográfico.</div>
+    </div>
+    <div class="field"><label>IPs autorizadas</label>
+      ${canIp ? `<div class="chiplist" id="issue-ip-chips"></div>
+        <div class="addrow">
+          <input class="input mono" placeholder="vacío = cualquiera" id="issue-ip-input" onkeydown="if(event.key==='Enter')addIssueIp()">
+          <button class="btn sm" onclick="addIssueIp()">Añadir</button>
+        </div>` : `<div class="locked-note">${ic.alert} ${!zt ? 'Activa Zero Trust primero.' : 'Bloqueado por el administrador.'}</div>`}
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn primary" onclick="issueStep2()">Crear</button>
+    </div>`;
+  if (!issueCtx.forSelf) renderTargetField();
+  if (canIp) renderIssueIpChips();
+}
+function setTargetKind(k) { issueCtx.targetKind = k; issueCtx.target = null; renderIssueStep1(); }
+function setExpiry(e) { issueCtx.expiry = e; renderIssueStep1(); }
+function toggleDevice(id) {
+  const i = issueCtx.devices.indexOf(id);
+  if (i === -1) issueCtx.devices.push(id); else issueCtx.devices.splice(i,1);
+  renderIssueStep1();
+}
+function renderTargetField() {
+  const f = document.getElementById('target-field');
+  if (issueCtx.targetKind === 'user') {
+    f.innerHTML = `<div class="userpick">${users.map(u=>`
+      <div class="u ${issueCtx.target===u?'on':''}" onclick="pickUser('${u}')">
+        <div class="avatar" style="width:20px;height:20px;font-size:8.5px">${u.slice(0,2).toUpperCase()}</div><span>${u}</span>
+      </div>`).join('')}</div>`;
+  } else {
+    f.innerHTML = `<input class="input" id="sys-name" style="width:100%" placeholder="p.ej. n8n-ingesta" oninput="issueCtx.target=this.value">`;
+  }
+}
+function pickUser(u) { issueCtx.target = u; renderTargetField(); }
+function renderIssueIpChips() {
+  const el = document.getElementById('issue-ip-chips');
+  if (!el) return;
+  el.innerHTML = issueCtx.ips.map((ip,i)=>`<div class="chip"><span class="mono">${ip}</span>
+    <button onclick="issueCtx.ips.splice(${i},1); renderIssueIpChips()">${ic.x}</button></div>`).join('')
+    || '<span style="font-size:10px;color:var(--subtle);font-style:italic">cualquiera</span>';
+}
+function addIssueIp() {
+  const input = document.getElementById('issue-ip-input');
+  const v = input.value.trim();
+  if (!v) return;
+  issueCtx.ips.push(v);
+  input.value = '';
+  renderIssueIpChips();
+}
+function issueStep2() {
+  const label = document.getElementById('issue-label').value.trim() || 'sin etiqueta';
+  const owner = issueCtx.forSelf ? 'ines' : (issueCtx.target || (issueCtx.targetKind==='sys' ? 'nueva-integración' : users[0]));
+  const kind = issueCtx.targetKind;
+  const fakeKey = 'lumi_ak_' + Math.random().toString(16).slice(2,10) + Math.random().toString(16).slice(2,10);
+  const m = document.getElementById('modal-inner');
+  m.innerHTML = `
+    <h3>Guarda esta clave ahora</h3>
+    <div class="reveal-warn">${ic.alert}<span>Solo se muestra una vez.</span></div>
+    <div class="reveal-box"><span class="k mono">${fakeKey}</span>
+      <button class="btn sm copybtn" id="copybtn" onclick="copiarClave('${fakeKey}')">${ic.copy}Copiar</button></div>
+    <div class="modal-actions"><button class="btn primary" onclick="finishIssue('${owner}','${kind}','${label}')">Listo</button></div>`;
+}
+function copiarClave(k) {
+  navigator.clipboard?.writeText(k).catch(()=>{});
+  const b = document.getElementById('copybtn');
+  b.innerHTML = ic.check + 'Copiada';
+  setTimeout(()=>{ b.innerHTML = ic.copy + 'Copiar'; }, 1400);
+}
+function finishIssue(owner, kind, label) {
+  seq++;
+  const entry = {id:seq, owner, kind, label, prefix:'lumi_ak_····'+seq, lastUsed:'nunca', ips:[...issueCtx.ips], devices:[...issueCtx.devices], entering:true};
+  if (issueCtx.forSelf) { myKeys.unshift({...entry}); renderMyKeys(); }
+  else { adminKeys.unshift(entry); renderAdminKeys(); }
+  closeModal();
+  toast('Clave creada');
+  setTimeout(()=>{ document.querySelectorAll('.entering').forEach(e=>e.classList.remove('entering')); }, 700);
+}
+function toast(msg) {
+  const slot = document.getElementById('toast-slot');
+  const el = document.createElement('div');
+  el.className = 'toast'; el.innerHTML = ic.check + msg;
+  slot.innerHTML = ''; slot.appendChild(el);
+  setTimeout(()=>{ el.remove(); }, 2200);
+}
+
+renderChips('allow-chips', allowList, false);
+renderChips('deny-chips', denyList, true);
+renderAdminKeys();
+renderMyKeys();
+renderSessions();
+document.getElementById('page-seguridad').classList.add('animate');
+document.getElementById('self-row').classList.add('disabled');
+</script>
+</body>
+</html>
