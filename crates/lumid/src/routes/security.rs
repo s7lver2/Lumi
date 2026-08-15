@@ -16,6 +16,10 @@ pub async fn get_security(State(app): State<App>, headers: HeaderMap) -> Result<
         self_service_ip: crate::zero_trust::self_service_ip(&app),
         allowlist: crate::zero_trust::allowlist(&app),
         denylist: crate::zero_trust::denylist(&app),
+        maintenance: crate::mantenimiento::activo(&app),
+        maintenance_message: crate::mantenimiento::mensaje(&app),
+        maintenance_block_login: crate::mantenimiento::bloquea_login(&app),
+        maintenance_services: crate::mantenimiento::servicios_habilitados(&app),
     }))
 }
 
@@ -31,6 +35,19 @@ pub async fn patch_security(
     if let Some(on) = req.self_service_ip {
         crate::zero_trust::set_self_service_ip(&app, on)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+    if let Some(on) = req.maintenance {
+        crate::mantenimiento::set_activo(&app, on).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+    if let Some(msg) = &req.maintenance_message {
+        crate::mantenimiento::set_mensaje(&app, msg).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+    if let Some(on) = req.maintenance_block_login {
+        crate::mantenimiento::set_bloquea_login(&app, on)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+    if let Some(ids) = &req.maintenance_services {
+        crate::mantenimiento::set_servicios(&app, ids).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     }
     get_security(State(app), headers).await.map_err(|c| (c, "no se pudo releer los ajustes".to_string()))
 }

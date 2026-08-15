@@ -193,7 +193,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/users/search", get(routes::projects::search_users));
 
     let capa_zero_trust = axum::middleware::from_fn_with_state(app.clone(), zero_trust::zero_trust_gate);
-    let router = router.layer(capa_zero_trust).with_state(app);
+    let capa_mantenimiento = axum::middleware::from_fn_with_state(app.clone(), mantenimiento::mantenimiento_gate);
+    let router = router.layer(capa_zero_trust).layer(capa_mantenimiento).with_state(app);
 
     let port: u16 = std::env::var("LUMI_PORT")
         .ok()
