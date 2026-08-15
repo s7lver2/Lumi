@@ -198,6 +198,12 @@ pub struct Sample {
     pub disk_free_mb: u64,
     pub queue_depth: u32,
     pub queue_paused: bool,
+    /// Va también aquí, no solo en `SecuritySettings`: esta muestra ya llega
+    /// a toda la app (cliente entero, no solo el panel de administración)
+    /// una vez por segundo, así que es el transporte natural para que la
+    /// tira de aviso se vea desde cualquier pantalla, no solo Seguridad.
+    pub maintenance: bool,
+    pub maintenance_message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

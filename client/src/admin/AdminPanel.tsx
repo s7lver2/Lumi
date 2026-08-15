@@ -5,7 +5,6 @@ import { Hueco } from "./Hueco";
 import { IndexToast } from "./IndexToast";
 import { IndicesPanel } from "./IndicesPanel";
 import { ApiKeysView } from "./ApiKeysView";
-import { MantenimientoBanner } from "./MantenimientoBanner";
 import { SecurityView } from "./SecurityView";
 import { ModelosView } from "./ModelosView";
 import { ModelToasts } from "./ModelToasts";
@@ -23,9 +22,10 @@ export function AdminPanel({ token }: { token: string }) {
   const [cuentas, setCuentas] = useState<Partial<Record<Seccion, { n: number; espera?: boolean }>>>({});
   const [licenciasPendientes, setLicenciasPendientes] = useState(false);
   const capIndices = useServer((s) => s.hello?.capabilities.find((c) => c.id === "indices"));
-  // Vive aquí, no dentro de SecurityView, para que la tira de aviso (que se
-  // pinta fuera de esa vista) refleje un cambio en cuanto se guarda, sin
-  // esperar a otra petición propia — ambos leen y escriben el mismo estado.
+  // Vive aquí, no dentro de SecurityView, para que un cambio se refleje al
+  // instante sin depender de que la propia vista vuelva a pedirlo. (La tira
+  // de aviso de mantenimiento, en cambio, ya no depende de este estado — la
+  // pinta `App.tsx` para toda la aplicación a partir de la telemetría.)
   const [seguridad, setSeguridad] = useState<SecuritySettings | null>(null);
 
   // Los contadores de la barra lateral salen del mismo Resumen que pinta la
@@ -49,38 +49,35 @@ export function AdminPanel({ token }: { token: string }) {
   return (
     <div className="relative z-10 grid h-full w-full grid-cols-[206px_1fr] overflow-hidden bg-bg">
       <Sidebar actual={seccion} onIr={setSeccion} contadores={cuentas} />
-      <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        {seguridad?.maintenance && <MantenimientoBanner mensaje={seguridad.maintenance_message} />}
-        <div key={seccion} className="overflow-y-auto"
-          style={{ animation: "jg-fade-rise .5s cubic-bezier(.16,1,.3,1) both" }}>
-          {PRONTO.includes(seccion) ? <Hueco seccion={seccion} />
-            : seccion === "resumen" ? <ResumenView token={token} onIr={setSeccion} />
-            : seccion === "solicitudes" ? <Seccion titulo="Solicitudes de acceso" grupo="Personas">
-                <RequestsView token={token} /></Seccion>
-            : seccion === "usuarios" ? <UsersView token={token} />
-            : seccion === "seguridad" ? <SecurityView token={token} ajustes={seguridad} onCambiar={setSeguridad} />
-            : seccion === "claves" ? <ApiKeysView token={token} onIr={setSeccion} />
-            : seccion === "personalizacion" ? <CustomizacionView token={token} />
-            : seccion === "modelos" ? <ModelosView token={token} onLicenciasPendientesChange={setLicenciasPendientes} />
-            : seccion === "cola" ? <Seccion titulo="Cola" grupo="Operación">
-                <QueueRow token={token} /></Seccion>
-                      : <Seccion titulo="Índices instalados" grupo="Servidor"
-                accion={
-                  <button disabled title="Abrirá el catálogo remoto; todavía no hace nada"
-                    className="inline-flex items-center gap-1.5 rounded-[8px] bg-accent px-2.5 py-1
-                      text-[10.5px] font-medium text-black opacity-40">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                      strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 5v14M5 12h14" />
-                    </svg>
-                    Instalar índice
-                  </button>
-                }>
-                {capIndices?.state === "on" ? <IndicesPanel token={token} /> : (
-                  <p className="mt-[19px] text-[11px] text-muted">{capIndices?.reason ?? "no disponible"}</p>
-                )}
-              </Seccion>}
-        </div>
+      <div key={seccion} className="overflow-y-auto"
+        style={{ animation: "jg-fade-rise .5s cubic-bezier(.16,1,.3,1) both" }}>
+        {PRONTO.includes(seccion) ? <Hueco seccion={seccion} />
+          : seccion === "resumen" ? <ResumenView token={token} onIr={setSeccion} />
+          : seccion === "solicitudes" ? <Seccion titulo="Solicitudes de acceso" grupo="Personas">
+              <RequestsView token={token} /></Seccion>
+          : seccion === "usuarios" ? <UsersView token={token} />
+          : seccion === "seguridad" ? <SecurityView token={token} ajustes={seguridad} onCambiar={setSeguridad} />
+          : seccion === "claves" ? <ApiKeysView token={token} onIr={setSeccion} />
+          : seccion === "personalizacion" ? <CustomizacionView token={token} />
+          : seccion === "modelos" ? <ModelosView token={token} onLicenciasPendientesChange={setLicenciasPendientes} />
+          : seccion === "cola" ? <Seccion titulo="Cola" grupo="Operación">
+              <QueueRow token={token} /></Seccion>
+                    : <Seccion titulo="Índices instalados" grupo="Servidor"
+              accion={
+                <button disabled title="Abrirá el catálogo remoto; todavía no hace nada"
+                  className="inline-flex items-center gap-1.5 rounded-[8px] bg-accent px-2.5 py-1
+                    text-[10.5px] font-medium text-black opacity-40">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  Instalar índice
+                </button>
+              }>
+              {capIndices?.state === "on" ? <IndicesPanel token={token} /> : (
+                <p className="mt-[19px] text-[11px] text-muted">{capIndices?.reason ?? "no disponible"}</p>
+              )}
+            </Seccion>}
       </div>
       <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col gap-2.5" style={{ width: 308 }}>
         <ModelToasts token={token} onIr={setSeccion} licenciasPendientes={licenciasPendientes} />

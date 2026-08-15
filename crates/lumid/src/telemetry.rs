@@ -60,5 +60,7 @@ pub fn sample(app: &App) -> Sample {
         // esto miraba la clave maestra, sobre la premisa de que las imágenes
         // estaban cifradas en reposo — y todavía no lo están.
         queue_paused: !app.queue.hay_trabajadores(),
+        maintenance: crate::mantenimiento::activo(app),
+        maintenance_message: crate::mantenimiento::mensaje(app),
     }
 }

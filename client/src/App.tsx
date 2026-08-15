@@ -13,6 +13,7 @@ import { StatusOverlay } from "./ui/StatusOverlay";
 import { EntryScreen } from "./entry/EntryScreen";
 import { AdminPanel } from "./admin/AdminPanel";
 import { ConnectionBanner } from "./ui/ConnectionBanner";
+import { MantenimientoBanner } from "./ui/MantenimientoBanner";
 import { DebugOrb } from "./dev/DebugOrb";
 import { useServer } from "./lib/store";
 import { useWorkspace } from "./lib/workspace";
@@ -42,6 +43,10 @@ export default function App() {
   const [projectsTick, setProjectsTick] = useState(0);
   const hello = useServer((s) => s.hello);
   const isAdmin = useServer((s) => s.isAdmin);
+  // Suscrito (no `getState().sample` suelto) a propósito: esta es la única
+  // lectura de `sample` en toda la app que necesita repintar en cuanto llega
+  // una muestra nueva, para que la tira aparezca/desaparezca sin refrescar.
+  const sample = useServer((s) => s.sample);
   const bootstrapToken = useServer((s) => s.bootstrapToken);
   const [status, setStatus] = useState<"ok" | "reboot" | "error" | "sealed" | "lost">("ok");
   const fails = useRef(0);
@@ -232,6 +237,11 @@ export default function App() {
       <TitleBar crumbs={crumbs} onOpenAdmin={() => { leaveProject(); setMode("admin"); }}
         onProfile={() => { leaveProject(); setMode("profile"); }}
         onSignOut={signOut} onProjectAccepted={() => setProjectsTick((t) => t + 1)} />
+      {/* Para toda la app, no solo el panel de administración: quien esté
+          bloqueado por el modo mantenimiento tiene que enterarse igual,
+          trabaje donde trabaje. Llega por telemetría (ya viva en cuanto hay
+          sesión), así que aparece y desaparece sin recargar nada. */}
+      {sample?.maintenance && <MantenimientoBanner mensaje={sample.maintenance_message} />}
       <ResizeHandles />
       {/* Para app/admin, la desconexión es un banner + bloqueo, no una
           pantalla completa: la sesión de un usuario normal no tiene un

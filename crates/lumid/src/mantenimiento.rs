@@ -63,6 +63,10 @@ fn es_nucleo(path: &str) -> bool {
         || path == "/v1/me/sessions"
         || path.starts_with("/v1/sessions/")
         || path.starts_with("/v1/admin/security")
+        // Mismo criterio que en `LOCKED`: la telemetría no depende de nada
+        // más, y es además el transporte por el que la tira de aviso llega
+        // a toda la app — bloquearla apagaría el propio aviso.
+        || path == "/v1/telemetry"
 }
 
 /// `None` = la ruta no pertenece a ningún servicio personalizable, y por

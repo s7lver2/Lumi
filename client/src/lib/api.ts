@@ -19,6 +19,8 @@ export interface Sample {
   disk_free_mb: number;
   queue_depth: number;
   queue_paused: boolean;
+  maintenance: boolean;
+  maintenance_message: string;
 }
 export interface LoginRes {
   token: string;
