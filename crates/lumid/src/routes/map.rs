@@ -228,12 +228,19 @@ fn rewrite(mut style: serde_json::Value, theme_id: &str) -> Result<(serde_json::
     for (name, src) in sources.iter_mut() {
         let Some(obj) = src.as_object_mut() else { continue };
         if let Some(u) = obj.get("url").and_then(|v| v.as_str()).map(str::to_string) {
-            let Some(id) = u.strip_prefix("mapbox://") else {
+            // `mapbox://mapbox.foo,mapbox.bar` es un identificador de tileset,
+            // no una URL real: hay que recordarlo para que `tile()` sepa contra
+            // cuál pedir. Otros proveedores (OpenFreeMap) usan aquí un TileJSON
+            // real y ya resuelto — `tile()` ya sabe su dirección fija por
+            // proveedor, así que no hace falta identificar nada, solo apuntar
+            // el estilo a nuestra ruta.
+            if let Some(id) = u.strip_prefix("mapbox://") {
+                up.tileset = Some(id.to_string());
+            } else if !u.starts_with("http://") && !u.starts_with("https://") {
                 return Err(format!(
-                    "la fuente `{name}` usa `url` pero no es un tileset de Mapbox ({u}); este proxy no sabe resolver TileJSON de otros proveedores"
+                    "la fuente `{name}` usa `url` con un esquema que no reconozco ({u})"
                 ));
-            };
-            up.tileset = Some(id.to_string());
+            }
             obj.remove("url");
             obj.insert("tiles".into(), serde_json::json!([tiles_url]));
             tocadas += 1;
