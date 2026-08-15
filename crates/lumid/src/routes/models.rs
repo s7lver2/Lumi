@@ -78,9 +78,10 @@ fn resolver_items(app: &App, ids: &[String]) -> Vec<ItemDescarga> {
                 gestion_propia: mo.gestion_propia,
             });
         } else if let Some(g) = recursos_geo.iter().find(|g| &g.id == id) {
+            let nombre = if g.id == "paises" { "paises.json" } else { "koppen.bin" };
             fuera.push(ItemDescarga {
                 id: g.id.clone(), fichero_url: g.fichero_url.clone(),
-                destino: format!("registros/geo/{}", if g.id == "paises" { "paises.json" } else { "koppen.bin" }),
+                destino: crate::assets::ruta("registros/geo").join(nombre).to_string_lossy().into_owned(),
                 licencia_texto: g.licencia_texto.clone(), sha256: String::new(),
                 gestion_propia: false,
             });

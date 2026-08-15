@@ -311,6 +311,8 @@ export const api = {
   revisionAceptarResto: (indiceId: number) => invoke<Cuentas>("revision_aceptar_resto", { indiceId }),
   colaProgreso: () => invoke<ProgresoCola[]>("cola_progreso"),
   colaPausar: (pausada: boolean) => invoke<void>("cola_pausar", { pausada }),
+  colaConcurrenciaLeer: () => invoke<number>("cola_concurrencia_leer"),
+  colaConcurrenciaFijar: (n: number) => invoke<void>("cola_concurrencia_fijar", { n }),
   indiceProgresoEmbebido: (id: number) => invoke<ProgresoIndiceEmbed[]>("indice_progreso_embebido", { id }),
 
   claveGuardar: (proveedor: string, clave: string) =>

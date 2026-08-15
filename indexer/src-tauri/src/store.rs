@@ -999,6 +999,7 @@ impl Almacen {
             .ok())
     }
 
+
     pub fn quadkey_de_imagen(&self, imagen_id: i64) -> Result<String> {
         let c = self.0.lock().unwrap();
         Ok(c.query_row("SELECT quadkey FROM imagenes WHERE id = ?1", params![imagen_id], |r| {

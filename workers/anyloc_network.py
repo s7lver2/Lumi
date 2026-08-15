@@ -40,14 +40,19 @@ class _DinoV2ExtractFeatures:
         return _forward_hook
 
     def __call__(self, img):
-        with torch.no_grad():
+        en_cuda = img.is_cuda
+        # fp16 en vez de fp32: DINOv2-giant es el modelo mas caro de los
+        # cinco (1.1B parametros) y el unico que corre imagen a imagen, asi
+        # que es donde mas se nota el tensor-core de una RTX -- misma logica
+        # que en lumi_pesos.Embebedor.vectores.
+        with torch.inference_mode(), torch.autocast("cuda", enabled=en_cuda):
             self.dino_model(img)
             res = self._hook_out[:, 1:, ...]  # sin el token CLS
             if self.facet in ("query", "key", "value"):
                 d_len = res.shape[2] // 3
                 idx = {"query": 0, "key": 1, "value": 2}[self.facet]
                 res = res[:, :, idx * d_len:(idx + 1) * d_len]
-        res = F.normalize(res, dim=-1)
+        res = F.normalize(res.float(), dim=-1)
         self._hook_out = None
         return res
 

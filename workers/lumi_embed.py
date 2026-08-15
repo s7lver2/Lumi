@@ -48,7 +48,7 @@ def _cargar(modelo):
     return e
 
 
-POR_SUBLOTE = 8  # un forward por cada 8 imagenes, no uno por imagen
+POR_SUBLOTE = 16  # un forward por cada 16 imagenes, no uno por imagen
 
 
 def _embeber(job):

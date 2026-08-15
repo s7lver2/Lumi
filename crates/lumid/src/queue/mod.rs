@@ -57,30 +57,15 @@ fn find_python() -> PathBuf {
     PathBuf::from("python3")
 }
 
-/// Dónde puede estar `lumi_geo.py`, de más a menos probable.
-///
-/// El directorio de datos es donde vivirá el día que un instalador lo copie
-/// ahí. El segundo candidato es la ruta del repositorio en la máquina donde
-/// se COMPILÓ el daemon — que es la misma donde se ejecuta, según la rutina
-/// de actualización de este proyecto (`cargo build` en el propio servidor).
-/// El último es relativo al directorio de trabajo, para `cargo run`/tests
-/// lanzados desde la raíz del repositorio.
-fn find_script(dir: &std::path::Path) -> PathBuf {
-    let candidatos = [
-        dir.join("workers/lumi_geo.py"),
-        PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../workers/lumi_geo.py")),
-        PathBuf::from("workers/lumi_geo.py"),
-    ];
-    // Cada candidato con su resultado, no solo el elegido: sin esto, cuando
-    // ninguno existe de verdad, el único rastro es una ruta relativa que no
-    // dice ni dónde se buscó ni por qué falló cada intento.
-    for c in &candidatos {
-        tracing::info!("cola: ¿existe {}? {}", c.display(), c.exists());
-    }
-    candidatos
-        .into_iter()
-        .find(|p| p.exists())
-        .unwrap_or_else(|| PathBuf::from("workers/lumi_geo.py"))
+/// Dónde está `lumi_geo.py` — `crate::assets::ruta` ya recorre los mismos
+/// candidatos (directorio de datos, checkout de compilación, directorio de
+/// trabajo); esto solo lo deja en el log, porque cuando ninguno existe de
+/// verdad el único rastro sin esto es una ruta relativa que no dice ni dónde
+/// se buscó ni por qué falló.
+fn find_script(_dir: &std::path::Path) -> PathBuf {
+    let ruta = crate::assets::ruta("workers/lumi_geo.py");
+    tracing::info!("cola: lumi_geo.py resuelto a {} (¿existe? {})", ruta.display(), ruta.exists());
+    ruta
 }
 
 /// El vector que escribió el trabajador: `dims` floats de 32 bits en little
@@ -225,13 +210,13 @@ impl Queue {
             script,
             dir,
             eventos: tx_ev,
-            niveles: Mutex::new(lumi_index::registro::cargar_niveles(std::path::Path::new("registros/niveles"))),
-            agentes: Mutex::new(lumi_index::registro::cargar_agentes(std::path::Path::new("registros/agentes"))),
-            geo: Mutex::new(lumi_index::geo::Datos::cargar(std::path::Path::new("registros/geo"))),
-            modelos: Mutex::new(lumi_index::registro::cargar_modelos(std::path::Path::new("registros/modelos"))),
-            verificadores: Mutex::new(lumi_index::registro::cargar_verificadores(std::path::Path::new("registros/verificadores"))),
-            motores: Mutex::new(lumi_index::registro::cargar_motores(std::path::Path::new("registros/motores"))),
-            recursos_geo: Mutex::new(lumi_index::geo::cargar_recursos(std::path::Path::new("registros/geo"))),
+            niveles: Mutex::new(lumi_index::registro::cargar_niveles(&crate::assets::ruta("registros/niveles"))),
+            agentes: Mutex::new(lumi_index::registro::cargar_agentes(&crate::assets::ruta("registros/agentes"))),
+            geo: Mutex::new(lumi_index::geo::Datos::cargar(&crate::assets::ruta("registros/geo"))),
+            modelos: Mutex::new(lumi_index::registro::cargar_modelos(&crate::assets::ruta("registros/modelos"))),
+            verificadores: Mutex::new(lumi_index::registro::cargar_verificadores(&crate::assets::ruta("registros/verificadores"))),
+            motores: Mutex::new(lumi_index::registro::cargar_motores(&crate::assets::ruta("registros/motores"))),
+            recursos_geo: Mutex::new(lumi_index::geo::cargar_recursos(&crate::assets::ruta("registros/geo"))),
             vectores: Mutex::new(HashMap::new()),
         });
 
@@ -250,18 +235,18 @@ impl Queue {
     /// releer tiene sentido.
     pub fn recargar(&self) {
         *self.niveles.lock().unwrap() =
-            lumi_index::registro::cargar_niveles(std::path::Path::new("registros/niveles"));
+            lumi_index::registro::cargar_niveles(&crate::assets::ruta("registros/niveles"));
         *self.agentes.lock().unwrap() =
-            lumi_index::registro::cargar_agentes(std::path::Path::new("registros/agentes"));
-        *self.geo.lock().unwrap() = lumi_index::geo::Datos::cargar(std::path::Path::new("registros/geo"));
+            lumi_index::registro::cargar_agentes(&crate::assets::ruta("registros/agentes"));
+        *self.geo.lock().unwrap() = lumi_index::geo::Datos::cargar(&crate::assets::ruta("registros/geo"));
         *self.modelos.lock().unwrap() =
-            lumi_index::registro::cargar_modelos(std::path::Path::new("registros/modelos"));
+            lumi_index::registro::cargar_modelos(&crate::assets::ruta("registros/modelos"));
         *self.verificadores.lock().unwrap() =
-            lumi_index::registro::cargar_verificadores(std::path::Path::new("registros/verificadores"));
+            lumi_index::registro::cargar_verificadores(&crate::assets::ruta("registros/verificadores"));
         *self.motores.lock().unwrap() =
-            lumi_index::registro::cargar_motores(std::path::Path::new("registros/motores"));
+            lumi_index::registro::cargar_motores(&crate::assets::ruta("registros/motores"));
         *self.recursos_geo.lock().unwrap() =
-            lumi_index::geo::cargar_recursos(std::path::Path::new("registros/geo"));
+            lumi_index::geo::cargar_recursos(&crate::assets::ruta("registros/geo"));
         tracing::info!("registros de modelos recargados en caliente");
     }
 

@@ -81,27 +81,44 @@ pub struct Cola {
     /// la primera vez que se llama para ese modelo.
     progreso: Mutex<HashMap<String, Progreso>>,
     pausada: Arc<Mutex<bool>>,
-    /// Un solo permiso, compartido por TODOS los modelos: cada bucle es
-    /// independiente (un modelo al 100% no espera a otro), pero eso significaba
-    /// que con ocho modelos con trabajo pendiente a la vez, ocho procesos de
-    /// Python se ponían a cargar pesos de varios GB y a pedir la misma GPU
-    /// EXACTAMENTE a la vez — disco y GPU compitiendo entre sí en vez de
-    /// repartirse, y ninguno avanzaba de verdad. Este permiso hace que solo
-    /// un modelo esté cargando pesos o embebiendo un lote en cada instante;
-    /// el resto espera su turno, no compite por él.
-    permiso_gpu: tokio::sync::Semaphore,
-    /// El ÚNICO trabajador con pesos cargados en GPU en un instante dado,
-    /// compartido por todos los bucles. Antes cada modelo tenía su propio
-    /// `Option<Trabajador>` que, una vez arrancado, nunca se soltaba: con
-    /// varios modelos reales activos (cosplace, salad, cliquemining,
-    /// anyloc...) eso significaba varios contextos CUDA y varios juegos de
-    /// pesos residentes en la GPU A LA VEZ para siempre. En una GPU ya
-    /// compartida con otras aplicaciones eso desborda la VRAM disponible,
-    /// y Windows cae a "memoria de GPU compartida" (RAM del sistema de
+    /// Cuántos modelos pueden tener pesos cargados en GPU A LA VEZ. Antes cada
+    /// modelo tenía su propio `Option<Trabajador>` que, una vez arrancado,
+    /// nunca se soltaba: con varios modelos reales activos (cosplace, salad,
+    /// cliquemining, anyloc...) eso significaba varios contextos CUDA y varios
+    /// juegos de pesos residentes en la GPU A LA VEZ para siempre. En una GPU
+    /// ya compartida con otras aplicaciones eso desborda la VRAM disponible, y
+    /// Windows cae a "memoria de GPU compartida" (RAM del sistema de
     /// respaldo) — ahí todo el escritorio se congela, no solo el embebido.
-    /// Un solo slot fuerza a soltar el modelo anterior (mata su proceso vía
-    /// `kill_on_drop`) antes de cargar el siguiente.
-    trabajador: tokio::sync::Mutex<Option<(String, Trabajador)>>,
+    /// Se guarda en `ajustes` (clave `concurrencia_gpu`) para que sobreviva a
+    /// un reinicio; se lee una vez al construir la cola y se puede cambiar en
+    /// caliente desde Ajustes con `fijar_concurrencia`.
+    concurrencia: std::sync::atomic::AtomicUsize,
+    /// El conjunto de trabajadores con pesos cargados AHORA MISMO, como mucho
+    /// `concurrencia` a la vez. Cada entrada es su propio `Mutex`: dos modelos
+    /// con ranura propia corren su lote EN PARALELO de verdad, sin esperarse
+    /// el uno al otro — solo se serializa la decisión de "qué modelo entra o
+    /// sale del conjunto", no el trabajo en sí.
+    trabajadores: tokio::sync::Mutex<Ranuras>,
+}
+
+#[derive(Default)]
+struct Ranuras {
+    ranuras: HashMap<String, Arc<tokio::sync::Mutex<Trabajador>>>,
+    /// Orden de uso, del menos reciente (al principio) al más (al final):
+    /// a quién desalojar cuando hace falta sitio para un modelo nuevo.
+    orden: Vec<String>,
+}
+
+impl Ranuras {
+    fn tocar(&mut self, modelo: &str) {
+        self.orden.retain(|m| m != modelo);
+        self.orden.push(modelo.to_string());
+    }
+
+    fn quitar(&mut self, modelo: &str) {
+        self.ranuras.remove(modelo);
+        self.orden.retain(|m| m != modelo);
+    }
 }
 
 struct Trabajador {
@@ -188,8 +205,23 @@ async fn arrancar(dir: &std::path::Path, log: Arc<Log>, dispositivo: &str, dims:
     Ok(Trabajador { hijo, entrada, salida: rx })
 }
 
+/// Clave bajo la que vive en `ajustes`. En claro (no `_sellado`): no es un
+/// secreto, es una preferencia de rendimiento.
+const CLAVE_CONCURRENCIA: &str = "concurrencia_gpu";
+/// Con una sola GPU en la mayoría de equipos, más de dos modelos con pesos
+/// cargados a la vez deja de ser "acelerar" y vuelve a ser "desbordar la
+/// VRAM" — el mismo problema que este mecanismo entero existe para evitar.
+const CONCURRENCIA_MAX: usize = 2;
+
 impl Cola {
     pub fn nueva(dir: PathBuf, almacen: Arc<Almacen>, log: Arc<Log>) -> Arc<Self> {
+        let concurrencia = almacen
+            .leer_ajuste(CLAVE_CONCURRENCIA)
+            .ok()
+            .flatten()
+            .and_then(|v| v.parse::<usize>().ok())
+            .map(|n| n.clamp(1, CONCURRENCIA_MAX))
+            .unwrap_or(1);
         Arc::new(Self {
             dir,
             almacen,
@@ -199,9 +231,53 @@ impl Cola {
             // horas, así que arranca cuando el operador lo pide, no solo
             // porque la app se abrió. `cola_pausar(false)` es el arranque.
             pausada: Arc::new(Mutex::new(true)),
-            permiso_gpu: tokio::sync::Semaphore::new(1),
-            trabajador: tokio::sync::Mutex::new(None),
+            concurrencia: std::sync::atomic::AtomicUsize::new(concurrencia),
+            trabajadores: tokio::sync::Mutex::new(Ranuras::default()),
         })
+    }
+
+    /// Cuántos modelos pueden tener pesos cargados en GPU a la vez, ahora
+    /// mismo. Para pintar el selector de Ajustes con el valor real.
+    pub fn concurrencia(&self) -> usize {
+        self.concurrencia.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Cambia el límite en caliente: no hace falta reiniciar la app para que
+    /// se note. Si se BAJA con más modelos activos que el nuevo límite, no se
+    /// desaloja nadie de golpe — el próximo modelo que necesite ranura y no
+    /// quepa ya la pedirá desalojando al menos usado, como siempre.
+    pub fn fijar_concurrencia(&self, n: usize) {
+        let n = n.clamp(1, CONCURRENCIA_MAX);
+        self.concurrencia.store(n, std::sync::atomic::Ordering::Relaxed);
+        let _ = self.almacen.guardar_ajuste(CLAVE_CONCURRENCIA, &n.to_string());
+    }
+
+    /// Consigue la ranura de `modelo`: la existente si ya la tiene, o una
+    /// nueva desalojando la menos usada si hace falta sitio. El `Mutex` que
+    /// envuelve cada `Trabajador` es SUYO, no el del conjunto: dos modelos con
+    /// ranura propia procesan su lote en paralelo de verdad, sin esperarse.
+    async fn ranura_para(&self, modelo: &str, dims: u32) -> Result<Arc<tokio::sync::Mutex<Trabajador>>> {
+        let mut pool = self.trabajadores.lock().await;
+        if let Some(r) = pool.ranuras.get(modelo) {
+            let r = r.clone();
+            pool.tocar(modelo);
+            return Ok(r);
+        }
+        let cap = self.concurrencia();
+        while pool.ranuras.len() >= cap {
+            let Some(victima) = pool.orden.first().cloned() else { break };
+            pool.quitar(&victima);
+            self.log.apuntar(format!("cola: se aparta {victima} de la GPU para dejar sitio a {modelo}"));
+            // El Trabajador se suelta aquí; si nadie más lo tiene entre manos
+            // en este instante, `kill_on_drop` mata su proceso ahora mismo. Si
+            // otra tarea aún lo está usando, el Arc sigue vivo hasta que esa
+            // tarea termine su lote y lo suelte -- no se corta a mitad.
+        }
+        let t = arrancar(&self.dir, self.log.clone(), "cuda:0", dims).await?;
+        let r = Arc::new(tokio::sync::Mutex::new(t));
+        pool.ranuras.insert(modelo.to_string(), r.clone());
+        pool.tocar(modelo);
+        Ok(r)
     }
 
     /// Una fila por modelo con un bucle arrancado, en el orden del registro.
@@ -294,45 +370,28 @@ impl Cola {
                     continue;
                 };
 
-                // Se coge ANTES de arrancar el trabajador y se suelta al
-                // terminar el lote: cargar pesos es la parte más pesada de
-                // disco y GPU, y es donde ocho modelos a la vez chocaban
-                // entre sí sin que ninguno avanzara de verdad.
-                let _turno = self.permiso_gpu.acquire().await;
-
-                let mut guard = self.trabajador.lock().await;
-                let es_de_otro_modelo = guard.as_ref().is_some_and(|(id, _)| id != &modelo);
-                if es_de_otro_modelo {
-                    // Soltar el `Trabajador` anterior mata su proceso
-                    // (`kill_on_drop`) y libera sus pesos de la GPU antes de
-                    // cargar los de este modelo — nunca dos a la vez.
-                    if let Some((id_anterior, _)) = guard.take() {
-                        self.log.apuntar(format!(
-                            "cola: cambiando la GPU de {id_anterior} a {modelo}"
-                        ));
+                // La ranura es del modelo, no de la cola entera: hasta
+                // `concurrencia` modelos distintos pueden tener la suya y
+                // avanzar en paralelo de verdad, sin esperarse unos a otros.
+                let ranura = match self.ranura_para(&modelo, dims).await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        self.log.apuntar(format!("cola ({modelo}): no arrancó el trabajador: {e}"));
+                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                        continue;
                     }
-                }
-                if guard.is_none() {
-                    match arrancar(&self.dir, self.log.clone(), "cuda:0", dims).await {
-                        Ok(t) => *guard = Some((modelo.clone(), t)),
-                        Err(e) => {
-                            drop(guard);
-                            self.log.apuntar(format!("cola ({modelo}): no arrancó el trabajador: {e}"));
-                            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                            continue;
-                        }
-                    }
-                }
-
-                let (_, trabajador_ref) = guard.as_mut().unwrap();
+                };
+                let mut trabajador_guard = ranura.lock().await;
                 let (vivo, fallo) = self
-                    .resolver_indice(trabajador_ref, indice_id, &modelo, &coleccion, &qdrant)
+                    .resolver_indice(&mut trabajador_guard, indice_id, &modelo, &coleccion, &qdrant)
                     .await;
+                drop(trabajador_guard);
                 if !vivo {
                     // El proceso murió: AVERÍA. El índice vuelve a la cola una
-                    // vez; el contador impide el bucle infinito.
-                    *guard = None;
-                    drop(guard);
+                    // vez; el contador impide el bucle infinito. Se quita
+                    // también de las ranuras: reintentar contra un `Mutex` que
+                    // envuelve un proceso ya muerto no sirve de nada.
+                    self.trabajadores.lock().await.quitar(&modelo);
                     if let Some(p) = self.progreso.lock().unwrap().get_mut(&modelo) {
                         p.reinicios += 1;
                     }

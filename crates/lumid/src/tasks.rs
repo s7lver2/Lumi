@@ -70,7 +70,7 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec
         // demasiado largo"). stdin no tiene ese límite.
         TaskKind::ModelDownload => (
             venv.join("bin").join("python3").to_string_lossy().into_owned(),
-            vec!["workers/lumi_bajar.py".into()],
+            vec![crate::assets::ruta("workers/lumi_bajar.py").to_string_lossy().into_owned()],
         ),
     }
 }

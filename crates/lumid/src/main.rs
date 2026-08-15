@@ -1,4 +1,5 @@
 mod limits;
+mod assets;
 mod exif;
 mod agentar;
 mod indices;

@@ -200,6 +200,17 @@ nunca añadirlos—, pero **qué cuenta como motivo válido para desreclamar** (
 abuso) lo decide la web del subsistema 9, que todavía no existe. Hasta entonces la lista
 vive vacía y todo reclamo válido se mantiene.
 
+### Panel administrativo del catálogo, en la web
+
+Hoy el catálogo remoto se navega desde dentro del Indexer (`territory.rs`/`publicar.rs`): un
+operador ve qué hay publicado y reclama territorio, pero no hay ninguna superficie de control
+fuera de esas dos apps de escritorio. La idea a futuro es que la web del subsistema 9 sea
+además **el buscador desde el que cualquiera descarga índices publicados** — no solo un
+escaparate — y que traiga su propio panel administrativo (aparte del de Lumi Station, que es
+por-servidor): moderar publicaciones, aplicar el criterio de desreclamo de arriba, y en
+general todo lo que hoy no tiene dueño porque no hay ningún sitio central que lo posea. Depende
+de que exista la web; no tiene sentido diseñarlo en detalle antes de eso.
+
 ---
 
 ## Motor de inferencia (subsistema 5)

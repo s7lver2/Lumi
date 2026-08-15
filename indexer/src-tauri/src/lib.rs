@@ -271,6 +271,18 @@ fn cola_pausar(estado: tauri::State<'_, Estado>, pausada: bool) {
     estado.cola.pausar(pausada);
 }
 
+/// Cuántos modelos pueden tener pesos cargados en GPU a la vez ahora mismo.
+#[tauri::command]
+fn cola_concurrencia_leer(estado: tauri::State<'_, Estado>) -> usize {
+    estado.cola.concurrencia()
+}
+
+/// Cambia el límite. Se aplica en caliente, sin reiniciar la app.
+#[tauri::command]
+fn cola_concurrencia_fijar(estado: tauri::State<'_, Estado>, n: usize) {
+    estado.cola.fijar_concurrencia(n);
+}
+
 /// Qué modelos se embeben para este índice: la unión de recuperación de los
 /// niveles que se eligieron al crearlo, acotada a lo que de verdad hay
 /// registrado — un nivel puede pedir un modelo que el operador todavía no
@@ -1600,6 +1612,8 @@ pub fn run() {
             runtime_instalar,
             cola_progreso,
             cola_pausar,
+            cola_concurrencia_leer,
+            cola_concurrencia_fijar,
             indice_progreso_embebido,
             ingesta_carpeta,
             indice_reembeber,

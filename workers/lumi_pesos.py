@@ -119,6 +119,13 @@ class Embebedor(object):
             self.red = crudo
         self.red.eval()
         self.red.to(dispositivo)
+        if str(dispositivo).startswith("cuda"):
+            # Todas las imagenes se redimensionan al mismo 322x322 antes del
+            # forward: con el tamano de entrada siempre igual, cudnn puede
+            # probar varios algoritmos de convolucion la primera vez y
+            # quedarse con el mas rapido para el resto de la sesion. Sin
+            # esto usa el algoritmo generico "seguro" para cualquier forma.
+            torch.backends.cudnn.benchmark = True
 
     def _prep(self):
         from torchvision import transforms
@@ -168,9 +175,17 @@ class Embebedor(object):
             return [], saltadas
 
         lote = torch.stack(tensores).to(self.dispositivo)
-        with torch.no_grad():
+        en_cuda = str(self.dispositivo).startswith("cuda")
+        # fp16 en vez de fp32: es solo inferencia (nada de gradientes que
+        # puedan desbordarse), y una RTX de esta generacion hace el doble de
+        # rapido el mismo forward en media precision gracias a sus tensor
+        # cores -- el vector final se guarda igual, la perdida de precision
+        # no es perceptible para lo que hace falta de un embedding de
+        # recuperacion. En CPU no hay tensor cores que aprovechar, así que
+        # ahí se queda en fp32 tal cual.
+        with torch.inference_mode(), torch.autocast("cuda", enabled=en_cuda):
             d = self.red(lote)
-        d = torch.nn.functional.normalize(d.flatten(1), p=2, dim=1)
+        d = torch.nn.functional.normalize(d.float().flatten(1), p=2, dim=1)
         ok = list(zip(buenas, d.cpu().tolist()))
         return ok, saltadas
 

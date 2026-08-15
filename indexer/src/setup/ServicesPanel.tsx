@@ -17,8 +17,16 @@ export function ServicesPanel({ so }: { so: string }) {
   const [servicios, setServicios] = useState<EstadoServicio[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [enCurso, setEnCurso] = useState<null | "levantar" | "parar">(null);
+  const [concurrencia, setConcurrencia] = useState<number | null>(null);
 
   const refrescar = () => api.serviciosEstado().then(setServicios);
+
+  useEffect(() => { void api.colaConcurrenciaLeer().then(setConcurrencia); }, []);
+
+  async function cambiarConcurrencia(n: number) {
+    setConcurrencia(n);
+    await api.colaConcurrenciaFijar(n);
+  }
 
   // Aquí sí se sondea de continuo, pero despacio y solo mientras el panel está
   // abierto: es una pantalla de vigilancia, no una espera.
@@ -119,6 +127,28 @@ export function ServicesPanel({ so }: { so: string }) {
           >
             {enCurso === "parar" ? "Parando…" : "Parar"}
           </button>
+        </div>
+
+        <div className="mt-7 border-t border-border pt-5">
+          <p className="text-sm text-fg">Concurrencia de embebido</p>
+          <p className="mt-[5px] text-[11px] leading-relaxed text-muted">
+            Cuántos modelos pueden tener pesos cargados en la GPU a la vez. Con una sola GPU,
+            más de uno reparte la memoria en vez de sumarla — súbelo solo si te sobra VRAM.
+          </p>
+          <div className="mt-3 flex gap-2">
+            {[1, 2].map((n) => (
+              <button
+                key={n}
+                onClick={() => void cambiarConcurrencia(n)}
+                disabled={concurrencia === null}
+                className={`jg-press rounded-lg border px-3.5 py-2 text-[11.5px] disabled:opacity-40 ${
+                  concurrencia === n ? "border-white/30 bg-white/[.08] text-fg" : "border-border text-fg"
+                }`}
+              >
+                {n === 1 ? "1 · uno por uno" : "2 · como mucho"}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="mt-5">

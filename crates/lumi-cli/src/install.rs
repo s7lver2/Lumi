@@ -184,6 +184,11 @@ pub fn run(auto: bool) -> Result<PairKey> {
         "clave maestra automática · systemd-creds"
     });
 
+    let pb = ui::step("copiando registros/ y workers/");
+    copiar_assets()?;
+    pb.finish_and_clear();
+    ui::ok("registros y workers copiados a /var/lib/lumi");
+
     let pb = ui::step("instalando el daemon");
     let src = std::env::current_exe()?.with_file_name("lumid");
     fs::copy(&src, BIN).with_context(|| format!("no se pudo copiar {src:?} a {BIN}"))?;
@@ -368,6 +373,43 @@ fn instalar_qdrant() -> Result<bool> {
         }
     }
     Ok(false)
+}
+
+/// `registros/` y `workers/` no son parte del binario: son datos y scripts
+/// de Python que `lumid` necesita leer en tiempo de ejecución. Como servicio
+/// de systemd, su directorio de trabajo es `/` y no el checkout desde el que
+/// se compiló, así que una ruta relativa a secas ("registros/niveles") nunca
+/// encuentra nada — `crate::assets::ruta` (en `lumid`) ya sabe buscar aquí
+/// primero. Se copian en CADA instalación, no solo la primera: así
+/// `lumi install` después de un `git pull` deja el registro al día sin más
+/// pasos, en vez de exigir acordarse de sincronizar algo a mano.
+fn copiar_assets() -> Result<()> {
+    let raiz = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
+    for nombre in ["registros", "workers"] {
+        let origen = raiz.join(nombre);
+        if !origen.exists() {
+            // No debería pasar en un checkout real; no es motivo para abortar
+            // la instalación entera si de algún modo falta.
+            continue;
+        }
+        copiar_dir_recursivo(&origen, &Path::new(DATA).join(nombre))
+            .with_context(|| format!("no se pudo copiar {nombre}/ a {DATA}/{nombre}"))?;
+    }
+    Ok(())
+}
+
+fn copiar_dir_recursivo(origen: &Path, destino: &Path) -> Result<()> {
+    fs::create_dir_all(destino)?;
+    for entrada in fs::read_dir(origen)?.flatten() {
+        let ruta = entrada.path();
+        let destino_hijo = destino.join(entrada.file_name());
+        if ruta.is_dir() {
+            copiar_dir_recursivo(&ruta, &destino_hijo)?;
+        } else {
+            fs::copy(&ruta, &destino_hijo)?;
+        }
+    }
+    Ok(())
 }
 
 fn run_ok(cmd: &str, args: &[&str]) -> Result<()> {

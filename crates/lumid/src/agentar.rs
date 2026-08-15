@@ -41,7 +41,7 @@ pub async fn preguntar(agentes: &[String], consulta: &str) -> Vec<(Veredicto, St
 
 async fn correr(agentes: &[String], consulta: &str) -> anyhow::Result<Vec<(Veredicto, String)>> {
     let mut hijo = tokio::process::Command::new("python3")
-        .arg("workers/lumi_agentes.py")
+        .arg(crate::assets::ruta("workers/lumi_agentes.py"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

@@ -32,7 +32,7 @@ pub async fn afinar(
     rutas: &[(i64, String)],
 ) -> Result<Vec<Afinado>> {
     let mut hijo = tokio::process::Command::new("python3")
-        .arg("workers/lumi_verify.py")
+        .arg(crate::assets::ruta("workers/lumi_verify.py"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
