@@ -135,12 +135,23 @@ pub struct SecuritySettings {
     pub self_service_ip: bool,
     pub allowlist: Vec<String>,
     pub denylist: Vec<String>,
+    pub maintenance: bool,
+    pub maintenance_message: String,
+    pub maintenance_block_login: bool,
+    /// Ids de servicio que se mantienen ALCANZABLES mientras dura el
+    /// mantenimiento (p.ej. "mapa", "modelos"). Vacío = todo bloqueado salvo
+    /// el núcleo fijo y los administradores.
+    pub maintenance_services: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct PatchSecurityReq {
     pub zero_trust: Option<bool>,
     pub self_service_ip: Option<bool>,
+    pub maintenance: Option<bool>,
+    pub maintenance_message: Option<String>,
+    pub maintenance_block_login: Option<bool>,
+    pub maintenance_services: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
