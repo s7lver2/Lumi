@@ -49,6 +49,17 @@ export interface SessionInfo {
   public_id: string; device_name: string | null; os: string | null;
   created_at: number; last_seen: number; current: boolean;
 }
+export interface ApiKeyInfo {
+  public_id: string; label: string; prefix: string;
+  owner_username: string; owner_is_service: boolean;
+  created_at: number; last_seen: number; expires_at: number | null;
+  ips: string[]; devices: string[];
+}
+export interface IssuedApiKey { key: string; info: ApiKeyInfo }
+export interface SecuritySettings {
+  zero_trust: boolean; self_service_ip: boolean;
+  allowlist: string[]; denylist: string[];
+}
 export interface DeviceRow { name: string; os: string | null; first_seen: number; last_seen: number }
 export interface AdminUser {
   id: number; username: string; display_name: string | null; is_admin: boolean;

@@ -74,7 +74,24 @@ const PATHS: Record<string, React.JSX.Element> = {
   lock: <><rect x="5" y="11" width="14" height="9" rx="1.5" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></>,
   cloud: <path d="M6 16a4 4 0 0 1 .8-7.9 5.5 5.5 0 0 1 10.6 1.4A3.5 3.5 0 0 1 17 16z" />,
   boxes: <><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></>,
+  key: <><circle cx="8" cy="15" r="4" /><path d="M10.5 12.5L20 3M16 7l3 3M13 10l3 3" /></>,
+  bars: <path d="M4 20V10M12 20V4M20 20v-6" />,
+  grid: (
+    <>
+      <rect x="3" y="3" width="8" height="8" rx="1.5" />
+      <rect x="13" y="3" width="8" height="8" rx="1.5" />
+      <rect x="3" y="13" width="8" height="8" rx="1.5" />
+      <rect x="13" y="13" width="8" height="8" rx="1.5" />
+    </>
+  ),
+  inbox: <path d="M4 4h16v12H7l-3 3V4z" />,
+  wrench: <path d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 1 5.4-5.4l-2.5 2.5-2-2 2.5-2.5z" />,
+  browser: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18" /></>,
+  cli: <><path d="M4 5l6 6-6 6" /><path d="M12 17h8" /></>,
+  mobile: <><rect x="7" y="2" width="10" height="20" rx="2" /><path d="M11 18h2" /></>,
 };
+
+export type IconName = keyof typeof PATHS;
 
 /** El candado es aparte: su arco se anima al abrirse. */
 export function LockIcon({ size = 13, open = false, className = "" }:
@@ -95,7 +112,7 @@ export function LockIcon({ size = 13, open = false, className = "" }:
 }
 
 export function Icon({ name, size = 13, className = "" }:
-  { name: keyof typeof PATHS; size?: number; className?: string }) {
+  { name: IconName; size?: number; className?: string }) {
   const spin = name === "spinner" || name === "refresh";
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
