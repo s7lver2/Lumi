@@ -59,6 +59,8 @@ export interface IssuedApiKey { key: string; info: ApiKeyInfo }
 export interface SecuritySettings {
   zero_trust: boolean; self_service_ip: boolean;
   allowlist: string[]; denylist: string[];
+  maintenance: boolean; maintenance_message: string;
+  maintenance_block_login: boolean; maintenance_services: string[];
 }
 export interface DeviceRow { name: string; os: string | null; first_seen: number; last_seen: number }
 export interface AdminUser {

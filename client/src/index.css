@@ -53,6 +53,7 @@ body { background: #0e0f11; color: #e8e8e6; overflow: hidden; }
 @keyframes jg-fade-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @keyframes jg-lock-breathe { 0%, 100% { opacity: .7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.06); } }
 @keyframes jg-alert-pulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+@keyframes jg-maint-stripes { from { background-position: 0 0; } to { background-position: -40px 0; } }
 @keyframes jg-scan { 0%, 70%, 100% { opacity: .22; } 25% { opacity: 1; } }
 @keyframes lumi-tumble-fall {
   0%   { transform: rotate(224deg) translateY(-260px) rotate(-224deg); opacity: 1; }
