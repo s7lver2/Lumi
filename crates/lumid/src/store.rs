@@ -204,6 +204,14 @@ CREATE TABLE IF NOT EXISTS model_licenses (
     aceptada_en  INTEGER NOT NULL,
     PRIMARY KEY (licencia, para)
 );
+CREATE TABLE IF NOT EXISTS ip_allowlist (
+    ip        TEXT PRIMARY KEY,
+    added_at  INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ip_denylist (
+    ip        TEXT PRIMARY KEY,
+    added_at  INTEGER NOT NULL
+);
 ";
 
 pub struct Store(Mutex<Connection>);
@@ -316,6 +324,16 @@ fn migrate(c: &Connection) {
         // solicitudes ya pendientes no lo tienen, y se enseñan con «no
         // consta» en vez de con un dato inventado.
         ("access_requests", "device", "TEXT"),
+        ("users", "is_service", "INTEGER NOT NULL DEFAULT 0"),
+        // Una clave de API es una fila más en `sessions`, no una tabla nueva:
+        // mismo camino de autenticación que un login, solo cambia el `kind`.
+        ("sessions", "kind", "TEXT NOT NULL DEFAULT 'login'"),
+        ("sessions", "label", "TEXT"),
+        // JSON: lista de IP/CIDR propias de esta clave, o clases de
+        // dispositivo permitidas. Vacío (`[]`) o NULL significa "sin
+        // restricción" — el mismo criterio que "sin Zero Trust".
+        ("sessions", "ips", "TEXT"),
+        ("sessions", "devices", "TEXT"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }

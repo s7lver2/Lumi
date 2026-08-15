@@ -87,6 +87,67 @@ pub struct SessionInfo {
     pub current: bool,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct ApiKeyInfo {
+    pub public_id: String,
+    pub label: String,
+    /// Derivado del token al leer, nunca guardado aparte: `lumi_ak_9f83…c1e2`.
+    pub prefix: String,
+    pub owner_username: String,
+    pub owner_is_service: bool,
+    pub created_at: i64,
+    pub last_seen: i64,
+    /// `i64::MAX` en la base de datos significa "nunca"; aquí ya sale como
+    /// `None` para que el cliente no tenga que conocer el centinela.
+    pub expires_at: Option<i64>,
+    pub ips: Vec<String>,
+    pub devices: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct IssueApiKeyReq {
+    pub label: String,
+    /// A quién se emite. Ambos `None` significa "para mí mismo". Cualquiera
+    /// de los dos presentes exige ser administrador.
+    pub user_id: Option<i64>,
+    pub service_name: Option<String>,
+    /// `None` = nunca caduca.
+    pub expires_in_days: Option<i64>,
+    pub devices: Vec<String>,
+    pub ips: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct IssuedApiKey {
+    /// La clave completa. Se manda UNA VEZ; no se puede volver a pedir.
+    pub key: String,
+    pub info: ApiKeyInfo,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PatchApiKeyReq {
+    pub ips: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct SecuritySettings {
+    pub zero_trust: bool,
+    pub self_service_ip: bool,
+    pub allowlist: Vec<String>,
+    pub denylist: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PatchSecurityReq {
+    pub zero_trust: Option<bool>,
+    pub self_service_ip: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct IpReq {
+    pub ip: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UnsealReq {
     pub passphrase: String,
