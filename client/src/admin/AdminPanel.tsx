@@ -11,6 +11,7 @@ import { ModelToasts } from "./ModelToasts";
 import { QueueRow } from "./QueueRow";
 import { RequestsView } from "./RequestsView";
 import { ResumenView } from "./ResumenView";
+import { CustomizacionView } from "./CustomizacionView";
 import { Sidebar, type Seccion } from "./Sidebar";
 import { UsersView } from "./UsersView";
 
@@ -48,6 +49,7 @@ export function AdminPanel({ token }: { token: string }) {
           : seccion === "usuarios" ? <UsersView token={token} />
           : seccion === "seguridad" ? <SecurityView token={token} />
           : seccion === "claves" ? <ApiKeysView token={token} onIr={setSeccion} />
+          : seccion === "personalizacion" ? <CustomizacionView token={token} />
           : seccion === "modelos" ? <ModelosView token={token} onLicenciasPendientesChange={setLicenciasPendientes} />
           : seccion === "cola" ? <Seccion titulo="Cola" grupo="Operación">
               <QueueRow token={token} /></Seccion>

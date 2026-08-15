@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, type ApiKeyInfo, type IssuedApiKey, type ProviderTokenState, type SecuritySettings } from "../lib/api";
+import { api, type ApiKeyInfo, type IssuedApiKey, type MapConfig, type ProviderTokenState, type SecuritySettings } from "../lib/api";
 import { Icon } from "../ui/Icon";
-import { MapRow } from "./MapRow";
 import { Seccion } from "./AdminPanel";
 import type { Seccion as SeccionId } from "./Sidebar";
 
@@ -15,12 +14,15 @@ const CLASES = [
 export function ApiKeysView({ token, onIr }: { token: string; onIr: (s: SeccionId) => void }) {
   const [pesos, setPesos] = useState<ProviderTokenState | null>(null);
   const [pesosValor, setPesosValor] = useState("");
+  const [mapa, setMapa] = useState<MapConfig | null>(null);
+  const [mapaValor, setMapaValor] = useState("");
   const [seguridad, setSeguridad] = useState<SecuritySettings | null>(null);
   const [claves, setClaves] = useState<ApiKeyInfo[] | null>(null);
   const [emitiendo, setEmitiendo] = useState(false);
   const [revelada, setRevelada] = useState<IssuedApiKey | null>(null);
 
   useEffect(() => { void api.get<ProviderTokenState>("/v1/admin/models/provider-token", token).then(setPesos); }, [token]);
+  useEffect(() => { void api.get<MapConfig>("/v1/map/config", token).then(setMapa); }, [token]);
   useEffect(() => { void cargarSeguridad(); }, [token]);
   useEffect(() => { void cargarClaves(); }, [token]);
 
@@ -32,6 +34,13 @@ export function ApiKeysView({ token, onIr }: { token: string; onIr: (s: SeccionI
     const r = await api.patch<ProviderTokenState>("/v1/admin/models/provider-token", { token: pesosValor }, token);
     setPesos(r);
     setPesosValor("");
+  }
+
+  async function guardarMapa() {
+    if (!mapaValor.trim() || !mapa?.theme) return;
+    const r = await api.patch<MapConfig>("/v1/admin/map", { theme: mapa.theme, key: mapaValor, engine: null }, token);
+    setMapa(r);
+    setMapaValor("");
   }
 
   async function agregarIp(cual: "allowlist" | "denylist", ip: string) {
@@ -54,7 +63,25 @@ export function ApiKeysView({ token, onIr }: { token: string; onIr: (s: SeccionI
       <p className="text-[11px] text-muted">Credenciales de terceros y claves para llamar a la API.</p>
 
       <h3 className="mb-1.5 mt-6 text-[12.5px] font-medium">Credenciales de terceros</h3>
-      <MapRow token={token} />
+      <div className="flex items-center gap-3 rounded-card border border-border p-[11px_14px]">
+        <span className="min-w-0 text-[11.5px] text-muted">
+          Mapbox
+          <small className="ml-2 text-[9.5px] text-subtle">clave del proveedor de mapas</small>
+        </span>
+        {mapa?.theme ? (
+          <>
+            <input type="password" value={mapaValor} onChange={(e) => setMapaValor(e.target.value)}
+              placeholder={mapa.has_key ? "clave guardada · escribe para sustituirla" : "clave de Mapbox"}
+              className="ml-auto min-w-[180px] rounded-lg border border-border bg-elevated px-2.5 py-1 font-mono text-[10.5px] text-fg outline-none focus:border-white/40" />
+            <button onClick={() => void guardarMapa()} className="rounded-lg border border-white/15 px-2.5 py-1 text-[10.5px] text-fg">Guardar</button>
+          </>
+        ) : (
+          <span className="ml-auto flex items-center gap-2 text-[10.5px] text-subtle">
+            <Icon name="alert" size={12} />
+            Elige un tema en Customización primero.
+          </span>
+        )}
+      </div>
       <div className="mt-2.5 flex items-center gap-3 rounded-card border border-border p-[11px_14px]">
         <span className="min-w-0 text-[11.5px] text-muted">
           Proveedor de pesos

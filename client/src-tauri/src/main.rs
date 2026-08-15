@@ -367,7 +367,16 @@ fn main() {
                 let c = state.lock().unwrap();
                 (c.base.clone(), c.client.clone(), c.token.clone())
             };
-            let path = request.uri().path().to_string();
+            // `.path()` a secas se comía la query string entera: cualquier ruta
+            // de este esquema que dependiera de un parámetro (como el `?theme=`
+            // de las vistas previas de mapa) llegaba al daemon sin él y volvía
+            // vacía o con un 400, sin que hubiera ningún error visible más allá
+            // de un lienzo en blanco.
+            let path = request
+                .uri()
+                .path_and_query()
+                .map(|pq| pq.as_str().to_string())
+                .unwrap_or_else(|| request.uri().path().to_string());
             tauri::async_runtime::spawn(async move {
                 let fallo = |code: u16, msg: &str| {
                     http::Response::builder()

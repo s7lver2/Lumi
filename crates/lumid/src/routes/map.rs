@@ -17,9 +17,18 @@
 
 use crate::routes::auth::{bearer, require_admin, require_session};
 use crate::App;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::{http::HeaderMap, http::StatusCode, Json};
 use lumi_proto::api::{MapConfig, MapConfigReq, MapTheme};
+
+/// `None` en `style()` pide el tema activo; un id explícito pide una vista
+/// previa de otro tema del catálogo sin tocar cuál está activo.
+#[derive(serde::Deserialize)]
+pub struct ThemeQuery { theme: Option<String> }
+/// `tile()`/`glyphs()`/`sprite()` siempre reciben el id explícito que el
+/// propio `style()` dejó escrito en las URLs que genera — nunca adivinan.
+#[derive(serde::Deserialize)]
+pub struct ThemeIdQuery { theme: String }
 
 struct Theme {
     id: &'static str,
@@ -62,6 +71,17 @@ fn theme_by_id(id: &str) -> Option<&'static Theme> {
 
 fn current_theme(app: &App) -> Option<&'static Theme> {
     theme_by_id(&app.store.get_meta("map_theme")?)
+}
+
+/// `Some(id)` es una vista previa explícita de ESE tema; `None` es el tema
+/// activo del servidor. Nunca se adivina uno a partir del otro.
+fn pick_theme(id: Option<&str>, app: &App) -> Result<&'static Theme, Fail> {
+    match id {
+        Some(id) => theme_by_id(id)
+            .ok_or_else(|| err(StatusCode::BAD_REQUEST, "ese tema no existe en el catálogo")),
+        None => current_theme(app)
+            .ok_or_else(|| err(StatusCode::SERVICE_UNAVAILABLE, "no hay tema de mapa elegido")),
+    }
 }
 
 type Fail = (StatusCode, String);
@@ -197,7 +217,8 @@ pub async fn config(State(app): State<App>, headers: HeaderMap) -> Result<Json<M
 /// `tiles` a secas, trae `"url": "mapbox://…"` señalando un TileJSON
 /// compuesto, y ESE identificador es justo lo que la API de teselas v4 de
 /// Mapbox acepta tal cual, sin tener que resolver el TileJSON aparte.
-fn rewrite(mut style: serde_json::Value) -> Result<(serde_json::Value, Upstreams), String> {
+fn rewrite(mut style: serde_json::Value, theme_id: &str) -> Result<(serde_json::Value, Upstreams), String> {
+    let tiles_url = format!("/v1/map/tiles/{{z}}/{{x}}/{{y}}?theme={theme_id}");
     let sources = style
         .get_mut("sources")
         .and_then(|s| s.as_object_mut())
@@ -214,13 +235,13 @@ fn rewrite(mut style: serde_json::Value) -> Result<(serde_json::Value, Upstreams
             };
             up.tileset = Some(id.to_string());
             obj.remove("url");
-            obj.insert("tiles".into(), serde_json::json!(["/v1/map/tiles/{z}/{x}/{y}"]));
+            obj.insert("tiles".into(), serde_json::json!([tiles_url]));
             tocadas += 1;
             continue;
         }
         if let Some(tiles) = obj.get_mut("tiles").and_then(|t| t.as_array_mut()) {
             for t in tiles.iter_mut() {
-                *t = serde_json::Value::String("/v1/map/tiles/{z}/{x}/{y}".into());
+                *t = serde_json::Value::String(tiles_url.clone());
             }
             tocadas += 1;
         }
@@ -239,7 +260,7 @@ fn rewrite(mut style: serde_json::Value) -> Result<(serde_json::Value, Upstreams
     up.sprite = o.get("sprite").and_then(|v| v.as_str()).map(resolve_mapbox);
     match up.glyphs {
         // El `{fontstack}` y el `{range}` los rellena MapLibre antes de pedir.
-        Some(_) => { o.insert("glyphs".into(), serde_json::json!("/v1/map/glyphs/{fontstack}/{range}")); }
+        Some(_) => { o.insert("glyphs".into(), serde_json::json!(format!("/v1/map/glyphs/{{fontstack}}/{{range}}?theme={theme_id}"))); }
         // Sin tipografías no hay estilo que dibujar; mejor decirlo aquí que
         // dejar que MapLibre lo descubra con el lienzo ya montado.
         None => return Err("el estilo no declara `glyphs`".into()),
@@ -248,16 +269,17 @@ fn rewrite(mut style: serde_json::Value) -> Result<(serde_json::Value, Upstreams
     // no el mapa. `base` es solo una raíz a la que el cliente le pega `.json`,
     // `.png` o `@2x`, que es como MapLibre construye estas peticiones.
     match up.sprite {
-        Some(_) => { o.insert("sprite".into(), serde_json::json!("/v1/map/sprite/base")); }
+        Some(_) => { o.insert("sprite".into(), serde_json::json!(format!("/v1/map/sprite/base?theme={theme_id}"))); }
         None => { o.remove("sprite"); }
     }
     Ok((style, up))
 }
 
-pub async fn style(State(app): State<App>, headers: HeaderMap) -> Result<Json<serde_json::Value>, Fail> {
+pub async fn style(
+    State(app): State<App>, Query(q): Query<ThemeQuery>, headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, Fail> {
     require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
-    let theme = current_theme(&app)
-        .ok_or_else(|| err(StatusCode::SERVICE_UNAVAILABLE, "no hay tema de mapa elegido"))?;
+    let theme = pick_theme(q.theme.as_deref(), &app)?;
     let key = app.store.get_meta("map_key").unwrap_or_default();
     let full = with_key(&resolve_mapbox(theme.style), &key);
     let raw: serde_json::Value = outbound()?
@@ -268,25 +290,26 @@ pub async fn style(State(app): State<App>, headers: HeaderMap) -> Result<Json<se
         .json()
         .await
         .map_err(|e| err(StatusCode::BAD_GATEWAY, &format!("el estilo del proveedor no es JSON: {e}")))?;
-    let (fixed, up) = rewrite(raw).map_err(|e| {
+    let (fixed, up) = rewrite(raw, theme.id).map_err(|e| {
         err(
             StatusCode::BAD_GATEWAY,
             &format!("no se pudo reescribir el estilo y servirlo crudo filtraría la clave: {e}"),
         )
     })?;
-    // Se recuerda para que `tile()` pida ESTE tileset y no el genérico por
-    // defecto: un estilo compuesto (varios tilesets Mapbox separados por
-    // comas) es indistinguible del sencillo si no se guarda cuál era. Lo mismo
-    // vale para tipografías e iconos: sus rutas solo aparecen dentro del
-    // estilo, y quien las pide después es el cliente, no `style()`.
+    // Se recuerda por tema, no en una sola clave global: dos temas de Mapbox
+    // pueden resolver a tilesets distintos, y una vista previa no puede pisar
+    // lo que el mapa activo ya tenía descubierto (ni al revés). Un estilo
+    // compuesto (varios tilesets separados por comas) es indistinguible del
+    // sencillo si no se guarda cuál era; lo mismo vale para tipografías e
+    // iconos, cuyas rutas solo aparecen dentro del estilo.
     if let Some(t) = up.tileset {
-        let _ = app.store.set_meta("map_mapbox_tileset", &t);
+        let _ = app.store.set_meta(&format!("map_tileset_{}", theme.id), &t);
     }
     if let Some(g) = up.glyphs {
-        let _ = app.store.set_meta("map_glyphs", &g);
+        let _ = app.store.set_meta(&format!("map_glyphs_{}", theme.id), &g);
     }
     if let Some(s) = up.sprite {
-        let _ = app.store.set_meta("map_sprite", &s);
+        let _ = app.store.set_meta(&format!("map_sprite_{}", theme.id), &s);
     }
     Ok(Json(fixed))
 }
@@ -297,15 +320,16 @@ pub async fn style(State(app): State<App>, headers: HeaderMap) -> Result<Json<se
 pub async fn tile(
     State(app): State<App>,
     Path((z, x, y)): Path<(u32, u32, u32)>,
+    Query(q): Query<ThemeIdQuery>,
     headers: HeaderMap,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), Fail> {
     require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
-    let theme = current_theme(&app)
-        .ok_or_else(|| err(StatusCode::SERVICE_UNAVAILABLE, "no hay tema de mapa elegido"))?;
-    // El caché es por proveedor, no por tema: los temas de Mapbox comparten
-    // tileset por defecto salvo que el estilo diga otra cosa (ver `style()`),
-    // y los de OSM comparten siempre la misma fuente vectorial "planet".
-    let cached = app.dir.join("tiles").join(theme.provider).join(z.to_string()).join(x.to_string());
+    let theme = theme_by_id(&q.theme)
+        .ok_or_else(|| err(StatusCode::BAD_REQUEST, "ese tema no existe en el catálogo"))?;
+    // El caché es por tema, no por proveedor: dos temas de Mapbox pueden
+    // resolver a tilesets distintos (ver `style()`), y compartir carpeta
+    // serviría teselas de uno bajo el nombre del otro.
+    let cached = app.dir.join("tiles").join(theme.id).join(z.to_string()).join(x.to_string());
     let file = cached.join(y.to_string());
     let ctype = |b: &[u8]| {
         // Vectoriales son protobuf comprimido; las rasterizadas, PNG.
@@ -324,13 +348,13 @@ pub async fn tile(
 
     let key = app.store.get_meta("map_key").unwrap_or_default();
     let upstream = match theme.provider {
-        // El tileset real es el que `style()` dejó anotado al reescribir el
-        // estilo. Sin uno guardado (estilo aún no pedido) se cae al
-        // streets-v8 de siempre.
+        // El tileset real es el que `style()` dejó anotado, por ESTE tema, al
+        // reescribir el estilo. Sin uno guardado (estilo aún no pedido) se cae
+        // al streets-v8 de siempre.
         "mapbox" => {
             let tileset = app
                 .store
-                .get_meta("map_mapbox_tileset")
+                .get_meta(&format!("map_tileset_{}", theme.id))
                 .unwrap_or_else(|| "mapbox.mapbox-streets-v8".into());
             format!("https://api.mapbox.com/v4/{tileset}/{z}/{x}/{y}.vector.pbf?access_token={key}")
         }
@@ -405,12 +429,14 @@ fn safe_segment(s: &str) -> Result<(), Fail> {
 pub async fn glyphs(
     State(app): State<App>,
     Path((fontstack, range)): Path<(String, String)>,
+    Query(q): Query<ThemeIdQuery>,
     headers: HeaderMap,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), Fail> {
     require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
     safe_segment(&fontstack)?;
     safe_segment(&range)?;
-    let tpl = app.store.get_meta("map_glyphs").ok_or_else(|| {
+    theme_by_id(&q.theme).ok_or_else(|| err(StatusCode::BAD_REQUEST, "ese tema no existe en el catálogo"))?;
+    let tpl = app.store.get_meta(&format!("map_glyphs_{}", q.theme)).ok_or_else(|| {
         err(StatusCode::SERVICE_UNAVAILABLE, "todavía no se ha pedido el estilo, así que no se sabe de dónde salen las tipografías")
     })?;
     let key = app.store.get_meta("map_key").unwrap_or_default();
@@ -428,6 +454,7 @@ pub async fn glyphs(
 pub async fn sprite(
     State(app): State<App>,
     Path(file): Path<String>,
+    Query(q): Query<ThemeIdQuery>,
     headers: HeaderMap,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), Fail> {
     require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
@@ -435,9 +462,10 @@ pub async fn sprite(
         .strip_prefix("base")
         .filter(|s| matches!(*s, ".json" | ".png" | "@2x.json" | "@2x.png"))
         .ok_or_else(|| err(StatusCode::BAD_REQUEST, "ese icono no existe"))?;
+    theme_by_id(&q.theme).ok_or_else(|| err(StatusCode::BAD_REQUEST, "ese tema no existe en el catálogo"))?;
     let base = app
         .store
-        .get_meta("map_sprite")
+        .get_meta(&format!("map_sprite_{}", q.theme))
         .ok_or_else(|| err(StatusCode::SERVICE_UNAVAILABLE, "este tema no trae iconos"))?;
     let key = app.store.get_meta("map_key").unwrap_or_default();
     let ctype = if sufijo.ends_with(".png") { "image/png" } else { "application/json" };
@@ -475,9 +503,16 @@ pub async fn patch_admin(
         app.store.set_meta("map_engine", e).map_err(fail)?;
         tracing::info!("motor de mapa: {e}");
     }
+    // Solo se invalida lo descubierto para ESTE tema: es lo que acaba de
+    // cambiar (clave o motor), y las vistas previas de los demás temas no
+    // tienen por qué perder lo que ya sabían.
     let _ = app.store.conn().execute(
-        "DELETE FROM meta WHERE k IN ('map_mapbox_tileset', 'map_glyphs', 'map_sprite')",
-        [],
+        "DELETE FROM meta WHERE k IN (?1, ?2, ?3)",
+        rusqlite::params![
+            format!("map_tileset_{}", theme.id),
+            format!("map_glyphs_{}", theme.id),
+            format!("map_sprite_{}", theme.id),
+        ],
     );
     tracing::info!("tema de mapa: {}", theme.id);
     config(State(app), headers).await
@@ -486,6 +521,19 @@ pub async fn patch_admin(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// El mapa real (`work/mapEngine.ts`) pide `/v1/map/style` SIN `?theme=`:
+    /// si el extractor exigiera esa clave, el mapa de producción se rompería
+    /// con esta misma reforma que solo debía tocar las vistas previas.
+    #[tokio::test]
+    async fn style_sin_query_no_exige_tema() {
+        use axum::extract::{FromRequestParts, Query};
+        let req = axum::http::Request::builder().uri("/v1/map/style").body(()).unwrap();
+        let (mut parts, _) = req.into_parts();
+        let Query(q) = Query::<ThemeQuery>::from_request_parts(&mut parts, &()).await
+            .expect("sin query string, theme tiene que quedar en None, no fallar");
+        assert!(q.theme.is_none());
+    }
 
     /// La forma real de un estilo oficial de Mapbox (`dark-v11`), recortada a
     /// lo que este proxy toca. Sin esto, la única forma de saber si `rewrite()`
@@ -507,7 +555,7 @@ mod tests {
             "layers": [{ "id": "background", "type": "background" }]
         });
 
-        let (fixed, up) = rewrite(raw).expect("dark-v11 tiene que poder reescribirse");
+        let (fixed, up) = rewrite(raw, "mapbox-dark").expect("dark-v11 tiene que poder reescribirse");
 
         // Lo que el cliente recibe apunta SOLO a rutas nuestras. Un `mapbox://`
         // o un `api.mapbox.com` que se colara aquí sería la clave viajando.
@@ -515,10 +563,12 @@ mod tests {
         assert!(!texto.contains("mapbox://"), "quedó un esquema del proveedor: {texto}");
         assert!(!texto.contains("api.mapbox.com"), "quedó una URL del proveedor: {texto}");
 
-        // Y las tres piezas que MapLibre necesita para dibujar están puestas.
-        assert_eq!(fixed["sources"]["composite"]["tiles"][0], "/v1/map/tiles/{z}/{x}/{y}");
-        assert_eq!(fixed["glyphs"], "/v1/map/glyphs/{fontstack}/{range}");
-        assert_eq!(fixed["sprite"], "/v1/map/sprite/base");
+        // Y las tres piezas que MapLibre necesita para dibujar están puestas,
+        // cada una con el tema explícito para que la respuesta no dependa de
+        // cuál esté activo en el servidor cuando el cliente vuelva a pedirlas.
+        assert_eq!(fixed["sources"]["composite"]["tiles"][0], "/v1/map/tiles/{z}/{x}/{y}?theme=mapbox-dark");
+        assert_eq!(fixed["glyphs"], "/v1/map/glyphs/{fontstack}/{range}?theme=mapbox-dark");
+        assert_eq!(fixed["sprite"], "/v1/map/sprite/base?theme=mapbox-dark");
         assert!(fixed["sources"]["composite"].get("url").is_none(), "la url del tileset sigue ahí");
 
         // Y lo que el daemon tiene que recordar para servir esas tres rutas.
@@ -537,6 +587,6 @@ mod tests {
             "sources": { "s": { "type": "vector", "tiles": ["https://ejemplo/{z}/{x}/{y}.pbf"] } },
             "layers": []
         });
-        assert!(rewrite(raw).is_err());
+        assert!(rewrite(raw, "osm-liberty").is_err());
     }
 }

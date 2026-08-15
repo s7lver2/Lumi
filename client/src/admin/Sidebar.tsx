@@ -3,7 +3,7 @@ import { useServer } from "../lib/store";
 import { Icon, type IconName } from "../ui/Icon";
 
 export type Seccion =
-  | "resumen" | "modelos" | "indices" | "seguridad" | "claves"
+  | "resumen" | "modelos" | "personalizacion" | "indices" | "seguridad" | "claves"
   | "solicitudes" | "usuarios"
   | "cola" | "mantenimiento" | "notificaciones" | "hardware";
 
@@ -16,6 +16,7 @@ const GRUPOS: { grupo: string; items: { id: Seccion; label: string; icon: IconNa
     items: [
       { id: "resumen", label: "Resumen", icon: "bars" },
       { id: "modelos", label: "Modelos", icon: "layers" },
+      { id: "personalizacion", label: "Customización", icon: "globe" },
       { id: "indices", label: "Índices", icon: "grid" },
       { id: "seguridad", label: "Seguridad", icon: "shield" },
       { id: "claves", label: "API Keys", icon: "key" },
