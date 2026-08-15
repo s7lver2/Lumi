@@ -187,7 +187,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/map/style", get(routes::map::style))
         .route("/v1/map/tiles/:z/:x/:y", get(routes::map::tile))
         .route("/v1/map/glyphs/:fontstack/:range", get(routes::map::glyphs))
-        .route("/v1/map/sprite/:file", get(routes::map::sprite))
+        .route("/v1/map/sprite/:theme/:file", get(routes::map::sprite))
         .route("/v1/admin/map", axum::routing::patch(routes::map::patch_admin))
         .route("/v1/users/search", get(routes::projects::search_users));
 

@@ -276,7 +276,14 @@ fn rewrite(mut style: serde_json::Value, theme_id: &str) -> Result<(serde_json::
     // no el mapa. `base` es solo una raíz a la que el cliente le pega `.json`,
     // `.png` o `@2x`, que es como MapLibre construye estas peticiones.
     match up.sprite {
-        Some(_) => { o.insert("sprite".into(), serde_json::json!(format!("/v1/map/sprite/base?theme={theme_id}"))); }
+        // MapLibre construye `sprite.json`/`sprite@2x.png` concatenando el
+        // sufijo directamente sobre esta cadena tal cual, sin volver a
+        // analizarla como URL — iba un `?theme=` colgando aquí y el sufijo se
+        // le pegaba DETRÁS de la query string en vez de delante, así que
+        // `sprite()` recibía un tema con basura y un `file` que no coincidía
+        // con ningún sufijo válido. El tema va en el PATH para que quede
+        // intacto pase lo que pase detrás.
+        Some(_) => { o.insert("sprite".into(), serde_json::json!(format!("/v1/map/sprite/{theme_id}/base"))); }
         None => { o.remove("sprite"); }
     }
     Ok((style, up))
@@ -379,12 +386,16 @@ pub async fn tile(
         .get(&upstream)
         .send()
         .await
-        .map_err(|e| err(StatusCode::BAD_GATEWAY, &format!("el proveedor no respondió: {e}")))?;
+        .map_err(|e| {
+            tracing::warn!("tema {}: tesela {z}/{x}/{y}: el proveedor no respondió: {e}", theme.id);
+            err(StatusCode::BAD_GATEWAY, &format!("el proveedor no respondió: {e}"))
+        })?;
     if !res.status().is_success() {
         let code = res.status();
         let cuerpo = res.text().await.unwrap_or_default();
         // El motivo crudo del proveedor, no un código a secas: una clave
         // caducada tiene que poder diagnosticarse desde la interfaz.
+        tracing::warn!("tema {}: tesela {z}/{x}/{y}: el proveedor devolvió {code}: {cuerpo}", theme.id);
         return Err(err(StatusCode::BAD_GATEWAY, &format!("el proveedor devolvió {code}: {cuerpo}")));
     }
     let bytes = res
@@ -412,10 +423,14 @@ async fn passthrough(url: &str, ctype: &str) -> Result<([(axum::http::HeaderName
         .get(url)
         .send()
         .await
-        .map_err(|e| err(StatusCode::BAD_GATEWAY, &format!("el proveedor no respondió: {e}")))?;
+        .map_err(|e| {
+            tracing::warn!("passthrough {url}: el proveedor no respondió: {e}");
+            err(StatusCode::BAD_GATEWAY, &format!("el proveedor no respondió: {e}"))
+        })?;
     if !res.status().is_success() {
         let code = res.status();
         let cuerpo = res.text().await.unwrap_or_default();
+        tracing::warn!("passthrough {url}: el proveedor devolvió {code}: {cuerpo}");
         return Err(err(StatusCode::BAD_GATEWAY, &format!("el proveedor devolvió {code}: {cuerpo}")));
     }
     let bytes = res.bytes().await.map_err(|e| err(StatusCode::BAD_GATEWAY, &e.to_string()))?.to_vec();
@@ -467,8 +482,7 @@ pub async fn glyphs(
 /// sufijo — y se acepta solo de esa lista, no lo que llegue.
 pub async fn sprite(
     State(app): State<App>,
-    Path(file): Path<String>,
-    Query(q): Query<ThemeIdQuery>,
+    Path((theme_id, file)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), Fail> {
     require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
@@ -476,10 +490,10 @@ pub async fn sprite(
         .strip_prefix("base")
         .filter(|s| matches!(*s, ".json" | ".png" | "@2x.json" | "@2x.png"))
         .ok_or_else(|| err(StatusCode::BAD_REQUEST, "ese icono no existe"))?;
-    theme_by_id(&q.theme).ok_or_else(|| err(StatusCode::BAD_REQUEST, "ese tema no existe en el catálogo"))?;
+    theme_by_id(&theme_id).ok_or_else(|| err(StatusCode::BAD_REQUEST, "ese tema no existe en el catálogo"))?;
     let base = app
         .store
-        .get_meta(&format!("map_sprite_{}", q.theme))
+        .get_meta(&format!("map_sprite_{theme_id}"))
         .ok_or_else(|| err(StatusCode::SERVICE_UNAVAILABLE, "este tema no trae iconos"))?;
     let key = app.store.get_meta("map_key").unwrap_or_default();
     let ctype = if sufijo.ends_with(".png") { "image/png" } else { "application/json" };
@@ -582,7 +596,7 @@ mod tests {
         // cuál esté activo en el servidor cuando el cliente vuelva a pedirlas.
         assert_eq!(fixed["sources"]["composite"]["tiles"][0], "/v1/map/tiles/{z}/{x}/{y}?theme=mapbox-dark");
         assert_eq!(fixed["glyphs"], "/v1/map/glyphs/{fontstack}/{range}?theme=mapbox-dark");
-        assert_eq!(fixed["sprite"], "/v1/map/sprite/base?theme=mapbox-dark");
+        assert_eq!(fixed["sprite"], "/v1/map/sprite/mapbox-dark/base");
         assert!(fixed["sources"]["composite"].get("url").is_none(), "la url del tileset sigue ahí");
 
         // Y lo que el daemon tiene que recordar para servir esas tres rutas.
