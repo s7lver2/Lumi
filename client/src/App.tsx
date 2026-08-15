@@ -222,9 +222,10 @@ export default function App() {
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
-      {/* El panel de administración tiene su propio fondo liso: el planeta
-          es la ambientación del trabajo de caso, no de mirar la máquina. */}
-      {mode !== "admin" && <PlanetBackground dead={status !== "ok"} />}
+      {/* El panel de administración y «Perfil y sesiones» tienen su propio
+          fondo liso: el planeta es la ambientación del trabajo de caso, no
+          de mirar la máquina o gestionar la propia cuenta. */}
+      {mode !== "admin" && mode !== "profile" && <PlanetBackground dead={status !== "ok"} />}
       {/* Una sola franja arriba para todo: migas, estado del servidor,
           notificaciones, cuenta y los botones de la ventana. La telemetría ya
           no es una franja permanente de 70 px — vive en su píldora. */}

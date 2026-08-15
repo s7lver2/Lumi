@@ -286,11 +286,18 @@ pub async fn style(
         .get(&full)
         .send()
         .await
-        .map_err(|e| err(StatusCode::BAD_GATEWAY, &format!("el proveedor de mapas no respondió: {e}")))?
+        .map_err(|e| {
+            tracing::warn!("tema {}: el proveedor de mapas no respondió: {e}", theme.id);
+            err(StatusCode::BAD_GATEWAY, &format!("el proveedor de mapas no respondió: {e}"))
+        })?
         .json()
         .await
-        .map_err(|e| err(StatusCode::BAD_GATEWAY, &format!("el estilo del proveedor no es JSON: {e}")))?;
+        .map_err(|e| {
+            tracing::warn!("tema {}: el estilo del proveedor no es JSON: {e}", theme.id);
+            err(StatusCode::BAD_GATEWAY, &format!("el estilo del proveedor no es JSON: {e}"))
+        })?;
     let (fixed, up) = rewrite(raw, theme.id).map_err(|e| {
+        tracing::warn!("tema {}: no se pudo reescribir el estilo: {e}", theme.id);
         err(
             StatusCode::BAD_GATEWAY,
             &format!("no se pudo reescribir el estilo y servirlo crudo filtraría la clave: {e}"),
