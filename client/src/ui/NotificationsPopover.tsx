@@ -39,8 +39,7 @@ type Item =
  *  Filas, no tarjetas: cuatro tarjetas con borde propio en 300 px de ancho son
  *  cuatro cajas compitiendo. Lo no leído se marca con un punto en el margen y
  *  no con un fondo de color — cuatro fondos distintos harían un semáforo. */
-export function NotificationsPopover({ onOpenAdmin, onProjectAccepted }: {
-  onOpenAdmin: () => void;
+export function NotificationsPopover({ onProjectAccepted }: {
   /** Aceptar una invitación cambia la lista de proyectos de otro componente,
    *  que no se entera por su cuenta. */
   onProjectAccepted?: () => void;
@@ -211,15 +210,6 @@ export function NotificationsPopover({ onOpenAdmin, onProjectAccepted }: {
               );
             })}
           </div>
-
-          {isAdmin && (
-            <div className="border-t border-border p-2 text-center">
-              <button onClick={() => { setOpen(false); onOpenAdmin(); }}
-                className="text-[10.5px] text-subtle transition-colors hover:text-fg">
-                Ver todo en Administración
-              </button>
-            </div>
-          )}
         </div>
       )}
     </div>

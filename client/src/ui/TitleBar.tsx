@@ -62,7 +62,7 @@ export function TitleBar({ crumbs, onOpenAdmin, onProfile, onSignOut, onProjectA
       {signedIn && (
         <>
           {isAdmin && <ServerPill />}
-          <NotificationsPopover onOpenAdmin={onOpenAdmin} onProjectAccepted={onProjectAccepted} />
+          <NotificationsPopover onProjectAccepted={onProjectAccepted} />
           <UserMenu name={username} isAdmin={isAdmin}
             onOpenAdmin={onOpenAdmin} onProfile={onProfile} onSignOut={onSignOut} />
           <span className="h-[18px] w-px bg-border" />
