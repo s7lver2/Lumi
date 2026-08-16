@@ -150,6 +150,7 @@ export default function App() {
         if (kicked && Date.now() - downSince.current > KICK_AFTER_MS) {
           updateSession({ token: undefined });
           useServer.getState().setToken(null);
+          useServer.getState().setSample(null);
           setAuth(null);
           useWorkspace.getState().clear();
           setMode("entry");
@@ -187,6 +188,10 @@ export default function App() {
     updateSession({ token: undefined });
     useServer.getState().setToken(null);
     useServer.getState().setUser("", false, null);
+    // Sin esto, una muestra vieja (con `maintenance: true` de la sesión
+    // anterior) se quedaba en el store y la tira de aviso seguía viéndose
+    // en la pantalla de login, donde ya no hay ninguna sesión que avisar.
+    useServer.getState().setSample(null);
     setAuth(null);
     useWorkspace.getState().clear();
     setDrawer(null);
@@ -241,7 +246,10 @@ export default function App() {
           bloqueado por el modo mantenimiento tiene que enterarse igual,
           trabaje donde trabaje. Llega por telemetría (ya viva en cuanto hay
           sesión), así que aparece y desaparece sin recargar nada. */}
-      {sample?.maintenance && <MantenimientoBanner mensaje={sample.maintenance_message} />}
+      {/* `mode !== "entry"` de más: sin sesión no hay nadie a quien avisar,
+          y es la red de seguridad si alguna vez una `sample` vieja se cuela
+          sin limpiarse (como pasaba antes de vaciarla en `signOut`). */}
+      {mode !== "entry" && sample?.maintenance && <MantenimientoBanner mensaje={sample.maintenance_message} />}
       <ResizeHandles />
       {/* Para app/admin, la desconexión es un banner + bloqueo, no una
           pantalla completa: la sesión de un usuario normal no tiene un
