@@ -1,10 +1,16 @@
 import { useEffect, useState } from "react";
-import { api, type AdminRequest, type Invite } from "../lib/api";
+import { api, type AdminRequest, type AvisoInfo, type Invite } from "../lib/api";
 import { useServer } from "../lib/store";
 import { AvisoEditor } from "../admin/AvisoEditor";
 import { Avatar } from "./Avatar";
 import { Icon, type IconName } from "./Icon";
 import { usePopover } from "./TitleBar";
+
+// Misma referencia siempre que no haya avisos: el selector de zustand exige
+// que dos lecturas sin cambios devuelvan el mismo objeto — un `?? []` en el
+// propio selector crea un array nuevo en cada render y `useSyncExternalStore`
+// nunca deja de considerarlo "cambiado", lo que dispara un bucle infinito.
+const SIN_AVISOS: AvisoInfo[] = [];
 
 function ago(ts: number): string {
   const s = Math.max(0, Math.floor(Date.now() / 1000) - ts);
@@ -41,7 +47,7 @@ export function NotificationsPopover({ onOpenAdmin, onProjectAccepted }: {
 }) {
   const token = useServer((s) => s.token) ?? undefined;
   const isAdmin = useServer((s) => s.isAdmin);
-  const sampleAvisos = useServer((s) => s.sample?.avisos ?? []);
+  const sampleAvisos = useServer((s) => s.sample?.avisos ?? SIN_AVISOS);
   const [items, setItems] = useState<Item[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [leido, setLeido] = useState<Set<string>>(new Set());
