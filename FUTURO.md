@@ -262,8 +262,7 @@ de firma Ed25519 en `lumi-proto` que podría reusarse para firmar releases.
 
 Es el subsistema 3 y está planificado, no aparcado. Se anota aquí solo lo que se le ha ido
 prometiendo por el camino: rediseñar desde cero las vistas provisionales de solicitudes y
-usuarios del subsistema 2, la fila de configuración del mapa del subsistema 6, las
-notificaciones redactadas por el admin
+usuarios del subsistema 2, la fila de configuración del mapa del subsistema 6
 
 ### mTLS o secreto de dispositivo por clave
 
