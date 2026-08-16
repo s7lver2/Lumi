@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type SecuritySettings } from "../lib/api";
 import { useServer } from "../lib/store";
 import { Hueco } from "./Hueco";
+import { NotificacionesView } from "./NotificacionesView";
 import { IndexToast } from "./IndexToast";
 import { IndicesPanel } from "./IndicesPanel";
 import { ApiKeysView } from "./ApiKeysView";
@@ -15,7 +16,7 @@ import { CustomizacionView } from "./CustomizacionView";
 import { Sidebar, type Seccion } from "./Sidebar";
 import { UsersView } from "./UsersView";
 
-const PRONTO: Seccion[] = ["notificaciones", "hardware"];
+const PRONTO: Seccion[] = ["hardware"];
 
 export function AdminPanel({ token }: { token: string }) {
   const [seccion, setSeccion] = useState<Seccion>("resumen");
@@ -62,6 +63,7 @@ export function AdminPanel({ token }: { token: string }) {
           : seccion === "modelos" ? <ModelosView token={token} onLicenciasPendientesChange={setLicenciasPendientes} />
           : seccion === "cola" ? <Seccion titulo="Cola" grupo="Operación">
               <QueueRow token={token} /></Seccion>
+          : seccion === "notificaciones" ? <NotificacionesView token={token} />
                     : <Seccion titulo="Índices instalados" grupo="Servidor"
               accion={
                 <button disabled title="Abrirá el catálogo remoto; todavía no hace nada"
