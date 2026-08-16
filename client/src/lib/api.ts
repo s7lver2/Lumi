@@ -12,6 +12,24 @@ export interface Image {
 export interface Capability { id: string; label: string; state: "on" | "partial" | "off"; reason: string | null }
 export interface GpuInfo { index: number; name: string; vram_total_mb: number; pcie: string }
 export interface GpuSample { index: number; util_pct: number; vram_used_mb: number; vram_total_mb: number; temp_c: number | null }
+export interface AvisoInfo {
+  id: number;
+  /** Documento JSON de Tiptap — opaco para el resto del cliente, solo lo
+   *  entiende `AvisoEditor`. */
+  contenido: unknown;
+  icono: string;
+  prioridad: "normal" | "urgente";
+  destino: "todos" | "admins" | "personas";
+  creado_por: string;
+  created_at: number;
+}
+export interface CrearAvisoReq {
+  contenido: unknown;
+  icono: string;
+  prioridad: "normal" | "urgente";
+  destino: "todos" | "admins" | "personas";
+  usuarios: string[];
+}
 export interface Sample {
   gpus: GpuSample[];
   cpu_pct: number;
@@ -21,6 +39,7 @@ export interface Sample {
   queue_paused: boolean;
   maintenance: boolean;
   maintenance_message: string;
+  avisos: AvisoInfo[];
 }
 export interface LoginRes {
   token: string;
