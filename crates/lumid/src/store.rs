@@ -212,6 +212,22 @@ CREATE TABLE IF NOT EXISTS ip_denylist (
     ip        TEXT PRIMARY KEY,
     added_at  INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS avisos (
+    id           INTEGER PRIMARY KEY,
+    -- Documento JSON del editor Tiptap, NUNCA HTML: quien lo lee en otra
+    -- sesión nunca pasa por un render de markup arbitrario.
+    contenido    TEXT NOT NULL,
+    icono        TEXT NOT NULL,
+    prioridad    TEXT NOT NULL,
+    destino      TEXT NOT NULL,
+    creado_por   TEXT NOT NULL,
+    created_at   INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS avisos_usuarios (
+    aviso_id  INTEGER NOT NULL,
+    user_id   INTEGER NOT NULL,
+    PRIMARY KEY (aviso_id, user_id)
+);
 ";
 
 pub struct Store(Mutex<Connection>);
