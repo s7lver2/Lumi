@@ -3,9 +3,9 @@
 //! máquina está sana y solo falta desbloquear.
 
 use crate::App;
-use lumi_proto::api::{GpuSample, Sample};
+use lumi_proto::api::{AvisoInfo, GpuSample, Sample};
 
-pub fn sample(app: &App) -> Sample {
+pub fn sample(app: &App, visto_por: Option<(i64, bool)>) -> Sample {
     let gpus = match nvml_wrapper::Nvml::init() {
         Ok(nvml) => (0..nvml.device_count().unwrap_or(0))
             .filter_map(|i| {
@@ -62,5 +62,60 @@ pub fn sample(app: &App) -> Sample {
         queue_paused: !app.queue.hay_trabajadores(),
         maintenance: crate::mantenimiento::activo(app),
         maintenance_message: crate::mantenimiento::mensaje(app),
+        avisos: avisos_para(app, visto_por),
     }
+}
+
+/// `None` (sesión inválida o sin token) significa "sin avisos" — el resto de
+/// la muestra sigue llegando igual, esto es lo único que depende de quién
+/// pregunta. Se resuelve una vez al abrir la conexión SSE
+/// (`routes::telemetry::sse`), no en cada muestra: la identidad de una
+/// sesión no cambia mientras el stream sigue abierto.
+fn avisos_para(app: &App, visto_por: Option<(i64, bool)>) -> Vec<AvisoInfo> {
+    let Some((user_id, is_admin)) = visto_por else { return Vec::new() };
+    let c = app.store.conn();
+    let Ok(mut q) = c.prepare(
+        "SELECT id, contenido, icono, prioridad, destino, creado_por, created_at
+         FROM avisos ORDER BY created_at DESC",
+    ) else {
+        return Vec::new();
+    };
+    let Ok(filas) = q.query_map([], |r| {
+        let contenido_texto: String = r.get(1)?;
+        Ok(AvisoInfo {
+            id: r.get(0)?,
+            contenido: serde_json::from_str(&contenido_texto).unwrap_or(serde_json::Value::Null),
+            icono: r.get(2)?,
+            prioridad: r.get(3)?,
+            destino: r.get(4)?,
+            creado_por: r.get(5)?,
+            created_at: r.get(6)?,
+        })
+    }) else {
+        return Vec::new();
+    };
+    let mut avisos: Vec<AvisoInfo> = filas
+        .flatten()
+        .filter(|a| {
+            a.destino == "todos"
+                || (a.destino == "admins" && is_admin)
+                || (a.destino == "personas" && incluye_a(app, a.id, user_id))
+        })
+        .collect();
+    // Los urgentes van primero, pero conservando el orden por fecha DENTRO
+    // de cada grupo — `sort_by_key` es estable, y la consulta ya vino
+    // ordenada por `created_at DESC`.
+    avisos.sort_by_key(|a| a.prioridad != "urgente");
+    avisos
+}
+
+fn incluye_a(app: &App, aviso_id: i64, user_id: i64) -> bool {
+    app.store
+        .conn()
+        .query_row(
+            "SELECT 1 FROM avisos_usuarios WHERE aviso_id = ?1 AND user_id = ?2",
+            rusqlite::params![aviso_id, user_id],
+            |_| Ok(()),
+        )
+        .is_ok()
 }
