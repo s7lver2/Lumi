@@ -29,6 +29,7 @@ mod services;
 mod spend;
 mod store;
 mod territory;
+mod ubicacion;
 mod versions;
 
 use std::path::PathBuf;
@@ -74,18 +75,57 @@ pub struct Estado {
     pub publicacion: std::sync::Mutex<Option<Arc<publicar::Publicacion>>>,
     /// La descarga de pesos de un modelo en curso, si hay alguna.
     pub pesos: pesos::EnCurso,
+    /// La migración de carpeta de datos en curso, si hay alguna. Mismo
+    /// patrón que `descarga`/`ingesta`/`sellado`.
+    pub migracion: std::sync::Mutex<Option<Arc<ubicacion::Migracion>>>,
 }
 
-/// Dónde vive todo. `LUMI_INDEXER_DATA` existe para poder correr una instancia
-/// de pruebas sin tocar la del operador.
+/// Dónde vive todo. Delegado en `ubicacion`, que además sabe leer el
+/// fichero-puntero de una migración ya hecha (ver ese módulo).
 fn directorio() -> PathBuf {
-    if let Ok(d) = std::env::var("LUMI_INDEXER_DATA") {
-        return PathBuf::from(d);
+    ubicacion::leer_ubicacion()
+}
+
+#[tauri::command]
+fn ubicacion_leer(estado: tauri::State<'_, Estado>) -> String {
+    estado.dir.display().to_string()
+}
+
+#[tauri::command]
+fn ubicacion_por_defecto() -> String {
+    ubicacion::directorio_por_defecto().display().to_string()
+}
+
+/// Rechaza empezar si hay trabajo activo — copiar mientras algo sigue
+/// escribiendo en la carpeta de origen dejaría la copia incompleta sin que
+/// nada lo avisara.
+#[tauri::command]
+fn ubicacion_migrar(destino: String, estado: tauri::State<'_, Estado>) -> Result<(), String> {
+    let hay_actividad = estado.descarga.lock().unwrap().is_some()
+        || estado.ingesta.lock().unwrap().is_some()
+        || estado.sondeo.lock().unwrap().is_some()
+        || estado.sellado.lock().unwrap().is_some()
+        || estado.publicacion.lock().unwrap().is_some()
+        || estado.pesos.lock().unwrap().is_some()
+        || estado.cola.progreso().iter().any(|p| p.trabajando);
+    if hay_actividad {
+        return Err("hay trabajo en curso (descarga, sellado, embebido…); espera a que termine antes de mudar la carpeta".into());
     }
-    let base = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| ".".into());
-    PathBuf::from(base).join(".lumi-indexer")
+    if estado.migracion.lock().unwrap().as_ref().is_some_and(|m| m.progreso().trabajando) {
+        return Err("ya hay una migración en curso".into());
+    }
+    let destino = PathBuf::from(destino);
+    if destino == estado.dir {
+        return Err("es la misma carpeta en la que ya está todo".into());
+    }
+    let migracion = ubicacion::Migracion::arrancar(estado.dir.clone(), destino);
+    *estado.migracion.lock().unwrap() = Some(migracion);
+    Ok(())
+}
+
+#[tauri::command]
+fn ubicacion_migracion_progreso(estado: tauri::State<'_, Estado>) -> Option<ubicacion::ProgresoMigracion> {
+    estado.migracion.lock().unwrap().as_ref().map(|m| m.progreso())
 }
 
 #[tauri::command]
@@ -1593,9 +1633,14 @@ pub fn run() {
             identidad_en_curso: std::sync::Mutex::new(None),
             publicacion: std::sync::Mutex::new(None),
             pesos: Arc::new(std::sync::Mutex::new(None)),
+            migracion: std::sync::Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             saludo,
+            ubicacion_leer,
+            ubicacion_por_defecto,
+            ubicacion_migrar,
+            ubicacion_migracion_progreso,
             rendimiento_leer,
             servicios_arrancar,
             servicios_arrancar_wsl,

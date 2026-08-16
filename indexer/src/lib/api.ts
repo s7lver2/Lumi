@@ -1,6 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export interface Saludo { version: string; so: string; dir: string }
+export interface ProgresoMigracion {
+  trabajando: boolean;
+  bytes_copiados: number;
+  bytes_total: number;
+  archivo_actual: string;
+  terminado: boolean;
+  error: string | null;
+}
 export interface Gpu { nombre: string; util_pct: number; vram_usada_mb: number; vram_total_mb: number }
 export interface Rendimiento { gpus: Gpu[] }
 export interface EstadoServicio { nombre: string; vivo: boolean; detalle: string; propio: boolean }
@@ -242,6 +250,10 @@ export interface ProgresoIndiceEmbed {
 
 export const api = {
   saludo: () => invoke<Saludo>("saludo"),
+  ubicacionLeer: () => invoke<string>("ubicacion_leer"),
+  ubicacionPorDefecto: () => invoke<string>("ubicacion_por_defecto"),
+  ubicacionMigrar: (destino: string) => invoke<void>("ubicacion_migrar", { destino }),
+  ubicacionMigracionProgreso: () => invoke<ProgresoMigracion | null>("ubicacion_migracion_progreso"),
   rendimientoLeer: () => invoke<Rendimiento>("rendimiento_leer"),
   serviciosArrancar: () => invoke<void>("servicios_arrancar"),
   serviciosArrancarWsl: () => invoke<void>("servicios_arrancar_wsl"),

@@ -129,6 +129,23 @@ tratarla como si nunca se hubiera bajado. Sigue sin haber un "motivo anotado" po
 lo pedía esa spec— ni recaptura de una imagen suelta dentro de la tesela: la unidad es la tesela
 entera, igual que la descarga.
 
+### Comprobación de espacio libre antes de mudar la carpeta de datos
+
+Ajustes → Almacenamiento copia primero y borra el origen solo si la copia entera se verificó
+tamaño a tamaño — si el disco se llena a mitad, el origen sigue intacto y el error se ve tal
+cual, así que no hacía falta un chequeo previo para que fuera seguro. Sigue faltando: avisar
+*antes* de empezar cuánto espacio libre hay en el destino frente a lo que se va a copiar, para no
+descubrir el problema ya a mitad de una migración de decenas de GB.
+
+### Mover Qdrant/Redis cuando corren en WSL
+
+La misma pantalla solo mueve la carpeta de Windows (imágenes, índice, paquetes, pesos, clave
+maestra) — Qdrant y Redis, cuando el operador los levantó "en WSL" (la vía real en Windows, ya
+que Redis no tiene binario nativo), viven dentro del disco de la propia distro de WSL, en
+`$HOME/.lumi-indexer` allí dentro, sin relación con la carpeta que esta pantalla mueve. Reubicarlos
+significaría una operación aparte contra WSL desde el lado de Windows — se dejó fuera a propósito
+por ser un pedido urgente centrado en las imágenes, que es lo que de verdad llena el disco.
+
 ### Versiones de índice: agrupar v1/v2/v3 bajo una tarjeta con selector
 
 `indice_crear` para una versión nueva (`viene_de` no nulo) inserta una fila normal en
