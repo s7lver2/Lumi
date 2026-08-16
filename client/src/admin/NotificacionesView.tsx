@@ -18,6 +18,17 @@ const GRUPOS: { valor: "todos" | "admins"; nombre: string; label: string }[] = [
 
 type Chip = { tipo: "grupo"; valor: "todos" | "admins"; label: string } | { tipo: "usuario"; valor: string };
 
+/** Texto plano de un documento de Tiptap — recorre `content` recogiendo los
+ *  nodos `text`, sin marcas ni formato. Sirve solo para previsualizar, nunca
+ *  para guardar: el documento real sigue siendo el JSON entero. */
+function textoPlano(doc: unknown): string {
+  if (!doc || typeof doc !== "object") return "";
+  const nodo = doc as { text?: string; content?: unknown[] };
+  if (typeof nodo.text === "string") return nodo.text;
+  if (Array.isArray(nodo.content)) return nodo.content.map(textoPlano).join(" ").replace(/\s+/g, " ").trim();
+  return "";
+}
+
 function ago(ts: number): string {
   const s = Math.max(0, Math.floor(Date.now() / 1000) - ts);
   if (s < 60) return "ahora";
@@ -91,6 +102,7 @@ function ModalComponer({ token, onCerrar, onPublicado }: {
   const [prioridad, setPrioridad] = useState<"normal" | "urgente">("normal");
   const [chips, setChips] = useState<Chip[]>([{ tipo: "grupo", valor: "todos", label: "Todos" }]);
   const [publicando, setPublicando] = useState(false);
+  const textoPreview = textoPlano(contenido) || "Tu mensaje aparecerá aquí";
 
   function quitar(chip: Chip) {
     setChips((cs) => cs.filter((c) => !(c.tipo === chip.tipo && c.valor === chip.valor)));
@@ -128,10 +140,10 @@ function ModalComponer({ token, onCerrar, onPublicado }: {
             botones aparte — se cambian tocando la propia preview de cómo se
             va a ver, cada uno con su propio popup. */}
         <div className="mb-3 flex items-center gap-3 rounded-card border border-border bg-panel p-3">
-          <IconoBoton icono={icono} prioridad={prioridad} onChange={setIcono} />
+          <IconoBoton icono={icono} prioridad={prioridad} texto={textoPreview} onChange={setIcono} />
           <div className="min-w-0 flex-1">
             <p className="text-[9px] uppercase tracking-[.06em] text-subtle">Vista previa</p>
-            <p className="truncate text-[11px] text-muted">Así se ve el icono y la prioridad en la campana</p>
+            <p className="truncate text-[11.5px] text-fg">{textoPreview}</p>
           </div>
           <PrioridadBoton prioridad={prioridad} onChange={setPrioridad} />
         </div>
@@ -164,8 +176,11 @@ function ModalComponer({ token, onCerrar, onPublicado }: {
  *  otro. */
 /** El icono de la preview ES el botón que lo cambia — sin fila de botones
  *  aparte, se toca directamente lo que se está previsualizando. */
-function IconoBoton({ icono, prioridad, onChange }: {
-  icono: IconName; prioridad: "normal" | "urgente"; onChange: (i: IconName) => void;
+/** Cada opción se ve tal cual se vería el aviso de verdad — icono más el
+ *  texto real ya escrito — en vez de una rejilla de glifos sueltos donde hay
+ *  que adivinar cuál es cuál. */
+function IconoBoton({ icono, prioridad, texto, onChange }: {
+  icono: IconName; prioridad: "normal" | "urgente"; texto: string; onChange: (i: IconName) => void;
 }) {
   const [abierto, setAbierto, box] = usePopover();
   return (
@@ -176,14 +191,20 @@ function IconoBoton({ icono, prioridad, onChange }: {
         <Icon name={icono} size={16} />
       </button>
       {abierto && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-30 grid grid-cols-4 gap-1 rounded-lg
-          border border-white/15 bg-[rgba(20,22,26,.98)] p-2 shadow-lg shadow-black/50"
+        <div className="absolute left-0 top-[calc(100%+8px)] z-30 w-[300px] max-h-[280px] overflow-y-auto
+          rounded-lg border border-white/15 bg-[rgb(20,22,26)] p-1.5 shadow-lg shadow-black/60"
           style={{ animation: "jg-popup-scale-in 160ms cubic-bezier(.2,.85,.35,1) both" }}>
+          <p className="mb-1 px-1.5 py-1 text-[9px] uppercase tracking-[.06em] text-subtle">Así se vería con cada icono</p>
           {ICONOS.map((i) => (
             <button key={i} type="button" onClick={() => { onChange(i); setAbierto(false); }}
-              className={`jg-press grid h-8 w-8 place-items-center rounded-md border ${
-                icono === i ? "border-white/35 bg-white/[.09] text-fg" : "border-border text-muted"}`}>
-              <Icon name={i} size={14} />
+              className={`jg-press flex w-full items-center gap-2.5 rounded-md p-1.5 text-left ${
+                icono === i ? "bg-white/[.08]" : "hover:bg-white/[.05]"}`}>
+              <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${
+                prioridad === "urgente" ? "bg-danger/[.15] text-danger-fg" : "bg-draw/[.12] text-draw-fg"}`}>
+                <Icon name={i} size={13} />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[11px] text-fg">{texto}</span>
+              {icono === i && <Icon name="check" size={12} className="shrink-0 text-fg" />}
             </button>
           ))}
         </div>
