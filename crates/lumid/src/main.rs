@@ -115,6 +115,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/users/:id", get(routes::admin::get_user).patch(routes::admin::patch_user))
         .route("/v1/admin/limits", get(routes::admin::get_limits).patch(routes::admin::patch_limits))
         .route("/v1/admin/resumen", get(routes::admin::resumen))
+        .route("/v1/admin/provisioning/complete", post(routes::admin::provisionar))
         .route("/v1/admin/models/accept-licenses", post(routes::models::accept_licenses))
         .route("/v1/admin/models/download", post(routes::models::download))
         .route("/v1/admin/model-task", get(routes::models::model_task))

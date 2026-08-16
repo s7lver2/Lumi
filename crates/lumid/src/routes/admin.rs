@@ -345,3 +345,13 @@ pub async fn resumen(
         arrancado_en: app.arrancado_en,
     }))
 }
+
+/// El último paso del asistente (instalar modelos) llama aquí al terminar.
+/// Sin esto `Store::state()` nunca llega a `Ready` — se queda en `Claimed`
+/// para siempre, y cada reconexión del propio administrador lo manda de
+/// vuelta al asistente aunque ya esté todo configurado.
+pub async fn provisionar(State(app): State<App>, headers: HeaderMap) -> Result<StatusCode, StatusCode> {
+    require_admin(&app, &bearer(&headers))?;
+    app.store.set_meta("provisioned", "1").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::NO_CONTENT)
+}

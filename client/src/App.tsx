@@ -292,8 +292,16 @@ export default function App() {
             if (step === 1) { document.getElementById("admin-submit")?.click(); return; }
             // El paso 3 (modelos) es el último construido: terminarlo lleva
             // directo a la app. El owner es admin, así que va al panel —
-            // igual que al reabrir la app.
-            if (step === 3) { setMode(useServer.getState().isAdmin ? "admin" : "picker"); return; }
+            // igual que al reabrir la app. Avisar al servidor de que el
+            // asistente terminó es lo único que faltaba para que
+            // `Store::state()` deje de devolver `Claimed` para siempre: sin
+            // esto, cada reconexión del propio administrador lo mandaba de
+            // vuelta aquí aunque ya estuviera todo configurado.
+            if (step === 3) {
+              void api.post("/v1/admin/provisioning/complete", {}, useServer.getState().token ?? undefined).catch(() => {});
+              setMode(useServer.getState().isAdmin ? "admin" : "picker");
+              return;
+            }
             setStep((s) => s + 1);
           }}
           nextDisabled={
