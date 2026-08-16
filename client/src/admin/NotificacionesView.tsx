@@ -102,7 +102,8 @@ function ModalComponer({ token, onCerrar, onPublicado }: {
   const [prioridad, setPrioridad] = useState<"normal" | "urgente">("normal");
   const [chips, setChips] = useState<Chip[]>([{ tipo: "grupo", valor: "todos", label: "Todos" }]);
   const [publicando, setPublicando] = useState(false);
-  const textoPreview = textoPlano(contenido) || "Tu mensaje aparecerá aquí";
+  const [error, setError] = useState<string | null>(null);
+  const vacio = !textoPlano(contenido).trim();
 
   function quitar(chip: Chip) {
     setChips((cs) => cs.filter((c) => !(c.tipo === chip.tipo && c.valor === chip.valor)));
@@ -119,9 +120,15 @@ function ModalComponer({ token, onCerrar, onPublicado }: {
     const usuarios = chips.filter((c): c is Extract<Chip, { tipo: "usuario" }> => c.tipo === "usuario").map((c) => c.valor);
     const destino = grupo ? grupo.valor : "personas";
     setPublicando(true);
+    setError(null);
     try {
       await api.post<AvisoInfo>("/v1/admin/avisos", { contenido, icono, prioridad, destino, usuarios }, token);
       onPublicado();
+    } catch (e) {
+      // Sin esto, una publicación fallida (p.ej. un destinatario que ya no
+      // existe) no decía nada: el modal se quedaba tal cual y parecía que
+      // había funcionado cuando en realidad no se creó ningún aviso.
+      setError(String(e));
     } finally {
       setPublicando(false);
     }
@@ -140,10 +147,14 @@ function ModalComponer({ token, onCerrar, onPublicado }: {
             botones aparte — se cambian tocando la propia preview de cómo se
             va a ver, cada uno con su propio popup. */}
         <div className="mb-3 flex items-center gap-3 rounded-card border border-border bg-panel p-3">
-          <IconoBoton icono={icono} prioridad={prioridad} texto={textoPreview} onChange={setIcono} />
+          <IconoBoton icono={icono} prioridad={prioridad} contenido={contenido} vacio={vacio} onChange={setIcono} />
           <div className="min-w-0 flex-1">
-            <p className="text-[9px] uppercase tracking-[.06em] text-subtle">Vista previa</p>
-            <p className="truncate text-[11.5px] text-fg">{textoPreview}</p>
+            <p className="mb-0.5 text-[9px] uppercase tracking-[.06em] text-subtle">Vista previa</p>
+            {vacio ? (
+              <p className="truncate text-[11.5px] italic text-subtle">Tu mensaje aparecerá aquí</p>
+            ) : (
+              <AvisoEditor contenido={contenido} editable={false} compacto />
+            )}
           </div>
           <PrioridadBoton prioridad={prioridad} onChange={setPrioridad} />
         </div>
@@ -156,7 +167,9 @@ function ModalComponer({ token, onCerrar, onPublicado }: {
         </div>
 
         <div className="mt-4 flex items-center gap-3">
-          <p className="text-[9.5px] text-subtle">Llega a quien corresponda en cuanto se publica, sin recargar.</p>
+          <p className="text-[9.5px] text-subtle">
+            {error ? <span className="text-danger-fg">{error}</span> : "Llega a quien corresponda en cuanto se publica, sin recargar."}
+          </p>
           <button onClick={onCerrar} className="jg-press ml-auto rounded-lg px-3 py-1.5 text-[10.5px] text-subtle">Cancelar</button>
           <button disabled={publicando || chips.length === 0} onClick={() => void publicar()}
             className="jg-press rounded-lg bg-accent px-3 py-1.5 text-[11px] font-medium text-black disabled:opacity-40">
@@ -179,8 +192,8 @@ function ModalComponer({ token, onCerrar, onPublicado }: {
 /** Cada opción se ve tal cual se vería el aviso de verdad — icono más el
  *  texto real ya escrito — en vez de una rejilla de glifos sueltos donde hay
  *  que adivinar cuál es cuál. */
-function IconoBoton({ icono, prioridad, texto, onChange }: {
-  icono: IconName; prioridad: "normal" | "urgente"; texto: string; onChange: (i: IconName) => void;
+function IconoBoton({ icono, prioridad, contenido, vacio, onChange }: {
+  icono: IconName; prioridad: "normal" | "urgente"; contenido: unknown; vacio: boolean; onChange: (i: IconName) => void;
 }) {
   const [abierto, setAbierto, box] = usePopover();
   return (
@@ -203,7 +216,13 @@ function IconoBoton({ icono, prioridad, texto, onChange }: {
                 prioridad === "urgente" ? "bg-danger/[.15] text-danger-fg" : "bg-draw/[.12] text-draw-fg"}`}>
                 <Icon name={i} size={13} />
               </span>
-              <span className="min-w-0 flex-1 truncate text-[11px] text-fg">{texto}</span>
+              <div className="min-w-0 flex-1 overflow-hidden">
+                {vacio ? (
+                  <span className="truncate text-[11px] italic text-subtle">Tu mensaje aparecerá aquí</span>
+                ) : (
+                  <AvisoEditor contenido={contenido} editable={false} compacto />
+                )}
+              </div>
               {icono === i && <Icon name="check" size={12} className="shrink-0 text-fg" />}
             </button>
           ))}

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
 import { Color, FontFamily, TextStyle } from "@tiptap/extension-text-style";
@@ -18,8 +19,11 @@ const DOC_VACIO = { type: "doc", content: [{ type: "paragraph" }] };
  *  barra, nunca un `dangerouslySetInnerHTML` aparte — así lo que un
  *  administrador escribe no puede convertirse en markup arbitrario en la
  *  pantalla de otra persona. */
-export function AvisoEditor({ contenido, onChange, editable = true }: {
+export function AvisoEditor({ contenido, onChange, editable = true, compacto = false }: {
   contenido: unknown; onChange?: (json: unknown) => void; editable?: boolean;
+  /** Una línea, truncada con "…" — para la vista previa y el selector de
+   *  icono, donde varias instancias de lectura se muestran a la vez. */
+  compacto?: boolean;
 }) {
   // `usePopover` (la misma pieza que ya cierra la campana al clicar fuera o
   // con Escape) — sin esto el picker se quedaba abierto para siempre, que es
@@ -32,10 +36,31 @@ export function AvisoEditor({ contenido, onChange, editable = true }: {
     onUpdate: ({ editor }) => onChange?.(editor.getJSON()),
   });
 
+  // `useEditor` solo aplica `content` al crear el editor, no en cada
+  // re-render — sin esto, las instancias de solo lectura (vista previa,
+  // selector de icono) se quedaban congeladas con el primer contenido y
+  // nunca reflejaban lo que se seguía escribiendo, que es por lo que ni el
+  // color ni la negrita ni la fuente parecían "no renderizarse": en
+  // realidad la vista previa ni siquiera estaba mostrando el documento
+  // actual. Solo aplica en modo lectura — el editor editable ya gestiona su
+  // propio contenido con cada pulsación.
+  useEffect(() => {
+    if (!editor || editable) return;
+    const actual = JSON.stringify(editor.getJSON());
+    const nuevo = JSON.stringify(contenido ?? DOC_VACIO);
+    if (actual !== nuevo) editor.commands.setContent((contenido ?? DOC_VACIO) as never, { emitUpdate: false });
+  }, [contenido, editor, editable]);
+
   if (!editor) return null;
 
   if (!editable) {
-    return <div className="aviso-lectura text-[12px] leading-[1.55] text-fg"><EditorContent editor={editor} /></div>;
+    return (
+      <div className={compacto
+        ? "truncate text-[12px] text-fg [&_p]:m-0 [&_p]:inline"
+        : "aviso-lectura text-[12px] leading-[1.55] text-fg"}>
+        <EditorContent editor={editor} />
+      </div>
+    );
   }
 
   return (
