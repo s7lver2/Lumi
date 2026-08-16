@@ -129,6 +129,32 @@ pub struct PatchApiKeyReq {
     pub ips: Option<Vec<String>>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AvisoInfo {
+    pub id: i64,
+    /// Documento JSON de Tiptap — un `serde_json::Value` estructurado, no un
+    /// `String` con HTML: así el propio esquema de Tiptap es lo único que
+    /// puede llegar a pintarse, nunca markup arbitrario.
+    pub contenido: serde_json::Value,
+    pub icono: String,
+    /// `"normal"` | `"urgente"`.
+    pub prioridad: String,
+    /// `"todos"` | `"admins"` | `"personas"`.
+    pub destino: String,
+    pub creado_por: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CrearAvisoReq {
+    pub contenido: serde_json::Value,
+    pub icono: String,
+    pub prioridad: String,
+    pub destino: String,
+    /// Solo se usa si `destino == "personas"`: usernames a resolver.
+    pub usuarios: Vec<String>,
+}
+
 #[derive(Debug, Serialize, Clone)]
 pub struct SecuritySettings {
     pub zero_trust: bool,
@@ -204,6 +230,10 @@ pub struct Sample {
     /// tira de aviso se vea desde cualquier pantalla, no solo Seguridad.
     pub maintenance: bool,
     pub maintenance_message: String,
+    /// Ya filtrados por `routes::telemetry::sse` según quién abrió esta
+    /// conexión — lo que llega aquí es exactamente lo que le toca ver a esa
+    /// sesión, ordenado con los urgentes primero.
+    pub avisos: Vec<AvisoInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
