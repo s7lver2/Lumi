@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { api, type AdminRequest, type Invite } from "../lib/api";
 import { useServer } from "../lib/store";
+import { AvisoEditor } from "../admin/AvisoEditor";
 import { Avatar } from "./Avatar";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 import { usePopover } from "./TitleBar";
 
 function ago(ts: number): string {
@@ -13,19 +14,21 @@ function ago(ts: number): string {
   return `${Math.floor(s / 86400)} d`;
 }
 
-/** Lo que la bandeja sabe enseñar. `kind` decide el icono y qué botones salen:
- *  una invitación se acepta, una solicitud se aprueba. */
-interface Item {
-  kind: "invite" | "access";
-  id: number;
-  who: string;
-  text: string;
-  at: number;
-}
+interface ItemBase { id: number; who: string; at: number }
+/** `kind` decide el icono y qué botones salen: una invitación se acepta,
+ *  una solicitud se aprueba, un aviso solo se lee — no hay nada que
+ *  decidir, así que no lleva fila de acciones. */
+type Item =
+  | (ItemBase & { kind: "invite"; text: string })
+  | (ItemBase & { kind: "access"; text: string })
+  | (ItemBase & { kind: "aviso"; contenido: unknown; icono: IconName; prioridad: "normal" | "urgente" });
 
 /** La campana no es un atajo al panel de administración: es la bandeja de todo
- *  lo que te espera. Para cualquiera, las invitaciones a proyectos; para el
- *  administrador, además, las solicitudes de cuenta.
+ *  lo que te espera. Para cualquiera, las invitaciones a proyectos y los
+ *  avisos del administrador; para el administrador, además, las solicitudes
+ *  de cuenta. Los avisos no vienen de una petición propia — ya llegan por la
+ *  misma telemetría que alimenta la tira de mantenimiento, filtrados por el
+ *  propio servidor a lo que le toca ver a esta sesión.
  *
  *  Filas, no tarjetas: cuatro tarjetas con borde propio en 300 px de ancho son
  *  cuatro cajas compitiendo. Lo no leído se marca con un punto en el margen y
@@ -38,6 +41,7 @@ export function NotificationsPopover({ onOpenAdmin, onProjectAccepted }: {
 }) {
   const token = useServer((s) => s.token) ?? undefined;
   const isAdmin = useServer((s) => s.isAdmin);
+  const sampleAvisos = useServer((s) => s.sample?.avisos ?? []);
   const [items, setItems] = useState<Item[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [leido, setLeido] = useState<Set<string>>(new Set());
@@ -76,6 +80,7 @@ export function NotificationsPopover({ onOpenAdmin, onProjectAccepted }: {
   const key = (i: Item) => `${i.kind}:${i.id}`;
 
   async function resolver(i: Item, si: boolean) {
+    if (i.kind === "aviso") return;
     setBusy(key(i));
     try {
       if (i.kind === "invite") {
@@ -95,7 +100,21 @@ export function NotificationsPopover({ onOpenAdmin, onProjectAccepted }: {
     }
   }
 
-  const pendientes = (items ?? []).filter((i) => !leido.has(key(i))).length;
+  const avisoItems: Item[] = sampleAvisos.map((a) => ({
+    kind: "aviso", id: a.id, who: a.creado_por, at: a.created_at,
+    contenido: a.contenido, icono: a.icono as IconName, prioridad: a.prioridad,
+  }));
+  // Los avisos urgentes van primero (el servidor ya los ordena así dentro de
+  // sí mismos); el resto, invitaciones/solicitudes/avisos normales, por
+  // fecha — mismo criterio que la lista de gestión de Notificaciones.
+  const todos = [...avisoItems, ...(items ?? [])].sort((a, b) => {
+    const au = a.kind === "aviso" && a.prioridad === "urgente";
+    const bu = b.kind === "aviso" && b.prioridad === "urgente";
+    if (au !== bu) return au ? -1 : 1;
+    return b.at - a.at;
+  });
+
+  const pendientes = todos.filter((i) => !leido.has(key(i))).length;
 
   return (
     <div ref={box} className="relative">
@@ -117,7 +136,7 @@ export function NotificationsPopover({ onOpenAdmin, onProjectAccepted }: {
           <div className="flex items-center gap-2 border-b border-border px-[11px] py-2.5">
             <span className="flex-1 text-[11.5px] text-fg">Notificaciones</span>
             {pendientes > 0 && (
-              <button onClick={() => setLeido(new Set((items ?? []).map(key)))}
+              <button onClick={() => setLeido(new Set(todos.map(key)))}
                 className="text-[10.5px] text-subtle transition-colors hover:text-fg">
                 Marcar todas
               </button>
@@ -126,44 +145,59 @@ export function NotificationsPopover({ onOpenAdmin, onProjectAccepted }: {
 
           <div className="max-h-[290px] overflow-y-auto p-1">
             {items === null && <p className="py-5 text-center text-[11px] text-subtle">cargando</p>}
-            {items !== null && items.length === 0 && (
+            {items !== null && todos.length === 0 && (
               <p className="py-5 text-center text-[11px] text-subtle">nada que atender</p>
             )}
 
-            {(items ?? []).map((i) => {
+            {todos.map((i) => {
               const k = key(i);
               return (
                 <div key={k}
-                  className="relative flex gap-[9px] rounded-[9px] py-2 pl-3 pr-[9px]
-                    transition-colors duration-300 hover:bg-white/[.04]">
+                  className={`relative flex gap-[9px] rounded-[9px] py-2 pl-3 pr-[9px]
+                    transition-colors duration-300 hover:bg-white/[.04] ${
+                    i.kind === "aviso" && i.prioridad === "urgente" ? "bg-danger/[.06]" : ""}`}>
                   {!leido.has(k) && (
                     <span className="absolute left-1 top-[15px] h-[4px] w-[4px] rounded-full bg-draw" />
                   )}
                   {i.kind === "invite" ? (
                     <Avatar name={i.who} size={22} />
-                  ) : (
+                  ) : i.kind === "access" ? (
                     <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full
                       bg-warning/[.12] text-warning-fg">
                       <Icon name="shield" size={12} />
                     </span>
+                  ) : (
+                    <span className={`grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full ${
+                      i.prioridad === "urgente" ? "bg-danger/[.15] text-danger-fg" : "bg-draw/[.12] text-draw-fg"}`}>
+                      <Icon name={i.icono} size={12} />
+                    </span>
                   )}
 
                   <div className="min-w-0 flex-1">
-                    <p className="text-[11.5px] leading-snug text-muted">
-                      <b className="font-medium text-fg">{i.who}</b> {i.text}
-                    </p>
-                    <div className="mt-[7px] flex gap-1.5">
-                      <button disabled={busy === k} onClick={() => void resolver(i, true)}
-                        className="jg-press rounded-md bg-accent px-2.5 py-1 text-[10.5px] font-medium
-                          text-black disabled:opacity-40">
-                        {i.kind === "invite" ? "Aceptar" : "Aprobar"}
-                      </button>
-                      <button disabled={busy === k} onClick={() => void resolver(i, false)}
-                        className="jg-press rounded-md border border-white/15 px-2.5 py-[3px]
-                          text-[10.5px] text-fg disabled:opacity-40">
-                        Rechazar
-                      </button>
-                    </div>
+                    {i.kind === "aviso" ? (
+                      <div className="text-[11.5px] leading-snug text-muted">
+                        <b className="font-medium text-fg">{i.who}</b>{" "}
+                        <AvisoEditor contenido={i.contenido} editable={false} />
+                      </div>
+                    ) : (
+                      <p className="text-[11.5px] leading-snug text-muted">
+                        <b className="font-medium text-fg">{i.who}</b> {i.text}
+                      </p>
+                    )}
+                    {i.kind !== "aviso" && (
+                      <div className="mt-[7px] flex gap-1.5">
+                        <button disabled={busy === k} onClick={() => void resolver(i, true)}
+                          className="jg-press rounded-md bg-accent px-2.5 py-1 text-[10.5px] font-medium
+                            text-black disabled:opacity-40">
+                          {i.kind === "invite" ? "Aceptar" : "Aprobar"}
+                        </button>
+                        <button disabled={busy === k} onClick={() => void resolver(i, false)}
+                          className="jg-press rounded-md border border-white/15 px-2.5 py-[3px]
+                            text-[10.5px] text-fg disabled:opacity-40">
+                          Rechazar
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <span className="shrink-0 pt-0.5 font-mono text-[9.5px] text-[#4a4d52]">{ago(i.at)}</span>
