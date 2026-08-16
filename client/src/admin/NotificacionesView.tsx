@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type AvisoInfo, type UserSummary } from "../lib/api";
 import { Avatar } from "../ui/Avatar";
 import { Icon, type IconName } from "../ui/Icon";
+import { usePopover } from "../ui/TitleBar";
 import { AvisoEditor } from "./AvisoEditor";
 import { Seccion } from "./AdminPanel";
 
@@ -123,28 +124,19 @@ function ModalComponer({ token, onCerrar, onPublicado }: {
         style={{ animation: "jg-popup-scale-in 220ms cubic-bezier(.2,.85,.35,1) both" }}>
         <h3 className="mb-4 text-[14px] font-medium">Nueva notificación</h3>
 
-        <AvisoEditor contenido={contenido} onChange={setContenido} />
-
-        <div className="mt-2.5 flex flex-wrap items-center gap-4 rounded-card border border-border bg-panel p-3">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[9px] uppercase tracking-[.06em] text-muted">Icono</span>
-            {ICONOS.map((i) => (
-              <button key={i} onClick={() => setIcono(i)}
-                className={`jg-press grid h-6 w-6 place-items-center rounded-md border ${
-                  icono === i ? "border-white/35 bg-white/[.07] text-fg" : "border-border text-muted"}`}>
-                <Icon name={i} size={12} />
-              </button>
-            ))}
+        {/* Vista previa: el icono y la prioridad no se eligen en una fila de
+            botones aparte — se cambian tocando la propia preview de cómo se
+            va a ver, cada uno con su propio popup. */}
+        <div className="mb-3 flex items-center gap-3 rounded-card border border-border bg-panel p-3">
+          <IconoBoton icono={icono} prioridad={prioridad} onChange={setIcono} />
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] uppercase tracking-[.06em] text-subtle">Vista previa</p>
+            <p className="truncate text-[11px] text-muted">Así se ve el icono y la prioridad en la campana</p>
           </div>
-          <div className="flex overflow-hidden rounded-lg border border-border">
-            <button onClick={() => setPrioridad("normal")}
-              className={`jg-press px-2.5 py-1 text-[10px] ${
-                prioridad === "normal" ? "bg-draw/[.15] text-draw-fg" : "bg-elevated text-muted"}`}>Normal</button>
-            <button onClick={() => setPrioridad("urgente")}
-              className={`jg-press px-2.5 py-1 text-[10px] ${
-                prioridad === "urgente" ? "bg-danger/[.18] text-danger-fg" : "bg-elevated text-muted"}`}>Urgente</button>
-          </div>
+          <PrioridadBoton prioridad={prioridad} onChange={setPrioridad} />
         </div>
+
+        <AvisoEditor contenido={contenido} onChange={setContenido} />
 
         <div className="mt-2.5 rounded-card border border-border bg-panel p-3">
           <label className="mb-1.5 block text-[9px] uppercase tracking-[.06em] text-muted">Destinatarios</label>
@@ -170,6 +162,65 @@ function ModalComponer({ token, onCerrar, onPublicado }: {
  *  como en `InviteDrawer.tsx`. Un grupo y personas concretas no conviven: el
  *  backend solo entiende un destino a la vez, así que elegir uno vacía el
  *  otro. */
+/** El icono de la preview ES el botón que lo cambia — sin fila de botones
+ *  aparte, se toca directamente lo que se está previsualizando. */
+function IconoBoton({ icono, prioridad, onChange }: {
+  icono: IconName; prioridad: "normal" | "urgente"; onChange: (i: IconName) => void;
+}) {
+  const [abierto, setAbierto, box] = usePopover();
+  return (
+    <div ref={box} className="relative shrink-0">
+      <button type="button" onClick={() => setAbierto(!abierto)}
+        className={`jg-press grid h-9 w-9 place-items-center rounded-full ${
+          prioridad === "urgente" ? "bg-danger/[.15] text-danger-fg" : "bg-draw/[.12] text-draw-fg"}`}>
+        <Icon name={icono} size={16} />
+      </button>
+      {abierto && (
+        <div className="absolute left-0 top-[calc(100%+6px)] z-30 grid grid-cols-4 gap-1 rounded-lg
+          border border-white/15 bg-[rgba(20,22,26,.98)] p-2 shadow-lg shadow-black/50"
+          style={{ animation: "jg-popup-scale-in 160ms cubic-bezier(.2,.85,.35,1) both" }}>
+          {ICONOS.map((i) => (
+            <button key={i} type="button" onClick={() => { onChange(i); setAbierto(false); }}
+              className={`jg-press grid h-8 w-8 place-items-center rounded-md border ${
+                icono === i ? "border-white/35 bg-white/[.09] text-fg" : "border-border text-muted"}`}>
+              <Icon name={i} size={14} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Igual: la etiqueta de prioridad de la preview es el botón que la cambia. */
+function PrioridadBoton({ prioridad, onChange }: {
+  prioridad: "normal" | "urgente"; onChange: (p: "normal" | "urgente") => void;
+}) {
+  const [abierto, setAbierto, box] = usePopover();
+  return (
+    <div ref={box} className="relative shrink-0">
+      <button type="button" onClick={() => setAbierto(!abierto)}
+        className={`jg-press rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[.04em] ${
+          prioridad === "urgente" ? "bg-danger/[.18] text-danger-fg" : "bg-draw/[.15] text-draw-fg"}`}>
+        {prioridad === "urgente" ? "Urgente" : "Normal"}
+      </button>
+      {abierto && (
+        <div className="absolute right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-lg border
+          border-white/15 bg-[rgba(20,22,26,.98)] shadow-lg shadow-black/50"
+          style={{ animation: "jg-popup-scale-in 160ms cubic-bezier(.2,.85,.35,1) both" }}>
+          {(["normal", "urgente"] as const).map((p) => (
+            <button key={p} type="button" onClick={() => { onChange(p); setAbierto(false); }}
+              className={`jg-press block w-full px-3 py-1.5 text-left text-[11px] ${
+                p === "urgente" ? "text-danger-fg" : "text-draw-fg"} ${prioridad === p ? "bg-white/[.06]" : ""}`}>
+              {p === "urgente" ? "Urgente" : "Normal"}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DestinatarioInput({ token, chips, onQuitar, onGrupo, onUsuario }: {
   token: string; chips: Chip[];
   onQuitar: (c: Chip) => void;
