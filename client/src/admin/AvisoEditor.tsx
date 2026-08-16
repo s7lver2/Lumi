@@ -1,7 +1,7 @@
-import { useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
 import { Color, FontFamily, TextStyle } from "@tiptap/extension-text-style";
+import { usePopover } from "../ui/TitleBar";
 
 const FUENTES = [
   { label: "Sans", value: "" },
@@ -21,7 +21,10 @@ const DOC_VACIO = { type: "doc", content: [{ type: "paragraph" }] };
 export function AvisoEditor({ contenido, onChange, editable = true }: {
   contenido: unknown; onChange?: (json: unknown) => void; editable?: boolean;
 }) {
-  const [emojiAbierto, setEmojiAbierto] = useState(false);
+  // `usePopover` (la misma pieza que ya cierra la campana al clicar fuera o
+  // con Escape) — sin esto el picker se quedaba abierto para siempre, que es
+  // parte de por qué se sentía roto.
+  const [emojiAbierto, setEmojiAbierto, emojiBox] = usePopover();
   const editor = useEditor({
     extensions: [StarterKit, TextStyle, Color, FontFamily],
     content: (contenido ?? DOC_VACIO) as never,
@@ -36,19 +39,23 @@ export function AvisoEditor({ contenido, onChange, editable = true }: {
   }
 
   return (
-    <div className="overflow-hidden rounded-card border border-border bg-panel">
-      <div className="flex flex-wrap items-center gap-0.5 border-b border-border bg-elevated px-2 py-1.5">
+    // Sin `overflow-hidden` aquí: recortaba el picker de emoji, que es
+    // descendiente de este contenedor aunque se posicione fuera de sus
+    // bordes — el bug real detrás de que se viera "roto". El redondeo de la
+    // barra se resuelve con sus propias esquinas, no recortando al padre.
+    <div className="rounded-card border border-border bg-panel">
+      <div className="flex flex-wrap items-center gap-0.5 rounded-t-[11px] border-b border-border bg-elevated px-2 py-1.5">
         <button type="button" onClick={() => editor.chain().focus().toggleBold().run()}
-          className={`grid h-6 w-6 place-items-center rounded-md text-[12px] font-bold ${
+          className={`jg-press grid h-6 w-6 place-items-center rounded-md text-[12px] font-bold ${
             editor.isActive("bold") ? "bg-white/[.09] text-fg" : "text-muted"}`}>B</button>
         <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()}
-          className={`grid h-6 w-6 place-items-center rounded-md text-[12px] italic ${
+          className={`jg-press grid h-6 w-6 place-items-center rounded-md text-[12px] italic ${
             editor.isActive("italic") ? "bg-white/[.09] text-fg" : "text-muted"}`}>i</button>
         <span className="mx-1.5 h-4 w-px bg-border" />
         <div className="flex gap-1">
           {COLORES.map((c) => (
             <button key={c} type="button" onClick={() => editor.chain().focus().setColor(c).run()}
-              className="h-[15px] w-[15px] rounded border border-white/15" style={{ background: c }} />
+              className="jg-press h-[15px] w-[15px] rounded border border-white/15" style={{ background: c }} />
           ))}
         </div>
         <span className="mx-1.5 h-4 w-px bg-border" />
@@ -57,16 +64,17 @@ export function AvisoEditor({ contenido, onChange, editable = true }: {
           {FUENTES.map((f) => <option key={f.label} value={f.value}>{f.label}</option>)}
         </select>
         <span className="mx-1.5 h-4 w-px bg-border" />
-        <div className="relative">
-          <button type="button" onClick={() => setEmojiAbierto((v) => !v)}
-            className="grid h-6 w-6 place-items-center rounded-md text-[12px] text-muted hover:text-fg">🙂</button>
+        <div ref={emojiBox} className="relative">
+          <button type="button" onClick={() => setEmojiAbierto(!emojiAbierto)}
+            className="jg-press grid h-6 w-6 place-items-center rounded-md text-[13px] text-muted hover:text-fg">🙂</button>
           {emojiAbierto && (
-            <div className="absolute left-0 top-[calc(100%+4px)] z-10 grid grid-cols-6 gap-0.5
-              rounded-lg border border-white/15 bg-[rgba(20,22,26,.98)] p-1.5 shadow-lg shadow-black/50">
+            <div className="absolute left-0 top-[calc(100%+6px)] z-30 grid w-[196px] grid-cols-6 gap-1
+              rounded-lg border border-white/15 bg-[rgba(20,22,26,.98)] p-2 shadow-lg shadow-black/50"
+              style={{ animation: "jg-popup-scale-in 160ms cubic-bezier(.2,.85,.35,1) both" }}>
               {EMOJIS.map((e) => (
                 <button key={e} type="button"
                   onClick={() => { editor.chain().focus().insertContent(e).run(); setEmojiAbierto(false); }}
-                  className="grid h-6 w-6 place-items-center rounded text-[13px] hover:bg-white/[.07]">{e}</button>
+                  className="jg-press grid h-7 w-7 place-items-center rounded-md text-[15px] hover:bg-white/[.08]">{e}</button>
               ))}
             </div>
           )}
