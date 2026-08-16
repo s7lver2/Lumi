@@ -137,6 +137,8 @@ async fn main() -> anyhow::Result<()> {
             "/v1/admin/security/denylist",
             post(routes::security::add_deny).delete(routes::security::remove_deny),
         )
+        .route("/v1/admin/avisos", get(routes::avisos::list_all).post(routes::avisos::create))
+        .route("/v1/avisos/:id", axum::routing::delete(routes::avisos::remove))
         .route("/v1/projects", get(routes::projects::list).post(routes::projects::create))
         .route(
             "/v1/projects/:id",
