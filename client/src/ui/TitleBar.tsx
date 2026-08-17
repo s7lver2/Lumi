@@ -125,25 +125,31 @@ function ServerPill() {
       </button>
 
       {open && (
-        <div className={`${pop} w-[250px] p-2.5`} style={popAnim}>
-          <div className="flex items-center gap-[7px] text-[11.5px] text-fg">
-            {hello.locked && <LockIcon size={12} className="text-warning" />}
+        <div className={`${pop} w-[264px] p-3`} style={popAnim}>
+          <div className="flex items-center gap-2 text-[11.5px] text-fg">
+            {hello.locked ? <LockIcon size={13} className="text-warning" /> : <Icon name="gpu" size={14} className="text-subtle" />}
             <span>{hello.locked ? "Servidor sellado" : "Servidor verificado"}</span>
           </div>
-          <p className="mb-2 font-mono text-[10px] text-subtle">
+          <p className="mb-2.5 font-mono text-[10px] text-subtle">
             {addr} · {hello.mode === "native" ? "nativo" : "docker"}
           </p>
 
-          {hello.gpus.map((g) => {
+          {hello.gpus.map((g, i) => {
             const m = sample?.gpus.find((x) => x.index === g.index);
             return (
-              <div key={g.index} className="mt-1.5">
-                <Row k={`gpu${g.index} · ${g.name.replace(/NVIDIA |GeForce /g, "")}`}
-                  v={m ? `${m.util_pct}%` : "—"} />
-                <Meter pct={m?.util_pct ?? 0} />
-                <Row k="vram"
-                  v={m ? `${(m.vram_used_mb / 1024).toFixed(1)} / ${Math.round(m.vram_total_mb / 1024)} GB` : "—"} />
-                <Meter pct={m ? (m.vram_used_mb / Math.max(1, m.vram_total_mb)) * 100 : 0} />
+              <div key={g.index} className="mb-1.5 flex items-center gap-2.5 rounded-[9px] bg-white/[.035] p-2"
+                style={{ animation: `jg-fade-rise .4s ${i * 60}ms cubic-bezier(.16,1,.3,1) both` }}>
+                <Ring pct={m?.util_pct ?? 0} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[10.5px] text-fg">{g.name.replace(/NVIDIA |GeForce /g, "")}</p>
+                  <p className="mt-0.5 font-mono text-[9px] text-subtle">gpu{g.index} · {m ? `${m.util_pct}% uso` : "—"}</p>
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    <Meter pct={m ? (m.vram_used_mb / Math.max(1, m.vram_total_mb)) * 100 : 0} />
+                    <span className="shrink-0 font-mono text-[9px] text-subtle">
+                      {m ? `${(m.vram_used_mb / 1024).toFixed(1)}/${Math.round(m.vram_total_mb / 1024)}GB` : "—"}
+                    </span>
+                  </div>
+                </div>
               </div>
             );
           })}
@@ -175,9 +181,30 @@ function Row({ k, v }: { k: string; v: string }) {
   );
 }
 
+/** Anillo de uso, no una barra más: el bloque de GPU ya trae una barra de
+ *  vram debajo, y dos barras idénticas apiladas se leían como el mismo dato
+ *  repetido. El % en el centro es la cifra real, el trazo solo la sitúa. */
+function Ring({ pct }: { pct: number }) {
+  const clamped = Math.min(100, Math.max(0, pct));
+  const c = 2 * Math.PI * 14;
+  return (
+    <div className="relative h-8 w-8 shrink-0">
+      <svg viewBox="0 0 32 32" className="h-8 w-8 -rotate-90">
+        <circle cx="16" cy="16" r="14" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="2.5" />
+        <circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+          className="text-draw transition-[stroke-dasharray] duration-700 ease-expo"
+          strokeDasharray={`${(clamped / 100) * c} ${c}`} />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center font-mono text-[8.5px] text-fg">
+        {Math.round(clamped)}
+      </span>
+    </div>
+  );
+}
+
 function Meter({ pct }: { pct: number }) {
   return (
-    <div className="h-[3px] overflow-hidden rounded-sm bg-white/[.07]">
+    <div className="h-[3px] flex-1 overflow-hidden rounded-sm bg-white/[.07]">
       <div className="h-full rounded-sm bg-draw transition-[width] duration-1000 ease-expo"
         style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
     </div>
