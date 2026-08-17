@@ -281,12 +281,11 @@ Es el subsistema 3 y está planificado, no aparcado. Se anota aquí solo lo que 
 prometiendo por el camino: rediseñar desde cero las vistas provisionales de solicitudes y
 usuarios del subsistema 2, la fila de configuración del mapa del subsistema 6
 
-### Hardware: CPU (temperatura por núcleo, PPT/PBO)
+### Hardware: control de ventilador de CPU (PWM de placa base)
 
-La sección Hardware de esta entrega cubre solo GPU. CPU necesita su propia spec: lectura por
-núcleo físico (Linux expone esto vía `coretemp`/`k10temp`, no NVML) y su propio control de
-potencia (PL1/PL2 en Intel, PPT/PBO en AMD) — mecanismos completamente distintos a los de GPU,
-con su propia matriz de capacidades.
+Fuera de alcance de la entrega de CPU (que cubrió temperatura por núcleo y PL1/PL2 Intel/PPT
+AMD): el control de ventilador de CPU depende de `fancontrol`/`lm-sensors` y es un mecanismo
+por placa base, no por CPU — un proyecto aparte con su propia detección de hardware.
 
 ### Hardware: comprobación de firmware de ventilador antes de escribir
 
