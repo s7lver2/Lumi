@@ -220,7 +220,17 @@ async fn start_telemetry(
                     }
                 }
             }
+            // El stream terminó (fin limpio o un frame con error en medio —
+            // `while let Some(Ok(chunk))` sale igual en los dos casos). Sin
+            // esta pausa, reconectar aquí no tenía ningún freno: si el
+            // daemon se reinicia o la conexión da un hipo, este bucle
+            // reintentaba al instante, una y otra vez, sin el respiro de 2s
+            // que ya tenía la rama de "ni siquiera conectó". Eso es lo que
+            // hacía parpadear los avisos de destino "personas" — el único
+            // tipo cuya visibilidad se vuelve a resolver en cada conexión
+            // nueva de este SSE.
             let _ = app.emit("telemetry-down", ());
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         }
     });
     Ok(())
