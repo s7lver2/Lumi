@@ -11,7 +11,24 @@ export interface Image {
 
 export interface Capability { id: string; label: string; state: "on" | "partial" | "off"; reason: string | null }
 export interface GpuInfo { index: number; name: string; vram_total_mb: number; pcie: string }
-export interface GpuSample { index: number; util_pct: number; vram_used_mb: number; vram_total_mb: number; temp_c: number | null }
+export interface GpuSample {
+  index: number; util_pct: number; vram_used_mb: number; vram_total_mb: number;
+  temp_c: number | null; clock_mhz: number | null; fan_pct: number | null;
+}
+export interface PuntoCurva { temp_c: number; valor: number }
+export interface RangoFabrica { potencia_min_w: number; potencia_max_w: number; temp_throttle_c: number | null }
+export interface HardwareProfile {
+  potencia_w: number; offset_nucleo_mhz: number; offset_memoria_mhz: number;
+  curva_ventilador: PuntoCurva[];
+}
+export interface HardwareDevice {
+  index: number; name: string; sample: GpuSample; rango: RangoFabrica;
+  perfil: HardwareProfile | null;
+}
+export interface PatchHardwareReq {
+  potencia_w?: number; offset_nucleo_mhz?: number; offset_memoria_mhz?: number;
+  curva_ventilador?: PuntoCurva[]; confirmado?: boolean;
+}
 export interface AvisoInfo {
   id: number;
   /** Documento JSON de Tiptap — opaco para el resto del cliente, solo lo
@@ -296,4 +313,7 @@ export const api = {
     call("GET", path, undefined, undefined, ticket).then(t => JSON.parse(t) as T),
   ticketPost: <T>(path: string, body: unknown, ticket: string) =>
     call("POST", path, body, undefined, ticket).then(t => (t ? (JSON.parse(t) as T) : (null as T))),
+  hardwareListar: (token: string) => api.get<HardwareDevice[]>("/v1/admin/hardware", token),
+  hardwareAplicar: (index: number, req: PatchHardwareReq, token: string) =>
+    api.patch<HardwareDevice>(`/v1/admin/hardware/${index}`, req, token),
 };
