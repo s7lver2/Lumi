@@ -42,6 +42,29 @@ function ring(lat: number, lng: number, radiusM: number): [number, number][] {
  *  en los tres vuelos de cámara para que todos se sientan igual de fluidos. */
 const EASE_OUT_CUBIC = (t: number) => 1 - Math.pow(1 - t, 3);
 
+/** `--ui-scale` (index.css) escala TODA la interfaz con un `transform` en
+ *  `#root` para que se lea a tamaño en ventanas grandes. Un lienzo GL anidado
+ *  ahí dentro se mide en píxeles de ANTES de esa escala — MapLibre le pone al
+ *  canvas la resolución de su `clientWidth` (que un `transform` nunca toca),
+ *  y el compositor infla ese mapa de bits ya pintado hasta el tamaño visual
+ *  real. El resultado no es solo borroso: arrastrar y hacer zoom leen la
+ *  posición del ratón contra un lienzo más pequeño que lo que se ve en
+ *  pantalla, así que cuanto mayor la escala, más se nota el arrastre a
+ *  trompicones y el zoom a saltos — y por eso empeora al maximizar. */
+function useUiScale(): number {
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const leer = () => {
+      const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ui-scale"));
+      setScale(Number.isFinite(v) && v > 0 ? v : 1);
+    };
+    leer();
+    window.addEventListener("resize", leer);
+    return () => window.removeEventListener("resize", leer);
+  }, []);
+  return scale;
+}
+
 function el(m: Marker): HTMLElement {
   const c = COLOR[m.kind];
   const d = document.createElement("div");
@@ -89,6 +112,7 @@ export function MapCanvas({
   // llamada. Las teselas y el estilo sí iban firmados, porque van por el
   // puente nativo `lumi://`, que lleva el token en su propio estado.
   const token = useServer((s) => s.token) ?? undefined;
+  const uiScale = useUiScale();
 
   useEffect(() => {
     let dead = false;
@@ -358,8 +382,13 @@ export function MapCanvas({
           Con el ancla fuera y el contenedor a `h-full w-full` dentro, da igual
           quién gane esa carrera: el 100 % del padre es el 100 % del padre. */}
       <div className="absolute inset-0">
-        <div ref={box} className="h-full w-full transition-opacity duration-700 ease-expo"
-          style={{ opacity: ready ? 1 : 0 }} />
+        {/* Se agranda `uiScale` veces y se contrarresta con la escala inversa:
+            las dos se cancelan visualmente (mismo sitio, mismo tamaño en
+            pantalla), pero MapLibre mide `clientWidth` ANTES de aplicar su
+            propio `transform` — así que su canvas se crea a la resolución
+            física real, y el ratón vuelve a alinearse 1:1 con lo que se ve. */}
+        <div ref={box} className="origin-top-left transition-opacity duration-700 ease-expo"
+          style={{ opacity: ready ? 1 : 0, width: `${uiScale * 100}%`, height: `${uiScale * 100}%`, transform: `scale(${1 / uiScale})` }} />
       </div>
 
       {/* Encima del dock y a la derecha del carril, donde no tapa resultados. */}
