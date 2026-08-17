@@ -281,6 +281,21 @@ Es el subsistema 3 y está planificado, no aparcado. Se anota aquí solo lo que 
 prometiendo por el camino: rediseñar desde cero las vistas provisionales de solicitudes y
 usuarios del subsistema 2, la fila de configuración del mapa del subsistema 6
 
+### Hardware: CPU (temperatura por núcleo, PPT/PBO)
+
+La sección Hardware de esta entrega cubre solo GPU. CPU necesita su propia spec: lectura por
+núcleo físico (Linux expone esto vía `coretemp`/`k10temp`, no NVML) y su propio control de
+potencia (PL1/PL2 en Intel, PPT/PBO en AMD) — mecanismos completamente distintos a los de GPU,
+con su propia matriz de capacidades.
+
+### Hardware: comprobación de firmware de ventilador antes de escribir
+
+El control de curva de ventilador se intenta siempre que `nvidia-settings` responde
+(`hardware_curvas` en `On`), pero algunas tarjetas de diseño de referencia o blower rechazan
+la escritura a nivel de firmware aunque el software la permita. Hoy ese rechazo se propaga tal
+cual venga de `nvidia-settings`; sería mejor detectarlo por adelantado y anunciarlo en la
+capacidad en vez de que el usuario lo descubra al intentar aplicar un cambio.
+
 ### mTLS o secreto de dispositivo por clave
 
 La comprobación de clase de dispositivo de una clave de API es hoy heurística (cabeceras
