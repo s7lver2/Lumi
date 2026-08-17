@@ -250,7 +250,18 @@ pub struct Store(Mutex<Connection>);
 
 impl Store {
     pub fn open(dir: &Path) -> Result<Self> {
-        let c = Connection::open(dir.join("lumi.db"))?;
+        let ruta = dir.join("lumi.db");
+        let c = Connection::open(&ruta)?;
+        // Sin esto, el fichero nace con el umask por defecto del proceso —
+        // en un host mal configurado (umask 022, cuenta compartida) podía
+        // quedar legible por cualquiera. Ahora guarda hashes de contraseña y
+        // de token, no secretos en claro, pero restringir el fichero al
+        // dueño del daemon sigue siendo la defensa barata de más capas.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&ruta, std::fs::Permissions::from_mode(0o600));
+        }
         // El instalador escribe la clave de vinculación en este mismo fichero
         // justo después de arrancar el servicio (`lumi install`), y por
         // defecto SQLite falla al instante con "database is locked" en vez de
