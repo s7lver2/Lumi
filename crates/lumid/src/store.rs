@@ -228,6 +228,16 @@ CREATE TABLE IF NOT EXISTS avisos_usuarios (
     user_id   INTEGER NOT NULL,
     PRIMARY KEY (aviso_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS hardware_profiles (
+    gpu_index          INTEGER PRIMARY KEY,
+    potencia_w         INTEGER NOT NULL,
+    offset_nucleo_mhz  INTEGER NOT NULL,
+    offset_memoria_mhz INTEGER NOT NULL,
+    -- JSON de `Vec<PuntoCurva>` — una curva no necesita sus propias filas,
+    -- se edita y se relee entera cada vez.
+    curva_ventilador   TEXT NOT NULL,
+    updated_at         INTEGER NOT NULL
+);
 ";
 
 pub struct Store(Mutex<Connection>);
