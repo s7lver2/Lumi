@@ -788,3 +788,55 @@ pub struct PatchHardwareReq {
     #[serde(default)]
     pub confirmado: bool,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CpuCoreSample {
+    pub indice: u32,
+    /// `None` si no hay sensor `hwmon` para este host (WSL2, siempre).
+    pub temp_c: Option<i32>,
+    pub uso_pct: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CpuSample {
+    pub nucleos: Vec<CpuCoreSample>,
+    /// Consumo real actual. `None` si no hay RAPL (WSL2) ni `ryzenadj` legible.
+    pub potencia_w: Option<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CpuRango {
+    pub potencia_min_w: f32,
+    pub potencia_max_w: f32,
+    /// `true` en AMD: no hay rango de fábrica leído del hardware, es una
+    /// aproximación (50–100% del TDP declarado) — la interfaz lo anuncia
+    /// como tal, no lo hace pasar por un dato real como en Intel.
+    pub aproximado: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CpuProfile {
+    /// PL1 en Intel (sostenido); STAPM/slow-limit en AMD. Mismo campo, otra
+    /// semántica según fabricante — no hay dos CPUs a la vez, no hace falta
+    /// distinguir en el esquema.
+    pub pl1_w: f32,
+    /// PL2 en Intel (boost); fast-limit en AMD.
+    pub pl2_w: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CpuDevice {
+    /// `"intel"` | `"amd"` | `"otro"`.
+    pub fabricante: String,
+    pub sample: CpuSample,
+    pub rango: CpuRango,
+    pub perfil: Option<CpuProfile>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PatchCpuReq {
+    pub pl1_w: Option<f32>,
+    pub pl2_w: Option<f32>,
+    #[serde(default)]
+    pub confirmado: bool,
+}

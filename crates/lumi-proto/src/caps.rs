@@ -35,6 +35,12 @@ pub struct HardwareCaps {
     pub potencia_reason: Option<String>,
     pub curvas: CapState,
     pub curvas_reason: Option<String>,
+    pub cpu_potencia_intel: CapState,
+    pub cpu_potencia_intel_reason: Option<String>,
+    pub cpu_potencia_amd: CapState,
+    pub cpu_potencia_amd_reason: Option<String>,
+    pub cpu_temperatura: CapState,
+    pub cpu_temperatura_reason: Option<String>,
 }
 
 impl Default for HardwareCaps {
@@ -44,6 +50,12 @@ impl Default for HardwareCaps {
             potencia_reason: Some("todavía no comprobado".into()),
             curvas: CapState::Off,
             curvas_reason: Some("todavía no comprobado".into()),
+            cpu_potencia_intel: CapState::Off,
+            cpu_potencia_intel_reason: Some("todavía no comprobado".into()),
+            cpu_potencia_amd: CapState::Off,
+            cpu_potencia_amd_reason: Some("todavía no comprobado".into()),
+            cpu_temperatura: CapState::Off,
+            cpu_temperatura_reason: Some("todavía no comprobado".into()),
         }
     }
 }
@@ -90,6 +102,24 @@ pub fn matrix(mode: Mode, gpu_count: usize, qdrant_vivo: bool, hw: &HardwareCaps
         hw.curvas,
         hw.curvas_reason.as_deref(),
     );
+    let hw_cpu_intel = cap(
+        "cpu_potencia_intel",
+        "Ajustar PL1/PL2 de CPU (Intel)",
+        hw.cpu_potencia_intel,
+        hw.cpu_potencia_intel_reason.as_deref(),
+    );
+    let hw_cpu_amd = cap(
+        "cpu_potencia_amd",
+        "Ajustar PPT de CPU (AMD, vía ryzenadj — sin garantía del fabricante)",
+        hw.cpu_potencia_amd,
+        hw.cpu_potencia_amd_reason.as_deref(),
+    );
+    let hw_cpu_temp = cap(
+        "cpu_temperatura",
+        "Temperatura de CPU por núcleo",
+        hw.cpu_temperatura,
+        hw.cpu_temperatura_reason.as_deref(),
+    );
     match mode {
         Mode::Native => vec![
             cap(
@@ -104,6 +134,9 @@ pub fn matrix(mode: Mode, gpu_count: usize, qdrant_vivo: bool, hw: &HardwareCaps
             indices,
             hw_potencia,
             hw_curvas,
+            hw_cpu_intel,
+            hw_cpu_amd,
+            hw_cpu_temp,
         ],
         Mode::Docker => vec![
             cap(
@@ -128,6 +161,9 @@ pub fn matrix(mode: Mode, gpu_count: usize, qdrant_vivo: bool, hw: &HardwareCaps
             indices,
             hw_potencia,
             hw_curvas,
+            hw_cpu_intel,
+            hw_cpu_amd,
+            hw_cpu_temp,
         ],
     }
 }
