@@ -166,6 +166,13 @@ pub async fn remove(
         let sql = [
             "DELETE FROM analysis_images WHERE analysis_id IN
                (SELECT a.id FROM analyses a JOIN cases k ON k.id = a.case_id WHERE k.project_id = ?1)",
+            // Sin estas dos, borrar un proyecto dejaba huérfanas para siempre
+            // las filas de hipótesis y de agentes de cada análisis suyo —
+            // nada las vuelve a tocar ni las cuenta, así que solo crecen.
+            "DELETE FROM analysis_hypotheses WHERE analysis_id IN
+               (SELECT a.id FROM analyses a JOIN cases k ON k.id = a.case_id WHERE k.project_id = ?1)",
+            "DELETE FROM analysis_agents WHERE analysis_id IN
+               (SELECT a.id FROM analyses a JOIN cases k ON k.id = a.case_id WHERE k.project_id = ?1)",
             "DELETE FROM analyses WHERE case_id IN (SELECT id FROM cases WHERE project_id = ?1)",
             "DELETE FROM images   WHERE case_id IN (SELECT id FROM cases WHERE project_id = ?1)",
             "DELETE FROM cases    WHERE project_id = ?1",

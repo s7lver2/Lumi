@@ -260,9 +260,11 @@ pub async fn remove(
     }
     let c = app.store.conn();
     let _ = c.execute("DELETE FROM analysis_images WHERE analysis_id = ?1", [id]);
-    // Un huérfano en analysis_hypotheses no rompe nada hoy, pero es basura
-    // que crece: se borra en cascada con el resto de lo que cuelga del análisis.
+    // Un huérfano en analysis_hypotheses/analysis_agents no rompe nada hoy,
+    // pero es basura que crece: se borra en cascada con el resto de lo que
+    // cuelga del análisis. Antes solo se limpiaba hipótesis y no agentes.
     let _ = c.execute("DELETE FROM analysis_hypotheses WHERE analysis_id = ?1", [id]);
+    let _ = c.execute("DELETE FROM analysis_agents WHERE analysis_id = ?1", [id]);
     c.execute("DELETE FROM analyses WHERE id = ?1", [id])
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
     Ok(StatusCode::NO_CONTENT)

@@ -142,6 +142,10 @@ pub async fn remove(
         let c = app.store.conn();
         for sql in [
             "DELETE FROM analysis_images WHERE analysis_id IN (SELECT id FROM analyses WHERE case_id = ?1)",
+            // Mismo motivo que en `projects::remove`: sin esto quedan
+            // huérfanas para siempre, y nada las cuenta ni las reclama.
+            "DELETE FROM analysis_hypotheses WHERE analysis_id IN (SELECT id FROM analyses WHERE case_id = ?1)",
+            "DELETE FROM analysis_agents WHERE analysis_id IN (SELECT id FROM analyses WHERE case_id = ?1)",
             "DELETE FROM analyses WHERE case_id = ?1",
             "DELETE FROM images WHERE case_id = ?1",
             "DELETE FROM cases WHERE id = ?1",
