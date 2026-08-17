@@ -21,6 +21,13 @@ pub fn sample(app: &App, visto_por: Option<(i64, bool)>) -> Sample {
                     temp_c: d
                         .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
                         .ok(),
+                    clock_mhz: d
+                        .clock(
+                            nvml_wrapper::enum_wrappers::device::Clock::Graphics,
+                            nvml_wrapper::enum_wrappers::device::ClockId::Current,
+                        )
+                        .ok(),
+                    fan_pct: d.fan_speed(0).ok(),
                 })
             })
             .collect(),
@@ -73,29 +80,37 @@ pub fn sample(app: &App, visto_por: Option<(i64, bool)>) -> Sample {
 /// sesión no cambia mientras el stream sigue abierto.
 fn avisos_para(app: &App, visto_por: Option<(i64, bool)>) -> Vec<AvisoInfo> {
     let Some((user_id, is_admin)) = visto_por else { return Vec::new() };
-    let c = app.store.conn();
-    let Ok(mut q) = c.prepare(
-        "SELECT id, contenido, icono, prioridad, destino, creado_por, created_at
-         FROM avisos ORDER BY created_at DESC",
-    ) else {
-        return Vec::new();
-    };
-    let Ok(filas) = q.query_map([], |r| {
-        let contenido_texto: String = r.get(1)?;
-        Ok(AvisoInfo {
-            id: r.get(0)?,
-            contenido: serde_json::from_str(&contenido_texto).unwrap_or(serde_json::Value::Null),
-            icono: r.get(2)?,
-            prioridad: r.get(3)?,
-            destino: r.get(4)?,
-            creado_por: r.get(5)?,
-            created_at: r.get(6)?,
-        })
-    }) else {
-        return Vec::new();
+    // `c` se suelta al final de este bloque, antes del filtro de abajo: ese
+    // filtro llama a `incluye_a`, que vuelve a pedir `app.store.conn()` — si
+    // siguiéramos sujetando el guard aquí sería un doble lock sobre el mismo
+    // Mutex no reentrante, en el mismo hilo, y un interbloqueo permanente que
+    // se lleva por delante cualquier otra petición (una sola conexión global).
+    let filas: Vec<AvisoInfo> = {
+        let c = app.store.conn();
+        let Ok(mut q) = c.prepare(
+            "SELECT id, contenido, icono, prioridad, destino, creado_por, created_at
+             FROM avisos ORDER BY created_at DESC",
+        ) else {
+            return Vec::new();
+        };
+        let Ok(filas) = q.query_map([], |r| {
+            let contenido_texto: String = r.get(1)?;
+            Ok(AvisoInfo {
+                id: r.get(0)?,
+                contenido: serde_json::from_str(&contenido_texto).unwrap_or(serde_json::Value::Null),
+                icono: r.get(2)?,
+                prioridad: r.get(3)?,
+                destino: r.get(4)?,
+                creado_por: r.get(5)?,
+                created_at: r.get(6)?,
+            })
+        }) else {
+            return Vec::new();
+        };
+        filas.flatten().collect()
     };
     let mut avisos: Vec<AvisoInfo> = filas
-        .flatten()
+        .into_iter()
         .filter(|a| {
             a.destino == "todos"
                 || (a.destino == "admins" && is_admin)

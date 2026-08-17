@@ -208,7 +208,7 @@ pub fn run(auto: bool) -> Result<PairKey> {
     }
 
     ui::head("capacidades");
-    for c in lumi_proto::caps::matrix(mode, gpus.len(), qdrant_vivo) {
+    for c in lumi_proto::caps::matrix(mode, gpus.len(), qdrant_vivo, &lumi_proto::caps::HardwareCaps::default()) {
         match c.state {
             CapState::On => ui::ok(&c.label),
             _ => {

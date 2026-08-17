@@ -7,6 +7,7 @@ pub mod avisos;
 pub mod cases;
 pub mod catalogo;
 pub mod claim;
+pub mod hardware;
 pub mod hello;
 pub mod images;
 pub mod indices;

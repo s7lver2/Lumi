@@ -16,7 +16,12 @@ pub async fn get(State(app): State<App>) -> Json<Hello> {
         mode: app.mode,
         locked: app.master.read().await.is_none(),
         fingerprint: app.fingerprint.clone(),
-        capabilities: lumi_proto::caps::matrix(app.mode, app.gpus.len(), qdrant_vivo),
+        capabilities: lumi_proto::caps::matrix(
+            app.mode,
+            app.gpus.len(),
+            qdrant_vivo,
+            &crate::hardware::capacidades().await,
+        ),
         gpus: app.gpus.clone(),
     })
 }
