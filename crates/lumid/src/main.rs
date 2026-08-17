@@ -2,6 +2,7 @@ mod limits;
 mod assets;
 mod exif;
 mod hardware;
+mod hardware_cpu;
 mod agentar;
 mod indices;
 mod mantenimiento;
@@ -88,7 +89,10 @@ async fn main() -> anyhow::Result<()> {
 
     tokio::spawn({
         let app = app.clone();
-        async move { hardware::reaplicar_al_arrancar(&app).await }
+        async move {
+            hardware::reaplicar_al_arrancar(&app).await;
+            hardware_cpu::reaplicar_al_arrancar(&app).await;
+        }
     });
 
     use axum::routing::post;
@@ -123,6 +127,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/resumen", get(routes::admin::resumen))
         .route("/v1/admin/hardware", get(routes::hardware::listar))
         .route("/v1/admin/hardware/:index", axum::routing::patch(routes::hardware::aplicar))
+        .route("/v1/admin/hardware/cpu", get(routes::hardware_cpu::leer).patch(routes::hardware_cpu::aplicar))
         .route("/v1/admin/provisioning/complete", post(routes::admin::provisionar))
         .route("/v1/admin/models/accept-licenses", post(routes::models::accept_licenses))
         .route("/v1/admin/models/download", post(routes::models::download))

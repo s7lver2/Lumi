@@ -8,6 +8,7 @@ pub mod cases;
 pub mod catalogo;
 pub mod claim;
 pub mod hardware;
+pub mod hardware_cpu;
 pub mod hello;
 pub mod images;
 pub mod indices;
