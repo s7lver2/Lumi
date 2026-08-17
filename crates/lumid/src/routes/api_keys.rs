@@ -10,7 +10,12 @@ use axum::{http::HeaderMap, http::StatusCode, Json};
 use lumi_proto::api::{ApiKeyInfo, IssueApiKeyReq, IssuedApiKey, PatchApiKeyReq};
 
 fn map_row(r: &rusqlite::Row) -> rusqlite::Result<ApiKeyInfo> {
-    let token: String = r.get(2)?;
+    // El fragmento se guarda aparte, en claro, al emitir la clave — `token`
+    // ahora guarda su hash (`lumi_proto::crypto::hash_token`), y un hash no
+    // se puede recortar para enseñar "lumi_ak_9f83…c1e2" después. Las claves
+    // emitidas antes de este cambio no tienen fragmento guardado: se enseñan
+    // sin él en vez de inventar uno.
+    let prefix: Option<String> = r.get(2)?;
     let label: Option<String> = r.get(1)?;
     let expires_at: i64 = r.get(5)?;
     let ips: Option<String> = r.get(6)?;
@@ -21,11 +26,7 @@ fn map_row(r: &rusqlite::Row) -> rusqlite::Result<ApiKeyInfo> {
     Ok(ApiKeyInfo {
         public_id: r.get(0)?,
         label: label.unwrap_or_default(),
-        prefix: if token.len() > 20 {
-            format!("{}…{}", &token[..16], &token[token.len() - 4..])
-        } else {
-            token.clone()
-        },
+        prefix: prefix.unwrap_or_default(),
         owner_username: r.get(8)?,
         owner_is_service: r.get::<_, i64>(9)? == 1,
         created_at: r.get(3)?,
@@ -36,7 +37,7 @@ fn map_row(r: &rusqlite::Row) -> rusqlite::Result<ApiKeyInfo> {
     })
 }
 
-const SELECT_CLAVE: &str = "SELECT s.public_id, s.label, s.token, s.created_at, s.last_seen, s.expires_at,
+const SELECT_CLAVE: &str = "SELECT s.public_id, s.label, s.token_prefix, s.created_at, s.last_seen, s.expires_at,
                                     s.ips, s.devices, u.username, u.is_service
                              FROM sessions s JOIN users u ON u.id = s.user_id
                              WHERE s.kind = 'api_key'";
@@ -123,6 +124,11 @@ pub async fn create(
     }
 
     let secret = format!("lumi_ak_{}", crate::routes::claim::new_token());
+    let prefix = if secret.len() > 20 {
+        format!("{}…{}", &secret[..16], &secret[secret.len() - 4..])
+    } else {
+        secret.clone()
+    };
     let public_id = crate::routes::claim::new_token();
     let t = now();
     let expires_at = req.expires_in_days.map(|d| t + d * 86_400).unwrap_or(i64::MAX);
@@ -132,9 +138,12 @@ pub async fn create(
     app.store
         .conn()
         .execute(
-            "INSERT INTO sessions (token, user_id, expires_at, created_at, last_seen, public_id, label, kind, ips, devices)
-             VALUES (?1, ?2, ?3, ?4, ?4, ?5, ?6, 'api_key', ?7, ?8)",
-            rusqlite::params![secret, target_user_id, expires_at, t, public_id, req.label, ips_json, devices_json],
+            "INSERT INTO sessions (token, user_id, expires_at, created_at, last_seen, public_id, label, kind, ips, devices, token_prefix)
+             VALUES (?1, ?2, ?3, ?4, ?4, ?5, ?6, 'api_key', ?7, ?8, ?9)",
+            rusqlite::params![
+                lumi_proto::crypto::hash_token(&secret),
+                target_user_id, expires_at, t, public_id, req.label, ips_json, devices_json, prefix,
+            ],
         )
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 

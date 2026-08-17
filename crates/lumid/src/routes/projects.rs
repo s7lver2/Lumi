@@ -241,6 +241,18 @@ pub async fn add_member(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Cuántas veces ha buscado cada sesión en la última ventana. Sin esto, una
+/// sola sesión válida podía reconstruir el catálogo entero de usernames
+/// probando letra por letra — la búsqueda en sí sigue siendo necesaria (es
+/// la única forma honesta de saber si una cuenta existe antes de invitarla),
+/// pero nada obliga a que sea gratis y sin límite para quien la use así.
+fn limitador_busqueda() -> &'static std::sync::Mutex<HashMap<i64, (i64, u32)>> {
+    static L: std::sync::OnceLock<std::sync::Mutex<HashMap<i64, (i64, u32)>>> = std::sync::OnceLock::new();
+    L.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
+const BUSQUEDAS_POR_MINUTO: u32 = 20;
+
 /// Sugerencias mientras se escribe a quién invitar. Cualquier sesión vale —no
 /// solo el dueño del proyecto— porque en el momento de pedir esto todavía no
 /// se sabe si el nombre pertenece a un proyecto que gestionas; es la misma
@@ -249,10 +261,25 @@ pub async fn add_member(
 pub async fn search_users(
     State(app): State<App>, headers: HeaderMap, Query(q): Query<HashMap<String, String>>,
 ) -> Result<Json<Vec<UserSummary>>, Fail> {
-    require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
+    let (uid, _) = require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
     let needle = q.get("q").map(|s| s.trim()).unwrap_or("");
-    if needle.is_empty() {
+    // Un solo carácter escanea casi cualquier username en 26 peticiones; dos
+    // ya reducen el catálogo lo bastante como para que buscar de verdad (en
+    // vez de barrer el servidor) sea el camino más corto.
+    if needle.chars().count() < 2 {
         return Ok(Json(vec![]));
+    }
+    {
+        let t = now();
+        let mut mapa = limitador_busqueda().lock().unwrap();
+        let entrada = mapa.entry(uid).or_insert((t, 0));
+        if t - entrada.0 >= 60 {
+            *entrada = (t, 0);
+        }
+        entrada.1 += 1;
+        if entrada.1 > BUSQUEDAS_POR_MINUTO {
+            return Err(err(StatusCode::TOO_MANY_REQUESTS, "demasiadas búsquedas; espera un momento"));
+        }
     }
     let c = app.store.conn();
     let mut stmt = c
@@ -367,10 +394,14 @@ pub async fn enter(State(app): State<App>, Path(id): Path<i64>, headers: HeaderM
             // colgada: se toma como abandonada y se roba sin preguntar.
         }
     }
+    // Se guarda el hash, no el token en claro: esta fila se compara luego
+    // directamente contra `sessions.token` (que ya guarda el hash) para
+    // saber si la sesión de quien tiene el candado sigue viva — las dos
+    // columnas tienen que hablar el mismo idioma.
     c.execute(
         "INSERT INTO project_locks (project_id, user_id, token, since) VALUES (?1, ?2, ?3, ?4)
          ON CONFLICT(project_id) DO UPDATE SET user_id = ?2, token = ?3, since = ?4",
-        rusqlite::params![id, uid, token, now()],
+        rusqlite::params![id, uid, lumi_proto::crypto::hash_token(&token), now()],
     )
     .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
     Ok(StatusCode::NO_CONTENT)

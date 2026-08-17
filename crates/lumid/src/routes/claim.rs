@@ -52,7 +52,7 @@ pub async fn claim(
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         c.execute(
             "INSERT INTO sessions (token, user_id, expires_at) VALUES (?1, 0, ?2)",
-            rusqlite::params![token, now() + BOOTSTRAP_TTL_S as i64],
+            rusqlite::params![lumi_proto::crypto::hash_token(&token), now() + BOOTSTRAP_TTL_S as i64],
         )
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         token
@@ -78,7 +78,7 @@ pub async fn create_admin(
     let valid: i64 = c
         .query_row(
             "SELECT COUNT(*) FROM sessions WHERE token = ?1 AND user_id = 0 AND expires_at > ?2",
-            rusqlite::params![req.bootstrap_token, now()],
+            rusqlite::params![lumi_proto::crypto::hash_token(&req.bootstrap_token), now()],
             |r| r.get(0),
         )
         .unwrap_or(0);
@@ -92,7 +92,7 @@ pub async fn create_admin(
         rusqlite::params![req.username.trim(), phc, now()],
     )
     .map_err(|e| (StatusCode::CONFLICT, e.to_string()))?;
-    c.execute("DELETE FROM sessions WHERE token = ?1", [&req.bootstrap_token])
+    c.execute("DELETE FROM sessions WHERE token = ?1", [lumi_proto::crypto::hash_token(&req.bootstrap_token)])
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(StatusCode::CREATED)
 }

@@ -119,7 +119,7 @@ fn reglas_de_la_clave(app: &App, token: &str) -> Option<(Vec<String>, Vec<String
         .conn()
         .query_row(
             "SELECT ips, devices FROM sessions WHERE token = ?1 AND kind = 'api_key'",
-            [token],
+            [lumi_proto::crypto::hash_token(token)],
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .ok()?;

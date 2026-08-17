@@ -4,7 +4,7 @@ use crate::store::Store;
 use crate::{master, App};
 use axum::{extract::State, http::StatusCode, Json};
 use lumi_proto::api::{ChangePasswordReq, DeviceInfo, LoginReq, LoginRes, SessionInfo, UnsealReq};
-use lumi_proto::crypto::{hash_password, verify_password};
+use lumi_proto::crypto::{hash_password, hash_token, verify_password};
 
 const SESSION_TTL_S: i64 = 12 * 3600;
 
@@ -59,7 +59,14 @@ pub async fn login(
     // Mismo mensaje para usuario inexistente y contraseña mala: no filtramos
     // qué nombres existen en el servidor.
     let denied = (StatusCode::UNAUTHORIZED, "usuario o contraseña incorrectos".to_string());
-    let Ok((id, phc, is_admin, blocked, must_change)) = row else { return Err(denied) };
+    let Ok((id, phc, is_admin, blocked, must_change)) = row else {
+        // Se gasta el mismo Argon2id que si el usuario existiera de verdad:
+        // ver el "Fix" sobre `phc_ficticio` — la diferencia de tiempo entre
+        // esta rama y la de contraseña incorrecta es un canal de enumeración
+        // aunque el mensaje de error sea idéntico.
+        let _ = verify_password(&req.password, lumi_proto::crypto::phc_ficticio());
+        return Err(denied);
+    };
     if !verify_password(&req.password, &phc) {
         return Err(denied);
     }
@@ -89,7 +96,7 @@ pub async fn login(
     c.execute(
         "INSERT INTO sessions (token, user_id, expires_at, device_id, created_at, last_seen, public_id)
          VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6)",
-        rusqlite::params![token, id, t + SESSION_TTL_S, device_id, t, public_id],
+        rusqlite::params![hash_token(&token), id, t + SESSION_TTL_S, device_id, t, public_id],
     )
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(Json(LoginRes {
@@ -110,7 +117,7 @@ fn lookup(store: &Store, token: &str, operable: bool) -> Result<(i64, bool), Sta
             "SELECT u.id, u.is_admin, u.must_change_password
              FROM sessions s JOIN users u ON u.id = s.user_id
              WHERE s.token = ?1 AND s.expires_at > ?2 AND u.blocked = 0",
-            rusqlite::params![token, now()],
+            rusqlite::params![hash_token(token), now()],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
@@ -185,7 +192,7 @@ pub async fn change_password(
     // comprometida. La actual sobrevive para no echar al usuario de la app.
     c.execute(
         "DELETE FROM sessions WHERE user_id = ?1 AND token != ?2",
-        rusqlite::params![uid, token],
+        rusqlite::params![uid, hash_token(&token)],
     )
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(StatusCode::NO_CONTENT)
@@ -207,7 +214,7 @@ pub async fn my_sessions(
         )
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let rows = q
-        .query_map(rusqlite::params![uid, token, now()], |r| {
+        .query_map(rusqlite::params![uid, hash_token(&token), now()], |r| {
             Ok(SessionInfo {
                 public_id: r.get(0)?,
                 device_name: r.get(1)?,
@@ -298,8 +305,8 @@ mod tests {
             .unwrap();
             c.execute(
                 "INSERT INTO sessions (token, user_id, expires_at, created_at, last_seen, public_id)
-                 VALUES ('tk', 1, 99999999999, 0, 0, 'pub')",
-                [],
+                 VALUES (?1, 1, 99999999999, 0, 0, 'pub')",
+                [hash_token("tk")],
             )
             .unwrap();
         }

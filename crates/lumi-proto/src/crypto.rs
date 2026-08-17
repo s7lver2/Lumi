@@ -10,6 +10,7 @@ use argon2::Argon2;
 use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::{XChaCha20Poly1305, XNonce};
 use rand::RngCore;
+use sha2::{Digest, Sha256};
 
 const NONCE_BYTES: usize = 24;
 
@@ -35,6 +36,29 @@ pub fn verify_password(pw: &str, phc: &str) -> bool {
     PasswordHash::new(phc)
         .map(|h| Argon2::default().verify_password(pw.as_bytes(), &h).is_ok())
         .unwrap_or(false)
+}
+
+/// Hash Argon2id fijo para gastar el mismo tiempo verificando una contraseña
+/// aunque el usuario no exista. Sin esto, "ese usuario no existe" contesta
+/// al instante (una consulta indexada que no encuentra fila) y "existe pero
+/// la contraseña es mala" tarda lo que tarda Argon2id — deliberadamente
+/// lento — y esa diferencia de tiempo es justo lo que un mensaje de error
+/// idéntico está intentando no revelar.
+pub fn phc_ficticio() -> &'static str {
+    static P: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    P.get_or_init(|| hash_password("ningun-usuario-tiene-esta-contrasena").expect("argon2 falló"))
+}
+
+/// Hash de un token de sesión o clave de API antes de guardarlo en
+/// `sessions.token`. El token ya trae 256 bits de aleatoriedad — no es una
+/// contraseña de baja entropía que alguien pueda adivinar probando — así que
+/// un hash rápido basta; Argon2 aquí solo penalizaría cada petición
+/// autenticada sin ganar nada frente a fuerza bruta, que ya es inviable por
+/// la propia entropía del token. Lo que sí gana: leer `lumi.db` (una copia de
+/// seguridad, una fuga) ya no basta para hacerse pasar por una sesión viva —
+/// antes el token vivía en claro en esa columna.
+pub fn hash_token(token: &str) -> String {
+    format!("{:x}", Sha256::digest(token.as_bytes()))
 }
 
 #[derive(Clone)]

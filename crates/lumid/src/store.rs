@@ -366,6 +366,13 @@ fn migrate(c: &Connection) {
         // restricción" — el mismo criterio que "sin Zero Trust".
         ("sessions", "ips", "TEXT"),
         ("sessions", "devices", "TEXT"),
+        // `token` pasa a guardar un hash (ver `lumi_proto::crypto::hash_token`)
+        // en vez del secreto en claro — leer `lumi.db` ya no basta para
+        // hacerse pasar por una sesión. Pero una clave de API necesita seguir
+        // mostrando un fragmento reconocible en la lista ("lumi_ak_9f83…c1e2")
+        // y un hash no se puede des-hacer para eso, así que ese fragmento se
+        // guarda aparte, en claro, calculado una vez al emitir la clave.
+        ("sessions", "token_prefix", "TEXT"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }
