@@ -2,11 +2,55 @@ use crate::routes::access::now;
 use crate::routes::claim::new_token;
 use crate::store::Store;
 use crate::{master, App};
+use axum::extract::ConnectInfo;
 use axum::{extract::State, http::StatusCode, Json};
 use lumi_proto::api::{ChangePasswordReq, DeviceInfo, LoginReq, LoginRes, SessionInfo, UnsealReq};
 use lumi_proto::crypto::{hash_password, hash_token, verify_password};
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::sync::{Mutex, OnceLock};
 
 const SESSION_TTL_S: i64 = 12 * 3600;
+
+/// Intentos de login fallidos por IP en la ventana actual. Sin esto, nada
+/// impedía probar contraseñas a la máxima velocidad de la red contra
+/// cualquier usuario conocido — el mensaje de error ya no distingue usuario
+/// inexistente de contraseña mala (para no filtrar cuentas), pero eso no
+/// sirve de nada si se pueden probar miles por segundo.
+const INTENTOS_MAX: u32 = 10;
+const VENTANA_S: i64 = 5 * 60;
+
+fn limitador_login() -> &'static Mutex<HashMap<SocketAddr, (i64, u32)>> {
+    static L: OnceLock<Mutex<HashMap<SocketAddr, (i64, u32)>>> = OnceLock::new();
+    L.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// `true` si esta IP ya gastó su cupo — se llama ANTES de tocar la base de
+/// datos o Argon2, para que agotar el cupo sea barato de comprobar también
+/// para quien lo está agotando a propósito.
+fn login_bloqueado(peer: SocketAddr) -> bool {
+    let t = now();
+    let mut mapa = limitador_login().lock().unwrap();
+    let entrada = mapa.entry(peer).or_insert((t, 0));
+    if t - entrada.0 >= VENTANA_S {
+        *entrada = (t, 0);
+    }
+    entrada.1 >= INTENTOS_MAX
+}
+
+fn registrar_intento_fallido(peer: SocketAddr) {
+    let t = now();
+    let mut mapa = limitador_login().lock().unwrap();
+    let entrada = mapa.entry(peer).or_insert((t, 0));
+    if t - entrada.0 >= VENTANA_S {
+        *entrada = (t, 0);
+    }
+    entrada.1 += 1;
+}
+
+fn limpiar_intentos(peer: SocketAddr) {
+    limitador_login().lock().unwrap().remove(&peer);
+}
 
 /// Desbloquea la maestra y reanuda la cola. En este subsistema la cola aún no
 /// existe; el subsistema 4 engancha aquí su reanudación.
@@ -47,8 +91,15 @@ fn upsert_device(c: &rusqlite::Connection, uid: i64, d: &DeviceInfo) -> Option<i
 
 pub async fn login(
     State(app): State<App>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Json(req): Json<LoginReq>,
 ) -> Result<Json<LoginRes>, (StatusCode, String)> {
+    if login_bloqueado(peer) {
+        return Err((
+            StatusCode::TOO_MANY_REQUESTS,
+            "demasiados intentos; espera unos minutos".to_string(),
+        ));
+    }
     let c = app.store.conn();
     let row: Result<(i64, String, i64, i64, i64), _> = c.query_row(
         "SELECT id, password_phc, is_admin, blocked, must_change_password
@@ -65,9 +116,11 @@ pub async fn login(
         // esta rama y la de contraseña incorrecta es un canal de enumeración
         // aunque el mensaje de error sea idéntico.
         let _ = verify_password(&req.password, lumi_proto::crypto::phc_ficticio());
+        registrar_intento_fallido(peer);
         return Err(denied);
     };
     if !verify_password(&req.password, &phc) {
+        registrar_intento_fallido(peer);
         return Err(denied);
     }
     // Bloqueado es DISTINTO de credenciales malas, y se dice: quien está
@@ -99,6 +152,7 @@ pub async fn login(
         rusqlite::params![hash_token(&token), id, t + SESSION_TTL_S, device_id, t, public_id],
     )
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    limpiar_intentos(peer);
     Ok(Json(LoginRes {
         token,
         username: req.username,
