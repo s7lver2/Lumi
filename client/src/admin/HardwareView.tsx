@@ -77,8 +77,16 @@ export function HardwareView({ token }: { token: string }) {
                 </span>
               </div>
               <div className="flex flex-1 gap-6">
-                <Stat v={`${d.perfil?.potencia_w ?? "—"}`} u="W" l="potencia"
-                  alerta={!!d.perfil && d.perfil.potencia_w > d.rango.potencia_max_w} />
+                <Stat
+                  v={d.sample.power_draw_mw != null ? `${(d.sample.power_draw_mw / 1000).toFixed(0)}` : "—"}
+                  u="W" l="potencia"
+                  alerta={!!d.perfil && d.perfil.potencia_w > d.rango.potencia_max_w}
+                />
+                <Stat
+                  v={(d.sample.vram_used_mb / 1024).toFixed(1)}
+                  u={`/ ${(d.sample.vram_total_mb / 1024).toFixed(0)}GB`}
+                  l="vram"
+                />
                 <Stat v={`${d.sample.clock_mhz ?? "—"}`} u="MHz" l="reloj" />
                 <Stat v={`${d.sample.fan_pct ?? "—"}`} u="%" l="ventilador" />
               </div>

@@ -162,6 +162,7 @@ fn muestra_de(nvml: &Nvml, index: u32) -> Option<GpuSample> {
         temp_c: d.temperature(TemperatureSensor::Gpu).ok(),
         clock_mhz: d.clock(Clock::Graphics, nvml_wrapper::enum_wrappers::device::ClockId::Current).ok(),
         fan_pct: d.fan_speed(0).ok(),
+        power_draw_mw: d.power_usage().ok(),
     })
 }
 

@@ -14,6 +14,7 @@ export interface GpuInfo { index: number; name: string; vram_total_mb: number; p
 export interface GpuSample {
   index: number; util_pct: number; vram_used_mb: number; vram_total_mb: number;
   temp_c: number | null; clock_mhz: number | null; fan_pct: number | null;
+  power_draw_mw: number | null;
 }
 export interface PuntoCurva { temp_c: number; valor: number }
 export interface RangoFabrica { potencia_min_w: number; potencia_max_w: number; temp_throttle_c: number | null }

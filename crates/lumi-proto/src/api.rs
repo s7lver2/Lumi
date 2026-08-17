@@ -247,6 +247,10 @@ pub struct GpuSample {
     pub clock_mhz: Option<u32>,
     /// Velocidad de ventilador en %, no rpm — es lo único que expone NVML.
     pub fan_pct: Option<u32>,
+    /// Consumo real en este instante, no el límite configurado — se lee
+    /// aunque no haya ningún perfil aplicado (o no se pueda aplicar, como en
+    /// WSL2), porque es una lectura, no depende de la escritura funcionando.
+    pub power_draw_mw: Option<u32>,
 }
 
 /// Las seis palancas de la spec. Se serializa entera hacia el cliente; se

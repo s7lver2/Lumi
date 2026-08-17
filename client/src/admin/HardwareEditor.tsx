@@ -144,8 +144,14 @@ export function HardwareEditor({
                 <tbody className="font-mono">
                   <tr><td className="py-1 text-fg">temperatura</td><td>{device.sample.temp_c ?? "—"}°C</td>
                     <td className="text-subtle">hasta {device.rango.temp_throttle_c ?? "—"}°</td></tr>
-                  <tr><td className="py-1 text-fg">potencia</td><td>{potenciaW}W</td>
+                  <tr><td className="py-1 text-fg">potencia (consumo real)</td>
+                    <td>{device.sample.power_draw_mw != null ? (device.sample.power_draw_mw / 1000).toFixed(1) : "—"}W</td>
+                    <td className="text-subtle">—</td></tr>
+                  <tr><td className="py-1 text-fg">potencia (límite pedido)</td><td>{potenciaW}W</td>
                     <td className="text-subtle">{device.rango.potencia_min_w}–{device.rango.potencia_max_w}W</td></tr>
+                  <tr><td className="py-1 text-fg">vram</td>
+                    <td>{(device.sample.vram_used_mb / 1024).toFixed(1)}GB</td>
+                    <td className="text-subtle">de {(device.sample.vram_total_mb / 1024).toFixed(0)}GB</td></tr>
                   <tr><td className="py-1 text-fg">ventilador</td><td>{device.sample.fan_pct ?? "—"}%</td><td className="text-subtle">0–100%</td></tr>
                   <tr><td className="py-1 text-fg">reloj</td><td>{device.sample.clock_mhz ?? "—"} MHz</td><td className="text-subtle">—</td></tr>
                 </tbody>

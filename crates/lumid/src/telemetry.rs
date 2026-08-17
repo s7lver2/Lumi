@@ -28,6 +28,7 @@ pub fn sample(app: &App, visto_por: Option<(i64, bool)>) -> Sample {
                         )
                         .ok(),
                     fan_pct: d.fan_speed(0).ok(),
+                    power_draw_mw: d.power_usage().ok(),
                 })
             })
             .collect(),
