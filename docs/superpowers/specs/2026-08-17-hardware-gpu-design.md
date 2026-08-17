@@ -39,10 +39,17 @@ La monitorización, en cambio, no depende de esto y funciona siempre que NVML es
 
 ## Alcance
 
+**Corrección tras verificar contra el código fuente de `nvml-wrapper` 0.10** (la versión que ya
+trae el workspace): la librería solo expone **un** sensor de temperatura por GPU
+(`temperature(TemperatureSensor::Gpu)`) — no hay hotspot ni memoria-junction en su API, así
+que el mockup de tres sensores no es alcanzable con esta dependencia sin FFI adicional fuera
+de alcance. Y el ventilador se lee como **porcentaje** (`fan_speed(fan_idx)`), no como rpm —
+no existe ninguna métrica de rpm expuesta. Ambas cosas se corrigen abajo.
+
 **Dentro:**
-- Monitorización por GPU: temperatura de borde/hotspot/memoria, % de uso, VRAM usada/total,
-  reloj núcleo/memoria actual, potencia actual, rpm de ventilador. Multi-GPU: una fila por
-  dispositivo.
+- Monitorización por GPU: temperatura (un único sensor por tarjeta), % de uso, VRAM
+  usada/total, reloj núcleo actual, potencia actual, velocidad de ventilador en %. Multi-GPU:
+  una fila por dispositivo.
 - Modo básico: slider de límite de potencia entre el mínimo y máximo de fábrica que NVML
   reporta para esa tarjeta (nunca por debajo ni por encima).
 - Modo avanzado: el mismo slider de potencia pero sin techo (hasta el máximo absoluto que
@@ -66,10 +73,11 @@ La monitorización, en cambio, no depende de esto y funciona siempre que NVML es
 ## Arquitectura
 
 **Lecturas** (`crates/lumid/src/hardware.rs`, nuevo): sobre NVML, una función por dispositivo
-que junta lo que ya expone `telemetry::sample`'s `GpuSample` (que se amplía: hotspot, memoria,
-reloj núcleo/memoria, rpm) con el rango de fábrica de cada tarjeta (`nvmlDeviceGetPowerManagementLimitConstraints`,
-`nvmlDeviceGetTemperatureThreshold`). El rango de fábrica se lee una vez por conexión de
-telemetría, no en cada muestra — no cambia mientras la tarjeta no cambia.
+que junta lo que ya expone `telemetry::sample`'s `GpuSample` (que se amplía: reloj núcleo
+actual, ventilador en %) con el rango de fábrica de cada tarjeta
+(`power_management_limit_constraints`, `temperature_threshold`). El rango de fábrica se lee
+una vez por conexión de telemetría, no en cada muestra — no cambia mientras la tarjeta no
+cambia.
 
 **Escrituras**: dos caminos distintos, cada uno en su propia función, cada uno detrás de su
 propia entrada de capacidad:
@@ -96,7 +104,7 @@ el índice detectado — si una GPU con perfil guardado no aparece (se quitó, o
   reintenta la petición con esa bandera puesta, nunca el primer intento silencioso.
 
 **Tiempo real**: no hace falta un canal nuevo — se reutiliza la SSE de telemetría existente
-(`routes::telemetry::sse`), ampliando `Sample` con los campos de hotspot/memoria/reloj/rpm que
+(`routes::telemetry::sse`), ampliando `Sample` con los campos de reloj y ventilador que
 faltan. La sección Hardware, además, hace su propio `GET /v1/admin/hardware` al entrar (para
 el rango de fábrica y el perfil persistido, que no viajan por telemetría) y luego se apoya en
 la SSE ya abierta para las cifras que cambian.
@@ -107,7 +115,7 @@ la SSE ya abierta para las cifras que cambian.
 dispositivos a la vez, con el mismo motivo de píldora deslizante que ya usa la barra lateral).
 Debajo, una fila por GPU: icono de dispositivo dibujado a mano (mismo lenguaje de trazo que
 `ui/Icon.tsx`), anillo de temperatura como protagonista visual, métricas secundarias en línea
-(hotspot, memoria, potencia, rpm), una miniatura de historial reciente, y una etiqueta discreta
+(potencia, reloj, ventilador en %), una miniatura de historial reciente, y una etiqueta discreta
 si algo está fuera de fábrica. En básico la fila no es interactiva más allá de sus propios
 datos; en avanzado, un clic en la fila abre el editor.
 
