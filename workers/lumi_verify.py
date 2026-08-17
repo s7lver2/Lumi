@@ -44,7 +44,15 @@ def _cargar(verificador):
     ruta = os.path.join(directorio, "pesos.pth")
     lumi_pesos._licencia(directorio)
     lumi_pesos._verificar(ruta, ficha.get("sha256", ""))
-    m = torch.load(ruta, map_location=DISPOSITIVO, weights_only=False)
+    # Este fichero guarda el módulo entero, no un state_dict — weights_only=True
+    # no puede reconstruir una clase arbitraria, así que aquí el camino seguro
+    # de verdad falla siempre y se cae al inseguro. Se intenta igual (por si
+    # algún verificador futuro sí guarda solo su state_dict) en vez de
+    # renunciar directamente a weights_only=True en todo el fichero.
+    try:
+        m = torch.load(ruta, map_location=DISPOSITIVO, weights_only=True)
+    except Exception:
+        m = torch.load(ruta, map_location=DISPOSITIVO, weights_only=False)
     m.eval()
     _cargados[verificador] = m
     _decir({"tipo": "listo", "dispositivo": DISPOSITIVO, "modelo": verificador})

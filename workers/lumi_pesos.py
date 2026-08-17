@@ -104,7 +104,18 @@ class Embebedor(object):
         ruta = os.path.join(directorio, "pesos.pth")
         _licencia(directorio)
         _verificar(ruta, ficha.get("sha256", ""))
-        crudo = torch.load(ruta, map_location=dispositivo, weights_only=False)
+        # weights_only=True restringe qué clases puede reconstruir el pickle
+        # de PyTorch (tensores y contenedores básicos, nada arbitrario) y es
+        # lo que hay que usar siempre que el fichero sea un state_dict — que
+        # es el caso normal. Algunos .pth antiguos guardan el módulo entero
+        # en vez de solo sus pesos, y para esos no hay forma de evitar el
+        # unpickling completo sin dejar de poder cargarlos: se intenta el
+        # camino seguro primero y solo se cae al inseguro si de verdad hace
+        # falta, nunca al revés.
+        try:
+            crudo = torch.load(ruta, map_location=dispositivo, weights_only=True)
+        except Exception:
+            crudo = torch.load(ruta, map_location=dispositivo, weights_only=False)
         if isinstance(crudo, dict):
             # Un .ckpt de PyTorch Lightning no es el state_dict en si: es un
             # sobre con el state_dict metido bajo la clave "state_dict",

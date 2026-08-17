@@ -90,7 +90,10 @@ class Embebedor:
         self.dims = 32 * 1536  # num_clusters * desc_dim de dinov2_vitg14
         self.dispositivo = dispositivo
         self._extractor = _DinoV2ExtractFeatures("dinov2_vitg14", 31, "value", dispositivo)
-        c_centers = torch.load(ruta_centros, map_location=dispositivo, weights_only=False)
+        # Solo un tensor de centros de cluster, nunca una clase reconstruida:
+        # weights_only=True basta y evita el unpickling arbitrario de
+        # torch.load con weights_only=False.
+        c_centers = torch.load(ruta_centros, map_location=dispositivo, weights_only=True)
         self._vlad = _VLAD(c_centers.to(dispositivo))
 
     def vector(self, ruta_imagen):
