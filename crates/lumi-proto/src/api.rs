@@ -243,6 +243,10 @@ pub struct GpuSample {
     pub vram_used_mb: u64,
     pub vram_total_mb: u64,
     pub temp_c: Option<u32>,
+    /// Reloj de núcleo actual, en MHz. `None` si NVML no lo da (p. ej. WSL2).
+    pub clock_mhz: Option<u32>,
+    /// Velocidad de ventilador en %, no rpm — es lo único que expone NVML.
+    pub fan_pct: Option<u32>,
 }
 
 /// Las seis palancas de la spec. Se serializa entera hacia el cliente; se
@@ -726,4 +730,57 @@ pub struct QueueView {
     pub pendientes: u32,
     pub en_curso: u32,
     pub trabajadores: Vec<WorkerView>,
+}
+
+/// Un punto de una curva editable — de ventilador (temperatura→%) o de offset
+/// de reloj (potencia→MHz), según en qué pestaña vive. El mismo tipo sirve
+/// para las dos: la interfaz decide qué eje es cuál.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct PuntoCurva {
+    pub temp_c: i32,
+    pub valor: i32,
+}
+
+/// Rango de fábrica de una GPU, tal como lo reporta NVML. Nunca inventado por
+/// el servidor — si NVML no lo da, no hay rango y el control avanzado para
+/// esa tarjeta se deshabilita (ver `HardwareCaps`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RangoFabrica {
+    pub potencia_min_w: u32,
+    pub potencia_max_w: u32,
+    pub temp_throttle_c: Option<u32>,
+}
+
+/// Lo que devuelve `GET /v1/admin/hardware`: lectura actual + rango de
+/// fábrica + el perfil ya persistido para esa tarjeta, si hay uno.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HardwareDevice {
+    pub index: u32,
+    pub name: String,
+    pub sample: GpuSample,
+    pub rango: RangoFabrica,
+    pub perfil: Option<HardwareProfile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HardwareProfile {
+    pub potencia_w: u32,
+    pub offset_nucleo_mhz: i32,
+    pub offset_memoria_mhz: i32,
+    pub curva_ventilador: Vec<PuntoCurva>,
+}
+
+/// Cuerpo de `PATCH /v1/admin/hardware/{index}`. Cualquier campo ausente deja
+/// ese valor como estaba — igual que `PatchSecurityReq`.
+#[derive(Debug, Deserialize)]
+pub struct PatchHardwareReq {
+    pub potencia_w: Option<u32>,
+    pub offset_nucleo_mhz: Option<i32>,
+    pub offset_memoria_mhz: Option<i32>,
+    pub curva_ventilador: Option<Vec<PuntoCurva>>,
+    /// `false` (o ausente) y algún valor sale del rango de fábrica → `409`
+    /// con el motivo. El modal de "soy consciente" es quien reintenta con
+    /// `true`, nunca el primer intento.
+    #[serde(default)]
+    pub confirmado: bool,
 }
