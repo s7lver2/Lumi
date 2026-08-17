@@ -86,16 +86,40 @@ mod tests {
     }
 }
 
+/// Que NVML inicialice solo dice que se puede LEER — WSL2 es la prueba: la
+/// GPU se pasa con lectura completa pero rechaza cualquier escritura
+/// (`NVML_ERROR_NO_PERMISSION`), incluso corriendo como root. La única forma
+/// honesta de saber si esta GPU acepta escritura es probarlo de verdad: se
+/// lee el límite de potencia actual y se vuelve a fijar exactamente ese
+/// mismo valor. Si el driver lo rechaza, el motivo real va tal cual al
+/// mensaje — no se adivina por el nombre del kernel, se comprueba contra la
+/// tarjeta.
+fn sondear_potencia() -> (CapState, Option<String>) {
+    let Ok(nvml) = Nvml::init() else {
+        return (CapState::Off, Some("NVML no está disponible en este host.".to_string()));
+    };
+    let Ok(mut d) = nvml.device_by_index(0) else {
+        return (CapState::Off, Some("No se detectó ninguna GPU.".to_string()));
+    };
+    let Ok(actual) = d.power_management_limit() else {
+        return (CapState::Off, Some("No se pudo leer el límite de potencia actual.".to_string()));
+    };
+    match d.set_power_management_limit(actual) {
+        Ok(()) => (CapState::On, None),
+        Err(e) => (
+            CapState::Off,
+            Some(format!(
+                "El driver rechaza la escritura ({e}). En WSL2 esto ocurre siempre: la GPU se pasa en modo de solo lectura aunque NVML pueda leerla."
+            )),
+        ),
+    }
+}
+
 /// Se comprueba una vez por conexión (`GET /v1/hello`), no en cada muestra:
 /// lanzar `nvidia-settings` tiene coste real y el resultado no cambia salvo
 /// que alguien arranque o pare un servidor X entre medias.
 pub async fn capacidades() -> HardwareCaps {
-    let potencia_ok = Nvml::init().is_ok();
-    let (potencia, potencia_reason) = if potencia_ok {
-        (CapState::On, None)
-    } else {
-        (CapState::Off, Some("NVML no está disponible en este host.".to_string()))
-    };
+    let (potencia, potencia_reason) = sondear_potencia();
 
     let curvas_ok = tokio::process::Command::new("nvidia-settings")
         .args(["-q", "GPUGraphicsClockOffset"])
