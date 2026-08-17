@@ -16,12 +16,19 @@ export function HardwareView({ token }: { token: string }) {
     api.hardwareListar(token).then(setDispositivos).catch((e) => setError(String(e)));
   }, [token]);
 
+  const [errorAplicar, setErrorAplicar] = useState<string | null>(null);
+
   // Básico: el slider de potencia se aplica directo desde la fila, acotado al
   // rango de fábrica — nunca puede salir de rango, así que nunca dispara la
   // confirmación de "soy consciente" (esa solo existe en avanzado).
   async function aplicarBasico(index: number, potencia_w: number) {
-    const dev = await api.hardwareAplicar(index, { potencia_w, confirmado: false }, token);
-    setDispositivos((prev) => prev!.map((x) => (x.index === dev.index ? dev : x)));
+    setErrorAplicar(null);
+    try {
+      const dev = await api.hardwareAplicar(index, { potencia_w, confirmado: false }, token);
+      setDispositivos((prev) => prev!.map((x) => (x.index === dev.index ? dev : x)));
+    } catch (e) {
+      setErrorAplicar(String(e));
+    }
   }
 
   if (error) return <p className="px-6 pt-5 text-[11px] text-danger-fg">{error}</p>;
@@ -93,6 +100,7 @@ export function HardwareView({ token }: { token: string }) {
                 <div className="flex justify-between font-mono text-[9px] text-subtle">
                   <span>{d.rango.potencia_min_w}W</span><span>{d.rango.potencia_max_w}W</span>
                 </div>
+                {errorAplicar && <p className="mt-1.5 text-[10.5px] text-danger-fg">{errorAplicar}</p>}
               </div>
             )}
           </div>
