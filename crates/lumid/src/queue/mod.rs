@@ -338,6 +338,7 @@ impl Queue {
             &self.script,
             log,
             self.eventos.clone(),
+            &crate::assets::ruta("registros/modelos"),
         ) {
             Ok(l) => {
                 if let Ok(mut e) = self.estado.lock() {

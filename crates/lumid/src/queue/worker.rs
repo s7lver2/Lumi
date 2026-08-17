@@ -100,6 +100,7 @@ pub fn spawn(
     script: &Path,
     log: PathBuf,
     eventos: UnboundedSender<Evento>,
+    registro: &Path,
 ) -> Result<Lanzado> {
     let mut hijo = Command::new(python)
         // `-u` no es opcional: sin él Python almacena su salida y el daemon no
@@ -108,6 +109,12 @@ pub fn spawn(
         .arg("-u")
         .arg(script)
         .env("LUMI_DEVICE", &dispositivo)
+        // `lumi_geo.py` cae a la ruta relativa "registros/modelos" si esto
+        // falta — y como el hijo hereda el cwd de `lumid` (bajo systemd, "/"
+        // salvo que se fije WorkingDirectory), esa ruta relativa nunca
+        // resuelve a nada real. Sin este env, todo análisis fallaba con
+        // "[Errno 2] No such file or directory: 'registros/modelos'".
+        .env("LUMI_REGISTRO", registro)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
