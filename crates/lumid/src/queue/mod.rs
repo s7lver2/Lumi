@@ -933,11 +933,16 @@ impl Queue {
 
             // El campo `modelo` del análisis guarda el NIVEL («mini», «pro»,
             // «vision»), no un id de modelo. Se resuelve contra el registro y
-            // se manda la lista.
-            let modelos = self
-                .nivel_de(&modelo)
-                .map(|n| n.recuperacion.clone())
-                .unwrap_or_else(|| vec![modelo.clone()]);
+            // se manda la lista. `nivel_de` da `None` cuando ningún índice
+            // instalado cubre sus modelos de recuperación — antes esto caía
+            // en el nivel mismo («mini») como si fuera un id de modelo, y el
+            // trabajador fallaba mucho más abajo con "el modelo mini no está
+            // en el registro": cierto en la letra, pero el motivo real es que
+            // no hay ningún índice instalado, no un registro roto.
+            let Some(modelos) = self.nivel_de(&modelo).map(|n| n.recuperacion.clone()) else {
+                self.fallar(a.analysis_id, "ningún índice instalado sirve para consultar con este nivel");
+                continue;
+            };
 
             let enviado = match self.estado.lock() {
                 Ok(mut e) => match e.trabajadores.get_mut(&a.dispositivo) {
