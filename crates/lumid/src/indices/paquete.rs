@@ -9,6 +9,13 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 
+/// Techo de bytes descomprimidos por paquete. Sin esto, un zip de unos pocos
+/// KB con una ratio de compresión absurda podía llenar el disco entero antes
+/// de que nada se diera cuenta — el sha256 solo comprueba el CIFRADO, nunca
+/// dice nada sobre cuánto pesa lo de dentro. 50 GiB es generoso para un
+/// índice geo-referenciado real y sigue parando una bomba de verdad.
+const MAX_DESCOMPRIMIDO: u64 = 50 * 1024 * 1024 * 1024;
+
 /// La clave AES viaja en la ficha, en base64. Eso es deliberado: el cifrado es
 /// ofuscación frente al alojamiento, no control de acceso.
 pub fn clave_de(cifrado: &str) -> Result<[u8; 32]> {
@@ -38,6 +45,21 @@ pub async fn traer_y_abrir(
     // ver. Misma lección que costó el "colgado" al publicar en el 8.
     tokio::task::spawn_blocking(move || -> Result<()> {
         let mut z = zip::ZipArchive::new(std::io::Cursor::new(claro))?;
+
+        // Se suma el tamaño DESCOMPRIMIDO que el propio zip declara para cada
+        // entrada antes de escribir ni un byte — un vistazo a las cabeceras,
+        // no a los datos. Una bomba de descompresión (unos pocos KB que se
+        // convierten en gigabytes) se corta aquí, no a mitad de escribir en
+        // disco.
+        let total: u64 = (0..z.len())
+            .map(|i| z.by_index(i).map(|f| f.size()).unwrap_or(0))
+            .sum();
+        if total > MAX_DESCOMPRIMIDO {
+            return Err(anyhow!(
+                "el paquete descomprime a {total} bytes, por encima del tope de {MAX_DESCOMPRIMIDO}"
+            ));
+        }
+
         std::fs::create_dir_all(&destino)?;
         for i in 0..z.len() {
             let mut f = z.by_index(i)?;
