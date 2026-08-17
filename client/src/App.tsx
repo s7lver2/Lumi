@@ -17,7 +17,7 @@ import { MantenimientoBanner } from "./ui/MantenimientoBanner";
 import { DebugOrb } from "./dev/DebugOrb";
 import { useServer } from "./lib/store";
 import { useWorkspace } from "./lib/workspace";
-import { api, type Hello, type Me, type Sample } from "./lib/api";
+import { api, type Hello, type Me, type Sample, type TaskStatus } from "./lib/api";
 import { announcePresence, setAuth } from "./lib/bridge";
 import { loadSession, updateSession } from "./lib/session";
 import { ProjectPicker } from "./work/ProjectPicker";
@@ -98,14 +98,28 @@ export default function App() {
             useServer.getState().setUser(me.username, me.is_admin, me.limits);
             await announcePresence(session.token);
             // El aprovisionamiento sigue siendo cosa del owner: si el servidor
-            // no está listo del todo, se vuelve al wizard donde se dejó.
-            //
-            // Fuera de ese caso, TODO el mundo aterriza en el selector de
-            // proyectos, también el administrador: administrar es una tarea
-            // más, no un modo de vida. Antes entraba directo al panel y la
-            // aplicación de verdad le quedaba escondida detrás de "Cerrar".
-            if (me.is_admin && h.state !== "ready") { setStep(2); setMode("wizard"); }
-            else setMode("picker");
+            // no está listo del todo, se vuelve al wizard donde se dejó —
+            // "donde se dejó" de verdad, no siempre al paso de Runtime. Antes
+            // `setStep(2)` estaba fijo aquí pese al comentario: alguien que ya
+            // había instalado el runtime y llegado a Modelos volvía a
+            // Runtime en cada reconexión (recarga de `tauri dev`, reabrir la
+            // app), aunque esa parte ya estuviera hecha. La tarea de runtime
+            // persiste su id en la sesión precisamente para poder
+            // reengancharse — se reutiliza aquí para saber si ya terminó.
+            if (me.is_admin && h.state !== "ready") {
+              const taskId = loadSession()?.taskId;
+              let runtimeListo = false;
+              if (taskId) {
+                try {
+                  const t = await api.get<TaskStatus>(`/v1/tasks/${taskId}`, session.token);
+                  runtimeListo = !t.running && t.exit_code === 0;
+                } catch { /* tarea ya no consultable: se trata como no lista */ }
+              }
+              setStep(runtimeListo ? 3 : 2);
+              setMode("wizard");
+            } else {
+              setMode("picker");
+            }
             return;
           } catch {
             // 403 (cambio pendiente) o token caducado: la entrada lo resuelve.
