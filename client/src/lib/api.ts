@@ -30,6 +30,15 @@ export interface PatchHardwareReq {
   potencia_w?: number; offset_nucleo_mhz?: number; offset_memoria_mhz?: number;
   curva_ventilador?: PuntoCurva[]; confirmado?: boolean;
 }
+export interface CpuCoreSample { indice: number; temp_c: number | null; uso_pct: number }
+export interface CpuSample { nucleos: CpuCoreSample[]; potencia_w: number | null }
+export interface CpuRango { potencia_min_w: number; potencia_max_w: number; aproximado: boolean }
+export interface CpuProfile { pl1_w: number; pl2_w: number }
+export interface CpuDevice {
+  fabricante: "intel" | "amd" | "otro"; sample: CpuSample; rango: CpuRango;
+  perfil: CpuProfile | null;
+}
+export interface PatchCpuReq { pl1_w?: number; pl2_w?: number; confirmado?: boolean }
 export interface AvisoInfo {
   id: number;
   /** Documento JSON de Tiptap — opaco para el resto del cliente, solo lo
@@ -317,4 +326,6 @@ export const api = {
   hardwareListar: (token: string) => api.get<HardwareDevice[]>("/v1/admin/hardware", token),
   hardwareAplicar: (index: number, req: PatchHardwareReq, token: string) =>
     api.patch<HardwareDevice>(`/v1/admin/hardware/${index}`, req, token),
+  cpuLeer: (token: string) => api.get<CpuDevice>("/v1/admin/hardware/cpu", token),
+  cpuAplicar: (req: PatchCpuReq, token: string) => api.patch<CpuDevice>("/v1/admin/hardware/cpu", req, token),
 };
