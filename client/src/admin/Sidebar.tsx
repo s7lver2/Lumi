@@ -34,7 +34,7 @@ const GRUPOS: { grupo: string; items: { id: Seccion; label: string; icon: IconNa
     items: [
       { id: "cola", label: "Cola", icon: "bars" },
       { id: "notificaciones", label: "Notificaciones", icon: "bell" },
-      { id: "hardware", label: "Hardware", icon: "device", pronto: true },
+      { id: "hardware", label: "Hardware", icon: "gpu" },
     ],
   },
 ];

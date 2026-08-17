@@ -13,10 +13,11 @@ import { QueueRow } from "./QueueRow";
 import { RequestsView } from "./RequestsView";
 import { ResumenView } from "./ResumenView";
 import { CustomizacionView } from "./CustomizacionView";
+import { HardwareView } from "./HardwareView";
 import { Sidebar, type Seccion } from "./Sidebar";
 import { UsersView } from "./UsersView";
 
-const PRONTO: Seccion[] = ["hardware"];
+const PRONTO: Seccion[] = [];
 
 export function AdminPanel({ token }: { token: string }) {
   const [seccion, setSeccion] = useState<Seccion>("resumen");
@@ -64,6 +65,7 @@ export function AdminPanel({ token }: { token: string }) {
           : seccion === "cola" ? <Seccion titulo="Cola" grupo="Operación">
               <QueueRow token={token} /></Seccion>
           : seccion === "notificaciones" ? <NotificacionesView token={token} />
+          : seccion === "hardware" ? <HardwareView token={token} />
                     : <Seccion titulo="Índices instalados" grupo="Servidor"
               accion={
                 <button disabled title="Abrirá el catálogo remoto; todavía no hace nada"

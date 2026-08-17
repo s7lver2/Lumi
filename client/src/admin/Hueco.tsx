@@ -1,10 +1,6 @@
 /** Una sección que todavía no existe. Una frase de qué será y en qué ciclo,
  *  y nada más: la pantalla no justifica decisiones, eso está en la spec. */
 const QUE: Record<string, { titulo: string; grupo: string; ciclo: string; que: string }> = {
-  hardware: {
-    titulo: "Hardware", grupo: "Operación", ciclo: "ciclo 3c",
-    que: "Dispositivos, VRAM y temperaturas con su histórico.",
-  },
 };
 
 export function Hueco({ seccion }: { seccion: string }) {
