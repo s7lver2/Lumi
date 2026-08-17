@@ -135,7 +135,7 @@ pub async fn capacidades() -> HardwareCaps {
         )
     };
 
-    HardwareCaps { potencia, potencia_reason, curvas, curvas_reason }
+    HardwareCaps { potencia, potencia_reason, curvas, curvas_reason, ..Default::default() }
 }
 
 fn rango_de(nvml: &Nvml, index: u32) -> Option<RangoFabrica> {

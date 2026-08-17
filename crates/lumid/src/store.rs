@@ -238,6 +238,12 @@ CREATE TABLE IF NOT EXISTS hardware_profiles (
     curva_ventilador   TEXT NOT NULL,
     updated_at         INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS cpu_profile (
+    id         INTEGER PRIMARY KEY CHECK (id = 1),
+    pl1_w      REAL NOT NULL,
+    pl2_w      REAL NOT NULL,
+    updated_at INTEGER NOT NULL
+);
 ";
 
 pub struct Store(Mutex<Connection>);
