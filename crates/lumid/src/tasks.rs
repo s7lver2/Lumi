@@ -41,22 +41,31 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec
         // durante pruebas) volvía a descargar ~2 GB aunque nada hubiera
         // cambiado. pip ya cachea localmente, pero recrear el venv desde
         // cero seguía siendo trabajo y tiempo de sobra.
+        // La ruta del venv va como argumento posicional ($1), no interpolada
+        // en el texto del script: `format!` metiendo una ruta directamente en
+        // un `sh -c` es la forma clásica de inyección de shell si esa ruta
+        // llegara alguna vez a depender de algo que no sea el propio
+        // instalador local — y aunque hoy `models_dir` solo lo fija `lumi
+        // install` (nunca una petición HTTP), dejar el primitivo ahí "porque
+        // hoy no es alcanzable" es la clase de gancho que se activa solo el
+        // día en que alguien añada una ruta remota sin volver a auditar esto.
+        // Pasarlo como argv en vez de texto lo cierra sin condiciones.
         TaskKind::InferenceRuntime => (
             "/bin/sh".into(),
             vec![
                 "-c".into(),
-                format!(
-                    "set -e; \
-                     if {v}/bin/python3 -c 'import torch, torchvision' 2>/dev/null; then \
-                       echo 'runtime ya instalado, nada que hacer'; \
-                     else \
-                       python3 -m venv {v}; \
-                       {v}/bin/pip install --upgrade pip; \
-                       {v}/bin/pip install --retries 5 --timeout 60 \
-                       torch torchvision --index-url https://download.pytorch.org/whl/cu126; \
-                     fi",
-                    v = venv.display()
-                ),
+                "set -e; \
+                 if \"$1/bin/python3\" -c 'import torch, torchvision' 2>/dev/null; then \
+                   echo 'runtime ya instalado, nada que hacer'; \
+                 else \
+                   python3 -m venv \"$1\"; \
+                   \"$1/bin/pip\" install --upgrade pip; \
+                   \"$1/bin/pip\" install --retries 5 --timeout 60 \
+                   torch torchvision --index-url https://download.pytorch.org/whl/cu126; \
+                 fi"
+                    .into(),
+                "sh".into(),
+                venv.display().to_string(),
             ],
         ),
         TaskKind::Database => (
