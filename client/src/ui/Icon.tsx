@@ -89,6 +89,14 @@ const PATHS: Record<string, React.JSX.Element> = {
   browser: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18" /></>,
   cli: <><path d="M4 5l6 6-6 6" /><path d="M12 17h8" /></>,
   mobile: <><rect x="7" y="2" width="10" height="20" rx="2" /><path d="M11 18h2" /></>,
+  gpu: (
+    <>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <circle cx="8" cy="12" r="2.6" />
+      <circle cx="16" cy="12" r="2.6" />
+      <path d="M0 9v2M0 14v2M24 9v2M24 14v2" />
+    </>
+  ),
 };
 
 export type IconName = keyof typeof PATHS;
