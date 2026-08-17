@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import { api, type HardwareDevice } from "../lib/api";
+import { api, type HardwareDevice, type CpuDevice } from "../lib/api";
 import { useServer } from "../lib/store";
 import { HardwareEditor } from "./HardwareEditor";
+import { CpuEditor } from "./CpuEditor";
+import { ConfirmarPeligro } from "./ConfirmarPeligro";
 import { Icon } from "../ui/Icon";
 
 export function HardwareView({ token }: { token: string }) {
@@ -12,8 +14,24 @@ export function HardwareView({ token }: { token: string }) {
   const capPotencia = useServer((s) => s.hello?.capabilities.find((c) => c.id === "hardware_potencia"));
   const capCurvas = useServer((s) => s.hello?.capabilities.find((c) => c.id === "hardware_curvas"));
 
+  const [cpu, setCpu] = useState<CpuDevice | null>(null);
+  const [cpuError, setCpuError] = useState<string | null>(null);
+  const [editandoCpu, setEditandoCpu] = useState(false);
+  // Básico en AMD todavía exige el mismo "soy consciente" que avanzado —
+  // ryzenadj no se vuelve más seguro por estar acotado a un rango, así que
+  // el slider básico de AMD no aplica directo como el de Intel/GPU: siempre
+  // pasa primero por este modal.
+  const [confirmandoCpuBasico, setConfirmandoCpuBasico] = useState<{ w: number } | null>(null);
+  const capCpuIntel = useServer((s) => s.hello?.capabilities.find((c) => c.id === "cpu_potencia_intel"));
+  const capCpuAmd = useServer((s) => s.hello?.capabilities.find((c) => c.id === "cpu_potencia_amd"));
+  const capCpuTemp = useServer((s) => s.hello?.capabilities.find((c) => c.id === "cpu_temperatura"));
+
   useEffect(() => {
     api.hardwareListar(token).then(setDispositivos).catch((e) => setError(String(e)));
+  }, [token]);
+
+  useEffect(() => {
+    api.cpuLeer(token).then(setCpu).catch((e) => setCpuError(String(e)));
   }, [token]);
 
   const [errorAplicar, setErrorAplicar] = useState<string | null>(null);
@@ -26,6 +44,20 @@ export function HardwareView({ token }: { token: string }) {
     try {
       const dev = await api.hardwareAplicar(index, { potencia_w, confirmado: false }, token);
       setDispositivos((prev) => prev!.map((x) => (x.index === dev.index ? dev : x)));
+    } catch (e) {
+      setErrorAplicar(String(e));
+    }
+  }
+
+  async function aplicarCpuBasico(w: number, confirmado: boolean) {
+    setErrorAplicar(null);
+    if (cpu?.fabricante === "amd" && !confirmado) {
+      setConfirmandoCpuBasico({ w });
+      return;
+    }
+    try {
+      const dev = await api.cpuAplicar({ pl1_w: w, pl2_w: w, confirmado }, token);
+      setCpu(dev);
     } catch (e) {
       setErrorAplicar(String(e));
     }
@@ -113,6 +145,46 @@ export function HardwareView({ token }: { token: string }) {
             )}
           </div>
         ))}
+        {cpu && (
+          <div
+            onClick={() => avanzado && (capCpuIntel?.state !== "off" || capCpuAmd?.state !== "off") && setEditandoCpu(true)}
+            className={`rounded-[14px] border border-border/70 bg-panel p-[18px_20px]
+              transition-colors ${avanzado ? "cursor-pointer hover:border-border" : ""}`}>
+            <div className="flex items-center gap-6">
+              <Icon name="device" size={44} className="shrink-0 text-subtle" />
+              <div className="w-[150px] shrink-0">
+                <div className="text-[13.5px] text-fg">CPU</div>
+                <div className="mt-0.5 font-mono text-[9.5px] text-subtle">{cpu.fabricante}</div>
+              </div>
+              <div className="grid flex-1 grid-cols-8 gap-1.5">
+                {cpu.sample.nucleos.map((n) => (
+                  <div key={n.indice} className="rounded-md bg-elevated px-1.5 py-1 text-center"
+                    style={{ background: n.temp_c != null ? `rgba(239,159,39,${Math.min(.28, n.temp_c / 350)})` : undefined }}>
+                    <div className="text-[7.5px] text-subtle">{n.indice}</div>
+                    <div className="font-mono text-[11px] text-fg">{n.temp_c ?? "—"}°</div>
+                  </div>
+                ))}
+              </div>
+              <Stat v={cpu.sample.potencia_w != null ? cpu.sample.potencia_w.toFixed(0) : "—"} u="W" l="potencia" />
+            </div>
+
+            {!avanzado && (cpu.fabricante === "intel" ? capCpuIntel?.state !== "off" : capCpuAmd?.state !== "off") && (
+              <div className="mt-3 border-t border-border/60 pt-3" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="range" min={cpu.rango.potencia_min_w} max={cpu.rango.potencia_max_w}
+                  defaultValue={cpu.perfil?.pl1_w ?? cpu.rango.potencia_max_w}
+                  onPointerUp={(e) => aplicarCpuBasico(+(e.target as HTMLInputElement).value, false)}
+                  className="w-full accent-fg"
+                />
+                <div className="flex justify-between font-mono text-[9px] text-subtle">
+                  <span>{cpu.rango.potencia_min_w.toFixed(0)}W</span>
+                  <span>{cpu.rango.potencia_max_w.toFixed(0)}W{cpu.rango.aproximado ? " (aprox.)" : ""}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {cpuError && <p className="text-[10.5px] text-danger-fg">{cpuError}</p>}
       </div>
 
       {editando !== null && (() => {
@@ -127,10 +199,32 @@ export function HardwareView({ token }: { token: string }) {
         );
       })()}
 
-      {(capPotencia?.state === "off" || capCurvas?.state === "off") && (
+      {editandoCpu && cpu && (
+        <CpuEditor
+          device={cpu} token={token} onCerrar={() => setEditandoCpu(false)}
+          onAplicado={setCpu}
+          potenciaHabilitada={cpu.fabricante === "intel" ? capCpuIntel?.state !== "off" : capCpuAmd?.state !== "off"}
+          potenciaMotivo={(cpu.fabricante === "intel" ? capCpuIntel?.reason : capCpuAmd?.reason) ?? null}
+        />
+      )}
+
+      {confirmandoCpuBasico && (
+        <ConfirmarPeligro
+          motivo="Vas a aplicar un control sin garantía del fabricante (ryzenadj) — esto se pide siempre en AMD, dentro o fuera de rango."
+          onCancelar={() => setConfirmandoCpuBasico(null)}
+          onConfirmar={() => {
+            const w = confirmandoCpuBasico.w;
+            setConfirmandoCpuBasico(null);
+            void aplicarCpuBasico(w, true);
+          }}
+        />
+      )}
+
+      {(capPotencia?.state === "off" || capCurvas?.state === "off" || capCpuTemp?.state === "off") && (
         <p className="mt-4 text-[10.5px] leading-relaxed text-subtle">
-          {capPotencia?.state === "off" && <>Potencia: {capPotencia.reason} </>}
-          {capCurvas?.state === "off" && <>Curvas: {capCurvas.reason}</>}
+          {capPotencia?.state === "off" && <>Potencia GPU: {capPotencia.reason} </>}
+          {capCurvas?.state === "off" && <>Curvas: {capCurvas.reason} </>}
+          {capCpuTemp?.state === "off" && <>Temperatura CPU: {capCpuTemp.reason}</>}
         </p>
       )}
     </div>
