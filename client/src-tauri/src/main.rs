@@ -109,6 +109,12 @@ fn client_for(fingerprint: &str) -> Result<reqwest::Client, String> {
         .with_no_client_auth();
     reqwest::Client::builder()
         .use_preconfigured_tls(cfg)
+        // Sin esto, un servidor que deja de responder a media petición
+        // (reinicio a destiempo, red que se cae) cuelga el `.send().await`
+        // para siempre: sin error, sin timeout, sin forma de recuperarse
+        // desde la interfaz. El login se queda en "Entrando" indefinidamente
+        // y nada libera al usuario de esa pantalla.
+        .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| e.to_string())
 }
