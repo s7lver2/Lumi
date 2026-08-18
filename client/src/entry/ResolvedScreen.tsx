@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { api, type AccessStatus, type PoliciesSettings } from "../lib/api";
+import { api, type AccessStatus, type PoliciesSettings, type ServerProfileSettings } from "../lib/api";
 import { loadSession, updateSession } from "../lib/session";
 import { AvisoEditor } from "../admin/AvisoEditor";
 import { Icon } from "../ui/Icon";
+import { ServerProfileCard } from "./ServerProfileCard";
 
 export function ResolvedScreen({ status, onCreated, onRetry, onBack }: {
   status: AccessStatus; onCreated: () => void; onRetry: () => void; onBack: () => void;
@@ -13,9 +14,14 @@ export function ResolvedScreen({ status, onCreated, onRetry, onBack }: {
   const [busy, setBusy] = useState(false);
   const [politicas, setPoliticas] = useState<PoliciesSettings | null>(null);
   const [aceptado, setAceptado] = useState(false);
+  const [perfil, setPerfil] = useState<ServerProfileSettings | null>(null);
 
   useEffect(() => {
     api.policiesPublic().then(setPoliticas).catch(() => setPoliticas(null));
+    // La conexión ya está viva a estas alturas: `WaitingScreen` reconecta en
+    // cada sondeo hasta que la solicitud se resuelve, justo antes de llegar
+    // aquí.
+    api.serverProfilePublic().then(setPerfil).catch(() => setPerfil(null));
   }, []);
 
   if (status.status === "rejected") {
@@ -69,6 +75,12 @@ export function ResolvedScreen({ status, onCreated, onRetry, onBack }: {
 
   return (
     <>
+      {perfil?.title && (
+        <>
+          <ServerProfileCard perfil={perfil} />
+          <div className="my-3 h-px bg-border" />
+        </>
+      )}
       <div className="flex items-center gap-2.5 py-[7px] text-xs text-muted">
         <Icon name="check" /> Acceso aprobado
       </div>

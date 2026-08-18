@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { api } from "../lib/api";
+import { useEffect, useState } from "react";
+import { api, type ServerProfileSettings } from "../lib/api";
 import { updateSession, type Server } from "../lib/session";
 import { Icon } from "../ui/Icon";
+import { ServerProfileCard } from "./ServerProfileCard";
 
 const MAX_NAME = 80;
 const MAX_MESSAGE = 500;
@@ -13,6 +14,19 @@ export function RequestForm({ server, onSent, onBack }: {
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [perfil, setPerfil] = useState<ServerProfileSettings | null>(null);
+
+  useEffect(() => {
+    if (!server) return;
+    // A diferencia de `AddServerForm` (que ya conecta al verificar la
+    // tarjeta), aquí puede que todavía no haya conexión viva — se pidió el
+    // servidor de la lista guardada, no se acaba de verificar una tarjeta.
+    // Reconectar antes de pedir el perfil es necesario, no solo redundante.
+    api.reconnect(server.addr, server.fingerprint)
+      .then(() => api.serverProfilePublic())
+      .then(setPerfil)
+      .catch(() => setPerfil(null));
+  }, [server]);
 
   async function send() {
     if (!server || !name.trim()) return;
@@ -38,6 +52,12 @@ export function RequestForm({ server, onSent, onBack }: {
 
   return (
     <>
+      {perfil?.title && (
+        <>
+          <ServerProfileCard perfil={perfil} />
+          <div className="my-3 h-px bg-border" />
+        </>
+      )}
       <label className="mb-[7px] block text-[11px] tracking-[.02em] text-muted">Tu nombre</label>
       <input value={name} maxLength={MAX_NAME} onChange={(e) => setName(e.target.value)} className={field} />
       <div className="h-3.5" />

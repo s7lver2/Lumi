@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { addrFromCard, api, fingerprintFromCard, isCard, type Hello, type ServerProfileSettings } from "../lib/api";
-import { lumiUrl } from "../lib/bridge";
 import { addServer } from "../lib/session";
-import { AvisoEditor } from "../admin/AvisoEditor";
 import { Icon } from "../ui/Icon";
+import { ServerProfileCard } from "./ServerProfileCard";
 
 export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
   onAdded: (addr: string) => void; onOwnerKey: (key: string) => void; onBack?: () => void;
@@ -78,27 +77,7 @@ export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
       {hello && perfil?.title && (
         <>
           <div className="my-3 h-px bg-border" />
-          <div className="overflow-hidden rounded-[11px] border border-border">
-            <div className="relative h-[86px] bg-elevated">
-              {perfil.has_banner && (
-                <img src={lumiUrl("/v1/server-profile/banner")} alt=""
-                  className="absolute inset-0 h-full w-full object-cover" />
-              )}
-              {perfil.has_avatar && (
-                <img src={lumiUrl("/v1/server-profile/avatar")} alt=""
-                  className="absolute -bottom-5 left-3.5 h-11 w-11 rounded-[10px] border-[3px] border-panel object-cover" />
-              )}
-            </div>
-            <div className="bg-panel p-3 pt-6">
-              <p className="text-[13px] text-fg">{perfil.title}</p>
-              <p className="mt-0.5 text-[10.5px] text-subtle">{perfil.member_count} miembros</p>
-              {perfil.description ? (
-                <div className="mt-2 text-[11px]">
-                  <AvisoEditor contenido={perfil.description} editable={false} />
-                </div>
-              ) : null}
-            </div>
-          </div>
+          <ServerProfileCard perfil={perfil} />
           <div className="my-3 h-px bg-border" />
           <label className="mb-[7px] block text-[11px] tracking-[.02em] text-muted">Nombre (opcional)</label>
           <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="equipo León"
