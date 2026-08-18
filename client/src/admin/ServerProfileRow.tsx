@@ -1,18 +1,25 @@
 import { useEffect, useState } from "react";
 import { api, type ServerProfileSettings } from "../lib/api";
-import { lumiUrl, pickImagePath, uploadServerAvatar, uploadServerBanner } from "../lib/bridge";
+import { blobToBase64, lumiUrl, pickImagePath, readImageAsDataUrl, uploadServerAvatarBytes, uploadServerBannerBytes } from "../lib/bridge";
+import { ImageCropModal } from "../ui/ImageCropModal";
 import { AvisoEditor } from "./AvisoEditor";
+
+const AVATAR_SIDE = 256;
+const BANNER_W = 1200;
+const BANNER_H = 360;
 
 /** Foto, banner, título y descripción del servidor — lo que se muestra en el
  *  popup de "Añadir servidor" (ver `AddServerForm.tsx`) antes de que quien
  *  mira tenga cuenta. Mismo patrón de borrador local + "Guardar cambios" que
- *  `PolicyRow`, más dos botones de imagen que suben al instante (no hay
- *  "borrador" posible para un archivo: o se sube, o no). */
+ *  `PolicyRow`; las imágenes pasan primero por el editor de recorte
+ *  (`ImageCropModal`) y suben ya recortadas al tamaño exacto — no hay
+ *  "borrador" posible para una imagen: o se sube, o no. */
 export function ServerProfileRow({ token }: { token: string }) {
   const [cfg, setCfg] = useState<ServerProfileSettings | null>(null);
   const [titulo, setTitulo] = useState("");
   const [descripcion, setDescripcion] = useState<unknown>(null);
   const [busyImg, setBusyImg] = useState<"avatar" | "banner" | null>(null);
+  const [recortando, setRecortando] = useState<{ tipo: "avatar" | "banner"; dataUrl: string } | null>(null);
   const [tick, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -24,27 +31,26 @@ export function ServerProfileRow({ token }: { token: string }) {
   }
   useEffect(() => { void cargar(); }, [token]);
 
-  async function subirAvatar() {
+  async function elegir(tipo: "avatar" | "banner") {
     const path = await pickImagePath();
     if (!path) return;
-    setBusyImg("avatar"); setError(null);
+    setError(null);
     try {
-      await uploadServerAvatar(path);
-      setTick((t) => t + 1);
-      void cargar();
+      setRecortando({ tipo, dataUrl: await readImageAsDataUrl(path) });
     } catch (e) {
       setError(String(e));
-    } finally {
-      setBusyImg(null);
     }
   }
 
-  async function subirBanner() {
-    const path = await pickImagePath();
-    if (!path) return;
-    setBusyImg("banner"); setError(null);
+  async function confirmarRecorte(blob: Blob) {
+    if (!recortando) return;
+    const tipo = recortando.tipo;
+    setRecortando(null);
+    setBusyImg(tipo); setError(null);
     try {
-      await uploadServerBanner(path);
+      const b64 = await blobToBase64(blob);
+      if (tipo === "avatar") await uploadServerAvatarBytes(b64);
+      else await uploadServerBannerBytes(b64);
       setTick((t) => t + 1);
       void cargar();
     } catch (e) {
@@ -75,13 +81,13 @@ export function ServerProfileRow({ token }: { token: string }) {
       <p className="mb-3 text-[12.5px] text-fg">Perfil del servidor</p>
 
       <div className="mb-3.5 flex items-center gap-3.5">
-        <button key={`banner-${tick}`} onClick={() => void subirBanner()} disabled={busyImg !== null}
+        <button key={`banner-${tick}`} onClick={() => void elegir("banner")} disabled={busyImg !== null}
           className="jg-press relative h-[70px] w-[130px] shrink-0 overflow-hidden rounded-lg border border-border bg-elevated text-[9.5px] text-subtle disabled:opacity-40">
           {cfg.has_banner ? (
             <img src={lumiUrl(`/v1/server-profile/banner?v=${tick}`)} alt="" className="h-full w-full object-cover" />
           ) : (busyImg === "banner" ? "Subiendo…" : "Banner · subir")}
         </button>
-        <button key={`avatar-${tick}`} onClick={() => void subirAvatar()} disabled={busyImg !== null}
+        <button key={`avatar-${tick}`} onClick={() => void elegir("avatar")} disabled={busyImg !== null}
           className="jg-press relative h-14 w-14 shrink-0 overflow-hidden rounded-[12px] border border-border bg-elevated text-[9px] text-subtle disabled:opacity-40">
           {cfg.has_avatar ? (
             <img src={lumiUrl(`/v1/server-profile/avatar?v=${tick}`)} alt="" className="h-full w-full object-cover" />
@@ -104,6 +110,15 @@ export function ServerProfileRow({ token }: { token: string }) {
         <span className="text-[10px] text-subtle">{cfg.member_count} miembros</span>
       </div>
       {error && <p className="mt-2.5 text-[11px] text-danger-fg">{error}</p>}
+
+      {recortando && (
+        <ImageCropModal imageDataUrl={recortando.dataUrl}
+          aspect={recortando.tipo === "avatar" ? 1 : BANNER_W / BANNER_H}
+          shape={recortando.tipo === "avatar" ? "circle" : "rect"}
+          outputW={recortando.tipo === "avatar" ? AVATAR_SIDE : BANNER_W}
+          outputH={recortando.tipo === "avatar" ? AVATAR_SIDE : BANNER_H}
+          onConfirm={confirmarRecorte} onCancel={() => setRecortando(null)} />
+      )}
     </div>
   );
 }

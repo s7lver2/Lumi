@@ -102,10 +102,33 @@ async fn upload_images(
 
 type Shared = Arc<Mutex<Conn>>;
 
-/// Compartido por los tres comandos de perfil de abajo: leer un único
-/// archivo por ruta y mandarlo como multipart a `url_path`. Mismo motivo que
-/// `upload_images` para leer por ruta y no por bytes desde TS.
-async fn subir_una_imagen(url_path: &str, path: &str, state: &Shared) -> Result<(), String> {
+/// Lee un archivo local y lo devuelve como `data:` URL en base64 — el
+/// webview no puede cargar una ruta de disco arbitraria directamente
+/// (necesitaría configurar el scope de activos de Tauri), así que la imagen
+/// ORIGINAL (antes de recortar) entra al editor de recorte por aquí. Es la
+/// única foto que viaja por el canal de IPC sin recortar primero: una
+/// excepción deliberada y puntual, no el camino general (el resultado ya
+/// recortado, mucho más pequeño, es lo que de verdad sube al servidor).
+#[tauri::command]
+fn read_image_as_data_url(path: String) -> Result<String, String> {
+    let bytes = std::fs::read(&path).map_err(|e| format!("{path}: {e}"))?;
+    let lower = path.to_lowercase();
+    let mime = if lower.ends_with(".png") {
+        "image/png"
+    } else if lower.ends_with(".webp") {
+        "image/webp"
+    } else {
+        "image/jpeg"
+    };
+    use base64::Engine;
+    Ok(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)))
+}
+
+/// Compartido por los tres comandos de perfil de abajo: el recorte ya
+/// llega hecho desde el editor de recorte de TS (un `<canvas>` exportado a
+/// JPEG y codificado en base64), así que aquí solo hace falta decodificarlo
+/// y mandarlo como multipart a `url_path`.
+async fn subir_bytes(url_path: &str, data_base64: &str, state: &Shared) -> Result<(), String> {
     let (base, client, token) = {
         let c = state.lock().unwrap();
         (
@@ -114,13 +137,12 @@ async fn subir_una_imagen(url_path: &str, path: &str, state: &Shared) -> Result<
             c.token.clone().ok_or("sin sesión")?,
         )
     };
-    let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
-    let name = std::path::Path::new(path)
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "imagen".into());
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data_base64)
+        .map_err(|e| e.to_string())?;
     let form = reqwest::multipart::Form::new()
-        .part("file", reqwest::multipart::Part::bytes(bytes).file_name(name));
+        .part("file", reqwest::multipart::Part::bytes(bytes).file_name("recorte.jpg"));
     let res = client
         .post(format!("{base}{url_path}"))
         .bearer_auth(token)
@@ -136,18 +158,18 @@ async fn subir_una_imagen(url_path: &str, path: &str, state: &Shared) -> Result<
 }
 
 #[tauri::command]
-async fn upload_avatar(path: String, state: tauri::State<'_, Shared>) -> Result<(), String> {
-    subir_una_imagen("/v1/me/avatar", &path, &state).await
+async fn upload_avatar_bytes(data_base64: String, state: tauri::State<'_, Shared>) -> Result<(), String> {
+    subir_bytes("/v1/me/avatar", &data_base64, &state).await
 }
 
 #[tauri::command]
-async fn upload_server_avatar(path: String, state: tauri::State<'_, Shared>) -> Result<(), String> {
-    subir_una_imagen("/v1/admin/server-profile/avatar", &path, &state).await
+async fn upload_server_avatar_bytes(data_base64: String, state: tauri::State<'_, Shared>) -> Result<(), String> {
+    subir_bytes("/v1/admin/server-profile/avatar", &data_base64, &state).await
 }
 
 #[tauri::command]
-async fn upload_server_banner(path: String, state: tauri::State<'_, Shared>) -> Result<(), String> {
-    subir_una_imagen("/v1/admin/server-profile/banner", &path, &state).await
+async fn upload_server_banner_bytes(data_base64: String, state: tauri::State<'_, Shared>) -> Result<(), String> {
+    subir_bytes("/v1/admin/server-profile/banner", &data_base64, &state).await
 }
 
 fn client_for(fingerprint: &str) -> Result<reqwest::Client, String> {
@@ -521,7 +543,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             pair, pair_card, reconnect, request, start_telemetry, start_task_log,
             start_queue_events, start_indices_events, start_admin_events, set_auth, upload_images,
-            upload_avatar, upload_server_avatar, upload_server_banner
+            read_image_as_data_url, upload_avatar_bytes, upload_server_avatar_bytes, upload_server_banner_bytes
         ])
         .run(tauri::generate_context!())
         .expect("error al arrancar Tauri");

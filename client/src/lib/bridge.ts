@@ -45,14 +45,34 @@ export async function uploadPaths(caseId: number, paths: string[]): Promise<Imag
   return JSON.parse(raw) as Image[];
 }
 
-export function uploadAvatar(path: string): Promise<void> {
-  return invoke("upload_avatar", { path });
+/** Lee un archivo local como `data:` URL, para poder mostrarlo dentro del
+ *  editor de recorte (`ImageCropModal`) antes de subir nada. */
+export function readImageAsDataUrl(path: string): Promise<string> {
+  return invoke("read_image_as_data_url", { path });
 }
-export function uploadServerAvatar(path: string): Promise<void> {
-  return invoke("upload_server_avatar", { path });
+
+/** El recorte ya viene hecho (un `<canvas>` exportado a JPEG en base64,
+ *  ver `ImageCropModal`) — estos tres solo mandan el resultado. */
+export function uploadAvatarBytes(dataBase64: string): Promise<void> {
+  return invoke("upload_avatar_bytes", { dataBase64 });
 }
-export function uploadServerBanner(path: string): Promise<void> {
-  return invoke("upload_server_banner", { path });
+export function uploadServerAvatarBytes(dataBase64: string): Promise<void> {
+  return invoke("upload_server_avatar_bytes", { dataBase64 });
+}
+export function uploadServerBannerBytes(dataBase64: string): Promise<void> {
+  return invoke("upload_server_banner_bytes", { dataBase64 });
+}
+
+/** El `Blob` que produce el `<canvas>` del editor de recorte, como base64
+ *  puro (sin el prefijo `data:...;base64,`) — es lo que esperan los
+ *  comandos de subida de arriba. */
+export function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve((reader.result as string).split(",")[1]);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }
 
 /** Selector de archivos del sistema. Devuelve rutas, nunca bytes, y no sube

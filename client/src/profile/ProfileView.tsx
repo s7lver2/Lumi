@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { api, type ApiKeyInfo, type IssuedApiKey, type Me, type SessionInfo } from "../lib/api";
-import { pickImagePath, uploadAvatar } from "../lib/bridge";
+import { blobToBase64, pickImagePath, readImageAsDataUrl, uploadAvatarBytes } from "../lib/bridge";
 import { useServer } from "../lib/store";
 import { ModalEmitir, ModalRevelada } from "../admin/ApiKeysView";
 import { Seccion } from "../admin/AdminPanel";
 import { Icon } from "../ui/Icon";
+import { ImageCropModal } from "../ui/ImageCropModal";
 import { UsageBar } from "../ui/UsageBar";
 import { UserTile } from "../ui/UserTile";
 import { ProfileSidebar, type ProfileSeccion } from "./ProfileSidebar";
+
+const AVATAR_SIDE = 256;
 
 /** Autoservicio: mis propias claves de API, y mis sesiones activas. Cuelga
  *  del hueco `onProfile` que `TitleBar.tsx` ya declaraba sin que nadie lo
@@ -40,6 +43,7 @@ function PerfilPanel({ token }: { token: string }) {
   const [me, setMe] = useState<Me | null>(null);
   const [subiendo, setSubiendo] = useState(false);
   const [fotoTick, setFotoTick] = useState(0);
+  const [recortando, setRecortando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { api.get<Me>("/v1/auth/me", token).then(setMe).catch(() => setMe(null)); }, [token]);
@@ -47,9 +51,19 @@ function PerfilPanel({ token }: { token: string }) {
   async function cambiarFoto() {
     const path = await pickImagePath();
     if (!path) return;
+    setError(null);
+    try {
+      setRecortando(await readImageAsDataUrl(path));
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  async function confirmarRecorte(blob: Blob) {
+    setRecortando(null);
     setSubiendo(true); setError(null);
     try {
-      await uploadAvatar(path);
+      await uploadAvatarBytes(await blobToBase64(blob));
       setFotoTick((t) => t + 1);
     } catch (e) {
       setError(String(e));
@@ -108,6 +122,12 @@ function PerfilPanel({ token }: { token: string }) {
       <p className="mt-4 text-[10.5px] text-subtle">
         El cambio de nombre o contraseña no vive todavía aquí.
       </p>
+
+      {recortando && (
+        <ImageCropModal imageDataUrl={recortando} aspect={1} shape="circle"
+          outputW={AVATAR_SIDE} outputH={AVATAR_SIDE}
+          onConfirm={confirmarRecorte} onCancel={() => setRecortando(null)} />
+      )}
     </Seccion>
   );
 }
