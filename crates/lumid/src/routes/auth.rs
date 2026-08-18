@@ -165,6 +165,7 @@ pub async fn login(
     limpiar_intentos(peer);
     Ok(Json(LoginRes {
         token,
+        id,
         username: req.username,
         is_admin: is_admin == 1,
         must_change_password: must_change == 1,
@@ -365,6 +366,7 @@ pub async fn me(
         )
         .unwrap_or(0);
     Ok(Json(serde_json::json!({
+        "id": uid,
         "username": username,
         "is_admin": is_admin,
         "limits": limits,

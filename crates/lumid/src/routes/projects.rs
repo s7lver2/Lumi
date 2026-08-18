@@ -71,7 +71,7 @@ pub async fn list(State(app): State<App>, headers: HeaderMap) -> Result<Json<Vec
         .prepare(
             "SELECT p.id, p.name, m.role, p.created_at, p.updated_at,
                     COALESCE(kc.n, 0), COALESCE(ic.n, 0), COALESCE(ic.bytes, 0),
-                    lk.username
+                    lk.username, lk.user_id
              FROM projects p
              JOIN project_members m ON m.project_id = p.id
              LEFT JOIN (SELECT project_id, COUNT(*) AS n FROM cases GROUP BY project_id) kc
@@ -86,7 +86,7 @@ pub async fn list(State(app): State<App>, headers: HeaderMap) -> Result<Json<Vec
              -- STALE_AFTER agarrado. Un candado abandonado no cuenta como
              -- alguien trabajando, es basura que todavía no se robó.
              LEFT JOIN (
-               SELECT pl.project_id, u.username
+               SELECT pl.project_id, u.username, u.id AS user_id
                FROM project_locks pl
                JOIN sessions s ON s.token = pl.token AND s.expires_at > ?2
                JOIN users u ON u.id = pl.user_id
@@ -110,6 +110,7 @@ pub async fn list(State(app): State<App>, headers: HeaderMap) -> Result<Json<Vec
                 images: r.get(6)?,
                 bytes: r.get(7)?,
                 locked_by: r.get(8)?,
+                locked_by_id: r.get(9)?,
             })
         })
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
@@ -160,6 +161,7 @@ pub async fn create(
         created_at: t,
         updated_at: t,
         locked_by: None,
+        locked_by_id: None,
     }))
 }
 
