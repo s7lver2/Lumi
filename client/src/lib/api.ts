@@ -131,6 +131,18 @@ export interface SecuritySettings {
   maintenance: boolean; maintenance_message: string;
   maintenance_block_login: boolean; maintenance_services: string[];
 }
+export interface NetworkSettings {
+  bind_port: number;
+  public_host: string | null;
+  public_port: number | null;
+  quic_enabled: boolean;
+  quic_port: number;
+}
+export interface NetworkView {
+  settings: NetworkSettings;
+  server_card: string;
+  restart_blocked_reason: string | null;
+}
 export interface DeviceRow { name: string; os: string | null; first_seen: number; last_seen: number }
 export interface AdminUser {
   id: number; username: string; display_name: string | null; is_admin: boolean;
@@ -310,7 +322,8 @@ export interface QueueView { pendientes: number; en_curso: number; trabajadores:
 export type Cambio =
   | { tipo: "estado"; analysis_id: number; case_id: number; estado: Analysis["state"] }
   | { tipo: "progreso"; analysis_id: number; fase: string; pct: number }
-  | { tipo: "invitacion"; project_id: number; project_name: string; invited_by: string };
+  | { tipo: "invitacion"; project_id: number; project_name: string; invited_by: string }
+  | { tipo: "red"; nuevo_addr: string };
 
 export interface Resumen {
   solicitudes_pendientes: number;
@@ -354,4 +367,7 @@ export const api = {
     api.patch<HardwareDevice>(`/v1/admin/hardware/${index}`, req, token),
   cpuLeer: (token: string) => api.get<CpuDevice>("/v1/admin/hardware/cpu", token),
   cpuAplicar: (req: PatchCpuReq, token: string) => api.patch<CpuDevice>("/v1/admin/hardware/cpu", req, token),
+  networkGet: (token: string) => api.get<NetworkView>("/v1/admin/network", token),
+  networkPatch: (s: NetworkSettings, token: string) => api.patch<NetworkView>("/v1/admin/network", s, token),
+  networkRestart: (token: string) => api.post<null>("/v1/admin/network/restart", {}, token),
 };
