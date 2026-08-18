@@ -397,6 +397,10 @@ fn migrate(c: &Connection) {
         // y un hash no se puede des-hacer para eso, así que ese fragmento se
         // guarda aparte, en claro, calculado una vez al emitir la clave.
         ("sessions", "token_prefix", "TEXT"),
+        // Cuándo aceptó el documento de políticas al crear su cuenta. Nulo
+        // significa "el gate no estaba activo cuando se creó" — no que
+        // rechazara nada, no hay nada que rechazar en un `INSERT`.
+        ("users", "accepted_policies_at", "INTEGER"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }
