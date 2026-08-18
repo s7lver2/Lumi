@@ -424,3 +424,12 @@ TCP+TLS.
 La configuración de red (`docs/superpowers/specs/2026-08-18-config-red-design.md`) asume un
 proxy/port-forward transparente a nivel TCP. Un proxy que descifra y vuelve a cifrar rompe el
 anclaje de huella de certificado — no está soportado ni se detecta activamente.
+
+- **Fotos de perfil en `NotificationsPopover.tsx`**: sus `Item.id` no son ids
+  de usuario (son id de proyecto para invitaciones, id de solicitud para
+  accesos) — mapearlos a un `userId` real no es mecánico como en el resto de
+  sitios (ver `docs/superpowers/specs/2026-08-18-perfiles-design.md`).
+  Pendiente si se decide que merece la pena.
+- **Edición/recorte interactivo de avatar y banner antes de subir**: hoy se
+  recorta centrado en el servidor (`resize_to_fill`), sin posibilidad de
+  ajustar el encuadre desde el cliente.
