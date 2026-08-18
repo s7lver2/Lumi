@@ -103,22 +103,14 @@ export function UsersView({ token }: { token: string }) {
               {LEVERS.map(([key, label]) => {
                 const overridden = key in detail.overrides;
                 const value = JSON.stringify((u.limits as unknown as Record<string, unknown>)[key]);
-                const g = JSON.stringify((detail.global as unknown as Record<string, unknown>)[key]);
                 return (
                   <div key={key}
-                    className="flex items-center justify-between gap-3 border-b border-border py-[7px] text-[11px] last:border-none">
-                    <span className="text-subtle">{label}</span>
-                    <span className="font-mono text-fg">{value}</span>
-                    <span className="text-[10px] text-subtle">
-                      {overridden ? `anulado · global ${g}` : "hereda del global"}
-                    </span>
-                    <span className="w-[92px] text-right">
-                      {overridden && (
-                        <button onClick={() => patch(u.id, { limits: { [key]: null } })}
-                          className="text-[10px] text-muted hover:text-fg">
-                          quitar anulación
-                        </button>
-                      )}
+                    className="flex items-center gap-3 border-b border-border py-[9px] text-[11px] last:border-none">
+                    <span className="w-[168px] shrink-0 text-subtle">{label}</span>
+                    <span className="flex-1 font-mono text-fg">{value}</span>
+                    <span className={`shrink-0 rounded-[5px] border px-1.5 py-px text-[9.5px] tracking-[.03em] ${
+                      overridden ? "border-warning/40 text-warning-fg" : "border-border text-subtle"}`}>
+                      {overridden ? "anulado" : "hereda"}
                     </span>
                   </div>
                 );
@@ -163,7 +155,7 @@ export function UsersView({ token }: { token: string }) {
 
         {editando === "usuario" && (
           <LimitsEditor modo="usuario" titulo={`Límites de ${u.username}`}
-            valores={u.limits} overrides={detail.overrides} userId={u.id} token={token}
+            valores={u.limits} global={detail.global} overrides={detail.overrides} userId={u.id} token={token}
             onGuardado={() => { setEditando(null); open(u.id); }}
             onCerrar={() => setEditando(null)} />
         )}

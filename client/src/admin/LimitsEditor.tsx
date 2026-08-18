@@ -22,14 +22,23 @@ type Fila = { anular: boolean; valor: unknown };
 /** Editor de las 9 palancas de límites. Sirve para dos casos con la misma
  *  pieza: los del servidor (`modo="global"`, siempre se fijan) y las
  *  anulaciones de un usuario (`modo="usuario"`, cada fila puede "heredar del
- *  global" o anular con su propio valor) — es la misma tabla de controles,
- *  solo cambia si hay un interruptor de anular por fila o no. */
+ *  global" o anular con su propio valor).
+ *
+ *  Tocar el control YA es anular — no hace falta un interruptor previo para
+ *  "desbloquearlo". La primera versión exigía activar "anulado" antes de que
+ *  el campo aceptara nada, y el campo se veía casi igual de habilitado que
+ *  deshabilitado (solo un 40% menos de opacidad): quien escribía directamente
+ *  en el número —lo natural— no veía ningún efecto y no sabía por qué. Ahora
+ *  el chip "hereda/anulado" solo sirve para volver atrás a mano. */
 export function LimitsEditor({
-  modo, titulo, valores, overrides, userId, token, onGuardado, onCerrar,
+  modo, titulo, valores, global, overrides, userId, token, onGuardado, onCerrar,
 }: {
   modo: "global" | "usuario";
   titulo: string;
   valores: Limits;
+  /** Solo hace falta en modo "usuario": a qué valor se vuelve al pulsar
+   *  "hereda" sobre una fila anulada. */
+  global?: Limits;
   /** Solo en modo "usuario": qué palancas están anuladas ahora mismo. */
   overrides?: Record<string, unknown>;
   /** Obligatorio en modo "usuario": a quién se le aplica. */
@@ -49,8 +58,21 @@ export function LimitsEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function set(key: string, patch: Partial<Fila>) {
-    setFilas((f) => ({ ...f, [key]: { ...f[key], ...patch } }));
+  /** Cambiar el valor de una fila también la marca anulada — tocar el
+   *  control es la señal de intención, no un paso aparte. */
+  function setValor(key: string, valor: unknown) {
+    setFilas((f) => ({ ...f, [key]: { anular: true, valor } }));
+  }
+
+  /** Solo el chip lo usa: alterna entre anulado y heredar del global. */
+  function toggleAnular(key: keyof Limits) {
+    setFilas((f) => {
+      const actual = f[key];
+      if (actual.anular) {
+        return { ...f, [key]: { anular: false, valor: global?.[key] ?? actual.valor } };
+      }
+      return { ...f, [key]: { ...actual, anular: true } };
+    });
   }
 
   async function guardar() {
@@ -89,33 +111,26 @@ export function LimitsEditor({
           <div className="flex-1">
             <div className="text-[14px] text-fg">{titulo}</div>
             <div className="text-[9.5px] text-subtle">
-              {modo === "global" ? "rige para todos, salvo anulación" : "anula el global solo para esta cuenta"}
+              {modo === "global" ? "rige para todos, salvo anulación" : "cambia cualquier valor para anularlo solo aquí"}
             </div>
           </div>
           <button onClick={onCerrar} className="jg-press rounded-lg px-2 py-1 text-subtle">✕</button>
         </div>
 
         <div className="max-h-[62vh] overflow-y-auto p-5">
-          <div className="flex flex-col gap-3.5">
+          <div className="flex flex-col">
             {PALANCAS.map(([key, etiqueta, tipo]) => {
               const f = filas[key];
               return (
-                <div key={key} className="flex items-center gap-3">
+                <div key={key}
+                  className="flex items-center gap-3 border-b border-border py-[10px] last:border-none">
                   <span className="w-[168px] shrink-0 text-[11px] text-subtle">{etiqueta}</span>
 
-                  {modo === "usuario" && (
-                    <button onClick={() => set(key, { anular: !f.anular })}
-                      className={`shrink-0 rounded border px-1.5 py-0.5 text-[9.5px] transition-colors duration-300 ease-expo ${
-                        f.anular ? "border-accent text-fg" : "border-border text-subtle"}`}>
-                      {f.anular ? "anulado" : "hereda"}
-                    </button>
-                  )}
-
-                  <div className={`flex-1 ${modo === "usuario" && !f.anular ? "pointer-events-none opacity-40" : ""}`}>
+                  <div className="flex-1">
                     {tipo === "bool" && (
                       <div className="flex gap-1.5">
                         {([true, false] as const).map((v) => (
-                          <button key={String(v)} onClick={() => set(key, { valor: v })}
+                          <button key={String(v)} onClick={() => setValor(key, v)}
                             className={`rounded border px-2 py-1 text-[10.5px] transition-colors duration-300 ease-expo ${
                               f.valor === v ? "border-accent text-fg" : "border-border text-subtle"}`}>
                             {v ? "activado" : "desactivado"}
@@ -128,7 +143,7 @@ export function LimitsEditor({
                         min={key === "queue_priority" ? -5 : 0}
                         max={key === "queue_priority" ? 5 : undefined}
                         value={f.valor as number}
-                        onChange={(e) => set(key, { valor: e.target.valueAsNumber || 0 })}
+                        onChange={(e) => setValor(key, e.target.valueAsNumber || 0)}
                         className="w-[110px] rounded-[9px] border border-border bg-[#0d0f12] px-[11px] py-[6px]
                           font-mono text-[12.5px] text-fg outline-none transition-colors duration-300 ease-expo
                           focus:border-white/40" />
@@ -139,9 +154,7 @@ export function LimitsEditor({
                           const lista = (f.valor as string[]) ?? [];
                           const on = lista.includes(m);
                           return (
-                            <button key={m} onClick={() => set(key, {
-                              valor: on ? lista.filter((x) => x !== m) : [...lista, m],
-                            })}
+                            <button key={m} onClick={() => setValor(key, on ? lista.filter((x) => x !== m) : [...lista, m])}
                               className={`rounded border px-1.5 py-0.5 text-[10.5px] transition-colors duration-300 ease-expo ${
                                 on ? "border-accent text-fg" : "border-border text-subtle"}`}>
                               {m}
@@ -151,6 +164,14 @@ export function LimitsEditor({
                       </div>
                     )}
                   </div>
+
+                  {modo === "usuario" && (
+                    <button onClick={() => toggleAnular(key)}
+                      className={`shrink-0 rounded-[5px] border px-1.5 py-px text-[9.5px] tracking-[.03em] transition-colors duration-300 ease-expo ${
+                        f.anular ? "border-warning/40 text-warning-fg" : "border-border text-subtle hover:text-fg"}`}>
+                      {f.anular ? "anulado" : "hereda"}
+                    </button>
+                  )}
                 </div>
               );
             })}
