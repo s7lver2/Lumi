@@ -54,7 +54,7 @@ export function UsersView({ token }: { token: string }) {
       <Seccion
         titulo={
           <span className="flex items-center gap-2.5">
-            <UserTile nombre={u.username} conectado={false} size={30} />
+            <UserTile nombre={u.username} conectado={false} size={30} userId={u.id} />
             {u.username}
             {u.is_admin && (
               <span className="rounded-[5px] border border-border px-1.5 py-px text-[9.5px] font-normal tracking-[.03em] text-subtle">
@@ -200,7 +200,7 @@ export function UsersView({ token }: { token: string }) {
             className="grid cursor-pointer grid-cols-[1fr_96px_108px] items-center gap-3 border-t border-border px-3.5 py-2.5 first:border-t-0 transition-colors duration-[400ms] ease-expo hover:bg-white/[.026]"
           >
             <span className="flex min-w-0 items-center gap-2.5 text-[11.5px] text-fg">
-              <UserTile nombre={u.username} conectado={false} size={24} />
+              <UserTile nombre={u.username} conectado={false} size={24} userId={u.id} />
               {u.username}
             </span>
             <span className="text-[10.5px] text-muted">{u.is_admin ? "administrador" : "analista"}</span>
@@ -225,7 +225,7 @@ export function UsersView({ token }: { token: string }) {
             }}
             className="flex flex-col items-center gap-2.5 rounded-[11px] border border-border bg-panel p-[13px_10px] shadow-[inset_0_1px_0_rgba(255,255,255,.045)] transition-[border-color,transform] duration-[450ms] ease-expo hover:-translate-y-[3px] hover:border-white/[.22]"
           >
-            <UserTile nombre={u.username} conectado={false} />
+            <UserTile nombre={u.username} conectado={false} userId={u.id} />
             {vista === "nombre" && (
               <>
                 <span className="max-w-full truncate text-[11px] text-fg">{u.username}</span>

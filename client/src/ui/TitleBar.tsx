@@ -31,6 +31,7 @@ export function TitleBar({ crumbs, onOpenAdmin, onProfile, onSignOut, onProjectA
 }) {
   const isAdmin = useServer((s) => s.isAdmin);
   const username = useServer((s) => s.username);
+  const userId = useServer((s) => s.userId);
   const signedIn = useServer((s) => s.token) !== null;
 
   return (
@@ -63,7 +64,7 @@ export function TitleBar({ crumbs, onOpenAdmin, onProfile, onSignOut, onProjectA
         <>
           {isAdmin && <ServerPill />}
           <NotificationsPopover onProjectAccepted={onProjectAccepted} />
-          <UserMenu name={username} isAdmin={isAdmin}
+          <UserMenu name={username} userId={userId} isAdmin={isAdmin}
             onOpenAdmin={onOpenAdmin} onProfile={onProfile} onSignOut={onSignOut} />
           <span className="h-[18px] w-px bg-border" />
         </>
@@ -211,8 +212,8 @@ function Meter({ pct }: { pct: number }) {
   );
 }
 
-function UserMenu({ name, isAdmin, onOpenAdmin, onProfile, onSignOut }: {
-  name: string; isAdmin: boolean;
+function UserMenu({ name, userId, isAdmin, onOpenAdmin, onProfile, onSignOut }: {
+  name: string; userId: number | null; isAdmin: boolean;
   onOpenAdmin: () => void; onProfile?: () => void; onSignOut: () => void;
 }) {
   const [open, setOpen, box] = usePopover();
@@ -221,14 +222,14 @@ function UserMenu({ name, isAdmin, onOpenAdmin, onProfile, onSignOut }: {
       <button onClick={() => setOpen(!open)}
         className="flex items-center gap-[7px] rounded-lg px-1.5 py-[3px] text-[11px] text-muted
           transition-colors duration-300 ease-expo hover:bg-white/[.05] hover:text-fg">
-        <Avatar name={name} size={21} />
+        <Avatar name={name} size={21} userId={userId ?? undefined} />
         <span className="max-w-[110px] truncate">{name}</span>
       </button>
 
       {open && (
         <div className={`${pop} w-[190px] p-1.5`} style={popAnim}>
           <div className="flex items-center gap-2 px-1.5 pb-2 pt-1">
-            <Avatar name={name} size={26} />
+            <Avatar name={name} size={26} userId={userId ?? undefined} />
             <div className="min-w-0">
               <p className="truncate text-[11.5px] text-fg">{name}</p>
               <p className="text-[10px] text-subtle">{isAdmin ? "administrador" : "investigador"}</p>

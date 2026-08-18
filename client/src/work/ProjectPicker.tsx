@@ -269,7 +269,7 @@ function Card({ project, vista, delay, drag, onOpen, onMenu }: {
       <span className="ml-auto flex items-center gap-1.5">
         {project.locked_by && (
           <span title={`${project.locked_by} está trabajando en este proyecto ahora mismo`}>
-            <UserTile nombre={project.locked_by} conectado size={16} />
+            <UserTile nombre={project.locked_by} conectado size={16} userId={project.locked_by_id ?? undefined} />
           </span>
         )}
         {project.role !== "owner" && (

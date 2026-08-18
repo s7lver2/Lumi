@@ -80,7 +80,7 @@ export function InviteDrawer({ project, open, onClose }:
 
       {rows.map((m) => (
         <div key={m.user_id} className="flex items-center gap-2 rounded-[9px] border border-border p-1.5">
-          <Avatar name={m.username} size={20} />
+          <Avatar name={m.username} size={20} userId={m.user_id} />
           <span className={`min-w-0 flex-1 truncate text-[11.5px] ${
             m.status === "pending" ? "text-muted" : "text-fg"}`}>{m.username}</span>
           <span className="shrink-0 text-[8.5px] uppercase tracking-[.1em] text-subtle">
@@ -117,7 +117,7 @@ export function InviteDrawer({ project, open, onClose }:
               // y con `onClick` la lista ya se habría cerrado.
               <button key={u.id} onMouseDown={() => void add(u.username)}
                 className="jg-press flex w-full items-center gap-2 rounded-md p-1.5 text-left hover:bg-white/[.05]">
-                <Avatar name={u.username} size={17} />
+                <Avatar name={u.username} size={17} userId={u.id} />
                 <span className="text-[11.5px] text-fg">{u.username}</span>
               </button>
             ))}
