@@ -1,13 +1,23 @@
-/** Círculo con la inicial, a falta de foto de perfil. Cuando exista un
- *  subsistema que las gestione, esta es la pieza que cambia por dentro: el
- *  mismo hueco de forma y tamaño, un `<img>` en vez de una letra. */
-export function Avatar({ name, size = 19 }: { name: string; size?: number }) {
+import { useState } from "react";
+import { lumiUrl } from "../lib/bridge";
+
+/** Círculo con la inicial, a falta de foto de perfil — o la foto en sí, si
+ *  se pasa `userId` y `/v1/users/:id/avatar` responde. `onError` cae de
+ *  vuelta a las iniciales sin que nadie tenga que comprobar antes si existe
+ *  una foto: un 404 no es un error que mostrar, es la señal de "todavía sin
+ *  foto". */
+export function Avatar({ name, size = 19, userId }: { name: string; size?: number; userId?: number }) {
   const letter = name.trim().slice(0, 1).toUpperCase() || "?";
+  const [fallo, setFallo] = useState(false);
+  const mostrarFoto = userId != null && !fallo;
   return (
     <span
       style={{ width: size, height: size, fontSize: Math.round(size * 0.47) }}
-      className="grid shrink-0 place-items-center rounded-full bg-elevated text-fg">
-      {letter}
+      className="grid shrink-0 place-items-center overflow-hidden rounded-full bg-elevated text-fg">
+      {mostrarFoto ? (
+        <img src={lumiUrl(`/v1/users/${userId}/avatar`)} alt="" onError={() => setFallo(true)}
+          className="h-full w-full object-cover" />
+      ) : letter}
     </span>
   );
 }
