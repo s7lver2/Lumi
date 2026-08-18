@@ -65,6 +65,9 @@ pub struct LoginReq {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginRes {
     pub token: String,
+    /// Necesario para poder pedir la propia foto de perfil
+    /// (`GET /v1/users/:id/avatar`) sin depender de una consulta aparte.
+    pub id: i64,
     pub username: String,
     pub is_admin: bool,
     /// Si es `true`, el token solo sirve para `POST /v1/auth/change-password`.
@@ -185,6 +188,12 @@ pub struct PatchPoliciesReq {
     pub active: Option<bool>,
     pub title: Option<String>,
     pub content: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PatchServerProfileReq {
+    pub title: Option<String>,
+    pub description: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -563,6 +572,10 @@ pub struct Project {
     /// consulta ya descarta candados de sesión caducada o de más de
     /// `STALE_AFTER`, así que esto es "de verdad, alguien está dentro ahora".
     pub locked_by: Option<String>,
+    /// El id de quien tiene el candado — junto a `locked_by`, no en su lugar:
+    /// el nombre ya se usaba para el texto, el id hace falta aparte para
+    /// pedir su foto de perfil.
+    pub locked_by_id: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
