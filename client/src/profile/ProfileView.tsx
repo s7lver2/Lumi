@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { api, type ApiKeyInfo, type IssuedApiKey, type SessionInfo } from "../lib/api";
+import { api, type ApiKeyInfo, type IssuedApiKey, type Me, type SessionInfo } from "../lib/api";
 import { useServer } from "../lib/store";
 import { ModalEmitir, ModalRevelada } from "../admin/ApiKeysView";
 import { Seccion } from "../admin/AdminPanel";
 import { Icon } from "../ui/Icon";
+import { UsageBar } from "../ui/UsageBar";
 import { ProfileSidebar, type ProfileSeccion } from "./ProfileSidebar";
 
 /** Autoservicio: mis propias claves de API, y mis sesiones activas. Cuelga
@@ -19,7 +20,7 @@ export function ProfileView({ token, onBack }: { token: string; onBack: () => vo
       <ProfileSidebar actual={seccion} onIr={setSeccion} onBack={onBack} />
       <div key={seccion} className="overflow-y-auto"
         style={{ animation: "jg-fade-rise .5s cubic-bezier(.16,1,.3,1) both" }}>
-        {seccion === "perfil" ? <PerfilPanel />
+        {seccion === "perfil" ? <PerfilPanel token={token} />
           : seccion === "claves" ? <ClavesPanel token={token} />
           : <SesionesPanel token={token} />}
       </div>
@@ -27,10 +28,15 @@ export function ProfileView({ token, onBack }: { token: string; onBack: () => vo
   );
 }
 
-function PerfilPanel() {
+function PerfilPanel({ token }: { token: string }) {
   const usuario = useServer((s) => s.username);
   const esAdmin = useServer((s) => s.isAdmin);
   const addr = useServer((s) => s.addr);
+  // Se pide fresco en vez de leerlo del store: el uso cambia con cada
+  // análisis lanzado, y `useServer` solo lo trae al iniciar sesión.
+  const [me, setMe] = useState<Me | null>(null);
+
+  useEffect(() => { api.get<Me>("/v1/auth/me", token).then(setMe).catch(() => setMe(null)); }, [token]);
 
   return (
     <Seccion titulo="Perfil" grupo="Cuenta">
@@ -40,6 +46,19 @@ function PerfilPanel() {
         <Fila etiqueta="Rol" valor={esAdmin ? "Administrador" : "Investigador"} />
         <Fila etiqueta="Servidor" valor={addr} mono />
       </div>
+
+      {!esAdmin && me && (
+        <div className="mt-4 rounded-card border border-border bg-panel p-[13px_16px]">
+          <div className="mb-2.5 text-[8.5px] uppercase tracking-[.15em] text-subtle">Uso</div>
+          <div className="flex flex-col gap-2">
+            <UsageBar etiqueta="Al día" usado={me.uso.hoy} tope={me.limits.max_daily} />
+            {me.limits.weekly_enabled && (
+              <UsageBar etiqueta="Semanal" usado={me.uso.semana} tope={me.limits.max_weekly} />
+            )}
+          </div>
+        </div>
+      )}
+
       <p className="mt-4 text-[10.5px] text-subtle">
         El cambio de nombre o contraseña no vive todavía aquí.
       </p>

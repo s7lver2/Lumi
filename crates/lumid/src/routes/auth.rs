@@ -345,10 +345,30 @@ pub async fn me(
     // Sin esto, la interfaz ofrecía crear un proyecto y el servidor contestaba
     // 403 después: el motivo se sabía demasiado tarde.
     let limits = crate::limits::effective(&app.store, uid);
+    // Mismo criterio exacto que la comprobación real en `analyses::create` y
+    // que el mismo cálculo del lado admin (`admin::get_user`): un número que
+    // no coincida con el que de verdad corta sería peor que no enseñarlo.
+    let t = now();
+    let c = app.store.conn();
+    let hoy: i64 = c
+        .query_row(
+            "SELECT COUNT(*) FROM analyses WHERE requested_by = ?1 AND created_at > ?2",
+            rusqlite::params![uid, t - 86_400],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    let semana: i64 = c
+        .query_row(
+            "SELECT COUNT(*) FROM analyses WHERE requested_by = ?1 AND created_at > ?2",
+            rusqlite::params![uid, t - 7 * 86_400],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
     Ok(Json(serde_json::json!({
         "username": username,
         "is_admin": is_admin,
         "limits": limits,
+        "uso": { "hoy": hoy, "semana": semana },
     })))
 }
 

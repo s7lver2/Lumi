@@ -281,7 +281,7 @@ export interface ProgresoInstalacion {
 }
 /** Lo que `/v1/auth/me` contesta. Los límites vienen aquí para que la interfaz
  *  sepa desde el primer render qué puede ofrecer habilitado. */
-export interface Me { username: string; is_admin: boolean; limits: Limits }
+export interface Me { username: string; is_admin: boolean; limits: Limits; uso: LimitsUsage }
 export interface MapConfig {
   provider: "mapbox" | "osm" | "none"; theme: string | null;
   has_key: boolean; reason: string | null;

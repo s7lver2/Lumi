@@ -3,23 +3,10 @@ import { api, type AdminUser, type Limits, type UserDetail } from "../lib/api";
 import { Icon } from "../ui/Icon";
 import { Seccion } from "./AdminPanel";
 import { LimitsEditor } from "./LimitsEditor";
+import { UsageBar } from "../ui/UsageBar";
 import { UserTile } from "../ui/UserTile";
 
 type Vista = "lista" | "foto" | "nombre";
-
-function Barra({ etiqueta, usado, tope }: { etiqueta: string; usado: number; tope: number }) {
-  const pct = tope > 0 ? Math.min(100, (usado / tope) * 100) : 0;
-  return (
-    <div className="flex items-center gap-3 text-[11px]">
-      <span className="w-[70px] shrink-0 text-subtle">{etiqueta}</span>
-      <span className="h-[3px] flex-1 overflow-hidden rounded-sm bg-elevated">
-        <span className={`block h-full rounded-sm transition-[width] duration-700 ease-expo ${
-          pct >= 100 ? "bg-warning" : "bg-fg"}`} style={{ width: `${pct}%` }} />
-      </span>
-      <span className="w-[64px] shrink-0 text-right font-mono text-[10.5px] text-muted">{usado} / {tope}</span>
-    </div>
-  );
-}
 
 export function UsersView({ token }: { token: string }) {
   const [rows, setRows] = useState<AdminUser[]>([]);
@@ -89,9 +76,9 @@ export function UsersView({ token }: { token: string }) {
           <div className="mt-4 rounded-[11px] border border-border bg-panel p-[13px_15px]">
             <div className="mb-2.5 text-[8.5px] uppercase tracking-[.15em] text-subtle">Uso</div>
             <div className="flex flex-col gap-2">
-              <Barra etiqueta="Al día" usado={detail.uso.hoy} tope={u.limits.max_daily} />
+              <UsageBar etiqueta="Al día" usado={detail.uso.hoy} tope={u.limits.max_daily} />
               {u.limits.weekly_enabled && (
-                <Barra etiqueta="Semanal" usado={detail.uso.semana} tope={u.limits.max_weekly} />
+                <UsageBar etiqueta="Semanal" usado={detail.uso.semana} tope={u.limits.max_weekly} />
               )}
             </div>
           </div>
