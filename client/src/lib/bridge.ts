@@ -45,6 +45,16 @@ export async function uploadPaths(caseId: number, paths: string[]): Promise<Imag
   return JSON.parse(raw) as Image[];
 }
 
+export function uploadAvatar(path: string): Promise<void> {
+  return invoke("upload_avatar", { path });
+}
+export function uploadServerAvatar(path: string): Promise<void> {
+  return invoke("upload_server_avatar", { path });
+}
+export function uploadServerBanner(path: string): Promise<void> {
+  return invoke("upload_server_banner", { path });
+}
+
 /** Selector de archivos del sistema. Devuelve rutas, nunca bytes, y no sube
  *  nada: quien llama decide qué hacer con ellas. Antes esto subía por su
  *  cuenta, y por eso no había hueco donde enseñar lo elegido ni elegir modelo
@@ -56,4 +66,14 @@ export async function pickPaths(): Promise<string[]> {
   });
   if (!sel) return [];
   return Array.isArray(sel) ? sel : [sel];
+}
+
+/** Como `pickPaths`, pero para un único archivo — foto de perfil, avatar o
+ *  banner de servidor: aquí no tiene sentido elegir varios. */
+export async function pickImagePath(): Promise<string | null> {
+  const sel = await open({
+    multiple: false,
+    filters: [{ name: "Imágenes", extensions: ["jpg", "jpeg", "png", "webp"] }],
+  });
+  return typeof sel === "string" ? sel : null;
 }
