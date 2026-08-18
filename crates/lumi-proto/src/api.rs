@@ -789,6 +789,18 @@ pub enum Cambio {
         project_name: String,
         invited_by: String,
     },
+    /// Aviso de que el servidor va a cambiar de dirección (puerto/host
+    /// público), emitido justo ANTES de reiniciar el proceso — mientras el
+    /// daemon todavía es alcanzable en la dirección vieja — para que quien
+    /// esté conectado en ese momento actualice su dirección guardada sin
+    /// tener que pedir una tarjeta nueva. Quien esté desconectado en ese
+    /// instante no recibe esto: para ese caso la recuperación es pedir una
+    /// tarjeta de servidor nueva, ver `AddServerForm`.
+    Red {
+        #[serde(skip)]
+        user_id: i64,
+        nuevo_addr: String,
+    },
 }
 
 impl Cambio {
@@ -796,7 +808,8 @@ impl Cambio {
         match self {
             Cambio::Estado { user_id, .. }
             | Cambio::Progreso { user_id, .. }
-            | Cambio::Invitacion { user_id, .. } => *user_id,
+            | Cambio::Invitacion { user_id, .. }
+            | Cambio::Red { user_id, .. } => *user_id,
         }
     }
 }
