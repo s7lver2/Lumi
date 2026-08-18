@@ -70,6 +70,7 @@ export interface Sample {
 }
 export interface LoginRes {
   token: string;
+  id: number;
   username: string;
   is_admin: boolean;
   must_change_password: boolean;
@@ -136,6 +137,14 @@ export interface PoliciesSettings {
   title: string;
   /** Documento Tiptap JSON — opaco aquí, solo lo entiende `AvisoEditor`. */
   content: unknown;
+}
+export interface ServerProfileSettings {
+  title: string;
+  /** Documento Tiptap JSON — opaco aquí, solo lo entiende `AvisoEditor`. */
+  description: unknown;
+  member_count: number;
+  has_avatar: boolean;
+  has_banner: boolean;
 }
 export interface NetworkSettings {
   bind_port: number;
@@ -235,6 +244,7 @@ export interface Project {
   created_at: number; updated_at: number;
   /** Quién tiene el candado de trabajo ahora mismo, si lo tiene alguien. */
   locked_by: string | null;
+  locked_by_id: number | null;
 }
 export interface ProjectMember {
   user_id: number; username: string; role: "owner" | "member";
@@ -299,7 +309,7 @@ export interface ProgresoInstalacion {
 }
 /** Lo que `/v1/auth/me` contesta. Los límites vienen aquí para que la interfaz
  *  sepa desde el primer render qué puede ofrecer habilitado. */
-export interface Me { username: string; is_admin: boolean; limits: Limits; uso: LimitsUsage }
+export interface Me { id: number; username: string; is_admin: boolean; limits: Limits; uso: LimitsUsage }
 export interface MapConfig {
   provider: "mapbox" | "osm" | "none"; theme: string | null;
   has_key: boolean; reason: string | null;
@@ -380,4 +390,8 @@ export const api = {
   policiesGet: (token: string) => api.get<PoliciesSettings>("/v1/admin/policies", token),
   policiesPatch: (patch: Partial<PoliciesSettings>, token: string) =>
     api.patch<PoliciesSettings>("/v1/admin/policies", patch, token),
+  serverProfilePublic: () => api.get<ServerProfileSettings>("/v1/server-profile"),
+  serverProfileGet: (token: string) => api.get<ServerProfileSettings>("/v1/admin/server-profile", token),
+  serverProfilePatch: (patch: Partial<Pick<ServerProfileSettings, "title" | "description">>, token: string) =>
+    api.patch<ServerProfileSettings>("/v1/admin/server-profile", patch, token),
 };
