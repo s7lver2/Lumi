@@ -127,6 +127,9 @@ async fn main() -> anyhow::Result<()> {
     let router = Router::new()
         .route("/v1/hello", get(routes::hello::get))
         .route("/v1/policies", get(routes::policies::get_public))
+        .route("/v1/server-profile", get(routes::perfil::get_public))
+        .route("/v1/server-profile/avatar", get(routes::perfil::ver_avatar_servidor))
+        .route("/v1/server-profile/banner", get(routes::perfil::ver_banner_servidor))
         .route("/v1/catalogo/grafo", get(routes::catalogo::resolver_grafo))
         .route("/v1/indices", get(routes::indices::listar).post(routes::indices::instalar))
         .route("/v1/indices/eventos", get(routes::indices::eventos))
@@ -147,6 +150,11 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/accounts", post(routes::access::create_account))
         .route("/v1/auth/change-password", post(routes::auth::change_password))
         .route("/v1/me/sessions", get(routes::auth::my_sessions))
+        .route(
+            "/v1/me/avatar",
+            post(routes::perfil::subir_mi_avatar).delete(routes::perfil::borrar_mi_avatar),
+        )
+        .route("/v1/users/:id/avatar", get(routes::perfil::ver_avatar_usuario))
         .route("/v1/sessions/:public_id", axum::routing::delete(routes::auth::revoke_session))
         .route("/v1/admin/access-requests", get(routes::admin::list_requests))
         .route("/v1/admin/access-requests/:id/resolve", post(routes::admin::resolve_request))
@@ -166,6 +174,18 @@ async fn main() -> anyhow::Result<()> {
         .route(
             "/v1/admin/policies",
             get(routes::policies::get_admin).patch(routes::policies::patch),
+        )
+        .route(
+            "/v1/admin/server-profile",
+            get(routes::perfil::get_admin).patch(routes::perfil::patch),
+        )
+        .route(
+            "/v1/admin/server-profile/avatar",
+            post(routes::perfil::subir_avatar_servidor).delete(routes::perfil::borrar_avatar_servidor),
+        )
+        .route(
+            "/v1/admin/server-profile/banner",
+            post(routes::perfil::subir_banner_servidor).delete(routes::perfil::borrar_banner_servidor),
         )
         .route("/v1/admin/hardware", get(routes::hardware::listar))
         .route("/v1/admin/hardware/:index", axum::routing::patch(routes::hardware::aplicar))
