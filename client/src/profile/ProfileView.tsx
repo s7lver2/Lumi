@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { api, type ApiKeyInfo, type IssuedApiKey, type Me, type SessionInfo } from "../lib/api";
+import { pickImagePath, uploadAvatar } from "../lib/bridge";
 import { useServer } from "../lib/store";
 import { ModalEmitir, ModalRevelada } from "../admin/ApiKeysView";
 import { Seccion } from "../admin/AdminPanel";
 import { Icon } from "../ui/Icon";
 import { UsageBar } from "../ui/UsageBar";
+import { UserTile } from "../ui/UserTile";
 import { ProfileSidebar, type ProfileSeccion } from "./ProfileSidebar";
 
 /** Autoservicio: mis propias claves de API, y mis sesiones activas. Cuelga
@@ -30,17 +32,61 @@ export function ProfileView({ token, onBack }: { token: string; onBack: () => vo
 
 function PerfilPanel({ token }: { token: string }) {
   const usuario = useServer((s) => s.username);
+  const userId = useServer((s) => s.userId);
   const esAdmin = useServer((s) => s.isAdmin);
   const addr = useServer((s) => s.addr);
   // Se pide fresco en vez de leerlo del store: el uso cambia con cada
   // análisis lanzado, y `useServer` solo lo trae al iniciar sesión.
   const [me, setMe] = useState<Me | null>(null);
+  const [subiendo, setSubiendo] = useState(false);
+  const [fotoTick, setFotoTick] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { api.get<Me>("/v1/auth/me", token).then(setMe).catch(() => setMe(null)); }, [token]);
+
+  async function cambiarFoto() {
+    const path = await pickImagePath();
+    if (!path) return;
+    setSubiendo(true); setError(null);
+    try {
+      await uploadAvatar(path);
+      setFotoTick((t) => t + 1);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSubiendo(false);
+    }
+  }
+
+  async function quitarFoto() {
+    setError(null);
+    try {
+      await api.del("/v1/me/avatar", token);
+      setFotoTick((t) => t + 1);
+    } catch (e) {
+      setError(String(e));
+    }
+  }
 
   return (
     <Seccion titulo="Perfil" grupo="Cuenta">
       <p className="text-[11px] text-muted">Quién eres en este servidor.</p>
+
+      <div className="mt-4 flex items-center gap-3.5">
+        <UserTile key={fotoTick} nombre={usuario} conectado={false} size={56} userId={userId ?? undefined} />
+        <div className="flex flex-col gap-1.5">
+          <button onClick={() => void cambiarFoto()} disabled={subiendo}
+            className="jg-press rounded-lg border border-white/15 px-2.5 py-1 text-[10.5px] text-fg disabled:opacity-40">
+            {subiendo ? "Subiendo…" : "Cambiar foto"}
+          </button>
+          <button onClick={() => void quitarFoto()}
+            className="text-left text-[9.5px] text-subtle hover:text-fg">
+            Quitar foto
+          </button>
+        </div>
+      </div>
+      {error && <p className="mt-2 text-[10.5px] text-danger-fg">{error}</p>}
+
       <div className="mt-4 rounded-card border border-border bg-panel">
         <Fila etiqueta="Usuario" valor={usuario} />
         <Fila etiqueta="Rol" valor={esAdmin ? "Administrador" : "Investigador"} />
