@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { api, type AccessStatus } from "../lib/api";
+import { useEffect, useState } from "react";
+import { api, type AccessStatus, type PoliciesSettings } from "../lib/api";
 import { loadSession, updateSession } from "../lib/session";
+import { AvisoEditor } from "../admin/AvisoEditor";
 import { Icon } from "../ui/Icon";
 
 export function ResolvedScreen({ status, onCreated, onRetry, onBack }: {
@@ -10,6 +11,12 @@ export function ResolvedScreen({ status, onCreated, onRetry, onBack }: {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [politicas, setPoliticas] = useState<PoliciesSettings | null>(null);
+  const [aceptado, setAceptado] = useState(false);
+
+  useEffect(() => {
+    api.policiesPublic().then(setPoliticas).catch(() => setPoliticas(null));
+  }, []);
 
   if (status.status === "rejected") {
     return (
@@ -43,7 +50,10 @@ export function ResolvedScreen({ status, onCreated, onRetry, onBack }: {
     if (!ticket) return;
     setBusy(true); setError(null);
     try {
-      await api.ticketPost("/v1/accounts", { username: username.trim(), password }, ticket);
+      await api.ticketPost("/v1/accounts", {
+        username: username.trim(), password,
+        accepted_policies: politicas?.active ? aceptado : undefined,
+      }, ticket);
       // El ticket ya está consumido: guardarlo solo serviría para que la app
       // volviera a aterrizar en una espera que ya terminó.
       updateSession({ ticket: undefined });
@@ -81,6 +91,24 @@ export function ResolvedScreen({ status, onCreated, onRetry, onBack }: {
         que la cambies.
       </p>
 
+      {politicas?.active && (
+        <>
+          <div className="my-3 h-px bg-border" />
+          <p className="mb-2 text-[11px] font-medium text-fg">{politicas.title || "Políticas de aceptación"}</p>
+          <div className="max-h-[160px] overflow-y-auto rounded-lg border border-border bg-[#0d0f12] p-2.5">
+            <AvisoEditor contenido={politicas.content} editable={false} />
+          </div>
+          <button type="button" onClick={() => setAceptado(!aceptado)}
+            className="mt-2.5 flex items-start gap-2 text-left text-[11px] text-muted">
+            <span className={`mt-0.5 grid h-[15px] w-[15px] shrink-0 place-items-center rounded border transition-colors duration-200 ${
+              aceptado ? "border-accent bg-accent" : "border-border"}`}>
+              {aceptado && <Icon name="check" size={10} className="text-black" />}
+            </span>
+            He leído y acepto «{politicas.title || "estas políticas"}».
+          </button>
+        </>
+      )}
+
       {error && (
         <div className="mt-3.5 flex items-start gap-2.5 text-xs">
           <Icon name="alert" className="mt-0.5 text-danger-fg" />
@@ -94,7 +122,8 @@ export function ResolvedScreen({ status, onCreated, onRetry, onBack }: {
         <button onClick={onBack} className="rounded-lg border border-white/15 px-4 py-2 text-xs text-fg active:translate-y-px">
           Más tarde
         </button>
-        <button onClick={create} disabled={busy || password.length < 12 || !username.trim()}
+        <button onClick={create}
+          disabled={busy || password.length < 12 || !username.trim() || (!!politicas?.active && !aceptado)}
           className="rounded-lg bg-accent px-5 py-2 text-xs font-medium text-black transition-transform duration-300 ease-expo active:translate-y-px disabled:opacity-40">
           {busy ? "Creando" : "Crear cuenta"}
         </button>
