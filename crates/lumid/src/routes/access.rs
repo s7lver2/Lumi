@@ -200,16 +200,26 @@ pub async fn create_account(
             "usuario vacío o contraseña de menos de 12 caracteres",
         ));
     }
+    if crate::politicas::activo(&app.store) && !req.accepted_policies {
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            "hay que aceptar las políticas para crear la cuenta",
+        ));
+    }
     let phc = hash_password(&req.password)
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    // Nulo si el gate no estaba activo o no se aceptó nada que registrar —
+    // no hay versión que comparar (ver spec), así que basta con la marca de
+    // tiempo como evidencia de que hubo un paso de aceptación explícito.
+    let accepted_at = req.accepted_policies.then(now);
 
     let uid = {
         let c = app.store.conn();
         // El nombre ocupado NO consume el ticket: es una colisión, no un abuso.
         c.execute(
-            "INSERT INTO users (username, display_name, password_phc, is_admin, created_at)
-             VALUES (?1, ?2, ?3, 0, ?4)",
-            rusqlite::params![username, row.display_name, phc, now()],
+            "INSERT INTO users (username, display_name, password_phc, is_admin, created_at, accepted_policies_at)
+             VALUES (?1, ?2, ?3, 0, ?4, ?5)",
+            rusqlite::params![username, row.display_name, phc, now(), accepted_at],
         )
         .map_err(|_| err(StatusCode::CONFLICT, "ese nombre de usuario ya existe"))?;
         let uid = c.last_insert_rowid();
