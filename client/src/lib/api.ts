@@ -83,6 +83,8 @@ export interface Limits {
   can_create_projects: boolean;
   /** Si su trabajo pendiente sigue avanzando cuando se desconecta. */
   background_jobs: boolean;
+  weekly_enabled: boolean;
+  max_weekly: number;
 }
 export interface AccessStatus { status: "pending" | "approved" | "rejected"; display_name: string; reason: string | null }
 export interface AdminRequest {
@@ -93,6 +95,25 @@ export interface AdminRequest {
   external: boolean; status: string; reason: string | null;
   created_at: number; expires_at: number;
 }
+export interface CreditRequestInfo {
+  id: number; user_id: number; username: string;
+  tipo: "diario" | "semanal";
+  valor_actual: number; valor_propuesto: number;
+  mensaje: string | null; status: string; reason: string | null;
+  created_at: number;
+}
+export interface CreateCreditReq {
+  tipo: "diario" | "semanal"; valor_propuesto: number; mensaje: string | null;
+}
+export interface ResolveCreditReq {
+  approve: boolean; valor_final?: number; reason?: string;
+}
+export type EventoAdmin = {
+  SolicitudCredito: {
+    user_id: number; username: string; tipo: "diario" | "semanal";
+    valor_actual: number; valor_propuesto: number;
+  };
+};
 export interface SessionInfo {
   public_id: string; device_name: string | null; os: string | null;
   created_at: number; last_seen: number; current: boolean;

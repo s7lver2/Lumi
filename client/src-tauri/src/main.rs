@@ -362,6 +362,41 @@ async fn start_indices_events(
     Ok(())
 }
 
+/// Mismo puente que `start_indices_events`: el webview no puede autenticar
+/// un `EventSource`, así que Rust hace la conexión real y TS solo escucha
+/// `admin-events`.
+#[tauri::command]
+async fn start_admin_events(
+    token: String, app: tauri::AppHandle, state: tauri::State<'_, Shared>,
+) -> Result<(), String> {
+    use futures_util::StreamExt;
+    use tauri::Emitter;
+    let (base, client) = {
+        let c = state.lock().unwrap();
+        (c.base.clone().ok_or("sin servidor")?, c.client.clone().ok_or("sin cliente")?)
+    };
+    tokio::spawn(async move {
+        let Ok(res) = client.get(format!("{base}/v1/admin/events")).bearer_auth(&token).send().await else {
+            return;
+        };
+        let mut stream = res.bytes_stream();
+        let mut buf = String::new();
+        while let Some(Ok(chunk)) = stream.next().await {
+            buf.push_str(&String::from_utf8_lossy(&chunk));
+            while let Some(i) = buf.find("\n\n") {
+                let frame = buf[..i].to_string();
+                buf.drain(..i + 2);
+                if let Some(d) = frame.strip_prefix("data: ") {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(d) {
+                        let _ = app.emit("admin-events", v);
+                    }
+                }
+            }
+        }
+    });
+    Ok(())
+}
+
 fn main() {
     rustls::crypto::ring::default_provider().install_default().ok();
     tauri::Builder::default()
@@ -431,7 +466,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             pair, pair_card, reconnect, request, start_telemetry, start_task_log,
-            start_queue_events, start_indices_events, set_auth, upload_images
+            start_queue_events, start_indices_events, start_admin_events, set_auth, upload_images
         ])
         .run(tauri::generate_context!())
         .expect("error al arrancar Tauri");

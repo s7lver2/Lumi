@@ -37,6 +37,7 @@ export async function announcePresence(token: string): Promise<void> {
  *  nueva — dos llamadas concurrentes no son un problema, cada una abre su
  *  propia conexión SSE y ambas reciben la misma fotografía del servidor. */
 export const startIndicesEvents = (token: string) => invoke("start_indices_events", { token });
+export const startAdminEvents = (token: string) => invoke("start_admin_events", { token });
 
 export async function uploadPaths(caseId: number, paths: string[]): Promise<Image[]> {
   if (paths.length === 0) return [];

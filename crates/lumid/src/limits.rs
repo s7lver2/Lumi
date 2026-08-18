@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 /// Las claves válidas. Cualquier otra se rechaza al escribir: una errata en un
 /// PATCH crearía una fila que nadie lee nunca y un límite que nadie entiende.
-pub const KEYS: [&str; 7] = [
+pub const KEYS: [&str; 9] = [
     "models",
     "max_concurrent",
     "max_daily",
@@ -19,6 +19,8 @@ pub const KEYS: [&str; 7] = [
     "queue_priority",
     "can_create_projects",
     "background_jobs",
+    "weekly_enabled",
+    "max_weekly",
 ];
 
 fn rows(s: &Store, user_id: Option<i64>) -> HashMap<String, Value> {
@@ -55,6 +57,8 @@ fn apply(l: &mut Limits, k: &str, v: &Value) {
             l.can_create_projects = v.as_bool().unwrap_or(l.can_create_projects)
         }
         "background_jobs" => l.background_jobs = v.as_bool().unwrap_or(l.background_jobs),
+        "weekly_enabled" => l.weekly_enabled = v.as_bool().unwrap_or(l.weekly_enabled),
+        "max_weekly" => l.max_weekly = v.as_i64().unwrap_or(l.max_weekly),
         _ => {}
     }
 }

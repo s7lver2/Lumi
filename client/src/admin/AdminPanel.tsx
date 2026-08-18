@@ -4,6 +4,7 @@ import { useServer } from "../lib/store";
 import { Hueco } from "./Hueco";
 import { NotificacionesView } from "./NotificacionesView";
 import { IndexToast } from "./IndexToast";
+import { CreditToast } from "./CreditToast";
 import { IndicesPanel } from "./IndicesPanel";
 import { ApiKeysView } from "./ApiKeysView";
 import { SecurityView } from "./SecurityView";
@@ -55,7 +56,7 @@ export function AdminPanel({ token }: { token: string }) {
         style={{ animation: "jg-fade-rise .5s cubic-bezier(.16,1,.3,1) both" }}>
         {PRONTO.includes(seccion) ? <Hueco seccion={seccion} />
           : seccion === "resumen" ? <ResumenView token={token} onIr={setSeccion} />
-          : seccion === "solicitudes" ? <Seccion titulo="Solicitudes de acceso" grupo="Personas">
+          : seccion === "solicitudes" ? <Seccion titulo="Solicitudes" grupo="Personas">
               <RequestsView token={token} /></Seccion>
           : seccion === "usuarios" ? <UsersView token={token} />
           : seccion === "seguridad" ? <SecurityView token={token} ajustes={seguridad} onCambiar={setSeguridad} />
@@ -86,6 +87,7 @@ export function AdminPanel({ token }: { token: string }) {
       <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col gap-2.5" style={{ width: 308 }}>
         <ModelToasts token={token} onIr={setSeccion} licenciasPendientes={licenciasPendientes} />
         <IndexToast token={token} onIr={setSeccion} />
+        <CreditToast token={token} onIr={setSeccion} />
       </div>
     </div>
   );

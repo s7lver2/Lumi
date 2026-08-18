@@ -269,6 +269,11 @@ pub struct Limits {
     /// delante de la pantalla. Lo que YA está corriendo termina en los dos
     /// casos: el cómputo gastado no se tira.
     pub background_jobs: bool,
+    /// Igual que `max_daily` pero sobre los últimos 7 días, y apagable: el
+    /// administrador puede no querer un segundo tope en absoluto, no solo
+    /// uno muy alto.
+    pub weekly_enabled: bool,
+    pub max_weekly: i64,
 }
 
 impl Default for Limits {
@@ -283,6 +288,8 @@ impl Default for Limits {
             // Apagado por defecto: que el administrador lo *pueda* habilitar,
             // no que esté habilitado sin que nadie lo decida.
             background_jobs: false,
+            weekly_enabled: false,
+            max_weekly: 300,
         }
     }
 }
@@ -320,6 +327,49 @@ pub struct AcceptLicensesReq {
     /// Agrupado por texto porque una licencia que cubre dos pesos se acepta
     /// una vez, no dos.
     pub licencias: std::collections::HashMap<String, Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreditRequestInfo {
+    pub id: i64,
+    pub user_id: i64,
+    pub username: String,
+    pub tipo: String,
+    pub valor_actual: i64,
+    pub valor_propuesto: i64,
+    pub mensaje: Option<String>,
+    pub status: String,
+    pub reason: Option<String>,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateCreditReq {
+    pub tipo: String,
+    pub valor_propuesto: i64,
+    pub mensaje: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResolveCreditReq {
+    pub approve: bool,
+    /// El admin puede aprobar con un valor distinto al propuesto. `None`
+    /// con `approve: true` usa el propuesto tal cual.
+    pub valor_final: Option<i64>,
+    pub reason: Option<String>,
+}
+
+/// Lo que llega por `/v1/admin/events`. Un solo tipo hoy: nace pensado para
+/// crecer, igual que `Cambio` en la cola.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum EventoAdmin {
+    SolicitudCredito {
+        user_id: i64,
+        username: String,
+        tipo: String,
+        valor_actual: i64,
+        valor_propuesto: i64,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]

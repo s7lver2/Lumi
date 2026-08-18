@@ -7,6 +7,7 @@ import { KNOWN_MODELS } from "../lib/models";
 import { useServer } from "../lib/store";
 import { useDismissable } from "../lib/useDismissable";
 import { ContextMenu, type MenuState } from "../ui/ContextMenu";
+import { CreditRequestDialog } from "./CreditRequestDialog";
 import { Dock, type ImgState } from "./Dock";
 import { DrawerTab, DRAWER_W, type DrawerId } from "./Drawer";
 import { DropFrame, DropTarget } from "./DropTarget";
@@ -41,6 +42,8 @@ export function CaseView({
   const [sel, setSel] = useState<number | null>(null);
   const [selAnalysis, setSelAnalysis] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [topeAlcanzado, setTopeAlcanzado] = useState<{ tipo: "diario" | "semanal"; valor: number } | null>(null);
+  const [pidiendoCupo, setPidiendoCupo] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -177,7 +180,18 @@ export function CaseView({
       setStaged(null);
       setSel(ids[0]);
     } catch (e) {
-      setError(String(e));
+      const msg = String(e);
+      setError(msg);
+      // El backend no manda el código de estado por este puente (ver
+      // `client/src-tauri/src/main.rs::request`, que solo devuelve el
+      // cuerpo de texto) — se detecta por el mensaje exacto que emite
+      // `analyses::create` (`crates/lumid/src/routes/analyses.rs`). Si
+      // cambia esa redacción, esto deja de detectarlo.
+      if (msg.includes("has llegado a tu tope de")) {
+        setTopeAlcanzado({ tipo: msg.includes("diarios") ? "diario" : "semanal", valor: 0 });
+      } else {
+        setTopeAlcanzado(null);
+      }
     } finally {
       setBusy(false);
     }
@@ -333,6 +347,12 @@ export function CaseView({
           gap-2 rounded-lg border border-danger/40 bg-[rgba(24,18,18,.94)] px-3 py-2 backdrop-blur"
           style={{ animation: "jg-toast-in 240ms cubic-bezier(.16,1,.3,1) both" }}>
           <p className="text-[10.5px] leading-snug text-danger-fg">{error}</p>
+          {topeAlcanzado && (
+            <button onClick={() => setPidiendoCupo(true)}
+              className="jg-press shrink-0 rounded-md border border-white/15 px-2 py-1 text-[10px] text-fg">
+              Pedir más cupo
+            </button>
+          )}
           <button onClick={() => setError(null)} className="jg-press shrink-0 text-subtle hover:text-fg">✕</button>
         </div>
       )}
@@ -348,6 +368,16 @@ export function CaseView({
           onDiscard={(id) => void discard(id)}
           onAnalyze={(m) => void analyze(m, staged ?? [])}
           onClose={() => { setStaged(null); setError(null); }} />
+      )}
+
+      {topeAlcanzado && token && (
+        <CreditRequestDialog
+          open={pidiendoCupo}
+          tipoInicial={topeAlcanzado.tipo}
+          valorActual={topeAlcanzado.tipo === "diario" ? (useServer.getState().limits?.max_daily ?? 50) : (useServer.getState().limits?.max_weekly ?? 300)}
+          token={token}
+          onDone={() => { setPidiendoCupo(false); setError(null); setTopeAlcanzado(null); }}
+          onClose={() => setPidiendoCupo(false)} />
       )}
     </div>
   );

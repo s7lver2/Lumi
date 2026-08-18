@@ -193,6 +193,23 @@ pub async fn create(
                 &format!("has llegado a tu tope de {} análisis diarios", l.max_daily),
             ));
         }
+        if l.weekly_enabled {
+            let semana: i64 = app
+                .store
+                .conn()
+                .query_row(
+                    "SELECT COUNT(*) FROM analyses WHERE requested_by = ?1 AND created_at > ?2",
+                    rusqlite::params![uid, now() - 7 * 86400],
+                    |r| r.get(0),
+                )
+                .unwrap_or(0);
+            if semana >= l.max_weekly {
+                return Err(err(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    &format!("has llegado a tu tope de {} análisis semanales", l.max_weekly),
+                ));
+            }
+        }
     }
 
     let t = now();

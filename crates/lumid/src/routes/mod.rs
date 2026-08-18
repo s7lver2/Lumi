@@ -7,6 +7,7 @@ pub mod avisos;
 pub mod cases;
 pub mod catalogo;
 pub mod claim;
+pub mod credit_requests;
 pub mod hardware;
 pub mod hardware_cpu;
 pub mod hello;

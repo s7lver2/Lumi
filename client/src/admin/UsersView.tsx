@@ -232,4 +232,6 @@ const LEVERS: [string, string][] = [
   ["max_storage_gb", "Almacenamiento (GB)"],
   ["queue_priority", "Prioridad"],
   ["can_create_projects", "Crear proyectos"],
+  ["weekly_enabled", "Tope semanal activo"],
+  ["max_weekly", "A la semana"],
 ];

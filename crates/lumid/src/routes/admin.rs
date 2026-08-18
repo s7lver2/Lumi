@@ -7,6 +7,7 @@ use crate::App;
 use axum::extract::{Path, State};
 use axum::{http::HeaderMap, http::StatusCode, Json};
 use lumi_proto::api::{AdminRequest, ResolveReq};
+use futures;
 
 /// ¿La dirección está fuera del rango privado? Un aviso, no un bloqueo: puede
 /// ser perfectamente legítimo (VPN mal configurada, oficina remota), pero el
@@ -354,4 +355,25 @@ pub async fn provisionar(State(app): State<App>, headers: HeaderMap) -> Result<S
     require_admin(&app, &bearer(&headers))?;
     app.store.set_meta("provisioned", "1").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Mismo patrón que `routes::queue::events`, pero el filtro es "la sesión es
+/// admin", no "es el dueño del job" — por eso no reutiliza ese canal: son dos
+/// preguntas distintas sobre el mismo tipo de conexión persistente.
+pub async fn events(
+    State(app): State<App>,
+    headers: HeaderMap,
+) -> Result<axum::response::sse::Sse<impl futures::stream::Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>>, StatusCode> {
+    require_admin(&app, &bearer(&headers))?;
+    let mut rx = app.admin_eventos.subscribe();
+    let stream = async_stream::stream! {
+        loop {
+            match rx.recv().await {
+                Ok(ev) => yield Ok(axum::response::sse::Event::default().json_data(&ev).unwrap_or_default()),
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    };
+    Ok(axum::response::sse::Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::default()))
 }

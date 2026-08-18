@@ -50,6 +50,19 @@ CREATE TABLE IF NOT EXISTS access_requests (
     resolved_at    INTEGER,
     resolved_by    INTEGER
 );
+CREATE TABLE IF NOT EXISTS credit_requests (
+    id              INTEGER PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id),
+    tipo            TEXT NOT NULL,
+    valor_actual    INTEGER NOT NULL,
+    valor_propuesto INTEGER NOT NULL,
+    mensaje         TEXT,
+    status          TEXT NOT NULL,
+    reason          TEXT,
+    created_at      INTEGER NOT NULL,
+    resolved_at     INTEGER,
+    resolved_by     INTEGER
+);
 CREATE TABLE IF NOT EXISTS devices (
     id         INTEGER PRIMARY KEY,
     user_id    INTEGER NOT NULL,

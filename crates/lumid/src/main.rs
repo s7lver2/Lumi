@@ -53,6 +53,11 @@ pub struct App {
     /// Un solo hueco de instalación de índice a la vez. `None` es "nunca se
     /// ha instalado nada en esta sesión del daemon", no "hay un error".
     pub indices_en_curso: indices::EnCurso,
+    /// Un solo tipo de evento hoy (`EventoAdmin::SolicitudCredito`). Igual
+    /// que `queue::Queue.difusion`, pero sin actor propio: no hace falta
+    /// nada más que un canal de difusión, así que no se crea una estructura
+    /// para envolverlo.
+    pub admin_eventos: tokio::sync::broadcast::Sender<lumi_proto::api::EventoAdmin>,
 }
 
 #[tokio::main]
@@ -71,6 +76,7 @@ async fn main() -> anyhow::Result<()> {
     let store = Arc::new(store::Store::open(&dir)?);
     let gpus = gpus();
     let queue = queue::Queue::arrancar(store.clone(), dir.clone(), &gpus);
+    let (admin_eventos, _) = tokio::sync::broadcast::channel(64);
     let app = App {
         store,
         fingerprint,
@@ -85,6 +91,7 @@ async fn main() -> anyhow::Result<()> {
         sysinfo: Arc::new(Mutex::new(sysinfo::System::new_all())),
         queue,
         indices_en_curso: Arc::new(Mutex::new(None)),
+        admin_eventos,
     };
 
     tokio::spawn({
@@ -121,6 +128,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/sessions/:public_id", axum::routing::delete(routes::auth::revoke_session))
         .route("/v1/admin/access-requests", get(routes::admin::list_requests))
         .route("/v1/admin/access-requests/:id/resolve", post(routes::admin::resolve_request))
+        .route("/v1/me/credit-requests", post(routes::credit_requests::create))
+        .route("/v1/admin/credit-requests", get(routes::credit_requests::list_all))
+        .route("/v1/admin/credit-requests/:id/resolve", post(routes::credit_requests::resolve))
+        .route("/v1/admin/events", get(routes::admin::events))
         .route("/v1/admin/users", get(routes::admin::list_users))
         .route("/v1/admin/users/:id", get(routes::admin::get_user).patch(routes::admin::patch_user))
         .route("/v1/admin/limits", get(routes::admin::get_limits).patch(routes::admin::patch_limits))
