@@ -12,6 +12,22 @@ import { usePopover } from "./TitleBar";
 // nunca deja de considerarlo "cambiado", lo que dispara un bucle infinito.
 const SIN_AVISOS: AvisoInfo[] = [];
 
+// Persistido en el propio cliente: no hay "recibos de lectura" en el
+// servidor para esto, y no hace falta — es una marca puramente local, igual
+// que el resto de estado de UI que no necesita sincronizarse entre sesiones.
+// Sin esto, cada reinicio de la app perdía el set y todo volvía a marcarse
+// como no leído, aunque ya se hubiera visto.
+const LEIDO_KEY = "lumi.notificaciones.leido";
+
+function cargarLeido(): Set<string> {
+  try {
+    const v = JSON.parse(localStorage.getItem(LEIDO_KEY) ?? "[]");
+    return Array.isArray(v) ? new Set(v) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
 function ago(ts: number): string {
   const s = Math.max(0, Math.floor(Date.now() / 1000) - ts);
   if (s < 60) return "ahora";
@@ -49,8 +65,12 @@ export function NotificationsPopover({ onProjectAccepted }: {
   const sampleAvisos = useServer((s) => s.sample?.avisos ?? SIN_AVISOS);
   const [items, setItems] = useState<Item[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [leido, setLeido] = useState<Set<string>>(new Set());
+  const [leido, setLeido] = useState<Set<string>>(cargarLeido);
   const [open, setOpen, box] = usePopover();
+
+  useEffect(() => {
+    localStorage.setItem(LEIDO_KEY, JSON.stringify([...leido]));
+  }, [leido]);
 
   async function load() {
     const out: Item[] = [];

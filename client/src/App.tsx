@@ -33,6 +33,8 @@ export default function App() {
   const [mode, setMode] = useState<"entry" | "wizard" | "picker" | "project" | "case" | "admin" | "profile">("entry");
   const [adminBusy, setAdminBusy] = useState(false);
   const [runtimeDone, setRuntimeDone] = useState(false);
+  const [terminando, setTerminando] = useState(false);
+  const [terminarError, setTerminarError] = useState<string | null>(null);
   /** Resultados e invitar piden el mismo carril de la derecha, así que el
    *  estado es uno solo: abrir cualquiera de los dos recoge el otro. */
   const [drawer, setDrawer] = useState<DrawerId>(null);
@@ -316,12 +318,20 @@ export default function App() {
             // directo a la app. El owner es admin, así que va al panel —
             // igual que al reabrir la app. Avisar al servidor de que el
             // asistente terminó es lo único que faltaba para que
-            // `Store::state()` deje de devolver `Claimed` para siempre: sin
-            // esto, cada reconexión del propio administrador lo mandaba de
-            // vuelta aquí aunque ya estuviera todo configurado.
+            // `Store::state()` deje de devolver `Claimed` para siempre. Esto
+            // se ESPERA antes de salir del wizard: antes era fire-and-forget
+            // (`void ... .catch(() => {})`) y un refresco de `tauri dev` a
+            // medio POST dejaba al cliente creyéndose en el panel mientras el
+            // servidor seguía en `Claimed` para siempre — la próxima
+            // reconexión volvía a mandar aquí aunque el usuario ya hubiera
+            // visto "Terminar".
             if (step === 3) {
-              void api.post("/v1/admin/provisioning/complete", {}, useServer.getState().token ?? undefined).catch(() => {});
-              setMode(useServer.getState().isAdmin ? "admin" : "picker");
+              setTerminando(true);
+              setTerminarError(null);
+              api.post("/v1/admin/provisioning/complete", {}, useServer.getState().token ?? undefined)
+                .then(() => setMode(useServer.getState().isAdmin ? "admin" : "picker"))
+                .catch(() => setTerminarError("no se pudo avisar al servidor; inténtalo de nuevo"))
+                .finally(() => setTerminando(false));
               return;
             }
             setStep((s) => s + 1);
@@ -331,11 +341,16 @@ export default function App() {
             (step === 2 && !runtimeDone)
           }
           nextLabel={step === 3 ? "Terminar" : "Siguiente"}
-          nextBusy={step === 1 && adminBusy}>
+          nextBusy={(step === 1 && adminBusy) || (step === 3 && terminando)}>
           {step === 0 && <PairStep onDone={() => setStep(1)} />}
           {step === 1 && <AdminStep bootstrapToken={bootstrapToken} onDone={() => setStep(2)} onBusyChange={setAdminBusy} />}
           {step === 2 && <ProvisionStep onDone={() => setStep(3)} onStatusChange={setRuntimeDone} />}
-          {step === 3 && <ModelosStep token={useServer.getState().token!} />}
+          {step === 3 && (
+            <>
+              <ModelosStep token={useServer.getState().token!} />
+              {terminarError && <p className="mt-3 text-[11px] text-danger-fg">{terminarError}</p>}
+            </>
+          )}
         </Wizard>
       ) : mode === "picker" ? (
         <ProjectPicker refresh={projectsTick}
