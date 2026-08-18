@@ -125,6 +125,7 @@ async fn main() -> anyhow::Result<()> {
     use axum::routing::post;
     let router = Router::new()
         .route("/v1/hello", get(routes::hello::get))
+        .route("/v1/policies", get(routes::policies::get_public))
         .route("/v1/catalogo/grafo", get(routes::catalogo::resolver_grafo))
         .route("/v1/indices", get(routes::indices::listar).post(routes::indices::instalar))
         .route("/v1/indices/eventos", get(routes::indices::eventos))
@@ -161,6 +162,10 @@ async fn main() -> anyhow::Result<()> {
             get(routes::network::get).patch(routes::network::patch),
         )
         .route("/v1/admin/network/restart", post(routes::network::restart))
+        .route(
+            "/v1/admin/policies",
+            get(routes::policies::get_admin).patch(routes::policies::patch),
+        )
         .route("/v1/admin/hardware", get(routes::hardware::listar))
         .route("/v1/admin/hardware/:index", axum::routing::patch(routes::hardware::aplicar))
         .route("/v1/admin/hardware/cpu", get(routes::hardware_cpu::leer).patch(routes::hardware_cpu::aplicar))
