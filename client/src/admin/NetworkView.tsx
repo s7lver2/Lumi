@@ -5,27 +5,11 @@ import { Seccion } from "./AdminPanel";
 
 const INPUT = "ml-auto rounded-lg border border-border bg-elevated px-2.5 py-1.5 font-mono text-[11px] text-fg outline-none transition-colors duration-300 ease-expo focus:border-white/40";
 
-/** Copia al portapapeles con feedback textual de 1.5s — no hay toast propio
- *  para esto, y no hace falta uno: es una acción de un solo paso. Mismo
- *  patrón que la clave revelada en ApiKeysView. */
-function useCopiado() {
-  const [copiado, setCopiado] = useState(false);
-  return {
-    copiado,
-    copiar: (texto: string) => {
-      void navigator.clipboard.writeText(texto);
-      setCopiado(true);
-      setTimeout(() => setCopiado(false), 1500);
-    },
-  };
-}
-
 export function NetworkView({ token }: { token: string }) {
   const [data, setData] = useState<NetworkViewData | null>(null);
   const [borrador, setBorrador] = useState<NetworkSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const { copiado, copiar } = useCopiado();
 
   const load = () =>
     api.networkGet(token).then((d) => { setData(d); setBorrador(d.settings); }).catch((e) => setError(String(e)));
@@ -103,20 +87,6 @@ export function NetworkView({ token }: { token: string }) {
               </Fila>
             </div>
           </div>
-        </div>
-      </div>
-
-      <div className="mt-4 rounded-card border border-border bg-panel p-3.5">
-        <p className="text-[12.5px] text-fg">Tarjeta de servidor actual</p>
-        <p className="mb-3 text-[11px] text-muted">
-          Compártela con quien necesite reconectar tras un cambio de dirección — sustituye a pedir acceso por SSH.
-        </p>
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-elevated p-[10px_12px]">
-          <span className="flex-1 truncate font-mono text-[11px] text-fg">{data.server_card}</span>
-          <button onClick={() => copiar(data.server_card)}
-            className="jg-press shrink-0 rounded-lg border border-border px-2.5 py-1 text-[10px] text-fg">
-            {copiado ? "Copiada" : "Copiar"}
-          </button>
         </div>
       </div>
 
