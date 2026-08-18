@@ -14,6 +14,7 @@ pub mod hello;
 pub mod images;
 pub mod indices;
 pub mod map;
+pub mod network;
 pub mod projects;
 pub mod queue;
 pub mod security;

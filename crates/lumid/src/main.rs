@@ -145,6 +145,11 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/users/:id", get(routes::admin::get_user).patch(routes::admin::patch_user))
         .route("/v1/admin/limits", get(routes::admin::get_limits).patch(routes::admin::patch_limits))
         .route("/v1/admin/resumen", get(routes::admin::resumen))
+        .route(
+            "/v1/admin/network",
+            get(routes::network::get).patch(routes::network::patch),
+        )
+        .route("/v1/admin/network/restart", post(routes::network::restart))
         .route("/v1/admin/hardware", get(routes::hardware::listar))
         .route("/v1/admin/hardware/:index", axum::routing::patch(routes::hardware::aplicar))
         .route("/v1/admin/hardware/cpu", get(routes::hardware_cpu::leer).patch(routes::hardware_cpu::aplicar))
