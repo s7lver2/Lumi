@@ -450,6 +450,24 @@ pub fn local_ip() -> Option<String> {
         .map(str::to_string)
 }
 
+/// Igual que `lumid::red::direccion_publica`, pero por SQL directa: este
+/// binario no enlaza con `lumid`. Si no hay ajuste guardado (servidor recién
+/// instalado, o admin que nunca tocó "Red"), cae al mismo cálculo de
+/// siempre: IP LAN + `lumi_proto::PORT`.
+pub fn direccion_publica(db: &rusqlite::Connection) -> String {
+    let leer = |k: &str| -> Option<String> {
+        db.query_row("SELECT v FROM meta WHERE k = ?1", [k], |r| r.get(0)).ok()
+    };
+    let host = leer("red_public_host")
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| local_ip().unwrap_or_else(|| "127.0.0.1".into()));
+    let port = leer("red_public_port")
+        .and_then(|v| v.parse::<u16>().ok())
+        .or_else(|| leer("red_bind_port").and_then(|v| v.parse().ok()))
+        .unwrap_or(lumi_proto::PORT);
+    format!("{host}:{port}")
+}
+
 /// El venv de inferencia (torch descargado, ~2 GB) vive bajo `models_dir`,
 /// leído de la misma base que usó la instalación. Si no se puede leer, el
 /// valor por defecto que puso `run` es la mejor suposición.
@@ -541,17 +559,13 @@ pub fn uninstall(yes: bool, pip: bool) -> Result<()> {
 /// ceremonia que ejecutar esto.
 pub fn reissue() -> Result<PairKey> {
     let der = fs::read(format!("{DATA}/cert.der")).context("el servidor no está instalado")?;
-    let addr = format!(
-        "{}:{}",
-        local_ip().unwrap_or_else(|| "127.0.0.1".into()),
-        lumi_proto::PORT
-    );
-    let key = PairKey::generate(&addr, &der);
     // lumid.service está corriendo (esto es un reissue en caliente, no una
     // instalación) y tiene su propia conexión abierta al mismo fichero: el
     // mismo busy_timeout que en `run()`, misma razón.
     let db = rusqlite::Connection::open(format!("{DATA}/lumi.db"))?;
     db.busy_timeout(std::time::Duration::from_secs(5))?;
+    let addr = direccion_publica(&db);
+    let key = PairKey::generate(&addr, &der);
     db.execute(
         "INSERT OR REPLACE INTO pair_key (id, secret_phc, expires_at, consumed) VALUES (1, ?1, ?2, 0)",
         rusqlite::params![hash_password(&key.secret)?, now() + 24 * 3600],

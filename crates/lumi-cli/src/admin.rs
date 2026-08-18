@@ -20,7 +20,7 @@ fn uid(c: &rusqlite::Connection, username: &str) -> Result<i64> {
 /// interno, canal del equipo) y sirve para todo el mundo.
 pub fn card() -> Result<ServerCard> {
     let der = std::fs::read(format!("{DATA}/cert.der")).context("el servidor no está instalado")?;
-    let addr = format!("{}:{}", crate::install::local_ip().unwrap_or_else(|| "127.0.0.1".into()), lumi_proto::PORT);
+    let addr = crate::install::direccion_publica(&db()?);
     Ok(ServerCard::new(&addr, &der))
 }
 
