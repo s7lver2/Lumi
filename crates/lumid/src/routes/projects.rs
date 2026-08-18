@@ -238,13 +238,33 @@ pub async fn add_member(
             |r| r.get(0),
         )
         .map_err(|_| err(StatusCode::NOT_FOUND, "no hay ningún usuario con ese nombre"))?;
-    c.execute(
-        "INSERT INTO project_members (project_id, user_id, role, status, invited_by, added_at)
-         VALUES (?1, ?2, 'member', 'pending', ?3, ?4)
-         ON CONFLICT(project_id, user_id) DO NOTHING",
-        rusqlite::params![id, uid, inviter, now()],
-    )
-    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    let filas = c
+        .execute(
+            "INSERT INTO project_members (project_id, user_id, role, status, invited_by, added_at)
+             VALUES (?1, ?2, 'member', 'pending', ?3, ?4)
+             ON CONFLICT(project_id, user_id) DO NOTHING",
+            rusqlite::params![id, uid, inviter, now()],
+        )
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    // `ON CONFLICT DO NOTHING` deja `filas` en 0 si ya era miembro o ya
+    // estaba invitada — avisar en ese caso sería una notificación de algo
+    // que no acaba de pasar. Sin esto, la invitada dependía de un sondeo
+    // cada 60s en `NotificationsPopover` para enterarse; ahora llega por el
+    // mismo canal que ya tiene abierto su propia sesión.
+    if filas > 0 {
+        let project_name: String = c
+            .query_row("SELECT name FROM projects WHERE id = ?1", [id], |r| r.get(0))
+            .unwrap_or_default();
+        let invited_by: String = c
+            .query_row("SELECT username FROM users WHERE id = ?1", [inviter], |r| r.get(0))
+            .unwrap_or_default();
+        app.queue.difundir(lumi_proto::api::Cambio::Invitacion {
+            user_id: uid,
+            project_id: id,
+            project_name,
+            invited_by,
+        });
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -259,6 +259,14 @@ impl Queue {
         self.difusion.subscribe()
     }
 
+    /// El único punto de entrada para que rutas fuera de este módulo (como
+    /// `projects::add_member`) empujen algo por el mismo canal que ya usa la
+    /// cola — sin duplicar un canal de difusión propio por cada cosa nueva
+    /// que alguien necesite avisar en tiempo real a una sesión conectada.
+    pub fn difundir(&self, cambio: Cambio) {
+        let _ = self.difusion.send(cambio);
+    }
+
     pub fn entra(self: &Arc<Self>, uid: i64) -> Presencia {
         if let Ok(mut e) = self.estado.lock() {
             *e.presentes.entry(uid).or_insert(0) += 1;

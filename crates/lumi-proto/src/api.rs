@@ -763,12 +763,24 @@ pub enum Cambio {
         fase: String,
         pct: u8,
     },
+    /// Invitación nueva a un proyecto, por el mismo canal que ya tiene abierto
+    /// cualquier sesión conectada (`/v1/queue/events`) — sin esto, enterarse
+    /// de una invitación dependía de un sondeo cada 60s en `NotificationsPopover`.
+    Invitacion {
+        #[serde(skip)]
+        user_id: i64,
+        project_id: i64,
+        project_name: String,
+        invited_by: String,
+    },
 }
 
 impl Cambio {
     pub fn user_id(&self) -> i64 {
         match self {
-            Cambio::Estado { user_id, .. } | Cambio::Progreso { user_id, .. } => *user_id,
+            Cambio::Estado { user_id, .. }
+            | Cambio::Progreso { user_id, .. }
+            | Cambio::Invitacion { user_id, .. } => *user_id,
         }
     }
 }

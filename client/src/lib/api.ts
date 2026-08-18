@@ -305,7 +305,8 @@ export interface QueueView { pendientes: number; en_curso: number; trabajadores:
  *  ninguna parte: se emite y se olvida, así que si te lo pierdes, se perdió. */
 export type Cambio =
   | { tipo: "estado"; analysis_id: number; case_id: number; estado: Analysis["state"] }
-  | { tipo: "progreso"; analysis_id: number; fase: string; pct: number };
+  | { tipo: "progreso"; analysis_id: number; fase: string; pct: number }
+  | { tipo: "invitacion"; project_id: number; project_name: string; invited_by: string };
 
 export interface Resumen {
   solicitudes_pendientes: number;

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, type AdminRequest, type AvisoInfo, type Invite } from "../lib/api";
+import { listen } from "@tauri-apps/api/event";
+import { api, type AdminRequest, type AvisoInfo, type Cambio, type Invite } from "../lib/api";
 import { useServer } from "../lib/store";
 import { AvisoEditor } from "../admin/AvisoEditor";
 import { Avatar } from "./Avatar";
@@ -101,6 +102,17 @@ export function NotificationsPopover({ onProjectAccepted }: {
     const t = setInterval(load, 60_000);
     return () => clearInterval(t);
   }, [isAdmin, token]);
+
+  // El sondeo de arriba es el respaldo (por si esta conexión se perdió el
+  // aviso); en cuanto llega por `queue-change` — el mismo canal que ya tiene
+  // abierto cualquier sesión conectada, vía `announcePresence` — se refresca
+  // al instante en vez de esperar hasta 60s a que toque el siguiente sondeo.
+  useEffect(() => {
+    const un = listen<Cambio>("queue-change", (e) => {
+      if (e.payload.tipo === "invitacion") void load();
+    });
+    return () => { void un.then((f) => f()); };
+  }, []);
 
   const key = (i: Item) => `${i.kind}:${i.id}`;
 
