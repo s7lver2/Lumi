@@ -102,6 +102,54 @@ async fn upload_images(
 
 type Shared = Arc<Mutex<Conn>>;
 
+/// Compartido por los tres comandos de perfil de abajo: leer un único
+/// archivo por ruta y mandarlo como multipart a `url_path`. Mismo motivo que
+/// `upload_images` para leer por ruta y no por bytes desde TS.
+async fn subir_una_imagen(url_path: &str, path: &str, state: &Shared) -> Result<(), String> {
+    let (base, client, token) = {
+        let c = state.lock().unwrap();
+        (
+            c.base.clone().ok_or("sin servidor vinculado")?,
+            c.client.clone().ok_or("sin cliente")?,
+            c.token.clone().ok_or("sin sesión")?,
+        )
+    };
+    let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+    let name = std::path::Path::new(path)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "imagen".into());
+    let form = reqwest::multipart::Form::new()
+        .part("file", reqwest::multipart::Part::bytes(bytes).file_name(name));
+    let res = client
+        .post(format!("{base}{url_path}"))
+        .bearer_auth(token)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        Err(res.text().await.unwrap_or_default())
+    }
+}
+
+#[tauri::command]
+async fn upload_avatar(path: String, state: tauri::State<'_, Shared>) -> Result<(), String> {
+    subir_una_imagen("/v1/me/avatar", &path, &state).await
+}
+
+#[tauri::command]
+async fn upload_server_avatar(path: String, state: tauri::State<'_, Shared>) -> Result<(), String> {
+    subir_una_imagen("/v1/admin/server-profile/avatar", &path, &state).await
+}
+
+#[tauri::command]
+async fn upload_server_banner(path: String, state: tauri::State<'_, Shared>) -> Result<(), String> {
+    subir_una_imagen("/v1/admin/server-profile/banner", &path, &state).await
+}
+
 fn client_for(fingerprint: &str) -> Result<reqwest::Client, String> {
     let cfg = rustls::ClientConfig::builder()
         .dangerous()
@@ -472,7 +520,8 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             pair, pair_card, reconnect, request, start_telemetry, start_task_log,
-            start_queue_events, start_indices_events, start_admin_events, set_auth, upload_images
+            start_queue_events, start_indices_events, start_admin_events, set_auth, upload_images,
+            upload_avatar, upload_server_avatar, upload_server_banner
         ])
         .run(tauri::generate_context!())
         .expect("error al arrancar Tauri");
