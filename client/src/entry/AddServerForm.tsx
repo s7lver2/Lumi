@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { addrFromCard, api, fingerprintFromCard, isCard, type Hello } from "../lib/api";
+import { addrFromCard, api, fingerprintFromCard, isCard, type Hello, type ServerProfileSettings } from "../lib/api";
+import { lumiUrl } from "../lib/bridge";
 import { addServer } from "../lib/session";
+import { AvisoEditor } from "../admin/AvisoEditor";
 import { Icon } from "../ui/Icon";
 
 export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
@@ -9,6 +11,7 @@ export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
   const [text, setText] = useState("");
   const [label, setLabel] = useState("");
   const [hello, setHello] = useState<Hello | null>(null);
+  const [perfil, setPerfil] = useState<ServerProfileSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Una clave lumi1_ pegada aquí no es un error: significa "soy el owner y
@@ -22,6 +25,15 @@ export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
     setBusy(true); setError(null);
     try {
       setHello(await api.pairCard(s));
+      // El popup enriquecido solo aparece si hay perfil configurado — sin
+      // esto, "Servidor verificado" (la línea de siempre) desaparecería y
+      // dejaría un hueco en blanco mientras se decide si hay algo que
+      // mostrar.
+      try {
+        setPerfil(await api.serverProfilePublic());
+      } catch {
+        setPerfil(null);
+      }
     } catch (e) {
       setHello(null);
       setError(String(e));
@@ -63,7 +75,37 @@ export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
         </>
       )}
 
-      {hello && (
+      {hello && perfil?.title && (
+        <>
+          <div className="my-3 h-px bg-border" />
+          <div className="overflow-hidden rounded-[11px] border border-border">
+            <div className="relative h-[86px] bg-elevated">
+              {perfil.has_banner && (
+                <img src={lumiUrl("/v1/server-profile/banner")} alt=""
+                  className="absolute inset-0 h-full w-full object-cover" />
+              )}
+              {perfil.has_avatar && (
+                <img src={lumiUrl("/v1/server-profile/avatar")} alt=""
+                  className="absolute -bottom-5 left-3.5 h-11 w-11 rounded-[10px] border-[3px] border-panel object-cover" />
+              )}
+            </div>
+            <div className="bg-panel p-3 pt-6">
+              <p className="text-[13px] text-fg">{perfil.title}</p>
+              <p className="mt-0.5 text-[10.5px] text-subtle">{perfil.member_count} miembros</p>
+              {perfil.description ? (
+                <div className="mt-2 text-[11px]">
+                  <AvisoEditor contenido={perfil.description} editable={false} />
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <div className="my-3 h-px bg-border" />
+          <label className="mb-[7px] block text-[11px] tracking-[.02em] text-muted">Nombre (opcional)</label>
+          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="equipo León"
+            className="w-full rounded-lg border border-border bg-[#0d0f12] px-3 py-2.5 text-[12.5px] text-fg outline-none focus:border-white/40" />
+        </>
+      )}
+      {hello && !perfil?.title && (
         <>
           <div className="my-3 h-px bg-border" />
           <div className="flex items-center gap-2.5 text-xs text-muted">
