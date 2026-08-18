@@ -95,6 +95,14 @@ async fn main() -> anyhow::Result<()> {
         admin_eventos,
     };
 
+    // LUMI_PORT (env) es la escotilla de emergencia: gana siempre sobre lo
+    // guardado en `meta`, igual que ya ganaba sobre la constante fija antes
+    // de que existiera un ajuste editable desde el panel.
+    let port: u16 = std::env::var("LUMI_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or_else(|| red::leer(&app.store).bind_port);
+
     tokio::spawn({
         let app = app.clone();
         async move {
@@ -224,10 +232,6 @@ async fn main() -> anyhow::Result<()> {
     let capa_mantenimiento = axum::middleware::from_fn_with_state(app.clone(), mantenimiento::mantenimiento_gate);
     let router = router.layer(capa_zero_trust).layer(capa_mantenimiento).with_state(app);
 
-    let port: u16 = std::env::var("LUMI_PORT")
-        .ok()
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(lumi_proto::PORT);
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("lumid escuchando en https://{addr}");
     axum_server::bind_rustls(addr, tls_cfg)
