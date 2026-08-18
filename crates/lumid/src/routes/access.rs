@@ -7,7 +7,7 @@
 use crate::App;
 use axum::extract::ConnectInfo;
 use axum::{extract::State, http::HeaderMap, http::StatusCode, Json};
-use lumi_proto::api::{AccessReq, AccessRes, AccessStatus, DaemonState};
+use lumi_proto::api::{AccessReq, AccessRes, AccessStatus, DaemonState, EventoAdmin};
 use lumi_proto::crypto::{hash_password, verify_password};
 use rand::RngCore;
 use std::net::SocketAddr;
@@ -158,6 +158,11 @@ pub async fn create(
     c.execute("UPDATE access_requests SET ticket_phc = ?1 WHERE id = ?2", rusqlite::params![phc, id])
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
     tracing::info!("solicitud de acceso #{id} desde {ip}");
+    let _ = app.admin_eventos.send(EventoAdmin::SolicitudAcceso {
+        id,
+        display_name: name.to_string(),
+        message: message.to_string(),
+    });
     Ok(Json(AccessRes { ticket: tk }))
 }
 

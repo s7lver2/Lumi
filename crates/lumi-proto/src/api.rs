@@ -359,8 +359,8 @@ pub struct ResolveCreditReq {
     pub reason: Option<String>,
 }
 
-/// Lo que llega por `/v1/admin/events`. Un solo tipo hoy: nace pensado para
-/// crecer, igual que `Cambio` en la cola.
+/// Lo que llega por `/v1/admin/events`. Nace pensado para crecer, igual que
+/// `Cambio` en la cola.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EventoAdmin {
     SolicitudCredito {
@@ -369,6 +369,11 @@ pub enum EventoAdmin {
         tipo: String,
         valor_actual: i64,
         valor_propuesto: i64,
+    },
+    SolicitudAcceso {
+        id: i64,
+        display_name: String,
+        message: String,
     },
 }
 

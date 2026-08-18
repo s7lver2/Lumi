@@ -4,7 +4,7 @@ import { useServer } from "../lib/store";
 import { Hueco } from "./Hueco";
 import { NotificacionesView } from "./NotificacionesView";
 import { IndexToast } from "./IndexToast";
-import { CreditToast } from "./CreditToast";
+import { AdminEventToast } from "./AdminEventToast";
 import { IndicesPanel } from "./IndicesPanel";
 import { ApiKeysView } from "./ApiKeysView";
 import { SecurityView } from "./SecurityView";
@@ -87,7 +87,7 @@ export function AdminPanel({ token }: { token: string }) {
       <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col gap-2.5" style={{ width: 308 }}>
         <ModelToasts token={token} onIr={setSeccion} licenciasPendientes={licenciasPendientes} />
         <IndexToast token={token} onIr={setSeccion} />
-        <CreditToast token={token} onIr={setSeccion} />
+        <AdminEventToast token={token} onIr={setSeccion} />
       </div>
     </div>
   );

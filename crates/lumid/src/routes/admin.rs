@@ -285,13 +285,25 @@ pub async fn resumen(
     // administrador, y elegir uno sería inventárselo.
     let hoy = ahora - (ahora % 86_400);
 
-    let (pendientes, mas_antigua): (i64, Option<i64>) = c
+    // "Solicitudes" en la barra lateral cuenta las dos fuentes que mezcla
+    // RequestsView (acceso + crédito) — contar solo access_requests aquí
+    // dejaba el numerito en 0 en cuanto lo pendiente era una solicitud de
+    // crédito, sin que hubiera ninguna de acceso de por medio.
+    let (pendientes_acceso, mas_antigua): (i64, Option<i64>) = c
         .query_row(
             "SELECT COUNT(*), MIN(created_at) FROM access_requests WHERE status = 'pending'",
             [],
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .unwrap_or((0, None));
+    let pendientes_credito: i64 = c
+        .query_row(
+            "SELECT COUNT(*) FROM credit_requests WHERE status = 'pending'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    let pendientes = pendientes_acceso + pendientes_credito;
 
     let usuarios: i64 =
         c.query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0)).unwrap_or(0);

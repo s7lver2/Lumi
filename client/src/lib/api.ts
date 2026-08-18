@@ -108,12 +108,12 @@ export interface CreateCreditReq {
 export interface ResolveCreditReq {
   approve: boolean; valor_final?: number; reason?: string;
 }
-export type EventoAdmin = {
-  SolicitudCredito: {
-    user_id: number; username: string; tipo: "diario" | "semanal";
-    valor_actual: number; valor_propuesto: number;
-  };
-};
+export type EventoAdmin =
+  | { SolicitudCredito: {
+      user_id: number; username: string; tipo: "diario" | "semanal";
+      valor_actual: number; valor_propuesto: number;
+    } }
+  | { SolicitudAcceso: { id: number; display_name: string; message: string } };
 export interface SessionInfo {
   public_id: string; device_name: string | null; os: string | null;
   created_at: number; last_seen: number; current: boolean;
