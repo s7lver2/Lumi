@@ -17,6 +17,7 @@ import { CustomizacionView } from "./CustomizacionView";
 import { HardwareView } from "./HardwareView";
 import { Sidebar, type Seccion } from "./Sidebar";
 import { UsersView } from "./UsersView";
+import { NetworkView } from "./NetworkView";
 
 const PRONTO: Seccion[] = [];
 
@@ -62,6 +63,7 @@ export function AdminPanel({ token }: { token: string }) {
           : seccion === "seguridad" ? <SecurityView token={token} ajustes={seguridad} onCambiar={setSeguridad} />
           : seccion === "claves" ? <ApiKeysView token={token} onIr={setSeccion} />
           : seccion === "personalizacion" ? <CustomizacionView token={token} />
+          : seccion === "red" ? <NetworkView token={token} />
           : seccion === "modelos" ? <ModelosView token={token} onLicenciasPendientesChange={setLicenciasPendientes} />
           : seccion === "cola" ? <Seccion titulo="Cola" grupo="Operación">
               <QueueRow token={token} /></Seccion>
