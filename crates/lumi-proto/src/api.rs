@@ -181,6 +181,13 @@ pub struct PatchSecurityReq {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct PatchPoliciesReq {
+    pub active: Option<bool>,
+    pub title: Option<String>,
+    pub content: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct IpReq {
     pub ip: String,
 }
@@ -421,6 +428,12 @@ pub struct AccessStatus {
 pub struct AccountReq {
     pub username: String,
     pub password: String,
+    /// Solo importa si las políticas de aceptación están activas (ver
+    /// `politicas::activo`). `#[serde(default)]` para que un cliente viejo
+    /// que todavía no manda este campo no rompa la deserialización — el
+    /// servidor lo trata igual que si viniera `false`.
+    #[serde(default)]
+    pub accepted_policies: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
