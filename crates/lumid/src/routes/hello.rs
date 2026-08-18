@@ -20,7 +20,7 @@ pub async fn get(State(app): State<App>) -> Json<Hello> {
             let hw = crate::hardware::capacidades().await;
             let (cpu_intel, cpu_intel_reason, cpu_amd, cpu_amd_reason, cpu_temp, cpu_temp_reason) =
                 crate::hardware_cpu::capacidades().await;
-            lumi_proto::caps::matrix(
+            let mut caps = lumi_proto::caps::matrix(
                 app.mode,
                 app.gpus.len(),
                 qdrant_vivo,
@@ -33,7 +33,19 @@ pub async fn get(State(app): State<App>) -> Json<Hello> {
                     cpu_temperatura_reason: cpu_temp_reason,
                     ..hw
                 },
-            )
+            );
+            let red = crate::red::leer(&app.store);
+            caps.push(lumi_proto::caps::Capability {
+                id: "quic".into(),
+                label: "Transporte QUIC/HTTP-3 (solo /v1/hello por ahora)".into(),
+                state: if red.quic_enabled { lumi_proto::caps::CapState::Partial } else { lumi_proto::caps::CapState::Off },
+                reason: Some(if red.quic_enabled {
+                    "activo, pero el cliente oficial todavía no lo consume (reqwest sin soporte HTTP/3 estable)".into()
+                } else {
+                    "desactivado en Red".into()
+                }),
+            });
+            caps
         },
         gpus: app.gpus.clone(),
     })

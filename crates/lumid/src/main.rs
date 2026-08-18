@@ -10,6 +10,7 @@ mod master;
 mod projects;
 mod qdrant;
 mod queue;
+mod quic;
 mod recuperar;
 mod red;
 mod routes;
@@ -108,6 +109,15 @@ async fn main() -> anyhow::Result<()> {
         async move {
             hardware::reaplicar_al_arrancar(&app).await;
             hardware_cpu::reaplicar_al_arrancar(&app).await;
+        }
+    });
+
+    tokio::spawn({
+        let app = app.clone();
+        async move {
+            if let Err(e) = quic::arrancar_si_procede(app).await {
+                tracing::warn!("no se pudo levantar el listener QUIC: {e}");
+            }
         }
     });
 
