@@ -3,8 +3,11 @@ import { api, type NetworkSettings, type NetworkView as NetworkViewData } from "
 import { Icon } from "../ui/Icon";
 import { Seccion } from "./AdminPanel";
 
+const INPUT = "ml-auto rounded-lg border border-border bg-elevated px-2.5 py-1.5 font-mono text-[11px] text-fg outline-none transition-colors duration-300 ease-expo focus:border-white/40";
+
 /** Copia al portapapeles con feedback textual de 1.5s — no hay toast propio
- *  para esto, y no hace falta uno: es una acción de un solo paso. */
+ *  para esto, y no hace falta uno: es una acción de un solo paso. Mismo
+ *  patrón que la clave revelada en ApiKeysView. */
 function useCopiado() {
   const [copiado, setCopiado] = useState(false);
   return {
@@ -54,84 +57,72 @@ export function NetworkView({ token }: { token: string }) {
   }
 
   if (!data || !borrador) {
-    return (
-      <Seccion titulo="Red" grupo="Servidor">
-        <p className="text-[11px] text-subtle">cargando</p>
-      </Seccion>
-    );
+    return <Seccion titulo="Red" grupo="Servidor"><p className="text-[11px] text-subtle">cargando</p></Seccion>;
   }
 
   const cambiado = JSON.stringify(borrador) !== JSON.stringify(data.settings);
 
   return (
     <Seccion titulo="Red" grupo="Servidor">
-      <div className="rounded-[11px] border border-border bg-panel p-[13px_15px]">
-        <div className="mb-2.5 text-[8.5px] uppercase tracking-[.15em] text-subtle">Escucha y dirección pública</div>
-        <Fila etiqueta="Puerto de escucha (TCP)">
+      <p className="text-[11px] text-muted">Puerto de escucha, dirección pública y transporte del servidor.</p>
+
+      <div className="mt-4 rounded-card border border-border bg-panel">
+        <Fila titulo="Puerto de escucha" sub="El puerto TCP local donde escucha lumid.">
           <input type="number" min={1} max={65535} value={borrador.bind_port}
             onChange={(e) => setBorrador({ ...borrador, bind_port: e.target.valueAsNumber || 0 })}
-            className="w-[100px] rounded-[9px] border border-border bg-[#0d0f12] px-[11px] py-[6px] font-mono text-[12.5px] text-fg outline-none focus:border-white/40" />
+            className={`w-[90px] ${INPUT}`} />
         </Fila>
-        <Fila etiqueta="Host público (dominio o IP)">
+        <Fila titulo="Host público" sub="Dominio o IP incrustado en claves y tarjetas nuevas. Vacío = IP LAN autodetectada.">
           <input type="text" placeholder="autodetectada" value={borrador.public_host ?? ""}
             onChange={(e) => setBorrador({ ...borrador, public_host: e.target.value || null })}
-            className="w-[220px] rounded-[9px] border border-border bg-[#0d0f12] px-[11px] py-[6px] font-mono text-[12.5px] text-fg outline-none focus:border-white/40" />
+            className={`w-[200px] ${INPUT}`} />
         </Fila>
-        <Fila etiqueta="Puerto público (si hay port-forwarding)">
+        <Fila titulo="Puerto público" sub="Solo si hay NAT o port-forwarding. Vacío = igual al de escucha.">
           <input type="number" min={1} max={65535} placeholder={String(borrador.bind_port)}
             value={borrador.public_port ?? ""}
             onChange={(e) => setBorrador({ ...borrador, public_port: e.target.valueAsNumber || null })}
-            className="w-[100px] rounded-[9px] border border-border bg-[#0d0f12] px-[11px] py-[6px] font-mono text-[12.5px] text-fg outline-none focus:border-white/40" />
+            className={`w-[90px] ${INPUT}`} />
         </Fila>
-        <p className="mt-2 max-w-[54ch] text-[10.5px] text-subtle">
-          El host/puerto público es lo que se incrusta en claves y tarjetas nuevas.
-          Distinto del puerto de escucha solo si hay NAT, port-forwarding o un proxy TCP transparente de por medio.
-        </p>
       </div>
 
-      <div className="mt-4 rounded-[11px] border border-border bg-panel p-[13px_15px]">
-        <div className="mb-2.5 text-[8.5px] uppercase tracking-[.15em] text-subtle">QUIC / HTTP-3 (opcional)</div>
-        <Fila etiqueta="Activado">
-          <div className="flex gap-1.5">
-            {([true, false] as const).map((v) => (
-              <button key={String(v)} onClick={() => setBorrador({ ...borrador, quic_enabled: v })}
-                className={`rounded border px-2 py-1 text-[10.5px] transition-colors duration-300 ease-expo ${
-                  borrador.quic_enabled === v ? "border-accent text-fg" : "border-border text-subtle"}`}>
-                {v ? "activado" : "desactivado"}
-              </button>
-            ))}
+      <div className="mt-4 rounded-card border border-border bg-panel">
+        <ToggleFila
+          titulo="QUIC / HTTP-3"
+          sub="Listener adicional del lado servidor. El cliente de Lumi Station sigue hablando TCP+TLS: activarlo no cambia nada hoy, es infraestructura para el futuro."
+          on={borrador.quic_enabled}
+          onClick={() => setBorrador({ ...borrador, quic_enabled: !borrador.quic_enabled })}
+        />
+        <div className="grid transition-[grid-template-rows] duration-[420ms] ease-expo"
+          style={{ gridTemplateRows: borrador.quic_enabled ? "1fr" : "0fr" }}>
+          <div className="overflow-hidden">
+            <div className="border-t border-border bg-black/15 pl-6">
+              <Fila titulo="Puerto UDP" sub="Puerto del listener QUIC.">
+                <input type="number" min={1} max={65535} value={borrador.quic_port}
+                  onChange={(e) => setBorrador({ ...borrador, quic_port: e.target.valueAsNumber || 0 })}
+                  className={`w-[90px] ${INPUT}`} />
+              </Fila>
+            </div>
           </div>
-        </Fila>
-        <Fila etiqueta="Puerto UDP">
-          <input type="number" min={1} max={65535} value={borrador.quic_port}
-            onChange={(e) => setBorrador({ ...borrador, quic_port: e.target.valueAsNumber || 0 })}
-            className="w-[100px] rounded-[9px] border border-border bg-[#0d0f12] px-[11px] py-[6px] font-mono text-[12.5px] text-fg outline-none focus:border-white/40" />
-        </Fila>
-        <p className="mt-2 max-w-[54ch] text-[10.5px] text-subtle">
-          El cliente de Lumi Station todavía habla TCP+TLS exclusivamente — activar esto
-          no cambia nada para él hoy. Es infraestructura para el futuro, anunciada en /v1/hello.
-        </p>
+        </div>
       </div>
 
-      <div className="mt-4 rounded-[11px] border border-border bg-panel p-[13px_15px]">
-        <div className="mb-2.5 text-[8.5px] uppercase tracking-[.15em] text-subtle">Tarjeta de servidor actual</div>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 truncate rounded-[9px] border border-border bg-[#0d0f12] px-[11px] py-[6px] font-mono text-[11px] text-fg">
-            {data.server_card}
-          </code>
+      <div className="mt-4 rounded-card border border-border bg-panel p-3.5">
+        <p className="text-[12.5px] text-fg">Tarjeta de servidor actual</p>
+        <p className="mb-3 text-[11px] text-muted">
+          Compártela con quien necesite reconectar tras un cambio de dirección — sustituye a pedir acceso por SSH.
+        </p>
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-elevated p-[10px_12px]">
+          <span className="flex-1 truncate font-mono text-[11px] text-fg">{data.server_card}</span>
           <button onClick={() => copiar(data.server_card)}
-            className="jg-press shrink-0 rounded-lg border border-white/15 px-2.5 py-1.5 text-[10.5px] text-fg">
+            className="jg-press shrink-0 rounded-lg border border-border px-2.5 py-1 text-[10px] text-fg">
             {copiado ? "Copiada" : "Copiar"}
           </button>
         </div>
-        <p className="mt-2 text-[10.5px] text-subtle">
-          Compártela con quien necesite reconectar tras un cambio de dirección — sustituye a pedir acceso por SSH.
-        </p>
       </div>
 
       {error && <p className="mt-3 text-[11px] text-danger-fg">{error}</p>}
 
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 flex items-center gap-2">
         <button onClick={guardar} disabled={busy || !cambiado}
           className="jg-press rounded-lg bg-accent px-3.5 py-1.5 text-[11px] font-medium text-black disabled:opacity-40">
           Guardar cambios
@@ -141,26 +132,55 @@ export function NetworkView({ token }: { token: string }) {
           className="jg-press rounded-lg border border-white/15 px-3.5 py-1.5 text-[11px] text-fg disabled:opacity-40">
           Reiniciar ahora
         </button>
-        {data.restart_blocked_reason && (
+        {data.restart_blocked_reason ? (
           <span className="flex items-center gap-1.5 text-[10.5px] text-warning-fg">
             <Icon name="alert" size={11} /> {data.restart_blocked_reason}
           </span>
-        )}
+        ) : cambiado ? (
+          <span className="text-[10.5px] text-subtle">Cambiar puerto de escucha o QUIC exige reiniciar para aplicarse.</span>
+        ) : null}
       </div>
-      {cambiado && (
-        <p className="mt-2 text-[10.5px] text-subtle">
-          Cambiar puerto de escucha o QUIC exige reiniciar para aplicarse.
-        </p>
-      )}
     </Seccion>
   );
 }
 
-function Fila({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
+/** Fila de solo lectura+control, mismo esqueleto que ApiKeysView para las
+ *  filas de credenciales: título y explicación a la izquierda, el control a
+ *  la derecha (`ml-auto` dentro del propio input). */
+function Fila({ titulo, sub, children }: { titulo: string; sub: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-3 border-b border-border py-[9px] text-[11px] last:border-none">
-      <span className="w-[220px] shrink-0 text-subtle">{etiqueta}</span>
+    <div className="flex items-center gap-3.5 border-b border-border p-[13px_16px] last:border-b-0">
+      <div className="min-w-0 flex-1">
+        <p className="text-[12px] text-fg">{titulo}</p>
+        <p className="mt-0.5 text-[10px] text-subtle">{sub}</p>
+      </div>
       {children}
+    </div>
+  );
+}
+
+/** Interruptor deslizante, mismo tamaño y transición que `SecurityView`: es
+ *  la misma decisión binaria ("activado, con opciones dependientes debajo")
+ *  que Zero Trust o modo mantenimiento, así que usa el mismo control. */
+function ToggleFila({ titulo, sub, on, onClick }: {
+  titulo: string; sub: string; on: boolean; onClick: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3.5 p-[13px_16px]">
+      <button
+        onClick={onClick}
+        className={`relative h-[21px] w-9 shrink-0 cursor-pointer rounded-full border transition-colors duration-300 ease-expo ${
+          on ? "border-white/30 bg-white/[.14]" : "border-border bg-elevated"
+        }`}
+      >
+        <span className={`absolute left-[2px] top-[2px] h-[15px] w-[15px] rounded-full transition-transform duration-300 ease-expo ${
+          on ? "translate-x-[15px] bg-fg" : "bg-subtle"
+        }`} />
+      </button>
+      <div className="min-w-0">
+        <p className="text-[12px] text-fg">{titulo}</p>
+        <p className="mt-0.5 text-[10px] text-subtle">{sub}</p>
+      </div>
     </div>
   );
 }
