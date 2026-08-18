@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, type AdminRequest, type AvisoInfo, type Cambio, type Invite } from "../lib/api";
 import { useServer } from "../lib/store";
+import { migrarDireccion } from "../lib/session";
 import { AvisoEditor } from "../admin/AvisoEditor";
 import { Avatar } from "./Avatar";
 import { Icon, type IconName } from "./Icon";
@@ -68,6 +69,7 @@ export function NotificationsPopover({ onProjectAccepted }: {
   const [busy, setBusy] = useState<string | null>(null);
   const [leido, setLeido] = useState<Set<string>>(cargarLeido);
   const [open, setOpen, box] = usePopover();
+  const [avisoRed, setAvisoRed] = useState<string | null>(null);
 
   useEffect(() => {
     localStorage.setItem(LEIDO_KEY, JSON.stringify([...leido]));
@@ -110,6 +112,13 @@ export function NotificationsPopover({ onProjectAccepted }: {
   useEffect(() => {
     const un = listen<Cambio>("queue-change", (e) => {
       if (e.payload.tipo === "invitacion") void load();
+      // El servidor avisó de un cambio de dirección: se actualiza la sesión
+      // en silencio (ver `migrarDireccion`) y se muestra un toast — no hay
+      // nada que aceptar ni rechazar, ya está aplicado.
+      if (e.payload.tipo === "red") {
+        migrarDireccion(e.payload.nuevo_addr);
+        setAvisoRed(e.payload.nuevo_addr);
+      }
     });
     return () => { void un.then((f) => f()); };
   }, []);
@@ -164,6 +173,17 @@ export function NotificationsPopover({ onProjectAccepted }: {
             style={{ animation: "jg-core-pulse 1.8s ease-in-out infinite" }} />
         )}
       </button>
+
+      {avisoRed && (
+        <div className="absolute right-0 top-[30px] z-[70] w-[260px] rounded-[11px] border border-white/[.14]
+          bg-[rgba(20,22,26,.97)] p-[11px_12px] text-[11px] text-muted shadow-lg shadow-black/40 backdrop-blur-xl"
+          style={{ animation: "jg-fade-rise .5s cubic-bezier(.16,1,.3,1) both" }}>
+          El servidor se movió a <b className="font-mono text-fg">{avisoRed}</b>. Ya está actualizado.
+          <button onClick={() => setAvisoRed(null)} className="mt-2 block text-[10.5px] text-subtle hover:text-fg">
+            Entendido
+          </button>
+        </div>
+      )}
 
       {open && (
         <div className="absolute right-0 top-[30px] z-[70] w-[308px] overflow-hidden rounded-[11px]

@@ -104,6 +104,21 @@ export function forgetServer(addr: string) {
   localStorage.setItem(nsKey(SERVERS), JSON.stringify(loadServers().filter((s) => s.addr !== addr)));
 }
 
+/** El servidor avisó (por `Cambio::Red`, mientras todavía era alcanzable en
+ *  la dirección vieja) de que se muda a `nuevoAddr`. La huella no cambia —
+ *  mismo certificado, no ha habido rotación — así que basta con mover la
+ *  sesión activa y la entrada de la lista de servidores recordados a la
+ *  dirección nueva, sin pedir nada al usuario. */
+export function migrarDireccion(nuevoAddr: string) {
+  const s = loadSession();
+  if (!s?.addr) return;
+  const fingerprint = s.fingerprint;
+  updateSession({ addr: nuevoAddr });
+  const viejo = loadServers().find((x) => x.addr === s.addr);
+  forgetServer(s.addr);
+  addServer({ addr: nuevoAddr, fingerprint, label: viejo?.label ?? nuevoAddr });
+}
+
 /** Identidad del equipo. Registro PASIVO: audita y permite revocar, no
  *  autentica. Copiar este valor copia la identidad, y es a propósito. */
 export function deviceId(): string {

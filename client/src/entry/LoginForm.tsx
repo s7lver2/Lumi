@@ -47,7 +47,18 @@ export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMu
       await announcePresence(res.token);
       onSignedIn();
     } catch (e) {
-      setError(String(e));
+      const msg = String(e);
+      // El error de conexión trae este prefijo (ver `client_for`/`connect`
+      // en `client/src-tauri/src/main.rs`) cuando la dirección guardada ya
+      // no responde — puede ser un corte de red normal, o que el admin
+      // cambió el puerto/host y esta sesión no estaba conectada para
+      // recibir el aviso en vivo. La pista cubre ese segundo caso sin
+      // afirmar que sea la causa segura.
+      setError(
+        msg.includes("no se pudo conectar")
+          ? `${msg}. ¿Cambió de dirección el servidor? Pide una tarjeta nueva y añádela.`
+          : msg
+      );
     } finally {
       setBusy(false);
     }
