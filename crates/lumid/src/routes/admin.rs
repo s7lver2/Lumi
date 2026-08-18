@@ -192,7 +192,26 @@ pub async fn get_user(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .flatten()
         .collect();
-    Ok(Json(UserDetail { user, global, overrides, devices, sessions }))
+    // Mismo criterio exacto que la comprobación real en `analyses::create`
+    // (`created_at > ahora - ventana`, sobre `requested_by`): un número que
+    // no coincida con el que de verdad corta sería peor que no enseñar nada.
+    let t = now();
+    let hoy: i64 = c
+        .query_row(
+            "SELECT COUNT(*) FROM analyses WHERE requested_by = ?1 AND created_at > ?2",
+            rusqlite::params![id, t - 86_400],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    let semana: i64 = c
+        .query_row(
+            "SELECT COUNT(*) FROM analyses WHERE requested_by = ?1 AND created_at > ?2",
+            rusqlite::params![id, t - 7 * 86_400],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    let uso = lumi_proto::api::LimitsUsage { hoy, semana };
+    Ok(Json(UserDetail { user, global, overrides, devices, sessions, uso }))
 }
 
 pub async fn patch_user(

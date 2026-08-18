@@ -49,10 +49,12 @@ pub async fn list(State(app): State<App>, headers: HeaderMap) -> Result<Json<Vec
     // reales, la lista tardaba segundos en cargar. Los `GROUP BY` de abajo
     // agregan cada tabla en una sola pasada, y el `LEFT JOIN` con `projects`
     // es lo único que queda por proyecto.
+    let ahora = now();
     let mut q = c
         .prepare(
             "SELECT p.id, p.name, m.role, p.created_at, p.updated_at,
-                    COALESCE(kc.n, 0), COALESCE(ic.n, 0), COALESCE(ic.bytes, 0)
+                    COALESCE(kc.n, 0), COALESCE(ic.n, 0), COALESCE(ic.bytes, 0),
+                    lk.username
              FROM projects p
              JOIN project_members m ON m.project_id = p.id
              LEFT JOIN (SELECT project_id, COUNT(*) AS n FROM cases GROUP BY project_id) kc
@@ -62,6 +64,17 @@ pub async fn list(State(app): State<App>, headers: HeaderMap) -> Result<Json<Vec
                FROM images i JOIN cases k ON k.id = i.case_id
                GROUP BY k.project_id
              ) ic ON ic.project_id = p.id
+             -- Mismo criterio de validez que enter: el candado solo cuenta
+             -- si la sesión de quien lo tiene sigue viva y no lleva más de
+             -- STALE_AFTER agarrado. Un candado abandonado no cuenta como
+             -- alguien trabajando, es basura que todavía no se robó.
+             LEFT JOIN (
+               SELECT pl.project_id, u.username
+               FROM project_locks pl
+               JOIN sessions s ON s.token = pl.token AND s.expires_at > ?2
+               JOIN users u ON u.id = pl.user_id
+               WHERE ?2 - pl.since < ?3
+             ) lk ON lk.project_id = p.id
              -- Una invitación pendiente no es un proyecto tuyo todavía: vive
              -- en `/v1/me/invites` hasta que la aceptas.
              WHERE m.user_id = ?1 AND m.status = 'accepted'
@@ -69,7 +82,7 @@ pub async fn list(State(app): State<App>, headers: HeaderMap) -> Result<Json<Vec
         )
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
     let rows = q
-        .query_map([uid], |r| {
+        .query_map(rusqlite::params![uid, ahora, STALE_AFTER], |r| {
             Ok(Project {
                 id: r.get(0)?,
                 name: r.get(1)?,
@@ -79,6 +92,7 @@ pub async fn list(State(app): State<App>, headers: HeaderMap) -> Result<Json<Vec
                 cases: r.get(5)?,
                 images: r.get(6)?,
                 bytes: r.get(7)?,
+                locked_by: r.get(8)?,
             })
         })
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
@@ -128,6 +142,7 @@ pub async fn create(
         bytes: 0,
         created_at: t,
         updated_at: t,
+        locked_by: None,
     }))
 }
 

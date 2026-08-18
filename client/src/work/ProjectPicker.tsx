@@ -5,6 +5,7 @@ import { useServer } from "../lib/store";
 import { ContextMenu, menuAt, type MenuState } from "../ui/ContextMenu";
 import { Icon } from "../ui/Icon";
 import { PromptDialog } from "../ui/PromptDialog";
+import { UserTile } from "../ui/UserTile";
 
 const GB = 1024 * 1024 * 1024;
 
@@ -263,11 +264,18 @@ function Card({ project, vista, delay, drag, onOpen, onMenu }: {
       <Stat icon="folder" v={String(project.cases)} />
       <Stat icon="image" v={String(project.images)} />
       <Stat icon="cloud" v={size(project.bytes)} />
-      {project.role !== "owner" && (
-        <span className="ml-auto text-warning-fg" title="te invitaron a este proyecto">
-          <Icon name="users" size={12} />
-        </span>
-      )}
+      <span className="ml-auto flex items-center gap-1.5">
+        {project.locked_by && (
+          <span title={`${project.locked_by} está trabajando en este proyecto ahora mismo`}>
+            <UserTile nombre={project.locked_by} conectado size={16} />
+          </span>
+        )}
+        {project.role !== "owner" && (
+          <span className="text-warning-fg" title="te invitaron a este proyecto">
+            <Icon name="users" size={12} />
+          </span>
+        )}
+      </span>
     </div>
   );
 

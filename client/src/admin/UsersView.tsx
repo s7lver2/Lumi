@@ -1,15 +1,32 @@
 import { useEffect, useState } from "react";
-import { api, type AdminUser, type UserDetail } from "../lib/api";
+import { api, type AdminUser, type Limits, type UserDetail } from "../lib/api";
 import { Icon } from "../ui/Icon";
 import { Seccion } from "./AdminPanel";
-import { UserTile } from "./UserTile";
+import { LimitsEditor } from "./LimitsEditor";
+import { UserTile } from "../ui/UserTile";
 
 type Vista = "lista" | "foto" | "nombre";
+
+function Barra({ etiqueta, usado, tope }: { etiqueta: string; usado: number; tope: number }) {
+  const pct = tope > 0 ? Math.min(100, (usado / tope) * 100) : 0;
+  return (
+    <div className="flex items-center gap-3 text-[11px]">
+      <span className="w-[70px] shrink-0 text-subtle">{etiqueta}</span>
+      <span className="h-[3px] flex-1 overflow-hidden rounded-sm bg-elevated">
+        <span className={`block h-full rounded-sm transition-[width] duration-700 ease-expo ${
+          pct >= 100 ? "bg-warning" : "bg-fg"}`} style={{ width: `${pct}%` }} />
+      </span>
+      <span className="w-[64px] shrink-0 text-right font-mono text-[10.5px] text-muted">{usado} / {tope}</span>
+    </div>
+  );
+}
 
 export function UsersView({ token }: { token: string }) {
   const [rows, setRows] = useState<AdminUser[]>([]);
   const [detail, setDetail] = useState<UserDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editando, setEditando] = useState<"usuario" | "global" | null>(null);
+  const [globalActual, setGlobalActual] = useState<Limits | null>(null);
   const [vista, setVista] = useState<Vista>(
     () => (localStorage.getItem("lumi.usuarios.vista") as Vista) ?? "lista"
   );
@@ -68,11 +85,27 @@ export function UsersView({ token }: { token: string }) {
           )}
         </div>
 
+        {!u.is_admin && (
+          <div className="mt-4 rounded-[11px] border border-border bg-panel p-[13px_15px]">
+            <div className="mb-2.5 text-[8.5px] uppercase tracking-[.15em] text-subtle">Uso</div>
+            <div className="flex flex-col gap-2">
+              <Barra etiqueta="Al día" usado={detail.uso.hoy} tope={u.limits.max_daily} />
+              {u.limits.weekly_enabled && (
+                <Barra etiqueta="Semanal" usado={detail.uso.semana} tope={u.limits.max_weekly} />
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="mt-4 rounded-[11px] border border-border bg-panel p-[13px_15px]">
           {u.is_admin ? (
             <p className="text-[11px] text-muted">Los administradores no tienen límites: se ignoran todos.</p>
           ) : (
             <div className="flex flex-col">
+              <button onClick={() => setEditando("usuario")}
+                className="mb-2.5 self-start text-[10.5px] text-muted hover:text-fg">
+                editar límites de esta cuenta
+              </button>
               {LEVERS.map(([key, label]) => {
                 const overridden = key in detail.overrides;
                 const value = JSON.stringify((u.limits as unknown as Record<string, unknown>)[key]);
@@ -133,6 +166,13 @@ export function UsersView({ token }: { token: string }) {
           </button>
         </div>
         {error && <p className="mt-3 text-xs text-danger-fg">{error}</p>}
+
+        {editando === "usuario" && (
+          <LimitsEditor modo="usuario" titulo={`Límites de ${u.username}`}
+            valores={u.limits} overrides={detail.overrides} userId={u.id} token={token}
+            onGuardado={() => { setEditando(null); open(u.id); }}
+            onCerrar={() => setEditando(null)} />
+        )}
       </Seccion>
     );
   }
@@ -214,12 +254,28 @@ export function UsersView({ token }: { token: string }) {
     );
 
   return (
-    <Seccion titulo="Usuarios" grupo="Personas" accion={seg}>
+    <Seccion titulo="Usuarios" grupo="Personas" accion={
+      <span className="flex items-center gap-3">
+        <button onClick={() => {
+          api.get<Limits>("/v1/admin/limits", token).then(setGlobalActual).catch((e) => setError(String(e)));
+          setEditando("global");
+        }} className="text-[10.5px] text-muted hover:text-fg">
+          límites globales
+        </button>
+        {seg}
+      </span>
+    }>
       {error && <p className="mb-3 text-[11px] text-danger-fg">{error}</p>}
       <p className="mb-4 text-xs text-muted">
         {rows.length} cuentas · {rows.filter((r) => r.blocked).length} bloqueadas.
       </p>
       {cuerpo}
+
+      {editando === "global" && globalActual && (
+        <LimitsEditor modo="global" titulo="Límites globales" valores={globalActual} token={token}
+          onGuardado={() => setEditando(null)}
+          onCerrar={() => setEditando(null)} />
+      )}
     </Seccion>
   );
 }
@@ -232,6 +288,7 @@ const LEVERS: [string, string][] = [
   ["max_storage_gb", "Almacenamiento (GB)"],
   ["queue_priority", "Prioridad"],
   ["can_create_projects", "Crear proyectos"],
+  ["background_jobs", "Trabajo en segundo plano"],
   ["weekly_enabled", "Tope semanal activo"],
   ["max_weekly", "A la semana"],
 ];

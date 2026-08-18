@@ -136,10 +136,12 @@ export interface AdminUser {
   id: number; username: string; display_name: string | null; is_admin: boolean;
   blocked: boolean; must_change_password: boolean; created_at: number; limits: Limits;
 }
+export interface LimitsUsage { hoy: number; semana: number }
 export interface UserDetail {
   user: AdminUser; global: Limits;
   overrides: Record<string, unknown>;
   devices: DeviceRow[]; sessions: SessionInfo[];
+  uso: LimitsUsage;
 }
 export interface TaskStatus {
   id: string;
@@ -213,6 +215,8 @@ export interface Project {
   id: number; name: string; role: "owner" | "member";
   cases: number; images: number; bytes: number;
   created_at: number; updated_at: number;
+  /** Quién tiene el candado de trabajo ahora mismo, si lo tiene alguien. */
+  locked_by: string | null;
 }
 export interface ProjectMember {
   user_id: number; username: string; role: "owner" | "member";

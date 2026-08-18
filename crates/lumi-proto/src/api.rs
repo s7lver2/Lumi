@@ -482,6 +482,17 @@ pub struct UserDetail {
     pub overrides: std::collections::HashMap<String, serde_json::Value>,
     pub devices: Vec<DeviceRow>,
     pub sessions: Vec<SessionInfo>,
+    pub uso: LimitsUsage,
+}
+
+/// Cuánto ha gastado ya del tope diario y del semanal. Mismo criterio exacto
+/// que la comprobación real de `analyses::create` (`created_at > ahora -
+/// ventana`) — mostrar un número que no coincida con el que de verdad corta
+/// sería peor que no mostrar nada.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LimitsUsage {
+    pub hoy: i64,
+    pub semana: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -534,6 +545,11 @@ pub struct Project {
     pub bytes: i64,
     pub created_at: i64,
     pub updated_at: i64,
+    /// Quién tiene el candado de trabajo (`project_locks`) ahora mismo, si lo
+    /// tiene alguien. `None` no solo significa "nadie lo pidió nunca": la
+    /// consulta ya descarta candados de sesión caducada o de más de
+    /// `STALE_AFTER`, así que esto es "de verdad, alguien está dentro ahora".
+    pub locked_by: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
