@@ -11,6 +11,7 @@ mod projects;
 mod qdrant;
 mod queue;
 mod recuperar;
+mod red;
 mod routes;
 mod store;
 mod tasks;
