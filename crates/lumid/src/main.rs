@@ -7,6 +7,7 @@ mod agentar;
 mod indices;
 mod mantenimiento;
 mod master;
+mod perfil;
 mod politicas;
 mod projects;
 mod qdrant;

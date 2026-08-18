@@ -401,6 +401,7 @@ fn migrate(c: &Connection) {
         // significa "el gate no estaba activo cuando se creó" — no que
         // rechazara nada, no hay nada que rechazar en un `INSERT`.
         ("users", "accepted_policies_at", "INTEGER"),
+        ("users", "avatar_updated_at", "INTEGER"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }
