@@ -47,7 +47,7 @@ function PerfilPanel({ token }: { token: string }) {
         <Fila etiqueta="Servidor" valor={addr} mono />
       </div>
 
-      {!esAdmin && me && (
+      {!esAdmin && me?.uso && (
         <div className="mt-4 rounded-card border border-border bg-panel p-[13px_16px]">
           <div className="mb-2.5 text-[8.5px] uppercase tracking-[.15em] text-subtle">Uso</div>
           <div className="flex flex-col gap-2">
