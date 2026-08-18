@@ -9,6 +9,9 @@ interface ServerState {
    *  parsear, pero sí sabemos la dirección por la sesión persistida. */
   addr: string;
   username: string;
+  /** Propio, no de otro usuario. Hace falta para pedir la propia foto de
+   *  perfil (`/v1/users/:id/avatar`) desde `TitleBar`. */
+  userId: number | null;
   isAdmin: boolean;
   /** Los límites efectivos de quien ha entrado. `null` hasta que `/v1/auth/me`
    *  conteste: la interfaz distingue "todavía no lo sé" de "no puede". */
@@ -19,17 +22,17 @@ interface ServerState {
   setSample: (s: Sample | null) => void;
   setBootstrapToken: (t: string) => void;
   setAddr: (a: string) => void;
-  setUser: (username: string, isAdmin: boolean, limits?: Limits | null) => void;
+  setUser: (username: string, isAdmin: boolean, limits?: Limits | null, userId?: number | null) => void;
 }
 
 export const useServer = create<ServerState>((set) => ({
   key: "", hello: null, token: null, sample: null, bootstrapToken: "", addr: "",
-  username: "", isAdmin: false, limits: null,
+  username: "", userId: null, isAdmin: false, limits: null,
   setKey: (key) => set({ key }),
   setHello: (hello) => set({ hello }),
   setToken: (token) => set({ token }),
   setSample: (sample) => set({ sample }),
   setBootstrapToken: (bootstrapToken) => set({ bootstrapToken }),
   setAddr: (addr) => set({ addr }),
-  setUser: (username, isAdmin, limits = null) => set({ username, isAdmin, limits }),
+  setUser: (username, isAdmin, limits = null, userId = null) => set({ username, isAdmin, limits, userId }),
 }));

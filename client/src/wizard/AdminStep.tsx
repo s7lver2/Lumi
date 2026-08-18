@@ -32,7 +32,7 @@ export function AdminStep({ bootstrapToken, onDone, onBusyChange }: {
       setAuth(res.token);
       // Sin esto el store no sabe quién es el owner: la app ya logueada
       // mostraba "sesión iniciada como ." con el usuario vacío.
-      useServer.getState().setUser(res.username, res.is_admin);
+      useServer.getState().setUser(res.username, res.is_admin, null, res.id);
       // bootstrapToken ya está gastado (/v1/admin lo consume); el token de
       // sesión es lo único que hace falta a partir de ahora para retomar.
       updateSession({ token: res.token, bootstrapToken: undefined, username: res.username });

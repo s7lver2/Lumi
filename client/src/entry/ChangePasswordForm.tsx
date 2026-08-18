@@ -31,7 +31,7 @@ export function ChangePasswordForm({ onDone, onCancel }: { onDone: () => void; o
       // `limits` se quedaba en `null` y la telemetría y la cola nunca
       // arrancaban para quien entraba por este camino.
       const me = await api.get<Me>("/v1/auth/me", token!);
-      useServer.getState().setUser(me.username, me.is_admin, me.limits);
+      useServer.getState().setUser(me.username, me.is_admin, me.limits, me.id);
       await announcePresence(token!);
       onDone();
     } catch (e) {

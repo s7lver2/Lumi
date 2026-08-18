@@ -31,7 +31,7 @@ export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMu
       });
       useServer.getState().setToken(res.token);
       setAuth(res.token);
-      useServer.getState().setUser(res.username, res.is_admin);
+      useServer.getState().setUser(res.username, res.is_admin, null, res.id);
       useServer.getState().setAddr(server.addr);
       updateSession({ addr: server.addr, fingerprint: server.fingerprint, token: res.token, username: res.username });
       if (res.must_change_password) { onMustChange(); return; }
@@ -40,7 +40,7 @@ export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMu
       // pendiente esta ruta contesta 403 a propósito, así que solo se pide
       // cuando la sesión está completa.
       const me = await api.get<Me>("/v1/auth/me", res.token);
-      useServer.getState().setUser(me.username, me.is_admin, me.limits);
+      useServer.getState().setUser(me.username, me.is_admin, me.limits, me.id);
       // Sin esto, quien entra por aquí (todo usuario normal, siempre) se
       // quedaba sin resultados de sus análisis hasta la próxima vez que
       // cerrara y reabriera la app — el único otro camino que lo arrancaba.

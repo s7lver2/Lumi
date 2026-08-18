@@ -97,7 +97,7 @@ export default function App() {
             const me = await api.get<Me>("/v1/auth/me", session.token);
             useServer.getState().setToken(session.token);
             setAuth(session.token);
-            useServer.getState().setUser(me.username, me.is_admin, me.limits);
+            useServer.getState().setUser(me.username, me.is_admin, me.limits, me.id);
             await announcePresence(session.token);
             // El aprovisionamiento sigue siendo cosa del owner: si el servidor
             // no está listo del todo, se vuelve al wizard donde se dejó —
@@ -203,7 +203,7 @@ export default function App() {
     leaveProject();
     updateSession({ token: undefined });
     useServer.getState().setToken(null);
-    useServer.getState().setUser("", false, null);
+    useServer.getState().setUser("", false, null, null);
     // Sin esto, una muestra vieja (con `maintenance: true` de la sesión
     // anterior) se quedaba en el store y la tira de aviso seguía viéndose
     // en la pantalla de login, donde ya no hay ninguna sesión que avisar.
