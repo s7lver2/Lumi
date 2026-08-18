@@ -131,6 +131,12 @@ export interface SecuritySettings {
   maintenance: boolean; maintenance_message: string;
   maintenance_block_login: boolean; maintenance_services: string[];
 }
+export interface PoliciesSettings {
+  active: boolean;
+  title: string;
+  /** Documento Tiptap JSON — opaco aquí, solo lo entiende `AvisoEditor`. */
+  content: unknown;
+}
 export interface NetworkSettings {
   bind_port: number;
   public_host: string | null;
@@ -370,4 +376,8 @@ export const api = {
   networkGet: (token: string) => api.get<NetworkView>("/v1/admin/network", token),
   networkPatch: (s: NetworkSettings, token: string) => api.patch<NetworkView>("/v1/admin/network", s, token),
   networkRestart: (token: string) => api.post<null>("/v1/admin/network/restart", {}, token),
+  policiesPublic: () => api.get<PoliciesSettings>("/v1/policies"),
+  policiesGet: (token: string) => api.get<PoliciesSettings>("/v1/admin/policies", token),
+  policiesPatch: (patch: Partial<PoliciesSettings>, token: string) =>
+    api.patch<PoliciesSettings>("/v1/admin/policies", patch, token),
 };
