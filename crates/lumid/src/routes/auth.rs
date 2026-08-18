@@ -100,8 +100,15 @@ pub async fn login(
             "demasiados intentos; espera unos minutos".to_string(),
         ));
     }
-    let c = app.store.conn();
-    let row: Result<(i64, String, i64, i64, i64), _> = c.query_row(
+    // Escopado a propósito: `app.store.conn()` es LA ÚNICA conexión de todo
+    // el daemon, bajo un solo mutex — mantenerla agarrada mientras se hace el
+    // Argon2id de abajo (deliberadamente lento) bloqueaba a CUALQUIER otra
+    // petición que tocara la base de datos durante ese rato, y con tráfico
+    // concurrente contra este endpoint eso podía dejar sin hilos libres a
+    // todo el runtime de tokio — un cuelgue total del servidor, no solo de
+    // este endpoint. El guard se suelta aquí, antes de gastar ni un ciclo en
+    // criptografía.
+    let row: Result<(i64, String, i64, i64, i64), _> = app.store.conn().query_row(
         "SELECT id, password_phc, is_admin, blocked, must_change_password
          FROM users WHERE username = ?1",
         [&req.username],
@@ -142,6 +149,9 @@ pub async fn login(
         ));
     }
 
+    // Se reabre aquí: todo lo de arriba (Argon2id incluido) ya pasó sin tener
+    // la conexión agarrada.
+    let c = app.store.conn();
     let device_id = req.device.as_ref().and_then(|d| upsert_device(&c, id, d));
     let token = new_token();
     let public_id = new_token();
@@ -225,8 +235,12 @@ pub async fn change_password(
     if req.new.len() < 12 {
         return Err((StatusCode::BAD_REQUEST, "la contraseña necesita 12 caracteres o más".into()));
     }
-    let c = app.store.conn();
-    let phc: String = c
+    // Escopado a propósito, mismo motivo que en `login`: la conexión única
+    // del daemon no debe quedar agarrada durante el Argon2id de abajo (aquí
+    // van DOS: verificar la actual y hashear la nueva).
+    let phc: String = app
+        .store
+        .conn()
         .query_row("SELECT password_phc FROM users WHERE id = ?1", [uid], |r| r.get(0))
         .map_err(|_| (StatusCode::UNAUTHORIZED, "sesión inválida".to_string()))?;
     // Nadie puede leer ni fijar la contraseña de otro: el admin solo exige que
@@ -237,6 +251,7 @@ pub async fn change_password(
     }
     let new_phc = hash_password(&req.new)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let c = app.store.conn();
     c.execute(
         "UPDATE users SET password_phc = ?1, must_change_password = 0 WHERE id = ?2",
         rusqlite::params![new_phc, uid],
