@@ -51,26 +51,30 @@ export function UsersView({ token }: { token: string }) {
   if (detail) {
     const u = detail.user;
     return (
-      <Seccion titulo={u.username} grupo="Personas"
+      <Seccion
+        titulo={
+          <span className="flex items-center gap-2.5">
+            <UserTile nombre={u.username} conectado={false} size={30} />
+            {u.username}
+            {u.is_admin && (
+              <span className="rounded-[5px] border border-border px-1.5 py-px text-[9.5px] font-normal tracking-[.03em] text-subtle">
+                administrador
+              </span>
+            )}
+            {u.blocked && (
+              <span className="rounded-[5px] border border-danger-fg/40 px-1.5 py-px text-[9.5px] font-normal tracking-[.03em] text-danger-fg">
+                bloqueada
+              </span>
+            )}
+          </span>
+        }
+        grupo="Personas"
         accion={
           <button onClick={() => setDetail(null)}
             className="flex items-center gap-1.5 text-[11px] text-subtle transition-colors hover:text-fg">
             <Icon name="back" size={12} /> Usuarios
           </button>
         }>
-        <div className="flex items-center gap-2">
-          <UserTile nombre={u.username} conectado={false} size={30} />
-          {u.is_admin && (
-            <span className="rounded-[5px] border border-border px-1.5 py-px text-[9.5px] tracking-[.03em] text-subtle">
-              administrador
-            </span>
-          )}
-          {u.blocked && (
-            <span className="rounded-[5px] border border-danger-fg/40 px-1.5 py-px text-[9.5px] tracking-[.03em] text-danger-fg">
-              bloqueada
-            </span>
-          )}
-        </div>
 
         {!u.is_admin && (
           <div className="mt-4 rounded-[11px] border border-border bg-panel p-[13px_15px]">
@@ -89,10 +93,13 @@ export function UsersView({ token }: { token: string }) {
             <p className="text-[11px] text-muted">Los administradores no tienen límites: se ignoran todos.</p>
           ) : (
             <div className="flex flex-col">
-              <button onClick={() => setEditando("usuario")}
-                className="mb-2.5 self-start text-[10.5px] text-muted hover:text-fg">
-                editar límites de esta cuenta
-              </button>
+              <div className="mb-2.5 flex items-center">
+                <span className="text-[8.5px] uppercase tracking-[.15em] text-subtle">Límites</span>
+                <button onClick={() => setEditando("usuario")}
+                  className="jg-press ml-auto rounded-lg border border-white/15 px-2.5 py-1 text-[10.5px] text-fg">
+                  Editar
+                </button>
+              </div>
               {LEVERS.map(([key, label]) => {
                 const overridden = key in detail.overrides;
                 const value = JSON.stringify((u.limits as unknown as Record<string, unknown>)[key]);
@@ -246,8 +253,8 @@ export function UsersView({ token }: { token: string }) {
         <button onClick={() => {
           api.get<Limits>("/v1/admin/limits", token).then(setGlobalActual).catch((e) => setError(String(e)));
           setEditando("global");
-        }} className="text-[10.5px] text-muted hover:text-fg">
-          límites globales
+        }} className="jg-press rounded-lg border border-white/15 px-2.5 py-1 text-[10.5px] text-fg">
+          Límites globales
         </button>
         {seg}
       </span>

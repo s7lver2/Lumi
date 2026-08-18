@@ -96,7 +96,7 @@ export function AdminPanel({ token }: { token: string }) {
 /** La cabecera común de una sección mudada. Existe para que las cinco vistas
  *  que se mudan no tengan que aprender a pintar su propio título. */
 export function Seccion({ titulo, grupo, accion, children }: {
-  titulo: string; grupo: string; accion?: React.ReactNode; children: React.ReactNode;
+  titulo: React.ReactNode; grupo: string; accion?: React.ReactNode; children: React.ReactNode;
 }) {
   return (
     <div className="px-6 pb-8 pt-5">

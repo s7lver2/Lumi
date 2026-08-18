@@ -176,12 +176,14 @@ export function ProjectPicker({ onOpen, refresh }: {
               onMenu={(e) => menuAt(e, p.name, [
                 { label: "Abrir", hint: "↵", onClick: () => void open(p) },
                 {
-                  label: "Renombrar", hint: "F2", disabled: p.role !== "owner",
+                  // El admin gestiona cualquier proyecto, sea o no su dueño —
+                  // mismo criterio que ya aplica el servidor en `guard()`.
+                  label: "Renombrar", hint: "F2", disabled: p.role !== "owner" && !isAdmin,
                   onClick: () => setRenaming(p),
                 },
                 null,
                 {
-                  label: "Eliminar proyecto", danger: true, disabled: p.role !== "owner",
+                  label: "Eliminar proyecto", danger: true, disabled: p.role !== "owner" && !isAdmin,
                   onClick: () => void remove(p),
                 },
               ], setMenu)} />

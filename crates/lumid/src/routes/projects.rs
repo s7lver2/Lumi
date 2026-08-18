@@ -25,12 +25,29 @@ pub fn err(c: StatusCode, m: &str) -> Fail {
 
 /// Sesión válida + papel en el proyecto. `manage` exige ser el dueño.
 fn guard(app: &App, headers: &HeaderMap, project_id: i64, manage: bool) -> Result<(i64, Role), Fail> {
-    let (uid, _) = require_session(app, &bearer(headers))
+    let (uid, is_admin) = require_session(app, &bearer(headers))
         .map_err(|c| (c, "sesión inválida".to_string()))?;
     // 404 y no 403 cuando no eres miembro: confirmar que el proyecto existe ya
     // sería filtrar que alguien investiga algo.
-    let role = access(&app.store, uid, project_id)
-        .ok_or_else(|| err(StatusCode::NOT_FOUND, "no existe ese proyecto"))?;
+    let role = access(&app.store, uid, project_id);
+    // El admin gestiona cualquier proyecto exista o no como miembro suyo —
+    // mismo patrón que ya usa el resto del daemon (límites, mantenimiento):
+    // quien administra el servidor nunca se queda fuera de algo que
+    // administra. Sin esto, borrar o renombrar el proyecto de otra persona
+    // era imposible incluso para el admin, sin ningún error visible: el
+    // cliente deshabilita esas acciones en cuanto `role !== "owner"`.
+    if is_admin {
+        let existe: bool = app
+            .store
+            .conn()
+            .query_row("SELECT 1 FROM projects WHERE id = ?1", [project_id], |_| Ok(()))
+            .is_ok();
+        if !existe {
+            return Err(err(StatusCode::NOT_FOUND, "no existe ese proyecto"));
+        }
+        return Ok((uid, role.unwrap_or(Role::Owner)));
+    }
+    let role = role.ok_or_else(|| err(StatusCode::NOT_FOUND, "no existe ese proyecto"))?;
     if manage && !role.manages() {
         return Err(err(StatusCode::FORBIDDEN, "solo el dueño del proyecto puede hacer esto"));
     }
