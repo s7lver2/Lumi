@@ -1,5 +1,6 @@
 import { MapRow } from "./MapRow";
 import { PolicyRow } from "./PolicyRow";
+import { ServerProfileRow } from "./ServerProfileRow";
 import { Seccion } from "./AdminPanel";
 
 /** El tema de mapa y quién lo dibuja, y el documento de aceptación al crear
@@ -13,6 +14,7 @@ export function CustomizacionView({ token }: { token: string }) {
         <MapRow token={token} />
       </div>
       <PolicyRow token={token} />
+      <ServerProfileRow token={token} />
     </Seccion>
   );
 }
