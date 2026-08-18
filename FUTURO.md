@@ -411,3 +411,16 @@ de un mismo recuperador (MegaLoc v1 y v2, por ejemplo) es un problema de Qdrant,
 colecciones por `(modelo, versión)`, y de las capas de índice del subsistema 8, que ya versionan
 por índice. Ninguno de los dos lados tiene hoy una pantalla que compare o migre entre versiones
 del mismo modelo; se aparca hasta que haya un caso real, no antes.
+
+### QUIC/HTTP-3 de extremo a extremo
+
+Hoy el listener QUIC de `lumid` sirve solo `/v1/hello` (ver `crates/lumid/src/quic.rs`) porque
+`reqwest` (cliente del lado `client/src-tauri`) no tiene soporte HTTP/3 estable. Cuando lo tenga,
+ampliar el listener ruta a ruta y hacer que el cliente intente QUIC primero con fallback a
+TCP+TLS.
+
+### Proxies TLS-terminating
+
+La configuración de red (`docs/superpowers/specs/2026-08-18-config-red-design.md`) asume un
+proxy/port-forward transparente a nivel TCP. Un proxy que descifra y vuelve a cifrar rompe el
+anclaje de huella de certificado — no está soportado ni se detecta activamente.
