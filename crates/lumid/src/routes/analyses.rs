@@ -5,7 +5,7 @@
 //! subsistema 4: cuando la cola arranque, encontrará trabajo real esperando.
 
 use crate::routes::access::now;
-use crate::routes::auth::{bearer, require_session};
+use crate::routes::auth::{bearer, require_admin, require_session};
 use crate::routes::cases::guard_case;
 use crate::routes::projects::{err, Fail};
 use crate::App;
@@ -266,7 +266,12 @@ pub async fn remove(
             Ok((r.get(0)?, r.get(1)?))
         })
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe ese análisis"))?;
-    guard_case(&app, &headers, case_id)?;
+    // Un administrador puede cancelar cualquier pendiente desde la página
+    // de Cola aunque no sea miembro del proyecto de ese caso. Cualquier
+    // otra persona sigue necesitando `guard_case`.
+    if require_admin(&app, &bearer(&headers)).is_err() {
+        guard_case(&app, &headers, case_id)?;
+    }
     // Cancelar es esto: borrar lo que todavía no ha empezado. Lo que ya está en
     // una GPU llega hasta el final — matarlo tiraría cómputo ya gastado.
     if state == "en_curso" {
