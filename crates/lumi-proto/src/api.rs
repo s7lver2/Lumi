@@ -391,6 +391,10 @@ pub enum EventoAdmin {
         display_name: String,
         message: String,
     },
+    /// Sin payload: es una señal ("algo cambió en la cola"), no un
+    /// snapshot — quien la recibe reacciona pidiendo `GET /v1/queue` de
+    /// nuevo, igual que ya haría un sondeo.
+    ColaCambio,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -876,6 +880,36 @@ pub struct WorkerView {
     pub trabajo: Option<i64>,
     /// Si ya dijo `listo`. Uno que no lo ha dicho está cargando, no colgado.
     pub listo: bool,
+    /// Dueño y caso del trabajo que tiene en la mano ahora mismo, si tiene
+    /// alguno — para pintar la Cinta de la Cola sin una segunda petición.
+    pub dueno_actual_id: Option<i64>,
+    pub dueno_actual: Option<String>,
+    pub caso_actual: Option<String>,
+}
+
+/// Por qué un pendiente no se reparte, cuando hay una razón real que
+/// explicarlo — no confundir con "todavía no le ha tocado turno", que es
+/// `None` en `PendienteView.razon`, no una variante de este enum.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RazonBloqueo {
+    Bloqueado,
+    Desconectado,
+    LimiteAlcanzado,
+}
+
+/// Un pendiente, para pintarlo en la página de Cola uno por uno en vez de
+/// solo contarlo.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendienteView {
+    pub id: i64,
+    pub user_id: i64,
+    pub username: String,
+    pub case_id: i64,
+    pub case_nombre: String,
+    pub nivel: String,
+    pub creado_en: i64,
+    pub razon: Option<RazonBloqueo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -883,6 +917,7 @@ pub struct QueueView {
     pub pendientes: u32,
     pub en_curso: u32,
     pub trabajadores: Vec<WorkerView>,
+    pub pendientes_detalle: Vec<PendienteView>,
 }
 
 /// Un punto de una curva editable — de ventilador (temperatura→%) o de offset
