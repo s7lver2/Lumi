@@ -19,14 +19,19 @@ export function AdminEventToast({ token, onIr }: { token: string; onIr: (s: Secc
     let vivo = true;
     void startAdminEvents(token);
     const un = listen<EventoAdmin>("admin-events", (e) => {
-      if (!vivo) return;
+      // Sin toast para esto: es una señal muda para la página de Cola, no
+      // algo que el resto del panel deba anunciar.
+      if (!vivo || e.payload === "ColaCambio") return;
       setCerrado(false);
       setEv(e.payload);
     });
     return () => { vivo = false; void un.then((f) => f()); };
   }, [token]);
 
-  if (!ev || cerrado) return null;
+  // El filtro en el listener ya descarta "ColaCambio" antes de `setEv`, pero
+  // el tipo `EventoAdmin` sigue incluyendo ese string plano — se estrecha
+  // aquí para que lo de abajo pueda usar `in` sobre las variantes objeto.
+  if (!ev || cerrado || typeof ev === "string") return null;
 
   const titulo = "SolicitudCredito" in ev
     ? `${ev.SolicitudCredito.username} pidió más cupo ${ev.SolicitudCredito.tipo}`

@@ -114,7 +114,8 @@ export type EventoAdmin =
       user_id: number; username: string; tipo: "diario" | "semanal";
       valor_actual: number; valor_propuesto: number;
     } }
-  | { SolicitudAcceso: { id: number; display_name: string; message: string } };
+  | { SolicitudAcceso: { id: number; display_name: string; message: string } }
+  | "ColaCambio";
 export interface SessionInfo {
   public_id: string; device_name: string | null; os: string | null;
   created_at: number; last_seen: number; current: boolean;
@@ -330,8 +331,29 @@ export interface WorkerView {
   trabajo: number | null;
   /** Si ya dijo `listo`. Uno que no lo ha dicho está cargando, no colgado. */
   listo: boolean;
+  dueno_actual_id: number | null;
+  dueno_actual: string | null;
+  caso_actual: string | null;
 }
-export interface QueueView { pendientes: number; en_curso: number; trabajadores: WorkerView[] }
+/** `null` en `PendienteView.razon` significa "solo espera un hueco libre" —
+ *  no confundir con una de estas tres, que sí son un motivo real. */
+export type RazonBloqueo = "bloqueado" | "desconectado" | "limite_alcanzado";
+export interface PendienteView {
+  id: number;
+  user_id: number;
+  username: string;
+  case_id: number;
+  case_nombre: string;
+  nivel: string;
+  creado_en: number;
+  razon: RazonBloqueo | null;
+}
+export interface QueueView {
+  pendientes: number;
+  en_curso: number;
+  trabajadores: WorkerView[];
+  pendientes_detalle: PendienteView[];
+}
 
 /** Lo que llega por el evento `queue-change`. El progreso no está guardado en
  *  ninguna parte: se emite y se olvida, así que si te lo pierdes, se perdió. */
