@@ -10,7 +10,13 @@ use lumi_proto::api::{CpuDevice, PatchCpuReq};
 
 pub async fn leer(State(app): State<App>, headers: HeaderMap) -> Result<Json<CpuDevice>, StatusCode> {
     require_admin(&app, &bearer(&headers))?;
-    Ok(Json(crate::hardware_cpu::dispositivo(&app)))
+    // Mismo motivo que en `routes::hardware::listar`: `dispositivo` bloquea
+    // de verdad (sysinfo, lectura de sysfs, intento de ejecutar `ryzenadj`)
+    // y no debe correr inline en el hilo del runtime asíncrono.
+    let dispositivo = tokio::task::spawn_blocking(move || crate::hardware_cpu::dispositivo(&app))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(dispositivo))
 }
 
 pub async fn aplicar(

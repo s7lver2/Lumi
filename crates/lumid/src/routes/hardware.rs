@@ -9,7 +9,18 @@ use lumi_proto::api::{HardwareDevice, PatchHardwareReq};
 
 pub async fn listar(State(app): State<App>, headers: HeaderMap) -> Result<Json<Vec<HardwareDevice>>, StatusCode> {
     require_admin(&app, &bearer(&headers))?;
-    Ok(Json(crate::hardware::dispositivos(&app)))
+    // `dispositivos` inicializa NVML y hace llamadas nativas síncronas —
+    // nada de esto es async de verdad. Ejecutarlo inline bloqueaba el hilo
+    // del runtime que le tocara: con pocos hilos (p.ej. 2 CPUs en una VM),
+    // un par de peticiones concurrentes a esta ruta bastaban para dejar sin
+    // hilos libres al runtime entero — el mismo síntoma que el freeze de
+    // login ya arreglado esta sesión, aquí con otra causa. `spawn_blocking`
+    // lo manda al pool dedicado para trabajo bloqueante, que no compite con
+    // el accept loop ni con el resto de peticiones.
+    let dispositivos = tokio::task::spawn_blocking(move || crate::hardware::dispositivos(&app))
+        .await
+        .unwrap_or_default();
+    Ok(Json(dispositivos))
 }
 
 pub async fn aplicar(
