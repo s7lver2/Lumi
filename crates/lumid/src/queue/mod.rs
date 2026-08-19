@@ -603,14 +603,18 @@ impl Queue {
                         // resueltos offline y los inliers que lo protegen.
                         let veredictos: Vec<lumi_index::agentes::Veredicto> =
                             dictamen.iter().map(|(v, _)| v.clone()).collect();
+                        // Antes relockeaba `self.geo` una vez POR CANDIDATO
+                        // dentro del `.map()` — se agarra una sola vez fuera.
+                        let geo = self.geo.lock().unwrap();
                         let para_aplicar: Vec<_> = usar
                             .iter()
                             .map(|c| {
-                                let at = self.geo.lock().unwrap().atributos(c.lat, c.lng);
+                                let at = geo.atributos(c.lat, c.lng);
                                 let inliers = respaldo_de.get(&clave(c.lat, c.lng)).map(|(i, _)| *i);
                                 (at, inliers)
                             })
                             .collect();
+                        drop(geo);
                         let veredicto_final = lumi_index::agentes::aplicar(
                             &self.agentes.lock().unwrap(), &veredictos, &para_aplicar,
                         );
@@ -1004,23 +1008,23 @@ impl Queue {
             // `limits::effective` y no la tabla: la precedencia de dos niveles
             // vive ahí y en un solo sitio.
             let l = limits::effective(&self.store, uid);
-            let bloqueado: bool = self
-                .store
-                .conn()
-                .query_row("SELECT blocked FROM users WHERE id = ?1", [uid], |r| {
-                    r.get::<_, i64>(0)
-                })
-                .map(|b| b == 1)
-                .unwrap_or(true);
-            let en_curso: i64 = self
-                .store
-                .conn()
-                .query_row(
-                    "SELECT COUNT(*) FROM analyses WHERE requested_by = ?1 AND state = 'en_curso'",
-                    [uid],
-                    |r| r.get(0),
-                )
-                .unwrap_or(0);
+            // Antes eran dos adquisiciones separadas de `store.conn()` por
+            // usuario — se agrupan bajo una sola.
+            let (bloqueado, en_curso): (bool, i64) = {
+                let c = self.store.conn();
+                let bloqueado = c
+                    .query_row("SELECT blocked FROM users WHERE id = ?1", [uid], |r| r.get::<_, i64>(0))
+                    .map(|b| b == 1)
+                    .unwrap_or(true);
+                let en_curso = c
+                    .query_row(
+                        "SELECT COUNT(*) FROM analyses WHERE requested_by = ?1 AND state = 'en_curso'",
+                        [uid],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or(0);
+                (bloqueado, en_curso)
+            };
             out.insert(
                 uid,
                 Dueno {
