@@ -117,9 +117,15 @@ fn sondear_potencia() -> (CapState, Option<String>) {
 
 /// Se comprueba una vez por conexión (`GET /v1/hello`), no en cada muestra:
 /// lanzar `nvidia-settings` tiene coste real y el resultado no cambia salvo
-/// que alguien arranque o pare un servidor X entre medias.
+/// que alguien arranque o pare un servidor X entre medias. `sondear_potencia`
+/// bloquea de verdad (NVML, incluida una escritura) y esta ruta se llama en
+/// cada intento de conexión/reconexión — el mismo motivo que ya se arregló
+/// en `routes::hardware::listar` y `routes::hardware_cpu::leer`, aquí con
+/// más impacto por la frecuencia de llamada.
 pub async fn capacidades() -> HardwareCaps {
-    let (potencia, potencia_reason) = sondear_potencia();
+    let (potencia, potencia_reason) = tokio::task::spawn_blocking(sondear_potencia)
+        .await
+        .unwrap_or_else(|_| (CapState::Off, Some("no se pudo sondear la potencia.".to_string())));
 
     let curvas_ok = tokio::process::Command::new("nvidia-settings")
         .args(["-q", "GPUGraphicsClockOffset"])
@@ -230,20 +236,30 @@ pub async fn aplicar(
             .unwrap_or_else(|| existente.as_ref().map(|p| p.curva_ventilador.clone()).unwrap_or_default()),
     };
 
-    let nvml = Nvml::init().map_err(|e| AplicarError::Nvml(e.to_string()))?;
-    let rango = rango_de(&nvml, index).ok_or_else(|| AplicarError::Nvml("no se pudo leer el rango de fábrica".into()))?;
-
-    if !req.confirmado {
-        if let Some(motivo) = fuera_de_rango(&nuevo, &rango) {
-            return Err(AplicarError::FueraDeRango(motivo));
+    // Inicializar NVML, leer el rango de fábrica y (si toca) escribir el
+    // límite de potencia son llamadas nativas síncronas — van a
+    // spawn_blocking, igual que ya se hizo con la lectura (GET) de esta
+    // misma sección.
+    let nuevo_c = nuevo.clone();
+    let confirmado = req.confirmado;
+    let quiere_potencia = req.potencia_w.is_some();
+    let rango = tokio::task::spawn_blocking(move || -> Result<RangoFabrica, AplicarError> {
+        let nvml = Nvml::init().map_err(|e| AplicarError::Nvml(e.to_string()))?;
+        let rango = rango_de(&nvml, index).ok_or_else(|| AplicarError::Nvml("no se pudo leer el rango de fábrica".into()))?;
+        if !confirmado {
+            if let Some(motivo) = fuera_de_rango(&nuevo_c, &rango) {
+                return Err(AplicarError::FueraDeRango(motivo));
+            }
         }
-    }
-
-    if req.potencia_w.is_some() {
-        let mut d = nvml.device_by_index(index).map_err(|e| AplicarError::Nvml(e.to_string()))?;
-        d.set_power_management_limit(nuevo.potencia_w * 1000)
-            .map_err(|e| AplicarError::Nvml(e.to_string()))?;
-    }
+        if quiere_potencia {
+            let mut d = nvml.device_by_index(index).map_err(|e| AplicarError::Nvml(e.to_string()))?;
+            d.set_power_management_limit(nuevo_c.potencia_w * 1000)
+                .map_err(|e| AplicarError::Nvml(e.to_string()))?;
+        }
+        Ok(rango)
+    })
+    .await
+    .map_err(|e| AplicarError::Nvml(e.to_string()))??;
 
     if req.offset_nucleo_mhz.is_some() || req.offset_memoria_mhz.is_some() || req.curva_ventilador.is_some() {
         aplicar_curvas(index, &nuevo).await.map_err(AplicarError::Curvas)?;
@@ -251,8 +267,16 @@ pub async fn aplicar(
 
     guardar_perfil(app, index, &nuevo).map_err(|e| AplicarError::Nvml(e.to_string()))?;
 
-    let sample = muestra_de(&nvml, index).ok_or_else(|| AplicarError::Nvml("no se pudo releer la tarjeta".into()))?;
+    // Releer el estado final también es NVML síncrono.
     let name = app.gpus.get(index as usize).map(|g| g.name.clone()).unwrap_or_default();
+    let sample = tokio::task::spawn_blocking(move || -> Option<GpuSample> {
+        let nvml = Nvml::init().ok()?;
+        muestra_de(&nvml, index)
+    })
+    .await
+    .map_err(|e| AplicarError::Nvml(e.to_string()))?
+    .ok_or_else(|| AplicarError::Nvml("no se pudo releer la tarjeta".into()))?;
+
     Ok(HardwareDevice { index, name, sample, rango, perfil: Some(nuevo) })
 }
 
