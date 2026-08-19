@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { api, type AdminRequest, type AvisoInfo, type Cambio, type Invite } from "../lib/api";
 import { useServer } from "../lib/store";
 import { migrarDireccion } from "../lib/session";
+import { ago } from "../lib/time";
 import { AvisoEditor } from "../admin/AvisoEditor";
 import { Avatar } from "./Avatar";
 import { Icon, type IconName } from "./Icon";
@@ -28,14 +29,6 @@ function cargarLeido(): Set<string> {
   } catch {
     return new Set();
   }
-}
-
-function ago(ts: number): string {
-  const s = Math.max(0, Math.floor(Date.now() / 1000) - ts);
-  if (s < 60) return "ahora";
-  if (s < 3600) return `${Math.floor(s / 60)} min`;
-  if (s < 86400) return `${Math.floor(s / 3600)} h`;
-  return `${Math.floor(s / 86400)} d`;
 }
 
 interface ItemBase { id: number; who: string; at: number }
