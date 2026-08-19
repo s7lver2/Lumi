@@ -555,6 +555,10 @@ pub struct Resumen {
     pub indices_bytes: i64,
     pub teselas: i64,
     pub arrancado_en: i64,
+    /// Para el chequeo de "primeros pasos" del Resumen: mismo criterio que
+    /// `routes::models::estado` (licencia junto al peso), factorizado en
+    /// `routes::models::hay_alguno_instalado`.
+    pub modelos_instalados: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -836,6 +840,29 @@ impl Cambio {
             | Cambio::Progreso { user_id, .. }
             | Cambio::Invitacion { user_id, .. }
             | Cambio::Red { user_id, .. } => *user_id,
+        }
+    }
+}
+
+/// Un evento del feed de "actividad reciente" del Resumen. Fusiona cuatro
+/// fuentes que ya existen (cuentas, análisis, avisos, solicitudes) — no hay
+/// tabla ni escritura nueva, solo lectura y orden por fecha.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "tipo", rename_all = "snake_case")]
+pub enum ActividadItem {
+    CuentaCreada { username: String, at: i64 },
+    AnalisisResuelto { id: i64, estado: String, at: i64 },
+    AvisoPublicado { extracto: String, at: i64 },
+    SolicitudResuelta { display_name: String, aprobada: bool, at: i64 },
+}
+
+impl ActividadItem {
+    pub fn at(&self) -> i64 {
+        match self {
+            ActividadItem::CuentaCreada { at, .. }
+            | ActividadItem::AnalisisResuelto { at, .. }
+            | ActividadItem::AvisoPublicado { at, .. }
+            | ActividadItem::SolicitudResuelta { at, .. } => *at,
         }
     }
 }
