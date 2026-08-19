@@ -64,7 +64,13 @@ pub struct App {
     pub admin_eventos: tokio::sync::broadcast::Sender<lumi_proto::api::EventoAdmin>,
 }
 
-#[tokio::main]
+// Explícito y no el valor por defecto de la macro: en la VM de producción
+// hay 2 CPUs, así que tokio ya arrancaría con 2 hilos de trabajo por su
+// cuenta — se deja escrito como decisión, no como casualidad, y es el
+// único sitio a tocar si el host algún día tiene más núcleos. El trabajo
+// que de verdad bloquea (NVML, sysinfo, decodificar imágenes, sysfs) no
+// compite por estos hilos: corre en el pool de `spawn_blocking`, aparte.
+#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> anyhow::Result<()> {
     // rustls 0.23 enlaza tanto `ring` como `aws-lc-rs` en cuanto dos
     // dependencias del árbol (aquí, axum-server y reqwest) piden rustls sin
