@@ -85,8 +85,11 @@ async fn main() -> anyhow::Result<()> {
     let (tls_cfg, fingerprint) = tls::load(&dir).await?;
     let store = Arc::new(store::Store::open(&dir)?);
     let gpus = gpus();
-    let queue = queue::Queue::arrancar(store.clone(), dir.clone(), &gpus);
+    // Antes se creaba después de `Queue::arrancar` — la cola necesita este
+    // remitente para avisar a la página de Cola cuando algo cambia
+    // (`EventoAdmin::ColaCambio`), así que tiene que existir primero.
     let (admin_eventos, _) = tokio::sync::broadcast::channel(64);
+    let queue = queue::Queue::arrancar(store.clone(), dir.clone(), &gpus, admin_eventos.clone());
     let app = App {
         store,
         fingerprint,

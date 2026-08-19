@@ -9,7 +9,7 @@ pub mod worker;
 
 use crate::limits;
 use crate::store::Store;
-use lumi_proto::api::{Cambio, GpuInfo, QueueView, WorkerView};
+use lumi_proto::api::{Cambio, EventoAdmin, GpuInfo, PendienteView, QueueView, RazonBloqueo, WorkerView};
 use lumi_proto::worker::Job;
 use plan::{Candidato, Dueno, Libre};
 use std::collections::HashMap;
@@ -121,6 +121,7 @@ pub struct Queue {
     estado: Mutex<Estado>,
     avisos: mpsc::UnboundedSender<()>,
     difusion: broadcast::Sender<Cambio>,
+    admin_eventos: broadcast::Sender<EventoAdmin>,
     /// Con qué relanzar. Se calcula una vez al arrancar porque no cambia
     /// mientras el daemon vive, y el vigilante lo necesita a cada rato.
     dispositivos: Vec<String>,
@@ -165,7 +166,12 @@ impl Drop for Presencia {
 }
 
 impl Queue {
-    pub fn arrancar(store: Arc<Store>, dir: PathBuf, gpus: &[GpuInfo]) -> Arc<Self> {
+    pub fn arrancar(
+        store: Arc<Store>,
+        dir: PathBuf,
+        gpus: &[GpuInfo],
+        admin_eventos: broadcast::Sender<EventoAdmin>,
+    ) -> Arc<Self> {
         let rearmados = store.rearmar_trabajos_huerfanos();
         if rearmados > 0 {
             tracing::info!("{rearmados} trabajos quedaron a medias en la caída anterior; vuelven a la cola");
@@ -205,6 +211,7 @@ impl Queue {
             }),
             avisos: tx_avisos,
             difusion,
+            admin_eventos,
             dispositivos,
             python,
             script,
@@ -319,18 +326,85 @@ impl Queue {
                 let mut v: Vec<WorkerView> = e
                     .trabajadores
                     .iter()
-                    .map(|(d, w)| WorkerView {
-                        dispositivo: d.clone(),
-                        modelo: w.modelo.clone(),
-                        trabajo: w.trabajo,
-                        listo: w.listo,
+                    .map(|(d, w)| {
+                        let (dueno_actual_id, dueno_actual, caso_actual) = w
+                            .trabajo
+                            .and_then(|id| self.detalle_de(id))
+                            .map(|(_, uid, username, caso)| (Some(uid), Some(username), Some(caso)))
+                            .unwrap_or((None, None, None));
+                        WorkerView {
+                            dispositivo: d.clone(),
+                            modelo: w.modelo.clone(),
+                            trabajo: w.trabajo,
+                            listo: w.listo,
+                            dueno_actual_id,
+                            dueno_actual,
+                            caso_actual,
+                        }
                     })
                     .collect();
                 v.sort_by(|a, b| a.dispositivo.cmp(&b.dispositivo));
                 v
             })
             .unwrap_or_default();
-        QueueView { pendientes: cuenta("pendiente"), en_curso: cuenta("en_curso"), trabajadores }
+
+        let candidatos = self.candidatos();
+        let duenos = self.duenos(&candidatos);
+        let pendientes_detalle = candidatos
+            .iter()
+            .map(|cand| {
+                let (case_id, _, username, case_nombre) = self
+                    .detalle_de(cand.analysis_id)
+                    .unwrap_or((0, cand.user_id, String::new(), String::new()));
+                let razon = duenos.get(&cand.user_id).and_then(|d| {
+                    if d.bloqueado {
+                        Some(RazonBloqueo::Bloqueado)
+                    } else if !d.conectado && !d.segundo_plano {
+                        Some(RazonBloqueo::Desconectado)
+                    } else if d.en_curso >= d.max_concurrent {
+                        Some(RazonBloqueo::LimiteAlcanzado)
+                    } else {
+                        None
+                    }
+                });
+                PendienteView {
+                    id: cand.analysis_id,
+                    user_id: cand.user_id,
+                    username,
+                    case_id,
+                    case_nombre,
+                    nivel: cand.modelo.clone(),
+                    creado_en: cand.created_at,
+                    razon,
+                }
+            })
+            .collect();
+
+        QueueView {
+            pendientes: cuenta("pendiente"),
+            en_curso: cuenta("en_curso"),
+            trabajadores,
+            pendientes_detalle,
+        }
+    }
+
+    /// Caso y dueño de un análisis, para pintarlo en la Cola. Aparte de
+    /// `Candidato`/`Dueno` (en `plan.rs`, que solo cargan lo que el
+    /// planificador necesita) porque esto es puramente para mostrar, no
+    /// para decidir el reparto.
+    fn detalle_de(&self, analysis_id: i64) -> Option<(i64, i64, String, String)> {
+        self.store
+            .conn()
+            .query_row(
+                "SELECT a.case_id, a.requested_by, u.username, c.name
+                   FROM analyses a
+                   JOIN users u ON u.id = a.requested_by
+                   JOIN cases c ON c.id = a.case_id
+                  WHERE a.id = ?1",
+                [analysis_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .ok()
     }
 
     // ---- interno ----
@@ -478,6 +552,7 @@ impl Queue {
                     // esperando un minuto para relanzarse la próxima vez.
                     e.reintento.remove(&dispositivo);
                 }
+                let _ = self.admin_eventos.send(EventoAdmin::ColaCambio);
             }
             Evento::Progreso { dispositivo, id, fase, pct } => {
                 if !self.es_suyo(&dispositivo, id) {
@@ -896,6 +971,7 @@ impl Queue {
                 estado: estado.to_string(),
             });
         }
+        let _ = self.admin_eventos.send(EventoAdmin::ColaCambio);
     }
 
     fn repartir_ahora(&self) {
