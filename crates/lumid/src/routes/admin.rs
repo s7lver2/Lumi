@@ -375,6 +375,7 @@ pub async fn resumen(
         indices_bytes,
         teselas,
         arrancado_en: app.arrancado_en,
+        modelos_instalados: crate::routes::models::hay_alguno_instalado(&app),
     }))
 }
 

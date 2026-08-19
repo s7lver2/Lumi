@@ -168,25 +168,35 @@ pub struct NivelEstado {
     pub resolucion: lumi_index::niveles::Resolucion,
 }
 
-pub async fn estado(
-    State(app): State<App>,
-    headers: HeaderMap,
-) -> Result<Json<Vec<NivelEstado>>, StatusCode> {
-    require_admin(&app, &bearer(&headers))?;
-    let niveles = app.queue.niveles.lock().unwrap().clone();
+// Instalado = LICENCIA.txt presente junto al peso — el mismo criterio que
+// lumi_pesos._licencia exige para cargar, así que "instalado" aquí nunca
+// puede decir sí cuando Python diría que no. Compartido entre `estado`
+// (necesita el conjunto entero, por nivel) y `hay_alguno_instalado` (solo
+// necesita saber si hay algo, para el Resumen).
+fn instalados_dir(app: &App) -> std::collections::HashSet<String> {
     let modelos_dir = app.store.get_meta("models_dir").unwrap_or_else(|| "runtime/pesos".to_string());
-
-    // Instalado = LICENCIA.txt presente junto al peso — el mismo criterio
-    // que lumi_pesos._licencia exige para cargar, así que "instalado" aquí
-    // nunca puede decir sí cuando Python diría que no.
-    let instalados: std::collections::HashSet<String> = std::fs::read_dir(&modelos_dir)
+    std::fs::read_dir(&modelos_dir)
         .map(|rd| {
             rd.flatten()
                 .filter(|e| e.path().join("LICENCIA.txt").exists())
                 .filter_map(|e| e.file_name().into_string().ok())
                 .collect()
         })
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
+
+/// Para el chequeo de "primeros pasos" del Resumen.
+pub fn hay_alguno_instalado(app: &App) -> bool {
+    !instalados_dir(app).is_empty()
+}
+
+pub async fn estado(
+    State(app): State<App>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<NivelEstado>>, StatusCode> {
+    require_admin(&app, &bearer(&headers))?;
+    let niveles = app.queue.niveles.lock().unwrap().clone();
+    let instalados = instalados_dir(&app);
 
     let fuera = niveles
         .iter()
