@@ -319,8 +319,12 @@ function VistaCinta({ q, token, onAbrirUsuario, onCambiado }: {
               </span>
             </div>
             <div ref={(el) => { if (el) laneRefs.current.set(w.dispositivo, el); else laneRefs.current.delete(w.dispositivo); }}
-              className="relative flex h-[62px] items-center overflow-hidden rounded-[11px] border border-border bg-panel/40 px-[44px]">
-              <div className="absolute inset-y-0 left-[44px] w-0 border-l border-dashed border-border" />
+              className={`relative flex h-[62px] items-center overflow-hidden rounded-[11px] border border-border bg-panel/40 ${
+                w.trabajo !== null ? "px-[44px]" : "justify-center"
+              }`}>
+              {w.trabajo !== null && (
+                <div className="absolute inset-y-0 left-[44px] w-0 border-l border-dashed border-border" />
+              )}
               {w.trabajo !== null ? (
                 <div key={w.trabajo}
                   className="relative flex w-[150px] items-center gap-2 rounded-[10px] border border-white/[.18] bg-elevated p-2 shadow-[0_2px_10px_rgba(0,0,0,.25)]"
