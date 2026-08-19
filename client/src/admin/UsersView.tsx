@@ -8,7 +8,7 @@ import { UserTile } from "../ui/UserTile";
 
 type Vista = "lista" | "foto" | "nombre";
 
-export function UsersView({ token }: { token: string }) {
+export function UsersView({ token, abrirUserId }: { token: string; abrirUserId?: number }) {
   const [rows, setRows] = useState<AdminUser[]>([]);
   const [detail, setDetail] = useState<UserDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +37,19 @@ export function UsersView({ token }: { token: string }) {
       .get<UserDetail>(`/v1/admin/users/${id}`, token)
       .then(setDetail)
       .catch((e) => setError(String(e)));
+
+  // Enlace directo desde la página de Cola: si llega con un usuario ya
+  // indicado, se abre su detalle y su editor de Límites sin tener que
+  // buscarlo en la lista. `UsersView` se remonta entera al cambiar de
+  // sección (AdminPanel usa `key={seccion}`), así que este efecto corre
+  // cada vez que se llega aquí desde la Cola, aunque sea el mismo usuario.
+  useEffect(() => {
+    if (abrirUserId == null) return;
+    api
+      .get<UserDetail>(`/v1/admin/users/${abrirUserId}`, token)
+      .then((d) => { setDetail(d); setEditando("usuario"); })
+      .catch((e) => setError(String(e)));
+  }, [abrirUserId, token]);
 
   async function patch(id: number, body: unknown) {
     try {
