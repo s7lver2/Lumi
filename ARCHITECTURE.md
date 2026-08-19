@@ -146,8 +146,8 @@ spec → plan → implementación, y cada una debe producir software que funcion
 | **2** | **Auth, usuarios y permisos** | Solicitudes de acceso, creación de cuentas, roles, límites por usuario, dispositivos de confianza | **Terminado** |
 | **3** | **Panel de administración · esqueleto** | Barra lateral, secciones, Resumen, API Keys; las vistas del 2 y del 6 mudadas a su sitio | **Terminado** |
 | **3a** | **Gestión de modelos** | Descargar pesos, aceptar licencias, verificar sha256, recargar registros en caliente | **Terminado** |
-| **3b** | **Rediseño de las vistas mudadas** | Solicitudes, usuarios, cola, mapa e índices por dentro | Pendiente |
-| **3c** | **La máquina** | Hardware, monitorización con histórico, modo mantenimiento, notificaciones | Pendiente |
+| **3b** | **Rediseño de las vistas mudadas** | Solicitudes, usuarios, cola, mapa e índices por dentro | Solicitudes, usuarios, cola e índices **terminados**; falta el mapa (`MapRow.tsx` sigue provisional) |
+| **3c** | **La máquina** | Hardware, monitorización con histórico, modo mantenimiento, notificaciones | Hardware, modo mantenimiento y notificaciones **terminados**; falta la monitorización con histórico (hoy solo hay lectura en vivo, sin serie temporal) |
 | **4** | **Cola y planificador** | Cientos de usuarios, pausa por desconexión, prioridades, multi-GPU y GPU+CPU | **Terminado** |
 | **5** | **Motor de inferencia** | Lumi Mini / Pro / Vision, ensemble de verificadores geométricos | **5-0, 5a, 5b y 5c terminados** (instalar un `.lumidx`; consulta → candidatos → hipótesis; modelos reales, ensemble de recuperación y verificadores geométricos compitiendo; los agentes); **5d pendiente** |
 | **5c** | **Agentes** | Idioma, sombras, dimensiones, clima, estación. Los que dan restricción geográfica dura filtran; los descriptivos solo se muestran | Terminado |

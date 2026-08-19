@@ -178,9 +178,11 @@ foundations) → 7b (indexer network origins) → 8 (index catalog) → 5 (infer
 panel) → 9 (website)`. 1/2/4/7a/7b/8 done; 6 is skeleton-only (no reverse geocoding, no project
 ownership transfer — see FUTURO.md); 5 is **5-0, 5a, 5b and 5c done** (real models, retrieval
 ensemble, competing geometric verifiers, and the agents) **with 5d pending** (annotating the corpus
-with capture dates so season and time-of-day can filter instead of only describing); 3/9 not
-started. API Keys admite ahora emitir claves de programa (autoservicio o en nombre de otro) y
-un modo Zero Trust opcional (IP + clase de dispositivo).
+with capture dates so season and time-of-day can filter instead of only describing); 3 is
+**3 and 3a done**, **3b and 3c mostly done** (3b: solicitudes/usuarios/cola/índices done, only
+the map view is still provisional; 3c: hardware/mantenimiento/notificaciones done, historical
+monitoring still missing); 9 not started. API Keys admite ahora emitir claves de programa
+(autoservicio o en nombre de otro) y un modo Zero Trust opcional (IP + clase de dispositivo).
 
 ## Conventions
 
