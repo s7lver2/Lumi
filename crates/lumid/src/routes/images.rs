@@ -23,6 +23,39 @@ fn dir_for(app: &App, project_id: i64) -> std::path::PathBuf {
     app.dir.join("projects").join(project_id.to_string())
 }
 
+struct ImagenProcesada {
+    mime: String,
+    w: i64,
+    h: i64,
+    ex: crate::exif::ExifRead,
+    sha: String,
+    thumb: Option<Vec<u8>>,
+}
+
+/// Todo el trabajo de CPU de una subida: detectar formato, decodificar,
+/// generar la miniatura, leer EXIF y calcular el hash. Nada de esto es
+/// async de verdad — se llama desde `upload` a través de
+/// `tokio::task::spawn_blocking`, no inline en el hilo del runtime.
+fn procesar_imagen(data: &[u8], filename: &str) -> Result<ImagenProcesada, String> {
+    let fmt = image::guess_format(data).map_err(|_| format!("{filename} no es una imagen"))?;
+    let decoded = image::load_from_memory_with_format(data, fmt)
+        .map_err(|e| format!("{filename}: {e}"))?;
+    let (w, h) = (decoded.width() as i64, decoded.height() as i64);
+    let mime = fmt.to_mime_type().to_string();
+    let ex = crate::exif::read(data);
+    let sha = format!("{:x}", Sha256::digest(data));
+    let thumb = {
+        let t = decoded.thumbnail(THUMB, THUMB);
+        let mut buf = std::io::Cursor::new(Vec::new());
+        if t.to_rgb8().write_to(&mut buf, image::ImageFormat::Jpeg).is_ok() {
+            Some(buf.into_inner())
+        } else {
+            None
+        }
+    };
+    Ok(ImagenProcesada { mime, w, h, ex, sha, thumb })
+}
+
 fn usage(app: &App, uid: i64) -> Usage {
     Usage {
         used_bytes: crate::projects::used_bytes(&app.store, uid),
@@ -223,17 +256,15 @@ pub async fn upload(
             }
         }
 
-        // Descodificar ANTES de escribir nada: si no es una imagen, el disco
-        // no se toca y se dice qué se detectó de verdad.
-        let fmt = image::guess_format(&data).map_err(|_| {
-            err(StatusCode::UNSUPPORTED_MEDIA_TYPE, &format!("{filename} no es una imagen"))
-        })?;
-        let decoded = image::load_from_memory_with_format(&data, fmt)
-            .map_err(|e| err(StatusCode::UNSUPPORTED_MEDIA_TYPE, &format!("{filename}: {e}")))?;
-        let (w, h) = (decoded.width() as i64, decoded.height() as i64);
-        let mime = fmt.to_mime_type().to_string();
-        let ex = crate::exif::read(&data);
-        let sha = format!("{:x}", Sha256::digest(&data));
+        // Decodificar, recortar la miniatura, leer EXIF y calcular el hash
+        // son CPU pura, no red — van al pool de `spawn_blocking` para no
+        // acaparar los pocos hilos del runtime asíncrono.
+        let data_proc = data.clone();
+        let filename_proc = filename.clone();
+        let procesada = tokio::task::spawn_blocking(move || procesar_imagen(&data_proc, &filename_proc))
+            .await
+            .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
+            .map_err(|msg| err(StatusCode::UNSUPPORTED_MEDIA_TYPE, &msg))?;
 
         let id = {
             let c = app.store.conn();
@@ -243,8 +274,8 @@ pub async fn upload(
                   exif_json, exif_lat, exif_lng, created_at)
                  VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
                 rusqlite::params![
-                    case_id, uid, filename, data.len() as i64, sha, w, h, mime,
-                    ex.json, ex.lat, ex.lng, now()
+                    case_id, uid, filename, data.len() as i64, procesada.sha, procesada.w, procesada.h,
+                    procesada.mime, procesada.ex.json, procesada.ex.lat, procesada.ex.lng, now()
                 ],
             )
             .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
@@ -255,10 +286,8 @@ pub async fn upload(
         std::fs::write(dir.join(id.to_string()), &data)
             .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
         // Y la miniatura al lado, siempre JPEG: la tira no necesita más.
-        let thumb = decoded.thumbnail(THUMB, THUMB);
-        let mut buf = std::io::Cursor::new(Vec::new());
-        if thumb.to_rgb8().write_to(&mut buf, image::ImageFormat::Jpeg).is_ok() {
-            let _ = std::fs::write(dir.join(format!("{id}.thumb")), buf.into_inner());
+        if let Some(thumb) = procesada.thumb {
+            let _ = std::fs::write(dir.join(format!("{id}.thumb")), thumb);
         }
 
         let img = app
