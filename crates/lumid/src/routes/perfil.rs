@@ -41,7 +41,13 @@ pub async fn subir_mi_avatar(
 ) -> Result<StatusCode, Fail> {
     let (uid, _) = require_session(&app, &bearer(&headers)).map_err(|c| err(c, "sesión inválida"))?;
     let data = primer_campo(&mut mp).await?;
-    perfil::guardar_recortada(&data, perfil::AVATAR_SIDE, perfil::AVATAR_SIDE, &perfil::ruta_avatar_usuario(&app.dir, uid))
+    // Decodificar y recortar (Lanczos3, el filtro más caro) es CPU pura —
+    // se manda al pool de `spawn_blocking`, mismo motivo que la subida de
+    // imágenes de caso.
+    let ruta = perfil::ruta_avatar_usuario(&app.dir, uid);
+    tokio::task::spawn_blocking(move || perfil::guardar_recortada(&data, perfil::AVATAR_SIDE, perfil::AVATAR_SIDE, &ruta))
+        .await
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
         .map_err(|e| err(StatusCode::UNSUPPORTED_MEDIA_TYPE, &format!("no es una imagen válida: {e}")))?;
     app.store
         .conn()
@@ -76,7 +82,10 @@ pub async fn ver_avatar_usuario(
 pub async fn subir_avatar_servidor(State(app): State<App>, headers: HeaderMap, mut mp: Multipart) -> Result<StatusCode, Fail> {
     require_admin(&app, &bearer(&headers)).map_err(|c| err(c, "hace falta ser administrador"))?;
     let data = primer_campo(&mut mp).await?;
-    perfil::guardar_recortada(&data, perfil::AVATAR_SIDE, perfil::AVATAR_SIDE, &perfil::ruta_avatar_servidor(&app.dir))
+    let ruta = perfil::ruta_avatar_servidor(&app.dir);
+    tokio::task::spawn_blocking(move || perfil::guardar_recortada(&data, perfil::AVATAR_SIDE, perfil::AVATAR_SIDE, &ruta))
+        .await
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
         .map_err(|e| err(StatusCode::UNSUPPORTED_MEDIA_TYPE, &format!("no es una imagen válida: {e}")))?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -90,7 +99,10 @@ pub async fn borrar_avatar_servidor(State(app): State<App>, headers: HeaderMap) 
 pub async fn subir_banner_servidor(State(app): State<App>, headers: HeaderMap, mut mp: Multipart) -> Result<StatusCode, Fail> {
     require_admin(&app, &bearer(&headers)).map_err(|c| err(c, "hace falta ser administrador"))?;
     let data = primer_campo(&mut mp).await?;
-    perfil::guardar_recortada(&data, perfil::BANNER_W, perfil::BANNER_H, &perfil::ruta_banner_servidor(&app.dir))
+    let ruta = perfil::ruta_banner_servidor(&app.dir);
+    tokio::task::spawn_blocking(move || perfil::guardar_recortada(&data, perfil::BANNER_W, perfil::BANNER_H, &ruta))
+        .await
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
         .map_err(|e| err(StatusCode::UNSUPPORTED_MEDIA_TYPE, &format!("no es una imagen válida: {e}")))?;
     Ok(StatusCode::NO_CONTENT)
 }
