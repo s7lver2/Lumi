@@ -10,7 +10,7 @@ import { ApiKeysView } from "./ApiKeysView";
 import { SecurityView } from "./SecurityView";
 import { ModelosView } from "./ModelosView";
 import { ModelToasts } from "./ModelToasts";
-import { QueueRow } from "./QueueRow";
+import { ColaView } from "./ColaView";
 import { RequestsView } from "./RequestsView";
 import { ResumenView } from "./ResumenView";
 import { CustomizacionView } from "./CustomizacionView";
@@ -25,6 +25,7 @@ export function AdminPanel({ token }: { token: string }) {
   const [seccion, setSeccion] = useState<Seccion>("resumen");
   const [cuentas, setCuentas] = useState<Partial<Record<Seccion, { n: number; espera?: boolean }>>>({});
   const [licenciasPendientes, setLicenciasPendientes] = useState(false);
+  const [abrirUserId, setAbrirUserId] = useState<number | undefined>(undefined);
   const capIndices = useServer((s) => s.hello?.capabilities.find((c) => c.id === "indices"));
   // Vive aquí, no dentro de SecurityView, para que un cambio se refleje al
   // instante sin depender de que la propia vista vuelva a pedirlo. (La tira
@@ -59,14 +60,15 @@ export function AdminPanel({ token }: { token: string }) {
           : seccion === "resumen" ? <ResumenView token={token} onIr={setSeccion} />
           : seccion === "solicitudes" ? <Seccion titulo="Solicitudes" grupo="Personas">
               <RequestsView token={token} /></Seccion>
-          : seccion === "usuarios" ? <UsersView token={token} />
+          : seccion === "usuarios" ? <UsersView token={token} abrirUserId={abrirUserId} />
           : seccion === "seguridad" ? <SecurityView token={token} ajustes={seguridad} onCambiar={setSeguridad} />
           : seccion === "claves" ? <ApiKeysView token={token} onIr={setSeccion} />
           : seccion === "personalizacion" ? <CustomizacionView token={token} />
           : seccion === "red" ? <NetworkView token={token} />
           : seccion === "modelos" ? <ModelosView token={token} onLicenciasPendientesChange={setLicenciasPendientes} />
-          : seccion === "cola" ? <Seccion titulo="Cola" grupo="Operación">
-              <QueueRow token={token} /></Seccion>
+          : seccion === "cola" ? (
+              <ColaView token={token} onAbrirUsuario={(id) => { setAbrirUserId(id); setSeccion("usuarios"); }} />
+            )
           : seccion === "notificaciones" ? <NotificacionesView token={token} />
           : seccion === "hardware" ? <HardwareView token={token} />
                     : <Seccion titulo="Índices instalados" grupo="Servidor"
