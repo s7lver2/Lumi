@@ -176,13 +176,27 @@ pub async fn aplicar(app: &App, req: &PatchCpuReq) -> Result<CpuDevice, AplicarC
     }
 
     match fab.as_str() {
-        "intel" => escribir_rapl(&nuevo).map_err(AplicarCpuError::Escritura)?,
+        "intel" => {
+            // Escritura síncrona a sysfs — mismo motivo que el resto de
+            // este barrido: va a spawn_blocking en vez de correr inline.
+            let nuevo_c = nuevo.clone();
+            tokio::task::spawn_blocking(move || escribir_rapl(&nuevo_c))
+                .await
+                .map_err(|e| AplicarCpuError::Escritura(e.to_string()))?
+                .map_err(AplicarCpuError::Escritura)?;
+        }
         "amd" => escribir_ryzenadj(&nuevo).await.map_err(AplicarCpuError::Escritura)?,
         _ => return Err(AplicarCpuError::Escritura("fabricante de CPU no reconocido".into())),
     }
 
     guardar_perfil(app, &nuevo).map_err(|e| AplicarCpuError::Escritura(e.to_string()))?;
-    Ok(dispositivo(app))
+
+    // `dispositivo` también bloquea (sysinfo, sysfs, intento de ejecutar
+    // `ryzenadj`) — mismo motivo que ya se aplicó a su GET hoy.
+    let app_c = app.clone();
+    tokio::task::spawn_blocking(move || dispositivo(&app_c))
+        .await
+        .map_err(|e| AplicarCpuError::Escritura(e.to_string()))
 }
 
 fn escribir_rapl(perfil: &CpuProfile) -> Result<(), String> {
