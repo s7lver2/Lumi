@@ -363,6 +363,12 @@ pub async fn resumen(
         )
         .unwrap_or((0, 0, 0));
 
+    // `hay_alguno_instalado` vuelve a pedir `app.store.conn()` por dentro
+    // (vía `get_meta`) — con `c` todavía viva, ese `std::sync::Mutex` no
+    // reentrante se bloquearía contra sí mismo para siempre. Hay que
+    // soltarlo antes de llamar.
+    drop(c);
+
     Ok(Json(lumi_proto::api::Resumen {
         solicitudes_pendientes: pendientes,
         solicitud_mas_antigua: mas_antigua,
