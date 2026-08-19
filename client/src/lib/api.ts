@@ -341,6 +341,12 @@ export type Cambio =
   | { tipo: "invitacion"; project_id: number; project_name: string; invited_by: string }
   | { tipo: "red"; nuevo_addr: string };
 
+export type ActividadItem =
+  | { tipo: "cuenta_creada"; username: string; at: number }
+  | { tipo: "analisis_resuelto"; id: number; estado: string; at: number }
+  | { tipo: "aviso_publicado"; extracto: string; at: number }
+  | { tipo: "solicitud_resuelta"; display_name: string; aprobada: boolean; at: number };
+
 export interface Resumen {
   solicitudes_pendientes: number;
   /** Epoch de la más antigua sin resolver. `null` si no hay ninguna. */
@@ -355,6 +361,7 @@ export interface Resumen {
   indices_bytes: number;
   teselas: number;
   arrancado_en: number;
+  modelos_instalados: boolean;
 }
 
 const call = (method: string, path: string, body: unknown, token?: string, ticket?: string) =>
@@ -394,4 +401,5 @@ export const api = {
   serverProfileGet: (token: string) => api.get<ServerProfileSettings>("/v1/admin/server-profile", token),
   serverProfilePatch: (patch: Partial<Pick<ServerProfileSettings, "title" | "description">>, token: string) =>
     api.patch<ServerProfileSettings>("/v1/admin/server-profile", patch, token),
+  actividadGet: (token: string) => api.get<ActividadItem[]>("/v1/admin/actividad", token),
 };
