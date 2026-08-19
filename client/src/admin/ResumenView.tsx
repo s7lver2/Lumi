@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type Resumen } from "../lib/api";
+import { api, type Resumen, type ServerProfileSettings } from "../lib/api";
 import type { Seccion } from "./Sidebar";
+import { ActividadFeed } from "./ActividadFeed";
+import { HardwareGlance } from "./HardwareGlance";
+import { PrimerosPasos, type Chequeo } from "./PrimerosPasos";
+import { QueueRow } from "./QueueRow";
+import { ResumenHeader } from "./ResumenHeader";
 
 const KB = 1024;
 function tamano(bytes: number): string {
@@ -88,24 +93,31 @@ function Esqueleto() {
 
 export function ResumenView({ token, onIr }: { token: string; onIr: (s: Seccion) => void }) {
   const [r, setR] = useState<Resumen | null>(null);
+  const [perfil, setPerfil] = useState<ServerProfileSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api.get<Resumen>("/v1/admin/resumen", token).then(setR).catch((e) => setError(String(e)));
+    api.serverProfileGet(token).then(setPerfil).catch(() => setPerfil(null));
   }, [token]);
 
   if (error) return <p className="px-6 pt-5 text-[11px] text-danger-fg">{error}</p>;
   if (!r) return <Esqueleto />;
 
+  const chequeos: Chequeo[] = [
+    { label: "Perfil del servidor (foto, título, descripción)", hecho: !!perfil?.title, ir: "personalizacion" },
+    { label: "Instala al menos un modelo para poder analizar", hecho: r.modelos_instalados, ir: "modelos" },
+    { label: "Instala un índice para habilitar la búsqueda geográfica", hecho: r.indices > 0, ir: "indices" },
+    { label: "Sigues siendo el único usuario del servidor", hecho: r.usuarios > 1, ir: "solicitudes" },
+  ];
+
   return (
     <div className="px-6 pb-8 pt-5">
       <span className="mb-1.5 block text-[8.5px] uppercase tracking-[.15em] text-subtle">Servidor</span>
-      <div className="flex items-end gap-3 border-b border-border pb-[11px]">
-        <h2 className="text-[21px] font-medium leading-none tracking-[-.025em]">Resumen</h2>
-        <span className="ml-auto pb-0.5 font-mono text-[10.5px] text-subtle">
-          en marcha desde hace {desdeHace(r.arrancado_en)}
-        </span>
-      </div>
+
+      <PrimerosPasos chequeos={chequeos} onIr={onIr} />
+
+      <ResumenHeader token={token} arrancadoEn={r.arrancado_en} perfil={perfil} />
 
       <div className="mt-[19px] grid grid-cols-4 gap-3">
         <Ficha i={0} k="Pendiente de ti" valor={<Cifra n={r.solicitudes_pendientes} />}
@@ -135,6 +147,13 @@ export function ResumenView({ token, onIr }: { token: string; onIr: (s: Seccion)
           </div>
         ))}
       </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <QueueRow token={token} />
+        <HardwareGlance token={token} />
+      </div>
+
+      <ActividadFeed token={token} />
     </div>
   );
 }
