@@ -251,8 +251,17 @@ pub async fn reaplicar_al_arrancar(app: &App) {
 /// para saber si el proceso puede escribir ahí (WSL2 podría, en teoría,
 /// tener el sysfs montado pero de solo lectura — se prueba, no se adivina).
 pub async fn capacidades() -> (CapState, Option<String>, CapState, Option<String>, CapState, Option<String>) {
-    let fab = fabricante();
-    let hay_hwmon = !temperaturas_por_nucleo().is_empty();
+    // `fabricante`, `temperaturas_por_nucleo` y `sondear_rapl` leen sysfs de
+    // forma síncrona; igual que en `hardware::capacidades`, esto se llama en
+    // cada `/v1/hello` y no puede correr inline en un hilo del runtime.
+    let (fab, hay_hwmon, rapl_ok) = tokio::task::spawn_blocking(|| {
+        let fab = fabricante();
+        let hay_hwmon = !temperaturas_por_nucleo().is_empty();
+        let rapl_ok = fab == "intel" && sondear_rapl();
+        (fab, hay_hwmon, rapl_ok)
+    })
+    .await
+    .unwrap_or_else(|_| (String::new(), false, false));
     let (temp, temp_reason) = if hay_hwmon {
         (CapState::On, None)
     } else {
@@ -261,7 +270,7 @@ pub async fn capacidades() -> (CapState, Option<String>, CapState, Option<String
 
     let (intel, intel_reason) = if fab != "intel" {
         (CapState::Off, Some("Esta CPU es de otro fabricante.".to_string()))
-    } else if sondear_rapl() {
+    } else if rapl_ok {
         (CapState::On, None)
     } else {
         (CapState::Off, Some("No hay /sys/class/powercap/intel-rapl:0 con permiso de escritura. En WSL2 esto ocurre siempre.".to_string()))
