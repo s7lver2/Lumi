@@ -29,10 +29,16 @@ pub async fn paquete(app: &crate::App, ficha: &Ficha, raiz: &Path) -> Result<usi
     // Al revés —vectores sin fila— dejaría puntos que no se pueden atribuir.
     let mut ids = Vec::with_capacity(filas.len());
     {
-        let c = app.store.conn();
+        // Una sola transacción para todo el paquete: antes cada INSERT era
+        // su propio commit/fsync, y mientras duraba (miles de filas en un
+        // índice grande) el mutex único de `Store::conn()` dejaba a TODO
+        // el daemon con la base de datos bloqueada — mismo síntoma que el
+        // freeze de hoy, aquí disparado por instalar un índice.
+        let mut c = app.store.conn();
+        let tx = c.transaction()?;
         for (ruta, lat, lng, quadkey, fuente) in &filas {
             let abs = raiz.join("imagenes").join(ruta);
-            c.execute(
+            tx.execute(
                 "INSERT INTO reference_images (paquete, ruta, lat, lng, quadkey, fuente)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 rusqlite::params![
@@ -44,8 +50,9 @@ pub async fn paquete(app: &crate::App, ficha: &Ficha, raiz: &Path) -> Result<usi
                     fuente
                 ],
             )?;
-            ids.push(c.last_insert_rowid());
+            ids.push(tx.last_insert_rowid());
         }
+        tx.commit()?;
     }
 
     // Una colección por capa. Antes se tomaba `capas.first()` y las demás se
