@@ -279,7 +279,15 @@ de firma Ed25519 en `lumi-proto` que podría reusarse para firmar releases.
 
 Es el subsistema 3 y está planificado, no aparcado. Se anota aquí solo lo que se le ha ido
 prometiendo por el camino: rediseñar desde cero las vistas provisionales de solicitudes y
-usuarios del subsistema 2, la fila de configuración del mapa del subsistema 6
+usuarios del subsistema 2, la fila de configuración del mapa del subsistema 6.
+
+### Pestaña de Logs en el panel de administración
+
+Falta una vista que enseñe el log del propio `lumid` (y, si tiene sentido, el del trabajador
+de inferencia) desde dentro del panel — hoy la única forma de verlo es `journalctl -u lumid`
+a mano en la máquina del servidor. Ninguna spec la ha cubierto todavía: falta decidir si es
+solo lectura de lo que ya escribe `tracing` (¿a un fichero rotado, o leyendo `journalctl` si
+existe?), cuánto se retiene, y si hace falta filtrar por nivel/módulo.
 
 ### Hardware: control de ventilador de CPU (PWM de placa base)
 
