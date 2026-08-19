@@ -166,6 +166,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/users/:id", get(routes::admin::get_user).patch(routes::admin::patch_user))
         .route("/v1/admin/limits", get(routes::admin::get_limits).patch(routes::admin::patch_limits))
         .route("/v1/admin/resumen", get(routes::admin::resumen))
+        .route("/v1/admin/actividad", get(routes::actividad::get))
         .route(
             "/v1/admin/network",
             get(routes::network::get).patch(routes::network::patch),
