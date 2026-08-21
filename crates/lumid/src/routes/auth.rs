@@ -122,11 +122,26 @@ pub async fn login(
         // ver el "Fix" sobre `phc_ficticio` — la diferencia de tiempo entre
         // esta rama y la de contraseña incorrecta es un canal de enumeración
         // aunque el mensaje de error sea idéntico.
-        let _ = verify_password(&req.password, lumi_proto::crypto::phc_ficticio());
+        let password = req.password.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            verify_password(&password, lumi_proto::crypto::phc_ficticio())
+        })
+        .await;
         registrar_intento_fallido(peer);
         return Err(denied);
     };
-    if !verify_password(&req.password, &phc) {
+    // Argon2id es deliberadamente lento (cientos de ms de CPU). Ejecutarlo
+    // inline en la tarea async se comía uno de los pocos hilos del runtime
+    // (2 en la VM de producción) durante todo ese rato — con un par de
+    // logins concurrentes bastaba para dejar sin hilos libres al resto de
+    // peticiones, aunque no tocaran la base de datos. `spawn_blocking` lo
+    // manda al pool dedicado a trabajo bloqueante.
+    let password = req.password.clone();
+    let phc_check = phc.clone();
+    let verificado = tokio::task::spawn_blocking(move || verify_password(&password, &phc_check))
+        .await
+        .unwrap_or(false);
+    if !verificado {
         registrar_intento_fallido(peer);
         return Err(denied);
     }
@@ -247,10 +262,20 @@ pub async fn change_password(
     // Nadie puede leer ni fijar la contraseña de otro: el admin solo exige que
     // se cambie. Por eso aquí SIEMPRE se pide la actual, incluso cuando el
     // cambio viene forzado.
-    if !verify_password(&req.current, &phc) {
+    // Dos Argon2id seguidos (verificar + hashear la nueva): mismo motivo que
+    // en `login`, al pool bloqueante para no comerse un hilo del runtime.
+    let current = req.current.clone();
+    let phc_check = phc.clone();
+    let verificado = tokio::task::spawn_blocking(move || verify_password(&current, &phc_check))
+        .await
+        .unwrap_or(false);
+    if !verificado {
         return Err((StatusCode::UNAUTHORIZED, "la contraseña actual no es correcta".into()));
     }
-    let new_phc = hash_password(&req.new)
+    let nueva = req.new.clone();
+    let new_phc = tokio::task::spawn_blocking(move || hash_password(&nueva))
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let c = app.store.conn();
     c.execute(

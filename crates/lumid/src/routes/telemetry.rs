@@ -16,8 +16,23 @@ pub async fn sse(State(app): State<App>, headers: HeaderMap) -> Sse<impl Stream<
     let visto_por = require_session(&app, &bearer(&headers)).ok();
     let stream = async_stream::stream! {
         loop {
-            let s = telemetry::sample(&app, visto_por);
-            yield Ok(Event::default().json_data(&s).unwrap_or_default());
+            // `sample()` inicializa NVML, refresca sysinfo y consulta la base
+            // de datos: nada de eso es async de verdad, y este bucle corre
+            // cada segundo por CADA cliente con esta conexión abierta (el
+            // panel de escritorio la deja abierta todo el rato). Ejecutarlo
+            // inline es el mismo síntoma que ya se arregló en `hardware.rs` —
+            // aquí, en vez de una petición puntual, se repite sin parar y
+            // escala con el número de usuarios conectados. `spawn_blocking`
+            // lo manda al pool dedicado, que no compite con el resto de
+            // peticiones ni con el accept loop.
+            let app2 = app.clone();
+            // Si la tarea bloqueante llega a entrar en pánico (no debería:
+            // `sample()` no lo hace), se salta esta muestra en vez de
+            // inventarse una — el `KeepAlive` de más abajo sostiene la
+            // conexión igualmente.
+            if let Ok(s) = tokio::task::spawn_blocking(move || telemetry::sample(&app2, visto_por)).await {
+                yield Ok(Event::default().json_data(&s).unwrap_or_default());
+            }
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
     };
