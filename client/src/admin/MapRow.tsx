@@ -3,10 +3,7 @@ import { api, type MapConfig, type MapTheme } from "../lib/api";
 import { Icon } from "../ui/Icon";
 import { MapThemePreview } from "./MapThemePreview";
 
-/** PROVISIONAL. El subsistema 3 rehace el panel entero; esto solo tiene que
- *  funcionar y usar los tokens.
- *
- *  Ya no hay campo de URL: un enlace mal copiado de Mapbox Studio (la página
+/** Ya no hay campo de URL: un enlace mal copiado de Mapbox Studio (la página
  *  de vista previa, o el esquema `mapbox://` sin traducir) rompió el mapa
  *  tres veces distintas antes de este cambio. El catálogo es cerrado — se
  *  elige un tema, no se pega una dirección. */
@@ -55,11 +52,14 @@ export function MapRow({ token }: { token: string }) {
         <p className="text-[11px] text-subtle">cargando</p>
       ) : (
         <div className="grid grid-cols-3 gap-2.5">
-          {themes.map((t) => (
+          {themes.map((t, i) => (
             <button key={t.id} onClick={() => void pick(t.id)}
+              style={{ animation: `jg-fade-rise .4s cubic-bezier(.16,1,.3,1) ${i * 0.05}s both` }}
               className={`jg-press group relative isolate h-[104px] overflow-hidden rounded-lg border text-left
-                transition-colors duration-300 ease-expo ${
-                theme === t.id ? "border-white/[.4]" : "border-border hover:border-white/20"
+                transition-all duration-300 ease-expo ${
+                theme === t.id
+                  ? "border-white/[.4] shadow-[0_0_0_3px_rgba(255,255,255,.08)]"
+                  : "border-border hover:border-white/20"
               }`}>
               <MapThemePreview themeId={t.id} />
               <div className="absolute inset-0 -z-10 bg-elevated" />
@@ -87,9 +87,9 @@ export function MapRow({ token }: { token: string }) {
       {/* El motor no es una preferencia estética: es dónde vive la clave.
           Por eso el compromiso va escrito en la propia opción y no en una
           ayuda que nadie abre. */}
-      <div className="mt-3.5 border-t border-border pt-3">
-        <p className="text-[12.5px] text-fg">Quién dibuja</p>
-        <div className="mt-2 grid grid-cols-2 gap-2">
+      <div className="mt-4 border-t border-border pt-3.5">
+        <p className="mb-2 text-[12.5px] text-fg">Quién dibuja</p>
+        <div className="grid grid-cols-2 gap-2.5">
           {([
             {
               id: "maplibre" as const, nombre: "MapLibre · por el servidor",
