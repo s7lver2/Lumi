@@ -257,6 +257,16 @@ CREATE TABLE IF NOT EXISTS cpu_profile (
     pl2_w      REAL NOT NULL,
     updated_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS telemetry_historial (
+    id           INTEGER PRIMARY KEY,
+    created_at   INTEGER NOT NULL,
+    cpu_pct      REAL NOT NULL,
+    ram_used_mb  INTEGER NOT NULL,
+    disk_free_mb INTEGER NOT NULL,
+    queue_depth  INTEGER NOT NULL,
+    gpus_json    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_telemetry_historial_created_at ON telemetry_historial (created_at);
 ";
 
 pub struct Store(Mutex<Connection>);
