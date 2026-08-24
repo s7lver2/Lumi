@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { api, type LogSettings, type MuestraHistorial, type Problema, type SaludView } from "../lib/api";
 import { startLogsStream } from "../lib/bridge";
 import { Icon } from "../ui/Icon";
+import { Select } from "../ui/Select";
 import { Seccion } from "./AdminPanel";
 import type { Seccion as SeccionId } from "./Sidebar";
 
@@ -235,13 +236,13 @@ function LogsPane({ token, senal }: { token: string; senal: number }) {
   return (
     <div>
       <div className="mb-3 flex items-center gap-2.5">
-        <select value={nivelMin} onChange={(e) => setNivelMin(Number(e.target.value) as Nivel)}
-          className="rounded-[7px] border border-border bg-panel px-2.5 py-1.5 text-[10.5px] text-fg outline-none">
-          <option value={0}>todos los niveles</option>
-          <option value={1}>INFO y superior</option>
-          <option value={2}>WARN y superior</option>
-          <option value={3}>solo ERROR</option>
-        </select>
+        <Select className="w-[150px]" value={String(nivelMin)} onChange={(v) => setNivelMin(Number(v) as Nivel)}
+          options={[
+            { value: "0", label: "todos los niveles" },
+            { value: "1", label: "INFO y superior" },
+            { value: "2", label: "WARN y superior" },
+            { value: "3", label: "solo ERROR" },
+          ]} />
         <input value={modulo} onChange={(e) => setModulo(e.target.value)}
           placeholder="filtrar por módulo (ej. lumid::queue)"
           className="w-[240px] rounded-[7px] border border-border bg-panel px-2.5 py-1.5 text-[10.5px]
@@ -310,21 +311,17 @@ function AjustesLog({ token, onCerrar }: { token: string; onCerrar: () => void }
         <p className="mb-2.5 text-[11px] text-fg">Qué se escribe en el log</p>
         {error && <p className="mb-2 text-[10.5px] text-danger-fg">{error}</p>}
         {!ajustes ? <p className="text-[10.5px] text-subtle">cargando</p> : (
-          <div className="max-h-[340px] overflow-y-auto">
-            <div className="mb-2 flex items-center justify-between border-b border-border pb-2">
+          <div>
+            <div className="mb-1.5 flex items-center justify-between gap-3 border-b border-border pb-2.5">
               <span className="text-[10.5px] text-muted">Base (todo lo demás)</span>
-              <select value={ajustes.base} onChange={(e) => void cambiarBase(e.target.value)}
-                className="rounded-[6px] border border-border bg-elevated px-2 py-1 text-[10px] text-fg outline-none">
-                {ajustes.niveles.map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
+              <Select className="w-[104px]" value={ajustes.base} onChange={(v) => void cambiarBase(v)}
+                options={ajustes.niveles.map((n) => ({ value: n, label: n }))} />
             </div>
             {ajustes.categorias.map((c) => (
-              <div key={c.id} className="flex items-center justify-between py-1.5">
+              <div key={c.id} className="flex items-center justify-between gap-3 py-[5px]">
                 <span className="text-[10.5px] text-muted">{c.label}</span>
-                <select value={c.nivel} onChange={(e) => void cambiarCategoria(c.id, e.target.value)}
-                  className="rounded-[6px] border border-border bg-elevated px-2 py-1 text-[10px] text-fg outline-none">
-                  {ajustes.niveles.map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
+                <Select className="w-[104px]" value={c.nivel} onChange={(v) => void cambiarCategoria(c.id, v)}
+                  options={ajustes.niveles.map((n) => ({ value: n, label: n }))} />
               </div>
             ))}
           </div>
