@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, type MuestraHistorial, type Problema, type SaludView } from "../lib/api";
+import { api, type LogSettings, type MuestraHistorial, type Problema, type SaludView } from "../lib/api";
 import { startLogsStream } from "../lib/bridge";
 import { Icon } from "../ui/Icon";
 import { Seccion } from "./AdminPanel";
@@ -185,6 +185,7 @@ function LogsPane({ token, senal }: { token: string; senal: number }) {
   const [modulo, setModulo] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [resaltado, setResaltado] = useState(false);
+  const [ajustesAbiertos, setAjustesAbiertos] = useState(false);
   const paneRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -246,6 +247,15 @@ function LogsPane({ token, senal }: { token: string; senal: number }) {
           className="w-[240px] rounded-[7px] border border-border bg-panel px-2.5 py-1.5 text-[10.5px]
             text-fg outline-none placeholder:text-subtle" />
         <span className="ml-auto font-mono text-[9.5px] text-subtle">{visibles.length} líneas</span>
+        <div className="relative">
+          <button onClick={() => setAjustesAbiertos((v) => !v)}
+            className={`jg-press flex items-center gap-1.5 rounded-[7px] border px-2.5 py-1.5 text-[10.5px]
+              ${ajustesAbiertos ? "border-white/30 bg-elevated text-fg" : "border-border bg-panel text-subtle"}`}>
+            <Icon name="ajustes" size={12} />
+            ajustes
+          </button>
+          {ajustesAbiertos && <AjustesLog token={token} onCerrar={() => setAjustesAbiertos(false)} />}
+        </div>
       </div>
       {error && <p className="mb-2 text-[11px] text-danger-fg">{error}</p>}
       <div ref={paneRef} className={`h-[520px] overflow-y-auto rounded-xl border bg-[#0c0d0f] py-2.5
@@ -264,6 +274,63 @@ function LogsPane({ token, senal }: { token: string; senal: number }) {
         ))}
       </div>
     </div>
+  );
+}
+
+/** Desplegable de ajustes de log: un nivel base para todo lo que no tiene
+ *  categoría propia (incluidas las dependencias) y un nivel por categoría,
+ *  aplicados en caliente en el propio daemon (`tracing_subscriber::reload`,
+ *  sin reiniciar). Cada cambio se guarda solo, no hay botón de "guardar" —
+ *  mismo criterio que el resto de interruptores del panel. */
+function AjustesLog({ token, onCerrar }: { token: string; onCerrar: () => void }) {
+  const [ajustes, setAjustes] = useState<LogSettings | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.logSettingsGet(token).then(setAjustes).catch((e) => setError(String(e)));
+  }, [token]);
+
+  async function cambiarBase(nivel: string) {
+    setAjustes((a) => (a ? { ...a, base: nivel } : a));
+    try { setAjustes(await api.logSettingsPatch({ base: nivel }, token)); }
+    catch (e) { setError(String(e)); }
+  }
+  async function cambiarCategoria(id: string, nivel: string) {
+    setAjustes((a) => (a ? { ...a, categorias: a.categorias.map((c) => (c.id === id ? { ...c, nivel } : c)) } : a));
+    try { setAjustes(await api.logSettingsPatch({ categorias: { [id]: nivel } }, token)); }
+    catch (e) { setError(String(e)); }
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={onCerrar} />
+      <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[320px] rounded-[12px] border border-border
+        bg-panel p-3 shadow-lg shadow-black/40"
+        style={{ animation: "jg-fade-rise .25s cubic-bezier(.16,1,.3,1) both" }}>
+        <p className="mb-2.5 text-[11px] text-fg">Qué se escribe en el log</p>
+        {error && <p className="mb-2 text-[10.5px] text-danger-fg">{error}</p>}
+        {!ajustes ? <p className="text-[10.5px] text-subtle">cargando</p> : (
+          <div className="max-h-[340px] overflow-y-auto">
+            <div className="mb-2 flex items-center justify-between border-b border-border pb-2">
+              <span className="text-[10.5px] text-muted">Base (todo lo demás)</span>
+              <select value={ajustes.base} onChange={(e) => void cambiarBase(e.target.value)}
+                className="rounded-[6px] border border-border bg-elevated px-2 py-1 text-[10px] text-fg outline-none">
+                {ajustes.niveles.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+            {ajustes.categorias.map((c) => (
+              <div key={c.id} className="flex items-center justify-between py-1.5">
+                <span className="text-[10.5px] text-muted">{c.label}</span>
+                <select value={c.nivel} onChange={(e) => void cambiarCategoria(c.id, e.target.value)}
+                  className="rounded-[6px] border border-border bg-elevated px-2 py-1 text-[10px] text-fg outline-none">
+                  {ajustes.niveles.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 

@@ -373,6 +373,9 @@ export interface MuestraHistorial {
   queue_depth: number;
   gpus: GpuSample[];
 }
+export interface LogCategoria { id: string; label: string; nivel: string }
+export interface LogSettings { base: string; categorias: LogCategoria[]; niveles: string[] }
+export interface PatchLogSettingsReq { base?: string; categorias?: Record<string, string> }
 
 /** Lo que llega por el evento `queue-change`. El progreso no está guardado en
  *  ninguna parte: se emite y se olvida, así que si te lo pierdes, se perdió. */
@@ -437,6 +440,9 @@ export const api = {
     api.get<MuestraHistorial[]>(`/v1/admin/telemetry/historial?rango=${rango}`, token),
   arreglarTrabajador: (dispositivo: string, token: string) =>
     api.post<null>(`/v1/admin/doctor/arreglar/trabajador/${encodeURIComponent(dispositivo)}`, {}, token),
+  logSettingsGet: (token: string) => api.get<LogSettings>("/v1/admin/logging", token),
+  logSettingsPatch: (req: PatchLogSettingsReq, token: string) =>
+    api.patch<LogSettings>("/v1/admin/logging", req, token),
   arreglarQdrant: (token: string) => api.post<null>("/v1/admin/doctor/arreglar/qdrant", {}, token),
   networkGet: (token: string) => api.get<NetworkView>("/v1/admin/network", token),
   networkPatch: (s: NetworkSettings, token: string) => api.patch<NetworkView>("/v1/admin/network", s, token),
