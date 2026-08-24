@@ -44,6 +44,10 @@ export function AdminPanel({ token }: { token: string }) {
         usuarios: { n: r.usuarios },
         cola: { n: r.analisis_en_cola },
         claves: { n: 1, espera: true },
+        // Sin numerito cuando no hay nada que avisar — a diferencia de
+        // "cola", que informa aunque esté en cero, un contador de problemas
+        // en cero no es información útil, solo ruido en la barra lateral.
+        ...(r.problemas_doctor > 0 ? { doctor: { n: r.problemas_doctor, espera: true } } : {}),
       }))
       .catch(() => setCuentas({}));
   }, [token]);

@@ -600,6 +600,10 @@ pub struct Resumen {
     /// `routes::models::estado` (licencia junto al peso), factorizado en
     /// `routes::models::hay_alguno_instalado`.
     pub modelos_instalados: bool,
+    /// Cuántos problemas detecta Doctor ahora mismo — mismo cálculo que
+    /// `GET /v1/admin/telemetry/salud`, solo que aquí se pide el conteo, no
+    /// la lista, para alimentar el numerito de la barra lateral.
+    pub problemas_doctor: i64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

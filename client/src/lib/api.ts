@@ -403,6 +403,7 @@ export interface Resumen {
   teselas: number;
   arrancado_en: number;
   modelos_instalados: boolean;
+  problemas_doctor: number;
 }
 
 const call = (method: string, path: string, body: unknown, token?: string, ticket?: string) =>
