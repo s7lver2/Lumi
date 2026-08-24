@@ -269,6 +269,39 @@ pub struct GpuSample {
     pub power_draw_mw: Option<u32>,
 }
 
+/// Un problema detectado en `GET /v1/admin/telemetry/salud`. No se persiste
+/// nunca — se calcula de cero en cada petición, así que no hay estado de
+/// "incidente" que pueda quedar obsoleto.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Problema {
+    pub id: String,
+    pub titulo: String,
+    pub detalle: String,
+    /// `Some(texto del botón)` si hay un arreglo real de un clic. `None` si
+    /// solo se puede avisar y enlazar a donde se resuelve a mano.
+    pub accion: Option<String>,
+    /// Sección del panel a la que salta el enlace cuando `accion` es `None`.
+    /// `"hardware"` o `"doctor:logs"` son los dos valores que emite hoy.
+    pub enlace: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SaludView {
+    pub problemas: Vec<Problema>,
+}
+
+/// Una fila de `telemetry_historial`, ya con `gpus_json` deserializado de
+/// vuelta a la lista tipada.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MuestraHistorial {
+    pub created_at: i64,
+    pub cpu_pct: f32,
+    pub ram_used_mb: u64,
+    pub disk_free_mb: u64,
+    pub queue_depth: u32,
+    pub gpus: Vec<GpuSample>,
+}
+
 /// Las seis palancas de la spec. Se serializa entera hacia el cliente; se
 /// almacena descompuesta en filas clave/valor para poder anular una sola.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
