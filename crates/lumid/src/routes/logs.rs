@@ -37,8 +37,34 @@ pub async fn stream(
         };
         let mut lineas = BufReader::new(salida).lines();
         while let Ok(Some(linea)) = lineas.next_line().await {
-            yield Ok(Event::default().data(linea));
+            yield Ok(Event::default().data(quitar_ansi(&linea)));
         }
     };
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+}
+
+/// Líneas escritas antes de que `main.rs` desactivara `with_ansi` siguen
+/// teniendo códigos de escape de color incrustados en el propio `journal` —
+/// eso no se puede arreglar retroactivamente en el log ya escrito, así que se
+/// limpia aquí, en el único sitio por el que pasa toda línea camino al panel.
+fn quitar_ansi(linea: &str) -> String {
+    let mut limpio = String::with_capacity(linea.len());
+    let mut chars = linea.chars();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' {
+            // Secuencia CSI: ESC '[' ... byte final entre 0x40 y 0x7E. Se
+            // consume entera y no se copia nada de ella.
+            if chars.clone().next() == Some('[') {
+                chars.next();
+                for c2 in chars.by_ref() {
+                    if ('\u{40}'..='\u{7e}').contains(&c2) {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+        limpio.push(c);
+    }
+    limpio
 }

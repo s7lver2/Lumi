@@ -78,7 +78,14 @@ async fn main() -> anyhow::Result<()> {
     // no puede elegir uno solo por su cuenta y el arranque del TLS entra en
     // panic. Se fija aquí, una vez, antes de tocar nada de red.
     rustls::crypto::ring::default_provider().install_default().ok();
-    tracing_subscriber::fmt::init();
+    // Sin `with_ansi(false)`, `tracing_subscriber` decide colorear según crea
+    // que su salida es una terminal — y bajo systemd, journald, o un pipe
+    // hacia `journalctl -f`, esa detección puede salir que sí, dejando los
+    // códigos de escape ANSI escritos tal cual en el journal para siempre.
+    // La pestaña Doctor (`routes::logs::stream`) reenvía esas líneas crudas y
+    // las colorea ella misma por nivel — los códigos de escape del propio
+    // proceso solo estorban ahí.
+    tracing_subscriber::fmt().with_ansi(false).init();
     let dir = PathBuf::from(std::env::var("LUMI_DATA").unwrap_or_else(|_| "/var/lib/lumi".into()));
     std::fs::create_dir_all(&dir)?;
 

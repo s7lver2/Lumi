@@ -37,22 +37,22 @@ export function DoctorView({ token, onIr }: { token: string; onIr: (s: SeccionId
     <Seccion titulo="Doctor" grupo="Operación">
       <SaludPanel token={token} onIr={onIr} irALogs={() => setVista("logs")} />
 
-      <div className="mt-[22px] flex items-center justify-between">
-        <span className="text-[10.5px] text-muted">Detalle</span>
-        <div className="relative flex w-[168px] rounded-lg border border-border bg-surface p-[3px]">
-          <span className="absolute left-[3px] top-[3px] h-[calc(100%-6px)] w-[78px] rounded-md bg-elevated
-            transition-transform duration-[420ms] ease-expo"
-            style={{ transform: vista === "historial" ? "translateX(78px)" : "translateX(0)" }} />
+      <div className="mt-[26px] flex items-center justify-between border-b border-border pb-2.5">
+        <span className="text-[12.5px] text-fg">Detalle</span>
+        <div className="relative flex w-[196px] rounded-[9px] border border-border bg-surface p-[3px]">
+          <span className="absolute left-[3px] top-[3px] h-[calc(100%-6px)] w-[92px] rounded-[7px] bg-elevated
+            shadow-[0_1px_0_rgba(255,255,255,.04)] transition-transform duration-[420ms] ease-expo"
+            style={{ transform: vista === "historial" ? "translateX(92px)" : "translateX(0)" }} />
           {(["logs", "historial"] as const).map((v) => (
             <button key={v} onClick={() => setVista(v)}
-              className={`relative z-10 flex-1 py-[5px] text-[10px] capitalize transition-colors
-                ${vista === v ? "text-fg" : "text-subtle"}`}>
+              className={`relative z-10 flex flex-1 items-center justify-center gap-1.5 py-[6px] text-[10.5px]
+                transition-colors duration-300 ease-expo ${vista === v ? "text-fg" : "text-subtle hover:text-muted"}`}>
+              <Icon name={v === "logs" ? "cli" : "bars"} size={11} />
               {v === "logs" ? "Logs" : "Histórico"}
             </button>
           ))}
         </div>
       </div>
-      <div className="mt-3 border-b border-border" />
 
       <div className="mt-[19px]">
         {vista === "logs" ? <LogsPane token={token} /> : <HistoricoPane token={token} />}
