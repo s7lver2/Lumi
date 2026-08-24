@@ -274,13 +274,23 @@ function formatoHora(ts: number, rango: "1h" | "24h" | "7d"): string {
     : d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
+const RANGO_S: Record<"1h" | "24h" | "7d", number> = { "1h": 3600, "24h": 86400, "7d": 7 * 86400 };
+
+function formatoTranscurrido(segundos: number): string {
+  if (segundos < 3600) return `${Math.round(segundos / 60)} min`;
+  if (segundos < 86400) return `${Math.round(segundos / 3600)} h`;
+  return `${Math.round(segundos / 86400)} d`;
+}
+
 function HistoricoPane({ token }: { token: string }) {
   const [rango, setRango] = useState<"1h" | "24h" | "7d">("24h");
   const [datos, setDatos] = useState<MuestraHistorial[] | null>(null);
-  // Compartido entre las tres tarjetas: pasar el ratón por encima de
-  // cualquiera de las tres muestra el mismo instante en las otras dos, que
-  // es justo lo que hace falta para comparar métricas en el mismo momento.
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  // Cuál de las tres tarjetas tiene el ratón encima de verdad — solo esa
+  // dibuja la línea/punto sobre su propio gráfico. Comparar métricas se
+  // resuelve con la fila de valores de abajo, no fingiendo que el cursor
+  // está a la vez en las tres.
+  const [hoverCard, setHoverCard] = useState<string | null>(null);
 
   useEffect(() => {
     // Al cambio de rango, la vieja serie desaparece en vez de quedarse
@@ -290,12 +300,21 @@ function HistoricoPane({ token }: { token: string }) {
     // valores.
     setDatos(null);
     setHoverIdx(null);
+    setHoverCard(null);
     api.historialGet(rango, token).then(setDatos).catch(() => setDatos([]));
   }, [rango, token]);
 
+  const foco = hoverIdx != null && datos ? datos[hoverIdx] : datos?.at(-1);
+  // Si la muestra más antigua es más reciente que el rango pedido, todavía
+  // no hay suficiente historial para que este rango se vea distinto del
+  // inmediatamente más corto — no es un fallo del selector, es que Doctor
+  // lleva poco tiempo recogiendo datos.
+  const antiguedad = datos && datos.length > 0 ? Math.floor(Date.now() / 1000) - datos[0].created_at : null;
+  const historialCorto = antiguedad != null && antiguedad < RANGO_S[rango] * 0.9;
+
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-2.5 flex items-center justify-between">
         <div className="flex gap-1.5">
           {(["1h", "24h", "7d"] as const).map((r) => (
             <button key={r} onClick={() => setRango(r)}
@@ -305,48 +324,68 @@ function HistoricoPane({ token }: { token: string }) {
             </button>
           ))}
         </div>
-        {datos && datos.length > 0 && hoverIdx != null && (
-          <span className="font-mono text-[10px] text-subtle">{formatoHora(datos[hoverIdx].created_at, rango)}</span>
+        {foco && (
+          <span className="flex items-center gap-3 font-mono text-[10px] text-subtle">
+            <span>{formatoHora(foco.created_at, rango)}</span>
+            <span>CPU {foco.cpu_pct.toFixed(0)}%</span>
+            <span>RAM {foco.ram_used_mb.toFixed(0)}MB</span>
+            <span>disco {foco.disk_free_mb.toFixed(0)}MB</span>
+          </span>
         )}
       </div>
+      {historialCorto && (
+        <p className="mb-3 text-[10.5px] text-subtle">
+          Doctor solo lleva {formatoTranscurrido(antiguedad!)} recogiendo muestras — este rango se verá igual que uno
+          más corto hasta que pase más tiempo.
+        </p>
+      )}
       {datos === null ? <p className="text-[11px] text-subtle">cargando</p> : datos.length === 0 ? (
         <p className="text-[11px] text-subtle">aún no hay muestras en este rango.</p>
       ) : (
         <div className="grid grid-cols-3 gap-3.5">
-          <MetricCard label="CPU" unidad="%" datos={datos} campo={(d) => d.cpu_pct}
-            hoverIdx={hoverIdx} onHover={setHoverIdx} />
-          <MetricCard label="RAM usada" unidad="MB" datos={datos} campo={(d) => d.ram_used_mb}
-            hoverIdx={hoverIdx} onHover={setHoverIdx} />
-          <MetricCard label="Disco libre" unidad="MB" datos={datos} campo={(d) => d.disk_free_mb}
-            hoverIdx={hoverIdx} onHover={setHoverIdx} />
+          <MetricCard id="cpu" label="CPU" unidad="%" datos={datos} campo={(d) => d.cpu_pct}
+            hoverIdx={hoverIdx} activa={hoverCard === "cpu"}
+            onHover={(i) => { setHoverIdx(i); setHoverCard(i == null ? null : "cpu"); }} />
+          <MetricCard id="ram" label="RAM usada" unidad="MB" datos={datos} campo={(d) => d.ram_used_mb}
+            hoverIdx={hoverIdx} activa={hoverCard === "ram"}
+            onHover={(i) => { setHoverIdx(i); setHoverCard(i == null ? null : "ram"); }} />
+          <MetricCard id="disco" label="Disco libre" unidad="MB" datos={datos} campo={(d) => d.disk_free_mb}
+            hoverIdx={hoverIdx} activa={hoverCard === "disco"}
+            onHover={(i) => { setHoverIdx(i); setHoverCard(i == null ? null : "disco"); }} />
         </div>
       )}
     </div>
   );
 }
 
-function MetricCard({ label, unidad, datos, campo, hoverIdx, onHover }: {
-  label: string; unidad: string; datos: MuestraHistorial[]; campo: (d: MuestraHistorial) => number;
-  hoverIdx: number | null; onHover: (i: number | null) => void;
+function MetricCard({ label, unidad, datos, campo, hoverIdx, activa, onHover }: {
+  id: string; label: string; unidad: string; datos: MuestraHistorial[]; campo: (d: MuestraHistorial) => number;
+  hoverIdx: number | null; activa: boolean; onHover: (i: number | null) => void;
 }) {
   const valores = datos.map(campo);
-  const enFoco = hoverIdx != null ? valores[hoverIdx] : valores.at(-1);
+  // Mientras otra tarjeta tiene el foco, esta sigue mostrando su propio
+  // último valor — no el del instante que se está mirando en otro sitio,
+  // que es justo lo que "activa" evita mezclar.
+  const enFoco = activa && hoverIdx != null ? valores[hoverIdx] : valores.at(-1);
   return (
     <div className="rounded-[14px] border border-border/70 bg-panel p-4">
       <span className="text-[10.5px] text-muted">{label}</span>
       <div className="mt-0.5 font-mono text-[20px] text-fg">
         {enFoco != null ? enFoco.toFixed(0) : "—"}<small className="ml-0.5 text-[10px] text-subtle">{unidad}</small>
       </div>
-      {valores.length > 1 && <Sparkline valores={valores} hoverIdx={hoverIdx} onHover={onHover} />}
+      {valores.length > 1 && (
+        <Sparkline valores={valores} hoverIdx={activa ? hoverIdx : null} onHover={onHover} />
+      )}
     </div>
   );
 }
 
 /** Curva suavizada con Bézier por puntos medios y relleno con degradado —
  *  mismo dibujo ya validado en el mockup interactivo de la sesión de
- *  brainstorming (`doctor-full.html`), sin librería de gráficas nueva. Ahora
- *  además reporta sobre qué punto está el ratón, para el hover comparado
- *  entre las tres tarjetas. */
+ *  brainstorming (`doctor-full.html`), sin librería de gráficas nueva.
+ *  `hoverIdx` llega en `null` cuando el ratón está sobre OTRA tarjeta: cada
+ *  gráfico solo dibuja su línea/punto cuando el cursor está de verdad
+ *  encima, nunca los tres a la vez. */
 function Sparkline({ valores, ancho = 280, alto = 56, hoverIdx, onHover }: {
   valores: number[]; ancho?: number; alto?: number;
   hoverIdx: number | null; onHover: (i: number | null) => void;
