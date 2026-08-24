@@ -33,9 +33,16 @@ export function DoctorView({ token, onIr }: { token: string; onIr: (s: SeccionId
   );
   useEffect(() => { localStorage.setItem("lumi.doctor.vista", vista); }, [vista]);
 
+  // "ver log" en una tarjeta de problema tiene que notarse SIEMPRE, incluso
+  // si ya estás mirando Logs (el caso más común, ya que es la vista por
+  // defecto) — cambiar de vista no basta ahí, así que además se manda una
+  // señal que baja el scroll del todo y da un parpadeo al panel.
+  const [senalLogs, setSenalLogs] = useState(0);
+  const irALogs = () => { setVista("logs"); setSenalLogs((n) => n + 1); };
+
   return (
     <Seccion titulo="Doctor" grupo="Operación">
-      <SaludPanel token={token} onIr={onIr} irALogs={() => setVista("logs")} />
+      <SaludPanel token={token} onIr={onIr} irALogs={irALogs} />
 
       <div className="mt-[26px] flex items-center justify-between border-b border-border pb-2.5">
         <span className="text-[12.5px] text-fg">Detalle</span>
@@ -55,7 +62,7 @@ export function DoctorView({ token, onIr }: { token: string; onIr: (s: SeccionId
       </div>
 
       <div className="mt-[19px]">
-        {vista === "logs" ? <LogsPane token={token} /> : <HistoricoPane token={token} />}
+        {vista === "logs" ? <LogsPane token={token} senal={senalLogs} /> : <HistoricoPane token={token} />}
       </div>
     </Seccion>
   );
@@ -172,11 +179,12 @@ function SaludPanel({ token, onIr, irALogs }: {
   );
 }
 
-function LogsPane({ token }: { token: string }) {
+function LogsPane({ token, senal }: { token: string; senal: number }) {
   const [lineas, setLineas] = useState<Linea[]>([]);
   const [nivelMin, setNivelMin] = useState<Nivel>(0);
   const [modulo, setModulo] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [resaltado, setResaltado] = useState(false);
   const paneRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -201,6 +209,17 @@ function LogsPane({ token }: { token: string }) {
       el.scrollTop = el.scrollHeight;
     }
   }, [lineas]);
+
+  // Reacciona a "ver log" aunque no haya cambio de vista que enseñar (ya
+  // estabas en Logs): baja del todo y da un parpadeo breve al borde.
+  useEffect(() => {
+    if (senal === 0) return;
+    const el = paneRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    setResaltado(true);
+    const t = setTimeout(() => setResaltado(false), 900);
+    return () => clearTimeout(t);
+  }, [senal]);
 
   const visibles = lineas.filter((l) => {
     const pasaModulo = !modulo.trim() || (l.modulo?.toLowerCase().includes(modulo.trim().toLowerCase()) ?? false);
@@ -229,7 +248,8 @@ function LogsPane({ token }: { token: string }) {
         <span className="ml-auto font-mono text-[9.5px] text-subtle">{visibles.length} líneas</span>
       </div>
       {error && <p className="mb-2 text-[11px] text-danger-fg">{error}</p>}
-      <div ref={paneRef} className="h-[520px] overflow-y-auto rounded-xl border border-border bg-[#0c0d0f] py-2.5">
+      <div ref={paneRef} className={`h-[520px] overflow-y-auto rounded-xl border bg-[#0c0d0f] py-2.5
+        transition-colors duration-300 ease-expo ${resaltado ? "border-white/40" : "border-border"}`}>
         {visibles.map((l, i) => (
           <div key={i} className="px-3.5 py-[2px] font-mono text-[11px] leading-[1.55]">
             {l.nivel && (
@@ -247,54 +267,92 @@ function LogsPane({ token }: { token: string }) {
   );
 }
 
+function formatoHora(ts: number, rango: "1h" | "24h" | "7d"): string {
+  const d = new Date(ts * 1000);
+  return rango === "7d"
+    ? d.toLocaleString(undefined, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
 function HistoricoPane({ token }: { token: string }) {
   const [rango, setRango] = useState<"1h" | "24h" | "7d">("24h");
   const [datos, setDatos] = useState<MuestraHistorial[] | null>(null);
+  // Compartido entre las tres tarjetas: pasar el ratón por encima de
+  // cualquiera de las tres muestra el mismo instante en las otras dos, que
+  // es justo lo que hace falta para comparar métricas en el mismo momento.
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
   useEffect(() => {
+    // Al cambio de rango, la vieja serie desaparece en vez de quedarse
+    // pegada en pantalla mientras llega la nueva — sin esto, si las dos
+    // peticiones devuelven un tamaño de array parecido, cambiar de rango
+    // podía parecer que no hacía nada hasta que de verdad se miraban los
+    // valores.
+    setDatos(null);
+    setHoverIdx(null);
     api.historialGet(rango, token).then(setDatos).catch(() => setDatos([]));
   }, [rango, token]);
 
   return (
     <div>
-      <div className="mb-4 flex gap-1.5">
-        {(["1h", "24h", "7d"] as const).map((r) => (
-          <button key={r} onClick={() => setRango(r)}
-            className={`rounded-[7px] border px-3.5 py-1.5 text-[10.5px] ${
-              rango === r ? "border-white/30 bg-elevated text-fg" : "border-border bg-panel text-subtle"}`}>
-            {r}
-          </button>
-        ))}
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex gap-1.5">
+          {(["1h", "24h", "7d"] as const).map((r) => (
+            <button key={r} onClick={() => setRango(r)}
+              className={`rounded-[7px] border px-3.5 py-1.5 text-[10.5px] transition-colors duration-300 ease-expo ${
+                rango === r ? "border-white/30 bg-elevated text-fg" : "border-border bg-panel text-subtle"}`}>
+              {r}
+            </button>
+          ))}
+        </div>
+        {datos && datos.length > 0 && hoverIdx != null && (
+          <span className="font-mono text-[10px] text-subtle">{formatoHora(datos[hoverIdx].created_at, rango)}</span>
+        )}
       </div>
-      {datos === null ? <p className="text-[11px] text-subtle">cargando</p> : (
+      {datos === null ? <p className="text-[11px] text-subtle">cargando</p> : datos.length === 0 ? (
+        <p className="text-[11px] text-subtle">aún no hay muestras en este rango.</p>
+      ) : (
         <div className="grid grid-cols-3 gap-3.5">
-          <MetricCard label="CPU" unidad="%" valores={datos.map((d) => d.cpu_pct)} />
-          <MetricCard label="RAM usada" unidad="MB" valores={datos.map((d) => d.ram_used_mb)} />
-          <MetricCard label="Disco libre" unidad="MB" valores={datos.map((d) => d.disk_free_mb)} />
+          <MetricCard label="CPU" unidad="%" datos={datos} campo={(d) => d.cpu_pct}
+            hoverIdx={hoverIdx} onHover={setHoverIdx} />
+          <MetricCard label="RAM usada" unidad="MB" datos={datos} campo={(d) => d.ram_used_mb}
+            hoverIdx={hoverIdx} onHover={setHoverIdx} />
+          <MetricCard label="Disco libre" unidad="MB" datos={datos} campo={(d) => d.disk_free_mb}
+            hoverIdx={hoverIdx} onHover={setHoverIdx} />
         </div>
       )}
     </div>
   );
 }
 
-function MetricCard({ label, unidad, valores }: { label: string; unidad: string; valores: number[] }) {
-  const ultimo = valores.at(-1);
+function MetricCard({ label, unidad, datos, campo, hoverIdx, onHover }: {
+  label: string; unidad: string; datos: MuestraHistorial[]; campo: (d: MuestraHistorial) => number;
+  hoverIdx: number | null; onHover: (i: number | null) => void;
+}) {
+  const valores = datos.map(campo);
+  const enFoco = hoverIdx != null ? valores[hoverIdx] : valores.at(-1);
   return (
     <div className="rounded-[14px] border border-border/70 bg-panel p-4">
       <span className="text-[10.5px] text-muted">{label}</span>
       <div className="mt-0.5 font-mono text-[20px] text-fg">
-        {ultimo != null ? ultimo.toFixed(0) : "—"}<small className="ml-0.5 text-[10px] text-subtle">{unidad}</small>
+        {enFoco != null ? enFoco.toFixed(0) : "—"}<small className="ml-0.5 text-[10px] text-subtle">{unidad}</small>
       </div>
-      {valores.length > 1 && <Sparkline valores={valores} />}
+      {valores.length > 1 && <Sparkline valores={valores} hoverIdx={hoverIdx} onHover={onHover} />}
     </div>
   );
 }
 
 /** Curva suavizada con Bézier por puntos medios y relleno con degradado —
  *  mismo dibujo ya validado en el mockup interactivo de la sesión de
- *  brainstorming (`doctor-full.html`), sin librería de gráficas nueva. */
-function Sparkline({ valores, ancho = 280, alto = 56 }: { valores: number[]; ancho?: number; alto?: number }) {
+ *  brainstorming (`doctor-full.html`), sin librería de gráficas nueva. Ahora
+ *  además reporta sobre qué punto está el ratón, para el hover comparado
+ *  entre las tres tarjetas. */
+function Sparkline({ valores, ancho = 280, alto = 56, hoverIdx, onHover }: {
+  valores: number[]; ancho?: number; alto?: number;
+  hoverIdx: number | null; onHover: (i: number | null) => void;
+}) {
   const ref = useRef<SVGPathElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
   // Un id de gradiente estable por instancia del componente, para que dos
   // `<svg>` en la misma página no compartan el mismo `id` de `<linearGradient>`.
   const id = `sp-${useId()}`;
@@ -321,8 +379,18 @@ function Sparkline({ valores, ancho = 280, alto = 56 }: { valores: number[]; anc
     requestAnimationFrame(() => { p.style.strokeDashoffset = "0"; });
   }, [d]);
 
+  function moverRaton(e: React.MouseEvent<SVGSVGElement>) {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const xRel = ((e.clientX - rect.left) / rect.width) * ancho;
+    const idx = Math.round(xRel / paso);
+    onHover(Math.max(0, Math.min(valores.length - 1, idx)));
+  }
+
   return (
-    <svg viewBox={`0 0 ${ancho} ${alto}`} className="mt-2.5 block w-full" style={{ height: alto }}>
+    <svg ref={svgRef} viewBox={`0 0 ${ancho} ${alto}`} className="mt-2.5 block w-full cursor-crosshair"
+      style={{ height: alto }} onMouseMove={moverRaton} onMouseLeave={() => onHover(null)}>
       <defs>
         <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#e8e8e6" stopOpacity=".16" />
@@ -334,6 +402,13 @@ function Sparkline({ valores, ancho = 280, alto = 56 }: { valores: number[]; anc
       ))}
       <path d={area} fill={`url(#${id})`} stroke="none" />
       <path ref={ref} d={d} fill="none" stroke="#e8e8e6" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
+      {hoverIdx != null && pts[hoverIdx] && (
+        <>
+          <line x1={pts[hoverIdx][0]} y1={0} x2={pts[hoverIdx][0]} y2={alto}
+            stroke="rgba(255,255,255,.22)" strokeWidth={1} />
+          <circle cx={pts[hoverIdx][0]} cy={pts[hoverIdx][1]} r={3} fill="#e8e8e6" />
+        </>
+      )}
     </svg>
   );
 }
