@@ -20,6 +20,7 @@ pub async fn create(
 ) -> Result<Json<TaskStatus>, StatusCode> {
     require_admin(&app, &bearer(&headers))?;
     let id = tasks::spawn(&app, spec.kind).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    tracing::info!("tarea de aprovisionamiento lanzada: {:?} ({id})", spec.kind);
     tasks::status(&app, &id).map(Json).ok_or(StatusCode::INTERNAL_SERVER_ERROR)
 }
 

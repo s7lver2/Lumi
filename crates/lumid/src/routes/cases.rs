@@ -92,6 +92,7 @@ pub async fn create(
     // Tocar el proyecto: la lista del arranque se ordena por uso reciente, y
     // crear un caso dentro es usarlo.
     let _ = c.execute("UPDATE projects SET updated_at = ?1 WHERE id = ?2", rusqlite::params![t, project_id]);
+    tracing::info!("caso \"{name}\" creado en el proyecto {project_id}");
     Ok(Json(Case {
         id,
         project_id,
@@ -159,5 +160,6 @@ pub async fn remove(
         let _ = std::fs::remove_file(base.join(img.to_string()));
         let _ = std::fs::remove_file(base.join(format!("{img}.thumb")));
     }
+    tracing::info!("caso {id} borrado, del proyecto {pid}");
     Ok(StatusCode::NO_CONTENT)
 }

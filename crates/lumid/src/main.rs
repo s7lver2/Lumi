@@ -5,6 +5,7 @@ mod hardware;
 mod hardware_cpu;
 mod agentar;
 mod indices;
+mod logging;
 mod mantenimiento;
 mod master;
 mod perfil;
@@ -62,6 +63,10 @@ pub struct App {
     /// nada más que un canal de difusión, así que no se crea una estructura
     /// para envolverlo.
     pub admin_eventos: tokio::sync::broadcast::Sender<lumi_proto::api::EventoAdmin>,
+    /// Cambia qué se escribe al log en caliente, sin reiniciar el daemon —
+    /// ver `logging.rs`. `Handle` ya es barato de clonar (es un `Arc` por
+    /// dentro), así que no hace falta envolverlo aparte.
+    pub log_filter: tracing_subscriber::reload::Handle<tracing_subscriber::EnvFilter, tracing_subscriber::Registry>,
 }
 
 // Explícito y no el valor por defecto de la macro: en la VM de producción
@@ -78,19 +83,37 @@ async fn main() -> anyhow::Result<()> {
     // no puede elegir uno solo por su cuenta y el arranque del TLS entra en
     // panic. Se fija aquí, una vez, antes de tocar nada de red.
     rustls::crypto::ring::default_provider().install_default().ok();
-    // Sin `with_ansi(false)`, `tracing_subscriber` decide colorear según crea
-    // que su salida es una terminal — y bajo systemd, journald, o un pipe
-    // hacia `journalctl -f`, esa detección puede salir que sí, dejando los
-    // códigos de escape ANSI escritos tal cual en el journal para siempre.
-    // La pestaña Doctor (`routes::logs::stream`) reenvía esas líneas crudas y
-    // las colorea ella misma por nivel — los códigos de escape del propio
-    // proceso solo estorban ahí.
-    tracing_subscriber::fmt().with_ansi(false).init();
     let dir = PathBuf::from(std::env::var("LUMI_DATA").unwrap_or_else(|_| "/var/lib/lumi".into()));
     std::fs::create_dir_all(&dir)?;
+    // Antes de nada más: el filtro inicial se construye a partir de lo que
+    // haya guardado en `meta` (Doctor > Logs > Ajustes), y para eso hace
+    // falta la base de datos ya abierta.
+    let store = Arc::new(store::Store::open(&dir)?);
+
+    // Sin `with_ansi(false)` en la capa de formato, `tracing_subscriber`
+    // decide colorear según crea que su salida es una terminal — y bajo
+    // systemd, journald, o un pipe hacia `journalctl -f`, esa detección
+    // puede salir que sí, dejando códigos de escape ANSI escritos tal cual
+    // en el journal para siempre. La pestaña Doctor (`routes::logs::stream`)
+    // reenvía esas líneas crudas y las colorea ella misma por nivel — los
+    // códigos de escape del propio proceso solo estorban ahí.
+    //
+    // El filtro va detrás de una `reload::Layer`: es lo que permite que
+    // Doctor > Logs > Ajustes cambie qué se escribe sin reiniciar el
+    // daemon — `app.log_filter.reload(...)` sustituye el filtro entero en
+    // caliente.
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+    let filtro_inicial = logging::construir_filtro(&store);
+    let (filtro_capa, log_filter) =
+        tracing_subscriber::reload::Layer::new(tracing_subscriber::EnvFilter::new(&filtro_inicial));
+    tracing_subscriber::registry()
+        .with(filtro_capa)
+        .with(tracing_subscriber::fmt::layer().with_ansi(false))
+        .init();
+    tracing::info!("nivel de log inicial: {filtro_inicial}");
 
     let (tls_cfg, fingerprint) = tls::load(&dir).await?;
-    let store = Arc::new(store::Store::open(&dir)?);
     let gpus = gpus();
     // Antes se creaba después de `Queue::arrancar` — la cola necesita este
     // remitente para avisar a la página de Cola cuando algo cambia
@@ -112,6 +135,7 @@ async fn main() -> anyhow::Result<()> {
         queue,
         indices_en_curso: Arc::new(Mutex::new(None)),
         admin_eventos,
+        log_filter,
     };
 
     // LUMI_PORT (env) es la escotilla de emergencia: gana siempre sobre lo
@@ -214,6 +238,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/doctor/arreglar/trabajador/:dispositivo", post(routes::doctor::arreglar_trabajador))
         .route("/v1/admin/doctor/arreglar/qdrant", post(routes::doctor::arreglar_qdrant))
         .route("/v1/admin/logs/stream", get(routes::logs::stream))
+        .route("/v1/admin/logging", get(routes::logs::ajustes_get).patch(routes::logs::ajustes_patch))
         .route("/v1/admin/provisioning/complete", post(routes::admin::provisionar))
         .route("/v1/admin/models/accept-licenses", post(routes::models::accept_licenses))
         .route("/v1/admin/models/download", post(routes::models::download))

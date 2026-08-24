@@ -269,6 +269,32 @@ pub struct GpuSample {
     pub power_draw_mw: Option<u32>,
 }
 
+/// Una categoría de log tal como la enseña el panel — el administrador ve
+/// "Hardware", no `lumid::hardware,lumid::hardware_cpu`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogCategoria {
+    pub id: String,
+    pub label: String,
+    pub nivel: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogSettings {
+    /// Nivel para todo lo que no tiene categoría propia — incluidas las
+    /// dependencias, así que en la práctica es el techo de ruido del log.
+    pub base: String,
+    pub categorias: Vec<LogCategoria>,
+    /// De menos a más ruido, el mismo orden que enseña cada desplegable.
+    pub niveles: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PatchLogSettingsReq {
+    pub base: Option<String>,
+    /// Solo las categorías que cambian — id → nuevo nivel.
+    pub categorias: Option<std::collections::HashMap<String, String>>,
+}
+
 /// Un problema detectado en `GET /v1/admin/telemetry/salud`. No se persiste
 /// nunca — se calcula de cero en cada petición, así que no hay estado de
 /// "incidente" que pueda quedar obsoleto.

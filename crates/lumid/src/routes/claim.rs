@@ -57,6 +57,7 @@ pub async fn claim(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         token
     };
+    tracing::info!("clave de vinculación canjeada; empieza el alta del primer administrador");
     Ok(Json(ClaimRes {
         bootstrap_token: token,
         expires_in_s: BOOTSTRAP_TTL_S,
@@ -94,5 +95,6 @@ pub async fn create_admin(
     .map_err(|e| (StatusCode::CONFLICT, e.to_string()))?;
     c.execute("DELETE FROM sessions WHERE token = ?1", [lumi_proto::crypto::hash_token(&req.bootstrap_token)])
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    tracing::info!("primer administrador creado: {}", req.username.trim());
     Ok(StatusCode::CREATED)
 }
