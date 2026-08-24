@@ -16,7 +16,14 @@ pub async fn salud(
     State(app): State<App>, headers: axum::http::HeaderMap,
 ) -> Result<Json<SaludView>, StatusCode> {
     require_admin(&app, &bearer(&headers))?;
+    Ok(Json(SaludView { problemas: detectar(&app).await }))
+}
 
+/// El numerito de la barra lateral (`Resumen::problemas_doctor`) reutiliza
+/// esto en vez de duplicar las cinco comprobaciones — un solo sitio que
+/// decide qué es un problema, tanto si lo pide la pestaña Doctor como si lo
+/// pide el resumen general.
+pub async fn detectar(app: &App) -> Vec<Problema> {
     let mut problemas = Vec::new();
 
     for (dispositivo, analysis_id) in app.queue.colgados(UMBRAL_COLGADO) {
@@ -67,7 +74,7 @@ pub async fn salud(
         }
     }
 
-    if reinicios_recientes(&app).await >= 2 {
+    if reinicios_recientes(app).await >= 2 {
         problemas.push(Problema {
             id: "reinicios".into(),
             titulo: "El daemon se ha reiniciado más de una vez en la última hora".into(),
@@ -77,7 +84,7 @@ pub async fn salud(
         });
     }
 
-    Ok(Json(SaludView { problemas }))
+    problemas
 }
 
 /// Cuenta cuántas veces aparece la línea de arranque de `lumid` en la última
@@ -103,8 +110,9 @@ async fn reinicios_recientes(_app: &App) -> u32 {
 pub async fn arreglar_trabajador(
     State(app): State<App>, headers: axum::http::HeaderMap, Path(dispositivo): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
-    require_admin(&app, &bearer(&headers))?;
+    let admin = require_admin(&app, &bearer(&headers))?;
     if app.queue.forzar_reinicio(&dispositivo) {
+        tracing::info!("trabajador de \"{dispositivo}\" reiniciado desde Doctor por el administrador {admin}");
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(StatusCode::NOT_FOUND)
@@ -114,15 +122,17 @@ pub async fn arreglar_trabajador(
 pub async fn arreglar_qdrant(
     State(app): State<App>, headers: axum::http::HeaderMap,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    require_admin(&app, &bearer(&headers)).map_err(|c| (c, "hace falta ser administrador".to_string()))?;
+    let admin = require_admin(&app, &bearer(&headers)).map_err(|c| (c, "hace falta ser administrador".to_string()))?;
     let salida = tokio::process::Command::new("systemctl")
         .args(["restart", "qdrant"])
         .output()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     if salida.status.success() {
+        tracing::info!("Qdrant reiniciado desde Doctor por el administrador {admin}");
         Ok(StatusCode::NO_CONTENT)
     } else {
+        tracing::error!("no se pudo reiniciar Qdrant desde Doctor: {}", String::from_utf8_lossy(&salida.stderr));
         Err((StatusCode::INTERNAL_SERVER_ERROR, String::from_utf8_lossy(&salida.stderr).to_string()))
     }
 }

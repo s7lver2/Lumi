@@ -289,5 +289,6 @@ pub async fn remove(
     let _ = c.execute("DELETE FROM analysis_agents WHERE analysis_id = ?1", [id]);
     c.execute("DELETE FROM analyses WHERE id = ?1", [id])
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    tracing::info!("análisis #{id} cancelado (estaba {state})");
     Ok(StatusCode::NO_CONTENT)
 }

@@ -149,6 +149,10 @@ pub async fn create(
 
     let info = key_row(&app, &public_id)
         .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "no se pudo releer la clave recién creada".to_string()))?;
+    tracing::info!(
+        "clave de API {public_id} emitida para el usuario {target_user_id} por el usuario {caller_id} (etiqueta: {})",
+        info.label
+    );
     Ok(Json(IssuedApiKey { key: secret, info }))
 }
 
@@ -173,6 +177,7 @@ pub async fn revoke(
     if n == 0 {
         return Err(StatusCode::NOT_FOUND);
     }
+    tracing::info!("clave de API {public_id} revocada por el usuario {uid}");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -207,6 +212,7 @@ pub async fn patch_ips(
             .conn()
             .execute("UPDATE sessions SET ips = ?1 WHERE public_id = ?2", rusqlite::params![ips_json, public_id])
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        tracing::info!("IPs de la clave de API {public_id} cambiadas por el usuario {uid}: {ips_json}");
     }
     key_row(&app, &public_id)
         .map(Json)

@@ -80,36 +80,40 @@ pub async fn ver_avatar_usuario(
 // --- Perfil de servidor (admin) ---
 
 pub async fn subir_avatar_servidor(State(app): State<App>, headers: HeaderMap, mut mp: Multipart) -> Result<StatusCode, Fail> {
-    require_admin(&app, &bearer(&headers)).map_err(|c| err(c, "hace falta ser administrador"))?;
+    let admin = require_admin(&app, &bearer(&headers)).map_err(|c| err(c, "hace falta ser administrador"))?;
     let data = primer_campo(&mut mp).await?;
     let ruta = perfil::ruta_avatar_servidor(&app.dir);
     tokio::task::spawn_blocking(move || perfil::guardar_recortada(&data, perfil::AVATAR_SIDE, perfil::AVATAR_SIDE, &ruta))
         .await
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
         .map_err(|e| err(StatusCode::UNSUPPORTED_MEDIA_TYPE, &format!("no es una imagen válida: {e}")))?;
+    tracing::info!("avatar del servidor cambiado por el administrador {admin}");
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn borrar_avatar_servidor(State(app): State<App>, headers: HeaderMap) -> Result<StatusCode, Fail> {
-    require_admin(&app, &bearer(&headers)).map_err(|c| err(c, "hace falta ser administrador"))?;
+    let admin = require_admin(&app, &bearer(&headers)).map_err(|c| err(c, "hace falta ser administrador"))?;
     let _ = std::fs::remove_file(perfil::ruta_avatar_servidor(&app.dir));
+    tracing::info!("avatar del servidor borrado por el administrador {admin}");
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn subir_banner_servidor(State(app): State<App>, headers: HeaderMap, mut mp: Multipart) -> Result<StatusCode, Fail> {
-    require_admin(&app, &bearer(&headers)).map_err(|c| err(c, "hace falta ser administrador"))?;
+    let admin = require_admin(&app, &bearer(&headers)).map_err(|c| err(c, "hace falta ser administrador"))?;
     let data = primer_campo(&mut mp).await?;
     let ruta = perfil::ruta_banner_servidor(&app.dir);
     tokio::task::spawn_blocking(move || perfil::guardar_recortada(&data, perfil::BANNER_W, perfil::BANNER_H, &ruta))
         .await
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
         .map_err(|e| err(StatusCode::UNSUPPORTED_MEDIA_TYPE, &format!("no es una imagen válida: {e}")))?;
+    tracing::info!("banner del servidor cambiado por el administrador {admin}");
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn borrar_banner_servidor(State(app): State<App>, headers: HeaderMap) -> Result<StatusCode, Fail> {
-    require_admin(&app, &bearer(&headers)).map_err(|c| err(c, "hace falta ser administrador"))?;
+    let admin = require_admin(&app, &bearer(&headers)).map_err(|c| err(c, "hace falta ser administrador"))?;
     let _ = std::fs::remove_file(perfil::ruta_banner_servidor(&app.dir));
+    tracing::info!("banner del servidor borrado por el administrador {admin}");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -134,12 +138,14 @@ pub async fn patch(
     headers: HeaderMap,
     Json(req): Json<lumi_proto::api::PatchServerProfileReq>,
 ) -> Result<Json<perfil::ServerProfile>, (StatusCode, String)> {
-    require_admin(&app, &bearer(&headers)).map_err(|c| (c, "hace falta ser administrador".to_string()))?;
+    let admin = require_admin(&app, &bearer(&headers)).map_err(|c| (c, "hace falta ser administrador".to_string()))?;
     if let Some(title) = &req.title {
         perfil::set_titulo(&app.store, title).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        tracing::info!("título del servidor cambiado por el administrador {admin}: {title}");
     }
     if let Some(desc) = &req.description {
         perfil::set_descripcion(&app.store, desc).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        tracing::info!("descripción del servidor cambiada por el administrador {admin}");
     }
     Ok(Json(perfil::leer_servidor(&app.store, &app.dir)))
 }

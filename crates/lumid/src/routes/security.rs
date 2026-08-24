@@ -28,26 +28,35 @@ pub async fn patch_security(
     headers: HeaderMap,
     Json(req): Json<PatchSecurityReq>,
 ) -> Result<Json<SecuritySettings>, (StatusCode, String)> {
-    require_admin(&app, &bearer(&headers)).map_err(|c| (c, "hace falta ser administrador".to_string()))?;
+    let admin = require_admin(&app, &bearer(&headers)).map_err(|c| (c, "hace falta ser administrador".to_string()))?;
     if let Some(on) = req.zero_trust {
         crate::zero_trust::set_zero_trust(&app, on).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        tracing::info!("Zero Trust {} por el administrador {admin}", if on { "activado" } else { "desactivado" });
     }
     if let Some(on) = req.self_service_ip {
         crate::zero_trust::set_self_service_ip(&app, on)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        tracing::info!("autoservicio de IP {} por el administrador {admin}", if on { "activado" } else { "desactivado" });
     }
     if let Some(on) = req.maintenance {
         crate::mantenimiento::set_activo(&app, on).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        tracing::info!("modo mantenimiento {} por el administrador {admin}", if on { "activado" } else { "desactivado" });
     }
     if let Some(msg) = &req.maintenance_message {
         crate::mantenimiento::set_mensaje(&app, msg).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        tracing::info!("mensaje de mantenimiento cambiado por el administrador {admin}");
     }
     if let Some(on) = req.maintenance_block_login {
         crate::mantenimiento::set_bloquea_login(&app, on)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        tracing::info!(
+            "bloqueo de login en mantenimiento {} por el administrador {admin}",
+            if on { "activado" } else { "desactivado" }
+        );
     }
     if let Some(ids) = &req.maintenance_services {
         crate::mantenimiento::set_servicios(&app, ids).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        tracing::info!("servicios habilitados en mantenimiento cambiados por el administrador {admin}: {ids:?}");
     }
     get_security(State(app), headers).await.map_err(|c| (c, "no se pudo releer los ajustes".to_string()))
 }
@@ -62,7 +71,7 @@ pub async fn add_allow(
     headers: HeaderMap,
     Json(req): Json<IpReq>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    require_admin(&app, &bearer(&headers)).map_err(|c| (c, "hace falta ser administrador".to_string()))?;
+    let admin = require_admin(&app, &bearer(&headers)).map_err(|c| (c, "hace falta ser administrador".to_string()))?;
     app.store
         .conn()
         .execute(
@@ -70,15 +79,17 @@ pub async fn add_allow(
             rusqlite::params![req.ip, now()],
         )
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    tracing::info!("IP {} añadida a la lista blanca por el administrador {admin}", req.ip);
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn remove_allow(State(app): State<App>, headers: HeaderMap, Query(q): Query<IpQuery>) -> Result<StatusCode, StatusCode> {
-    require_admin(&app, &bearer(&headers))?;
+    let admin = require_admin(&app, &bearer(&headers))?;
     app.store
         .conn()
         .execute("DELETE FROM ip_allowlist WHERE ip = ?1", [&q.ip])
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    tracing::info!("IP {} quitada de la lista blanca por el administrador {admin}", q.ip);
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -87,7 +98,7 @@ pub async fn add_deny(
     headers: HeaderMap,
     Json(req): Json<IpReq>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    require_admin(&app, &bearer(&headers)).map_err(|c| (c, "hace falta ser administrador".to_string()))?;
+    let admin = require_admin(&app, &bearer(&headers)).map_err(|c| (c, "hace falta ser administrador".to_string()))?;
     app.store
         .conn()
         .execute(
@@ -95,14 +106,16 @@ pub async fn add_deny(
             rusqlite::params![req.ip, now()],
         )
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    tracing::info!("IP {} añadida a la lista negra por el administrador {admin}", req.ip);
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn remove_deny(State(app): State<App>, headers: HeaderMap, Query(q): Query<IpQuery>) -> Result<StatusCode, StatusCode> {
-    require_admin(&app, &bearer(&headers))?;
+    let admin = require_admin(&app, &bearer(&headers))?;
     app.store
         .conn()
         .execute("DELETE FROM ip_denylist WHERE ip = ?1", [&q.ip])
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    tracing::info!("IP {} quitada de la lista negra por el administrador {admin}", q.ip);
     Ok(StatusCode::NO_CONTENT)
 }

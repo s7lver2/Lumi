@@ -51,8 +51,9 @@ pub async fn patch(
     headers: HeaderMap,
     Json(s): Json<red::Settings>,
 ) -> Result<Json<NetworkView>, (StatusCode, String)> {
-    require_admin(&app, &bearer(&headers)).map_err(|c| (c, "hace falta ser administrador".to_string()))?;
+    let admin = require_admin(&app, &bearer(&headers)).map_err(|c| (c, "hace falta ser administrador".to_string()))?;
     red::guardar(&app.store, &s).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    tracing::info!("ajustes de red cambiados por el administrador {admin}: puerto {}", s.bind_port);
     Ok(Json(NetworkView {
         settings: red::leer(&app.store),
         server_card: tarjeta(&app),
@@ -66,10 +67,11 @@ pub async fn patch(
 const AVISO_ANTES_DE_REINICIAR: Duration = Duration::from_secs(5);
 
 pub async fn restart(State(app): State<App>, headers: HeaderMap) -> Result<StatusCode, (StatusCode, String)> {
-    require_admin(&app, &bearer(&headers)).map_err(|c| (c, "hace falta ser administrador".to_string()))?;
+    let admin = require_admin(&app, &bearer(&headers)).map_err(|c| (c, "hace falta ser administrador".to_string()))?;
     if let Some(motivo) = motivo_bloqueo(&app) {
         return Err((StatusCode::CONFLICT, motivo));
     }
+    tracing::info!("reinicio del servidor pedido por el administrador {admin}");
     let nuevo_addr = red::direccion_publica(&app.store);
     // Difunde a TODAS las sesiones conectadas (el filtro por user_id lo hace
     // cada handler de SSE en `routes::queue::events`, no aquí).

@@ -82,6 +82,7 @@ pub async fn create(
         }
     }
 
+    tracing::info!("aviso #{id} publicado por {creado_por} (destino: {})", req.destino);
     c.query_row(&format!("{SELECT_AVISO} WHERE id = ?1"), [id], map_row)
         .map(Json)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
@@ -91,7 +92,7 @@ pub async fn create(
 /// escribió — mismo criterio que el resto del panel, que no distingue entre
 /// administradores.
 pub async fn remove(State(app): State<App>, Path(id): Path<i64>, headers: HeaderMap) -> Result<StatusCode, StatusCode> {
-    require_admin(&app, &bearer(&headers))?;
+    let admin = require_admin(&app, &bearer(&headers))?;
     let c = app.store.conn();
     let n = c
         .execute("DELETE FROM avisos WHERE id = ?1", [id])
@@ -100,5 +101,6 @@ pub async fn remove(State(app): State<App>, Path(id): Path<i64>, headers: Header
     if n == 0 {
         return Err(StatusCode::NOT_FOUND);
     }
+    tracing::info!("aviso #{id} borrado por el administrador {admin}");
     Ok(StatusCode::NO_CONTENT)
 }

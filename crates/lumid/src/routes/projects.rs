@@ -151,6 +151,7 @@ pub async fn create(
         rusqlite::params![id, uid, t],
     )
     .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    tracing::info!("proyecto #{id} creado: {name} (usuario {uid})");
     Ok(Json(Project {
         id,
         name: name.to_string(),
@@ -183,6 +184,7 @@ pub async fn rename(
             rusqlite::params![name, now(), id],
         )
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    tracing::info!("proyecto #{id} renombrado a {name}");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -292,6 +294,7 @@ pub async fn add_member(
         let invited_by: String = c
             .query_row("SELECT username FROM users WHERE id = ?1", [inviter], |r| r.get(0))
             .unwrap_or_default();
+        tracing::info!("proyecto #{id} ({project_name}): {invited_by} invita al usuario {uid}");
         app.queue.difundir(lumi_proto::api::Cambio::Invitacion {
             user_id: uid,
             project_id: id,
@@ -507,5 +510,6 @@ pub async fn remove_member(
             rusqlite::params![id, target],
         )
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    tracing::info!("proyecto #{id}: usuario {target} quitado por el usuario {uid}");
     Ok(StatusCode::NO_CONTENT)
 }

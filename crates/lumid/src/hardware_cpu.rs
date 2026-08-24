@@ -190,6 +190,7 @@ pub async fn aplicar(app: &App, req: &PatchCpuReq) -> Result<CpuDevice, AplicarC
     }
 
     guardar_perfil(app, &nuevo).map_err(|e| AplicarCpuError::Escritura(e.to_string()))?;
+    tracing::info!("perfil de potencia de CPU aplicado: PL1 {}W, PL2 {}W", nuevo.pl1_w, nuevo.pl2_w);
 
     // `dispositivo` también bloquea (sysinfo, sysfs, intento de ejecutar
     // `ryzenadj`) — mismo motivo que ya se aplicó a su GET hoy.

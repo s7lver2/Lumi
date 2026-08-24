@@ -35,12 +35,13 @@ pub async fn instalar(
     headers: HeaderMap,
     Json(p): Json<Peticion>,
 ) -> Result<StatusCode, StatusCode> {
-    require_admin(&app, &bearer(&headers))?;
+    let admin = require_admin(&app, &bearer(&headers))?;
     if app.indices_en_curso.lock().unwrap().as_ref().is_some_and(|p| !p.terminado) {
         // Un solo hueco a propósito: dos instalaciones contra el mismo disco
         // y la misma red no van más rápido, van peor.
         return Err(StatusCode::CONFLICT);
     }
+    tracing::info!("instalación de índice pedida por el administrador {admin}: {}", p.url);
     // Se marca "en curso" AQUÍ, antes de soltar la petición, no dentro de la
     // tarea lanzada más abajo: `crate::indices::instalar` tarda en traer la
     // ficha por red antes de tocar `indices_en_curso`, y en ese hueco el
@@ -136,7 +137,7 @@ pub async fn desinstalar(
     Path(paquete): Path<String>,
     headers: HeaderMap,
 ) -> Result<StatusCode, StatusCode> {
-    require_admin(&app, &bearer(&headers))?;
+    let admin = require_admin(&app, &bearer(&headers))?;
 
     let existe: bool = app
         .store
@@ -196,5 +197,6 @@ pub async fn desinstalar(
         .execute("DELETE FROM installed_indices WHERE paquete = ?1", [&paquete])
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    tracing::info!("índice {paquete} desinstalado por el administrador {admin}");
     Ok(StatusCode::NO_CONTENT)
 }

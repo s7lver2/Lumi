@@ -72,6 +72,7 @@ pub async fn create(
     let username: String = c
         .query_row("SELECT username FROM users WHERE id = ?1", [uid], |r| r.get(0))
         .unwrap_or_default();
+    tracing::info!("solicitud de crédito #{id} ({}) del usuario {uid}: {valor_actual} -> {}", info.tipo, info.valor_propuesto);
     let _ = app.admin_eventos.send(EventoAdmin::SolicitudCredito {
         user_id: uid,
         username,
@@ -132,5 +133,9 @@ pub async fn resolve(
         )
     }
     .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    tracing::info!(
+        "solicitud de crédito #{id} {} por el administrador {admin}",
+        if req.approve { "aprobada" } else { "rechazada" }
+    );
     Ok(StatusCode::NO_CONTENT)
 }

@@ -29,6 +29,7 @@ pub async fn accept_licenses(
             rusqlite::params![licencia, junto, quien, t],
         )
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        tracing::info!("licencia '{licencia}' aceptada por el administrador {quien} para {junto}");
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -100,7 +101,7 @@ pub async fn download(
     headers: HeaderMap,
     Json(req): Json<DownloadReq>,
 ) -> Result<Json<lumi_proto::api::TaskStatus>, (StatusCode, String)> {
-    require_admin(&app, &bearer(&headers))
+    let admin = require_admin(&app, &bearer(&headers))
         .map_err(|c| (c, "hace falta ser administrador".to_string()))?;
 
     if !licencias_aceptadas(&app, &req.items) {
@@ -114,6 +115,7 @@ pub async fn download(
 
     let id = crate::tasks::spawn_model_download(&app, items)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    tracing::info!("descarga de modelos pedida por el administrador {admin}: {:?}", req.items);
 
     // Clonar app e id para el sondeo en segundo plano
     let app2 = app.clone();
@@ -227,12 +229,14 @@ pub async fn set_provider_token(
     headers: HeaderMap,
     Json(req): Json<lumi_proto::api::ProviderTokenReq>,
 ) -> Result<Json<lumi_proto::api::ProviderTokenState>, StatusCode> {
-    require_admin(&app, &bearer(&headers))?;
+    let admin = require_admin(&app, &bearer(&headers))?;
     if let Some(t) = req.token {
         if t.is_empty() {
             let _ = app.store.conn().execute("DELETE FROM meta WHERE k = 'model_provider_token'", []);
+            tracing::info!("token de proveedor de modelos borrado por el administrador {admin}");
         } else {
             app.store.set_meta("model_provider_token", t.trim()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            tracing::info!("token de proveedor de modelos actualizado por el administrador {admin}");
         }
     }
     Ok(Json(lumi_proto::api::ProviderTokenState {

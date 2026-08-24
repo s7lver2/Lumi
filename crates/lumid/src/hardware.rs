@@ -266,6 +266,10 @@ pub async fn aplicar(
     }
 
     guardar_perfil(app, index, &nuevo).map_err(|e| AplicarError::Nvml(e.to_string()))?;
+    tracing::info!(
+        "perfil de hardware de la GPU {index} aplicado: {}W, offset núcleo {}MHz, offset memoria {}MHz",
+        nuevo.potencia_w, nuevo.offset_nucleo_mhz, nuevo.offset_memoria_mhz
+    );
 
     // Releer el estado final también es NVML síncrono.
     let name = app.gpus.get(index as usize).map(|g| g.name.clone()).unwrap_or_default();

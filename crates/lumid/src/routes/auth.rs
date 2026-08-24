@@ -178,6 +178,7 @@ pub async fn login(
     )
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     limpiar_intentos(peer);
+    tracing::info!("login: {} ({id}) desde {}", req.username, peer.ip());
     Ok(Json(LoginRes {
         token,
         id,
@@ -348,6 +349,7 @@ pub async fn revoke_session(
     if n == 0 {
         return Err(StatusCode::NOT_FOUND);
     }
+    tracing::info!("sesión {public_id} revocada por el usuario {uid}");
     Ok(StatusCode::NO_CONTENT)
 }
 

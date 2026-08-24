@@ -237,6 +237,10 @@ pub async fn patch_user(
             if b {
                 let _ = c.execute("DELETE FROM sessions WHERE user_id = ?1", [id]);
             }
+            tracing::info!(
+                "usuario {id} {} por el administrador {admin}",
+                if b { "bloqueado" } else { "desbloqueado" }
+            );
         }
         if let Some(m) = req.must_change_password {
             c.execute(
@@ -244,6 +248,9 @@ pub async fn patch_user(
                 rusqlite::params![m as i64, id],
             )
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            if m {
+                tracing::info!("el administrador {admin} exige cambio de contraseña al usuario {id}");
+            }
         }
     }
     for (k, v) in &req.limits {
@@ -253,6 +260,7 @@ pub async fn patch_user(
             crate::limits::set(&app.store, Some(id), k, v)
         };
         r.map_err(|e| bad(&e.to_string()))?;
+        tracing::info!("límite '{k}' del usuario {id} cambiado por el administrador {admin}: {v}");
     }
     // Se devuelve el detalle recalculado para que la interfaz no tenga que
     // adivinar el resultado ni volver a pedirlo.
@@ -274,7 +282,7 @@ pub async fn patch_limits(
     headers: HeaderMap,
     Json(req): Json<PatchLimitsReq>,
 ) -> Result<Json<lumi_proto::api::Limits>, (StatusCode, String)> {
-    require_admin(&app, &bearer(&headers))
+    let admin = require_admin(&app, &bearer(&headers))
         .map_err(|c| (c, "hace falta ser administrador".to_string()))?;
     for (k, v) in &req.limits {
         let r = if v.is_null() {
@@ -283,6 +291,7 @@ pub async fn patch_limits(
             crate::limits::set(&app.store, None, k, v)
         };
         r.map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+        tracing::info!("límite global '{k}' cambiado por el administrador {admin}: {v}");
     }
     Ok(Json(crate::limits::global(&app.store)))
 }
@@ -298,6 +307,10 @@ pub async fn resumen(
     headers: HeaderMap,
 ) -> Result<Json<lumi_proto::api::Resumen>, StatusCode> {
     require_admin(&app, &bearer(&headers))?;
+    // Antes de abrir la conexión: `detectar` es async y `c` (el guard del
+    // mutex de la única conexión del daemon) no es `Send` — mantenerlo vivo
+    // a través de este `.await` rompía la compilación del handler entero.
+    let problemas_doctor = crate::routes::doctor::detectar(&app).await.len() as i64;
     let c = app.store.conn();
     let ahora = now();
     // Medianoche UTC, no local: el daemon no sabe en qué huso está mirando el
@@ -382,6 +395,7 @@ pub async fn resumen(
         teselas,
         arrancado_en: app.arrancado_en,
         modelos_instalados: crate::routes::models::hay_alguno_instalado(&app),
+        problemas_doctor,
     }))
 }
 
@@ -390,8 +404,9 @@ pub async fn resumen(
 /// para siempre, y cada reconexión del propio administrador lo manda de
 /// vuelta al asistente aunque ya esté todo configurado.
 pub async fn provisionar(State(app): State<App>, headers: HeaderMap) -> Result<StatusCode, StatusCode> {
-    require_admin(&app, &bearer(&headers))?;
+    let admin = require_admin(&app, &bearer(&headers))?;
     app.store.set_meta("provisioned", "1").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    tracing::info!("servidor provisionado por el administrador {admin}: asistente completado");
     Ok(StatusCode::NO_CONTENT)
 }
 
