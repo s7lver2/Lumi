@@ -473,6 +473,49 @@ async fn start_admin_events(
     Ok(())
 }
 
+/// Mismo puente que `start_admin_events`, pero para `/v1/admin/logs/stream`.
+/// A diferencia de los otros SSE, aquí el `data:` de cada frame es texto
+/// plano (una línea de log), no JSON — así que se reenvía tal cual, y se
+/// distingue el frame de error por su `event: error` para emitirlo aparte.
+#[tauri::command]
+async fn start_logs_stream(
+    token: String, app: tauri::AppHandle, state: tauri::State<'_, Shared>,
+) -> Result<(), String> {
+    use futures_util::StreamExt;
+    use tauri::Emitter;
+    let (base, client) = {
+        let c = state.lock().unwrap();
+        (c.base.clone().ok_or("sin servidor")?, c.client.clone().ok_or("sin cliente")?)
+    };
+    tokio::spawn(async move {
+        let Ok(res) = client.get(format!("{base}/v1/admin/logs/stream")).bearer_auth(&token).send().await else {
+            let _ = app.emit("logs-down", ());
+            return;
+        };
+        let mut stream = res.bytes_stream();
+        let mut buf = String::new();
+        while let Some(Ok(chunk)) = stream.next().await {
+            buf.push_str(&String::from_utf8_lossy(&chunk));
+            while let Some(i) = buf.find("\n\n") {
+                let frame = buf[..i].to_string();
+                buf.drain(..i + 2);
+                let es_error = frame.lines().any(|l| l == "event: error");
+                let dato: String = frame
+                    .lines()
+                    .filter_map(|l| l.strip_prefix("data: "))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if dato.is_empty() {
+                    continue;
+                }
+                let _ = app.emit(if es_error { "logs-error" } else { "logs-line" }, dato);
+            }
+        }
+        let _ = app.emit("logs-down", ());
+    });
+    Ok(())
+}
+
 fn main() {
     rustls::crypto::ring::default_provider().install_default().ok();
     tauri::Builder::default()
@@ -542,8 +585,9 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             pair, pair_card, reconnect, request, start_telemetry, start_task_log,
-            start_queue_events, start_indices_events, start_admin_events, set_auth, upload_images,
-            read_image_as_data_url, upload_avatar_bytes, upload_server_avatar_bytes, upload_server_banner_bytes
+            start_queue_events, start_indices_events, start_admin_events, start_logs_stream, set_auth,
+            upload_images, read_image_as_data_url, upload_avatar_bytes, upload_server_avatar_bytes,
+            upload_server_banner_bytes
         ])
         .run(tauri::generate_context!())
         .expect("error al arrancar Tauri");
