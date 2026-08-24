@@ -39,6 +39,7 @@ export function RequestsView({ token }: { token: string }) {
   const [acceso, setAcceso] = useState<AdminRequest[]>([]);
   const [credito, setCredito] = useState<CreditRequestInfo[]>([]);
   const [granted, setGranted] = useState<Record<number, string[]>>({});
+  const [comoAdmin, setComoAdmin] = useState<Record<number, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [abierta, setAbierta] = useState<string | null>(null);
 
@@ -52,7 +53,7 @@ export function RequestsView({ token }: { token: string }) {
   async function resolveAcceso(id: number, approve: boolean) {
     try {
       await api.post(`/v1/admin/access-requests/${id}/resolve`,
-        { approve, granted_models: approve ? granted[id] ?? ["mini"] : undefined }, token);
+        { approve, granted_models: approve ? granted[id] ?? ["mini"] : undefined, as_admin: !!comoAdmin[id] }, token);
       load();
     } catch (e) { setError(String(e)); load(); }
   }
@@ -138,6 +139,19 @@ export function RequestsView({ token }: { token: string }) {
                           <button onClick={() => resolveAcceso(f.r.id, true)} className="rounded-lg bg-accent px-3 py-1.5 text-[11px] font-medium text-black active:translate-y-px">Aprobar</button>
                           <button onClick={() => resolveAcceso(f.r.id, false)} className="rounded-lg border border-white/15 px-3 py-1.5 text-[11px] text-fg active:translate-y-px">Rechazar</button>
                           <span className="ml-auto flex items-center gap-1.5 text-[11px] text-subtle">
+                            entra como:
+                            {(["usuario", "admin"] as const).map((rol) => {
+                              const on = rol === "admin" ? !!comoAdmin[f.r.id] : !comoAdmin[f.r.id];
+                              return (
+                                <button key={rol}
+                                  onClick={() => setComoAdmin((s) => ({ ...s, [f.r.id]: rol === "admin" }))}
+                                  className={`rounded border px-1.5 py-0.5 text-[10.5px] capitalize transition-colors duration-300 ease-expo ${on ? "border-accent text-fg" : "border-border text-subtle"}`}>
+                                  {rol}
+                                </button>
+                              );
+                            })}
+                          </span>
+                          <span className="flex items-center gap-1.5 text-[11px] text-subtle">
                             conceder:
                             {MODELS.map((m) => {
                               const on = (granted[f.r.id] ?? ["mini"]).includes(m);

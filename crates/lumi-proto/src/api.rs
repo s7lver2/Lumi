@@ -509,6 +509,10 @@ pub struct ResolveReq {
     /// Solo al aprobar. Vacío o ausente: hereda los modelos del global.
     #[serde(default)]
     pub granted_models: Option<Vec<String>>,
+    /// Solo al aprobar. La cuenta nace administradora o normal según lo que
+    /// eligió quien aprobó, no una decisión que tome el propio solicitante.
+    #[serde(default)]
+    pub as_admin: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

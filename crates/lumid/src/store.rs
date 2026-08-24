@@ -412,6 +412,11 @@ fn migrate(c: &Connection) {
         // rechazara nada, no hay nada que rechazar en un `INSERT`.
         ("users", "accepted_policies_at", "INTEGER"),
         ("users", "avatar_updated_at", "INTEGER"),
+        // Qué rol pidió el administrador al aprobar la solicitud — la cuenta
+        // se crea después, en `create_account`, cuando el propio solicitante
+        // vuelve con el ticket, así que la decisión tiene que sobrevivir
+        // hasta entonces en algún sitio que no sea la sesión del admin.
+        ("access_requests", "granted_is_admin", "INTEGER NOT NULL DEFAULT 0"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }

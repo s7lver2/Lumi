@@ -88,10 +88,10 @@ pub async fn resolve_request(
             .and_then(|m| serde_json::to_string(&m).ok());
         c.execute(
             "UPDATE access_requests
-             SET status = 'approved', granted_models = ?1, expires_at = ?2,
-                 resolved_at = ?3, resolved_by = ?4
-             WHERE id = ?5",
-            rusqlite::params![models, t + APPROVED_TTL_S, t, admin, id],
+             SET status = 'approved', granted_models = ?1, granted_is_admin = ?2, expires_at = ?3,
+                 resolved_at = ?4, resolved_by = ?5
+             WHERE id = ?6",
+            rusqlite::params![models, req.as_admin, t + APPROVED_TTL_S, t, admin, id],
         )
     } else {
         c.execute(

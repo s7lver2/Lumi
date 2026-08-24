@@ -63,6 +63,9 @@ pub struct Row {
     pub status: String,
     pub display_name: String,
     pub granted_models: Option<String>,
+    /// Lo que decidió el administrador al aprobar: si la cuenta que está a
+    /// punto de crearse en `create_account` nace administradora.
+    pub granted_is_admin: bool,
     // ponytail: se lee de la fila porque la consulta ya la trae, pero nada
     // todavía decide nada por caducidad de acceso concedido — el ticket en sí
     // ya expira aparte. Queda aquí para cuando esa política exista.
@@ -75,14 +78,14 @@ pub struct Row {
 pub fn authorize(app: &App, t: &str) -> Result<Row, (StatusCode, String)> {
     let bad = |c: StatusCode, m: &str| (c, m.to_string());
     let (id, secret) = split_ticket(t).ok_or_else(|| bad(StatusCode::UNAUTHORIZED, "ticket inválido"))?;
-    let r: (String, String, String, Option<String>, i64) = app
+    let r: (String, String, String, Option<String>, i64, i64) = app
         .store
         .conn()
         .query_row(
-            "SELECT ticket_phc, status, display_name, granted_models, expires_at
+            "SELECT ticket_phc, status, display_name, granted_models, expires_at, granted_is_admin
              FROM access_requests WHERE id = ?1",
             [id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
         )
         .map_err(|_| bad(StatusCode::UNAUTHORIZED, "ticket inválido"))?;
     if !verify_password(&secret, &r.0) {
@@ -94,7 +97,7 @@ pub fn authorize(app: &App, t: &str) -> Result<Row, (StatusCode, String)> {
     if now() > r.4 {
         return Err(bad(StatusCode::GONE, "la solicitud caducó; vuelve a solicitar acceso"));
     }
-    Ok(Row { id, status: r.1, display_name: r.2, granted_models: r.3, expires_at: r.4 })
+    Ok(Row { id, status: r.1, display_name: r.2, granted_models: r.3, granted_is_admin: r.5 != 0, expires_at: r.4 })
 }
 
 pub async fn create(
@@ -218,8 +221,8 @@ pub async fn create_account(
         // El nombre ocupado NO consume el ticket: es una colisión, no un abuso.
         c.execute(
             "INSERT INTO users (username, display_name, password_phc, is_admin, created_at, accepted_policies_at)
-             VALUES (?1, ?2, ?3, 0, ?4, ?5)",
-            rusqlite::params![username, row.display_name, phc, now(), accepted_at],
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![username, row.display_name, phc, row.granted_is_admin, now(), accepted_at],
         )
         .map_err(|_| err(StatusCode::CONFLICT, "ese nombre de usuario ya existe"))?;
         let uid = c.last_insert_rowid();
@@ -236,7 +239,11 @@ pub async fn create_account(
             let _ = crate::limits::set(&app.store, Some(uid), "models", &v);
         }
     }
-    tracing::info!("cuenta creada: {username} (solicitud #{})", row.id);
+    tracing::info!(
+        "cuenta creada: {username} ({}, solicitud #{})",
+        if row.granted_is_admin { "administrador" } else { "usuario normal" },
+        row.id
+    );
     Ok(StatusCode::CREATED)
 }
 
