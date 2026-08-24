@@ -5,7 +5,7 @@ import { Icon, type IconName } from "../ui/Icon";
 export type Seccion =
   | "resumen" | "modelos" | "personalizacion" | "indices" | "seguridad" | "claves" | "red"
   | "solicitudes" | "usuarios"
-  | "cola" | "notificaciones" | "hardware";
+  | "cola" | "notificaciones" | "hardware" | "doctor";
 
 /** Las que todavía no existen se ven, atenuadas, con su «pronto». Aparecer de
  *  la nada dentro de tres meses es peor que estar desde el principio diciendo
@@ -36,6 +36,7 @@ const GRUPOS: { grupo: string; items: { id: Seccion; label: string; icon: IconNa
       { id: "cola", label: "Cola", icon: "bars" },
       { id: "notificaciones", label: "Notificaciones", icon: "bell" },
       { id: "hardware", label: "Hardware", icon: "gpu" },
+      { id: "doctor", label: "Doctor", icon: "pulse" },
     ],
   },
 ];

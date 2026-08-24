@@ -97,6 +97,7 @@ const PATHS: Record<string, React.JSX.Element> = {
       <path d="M0 9v2M0 14v2M24 9v2M24 14v2" />
     </>
   ),
+  pulse: <path d="M2 12h4l2-7 4 14 3-9 2 4h5" />,
 };
 
 export type IconName = keyof typeof PATHS;

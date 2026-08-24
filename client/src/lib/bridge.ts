@@ -38,6 +38,7 @@ export async function announcePresence(token: string): Promise<void> {
  *  propia conexión SSE y ambas reciben la misma fotografía del servidor. */
 export const startIndicesEvents = (token: string) => invoke("start_indices_events", { token });
 export const startAdminEvents = (token: string) => invoke("start_admin_events", { token });
+export const startLogsStream = (token: string) => invoke("start_logs_stream", { token });
 
 export async function uploadPaths(caseId: number, paths: string[]): Promise<Image[]> {
   if (paths.length === 0) return [];

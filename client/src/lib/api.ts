@@ -355,6 +355,25 @@ export interface QueueView {
   pendientes_detalle: PendienteView[];
 }
 
+export interface Problema {
+  id: string;
+  titulo: string;
+  detalle: string;
+  accion: string | null;
+  enlace: string | null;
+}
+export interface SaludView {
+  problemas: Problema[];
+}
+export interface MuestraHistorial {
+  created_at: number;
+  cpu_pct: number;
+  ram_used_mb: number;
+  disk_free_mb: number;
+  queue_depth: number;
+  gpus: GpuSample[];
+}
+
 /** Lo que llega por el evento `queue-change`. El progreso no está guardado en
  *  ninguna parte: se emite y se olvida, así que si te lo pierdes, se perdió. */
 export type Cambio =
@@ -412,6 +431,12 @@ export const api = {
     api.patch<HardwareDevice>(`/v1/admin/hardware/${index}`, req, token),
   cpuLeer: (token: string) => api.get<CpuDevice>("/v1/admin/hardware/cpu", token),
   cpuAplicar: (req: PatchCpuReq, token: string) => api.patch<CpuDevice>("/v1/admin/hardware/cpu", req, token),
+  saludGet: (token: string) => api.get<SaludView>("/v1/admin/telemetry/salud", token),
+  historialGet: (rango: "1h" | "24h" | "7d", token: string) =>
+    api.get<MuestraHistorial[]>(`/v1/admin/telemetry/historial?rango=${rango}`, token),
+  arreglarTrabajador: (dispositivo: string, token: string) =>
+    api.post<null>(`/v1/admin/doctor/arreglar/trabajador/${encodeURIComponent(dispositivo)}`, {}, token),
+  arreglarQdrant: (token: string) => api.post<null>("/v1/admin/doctor/arreglar/qdrant", {}, token),
   networkGet: (token: string) => api.get<NetworkView>("/v1/admin/network", token),
   networkPatch: (s: NetworkSettings, token: string) => api.patch<NetworkView>("/v1/admin/network", s, token),
   networkRestart: (token: string) => api.post<null>("/v1/admin/network/restart", {}, token),
