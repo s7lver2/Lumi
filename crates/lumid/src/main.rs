@@ -206,6 +206,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/telemetry/historial", get(routes::doctor::historial))
         .route("/v1/admin/doctor/arreglar/trabajador/:dispositivo", post(routes::doctor::arreglar_trabajador))
         .route("/v1/admin/doctor/arreglar/qdrant", post(routes::doctor::arreglar_qdrant))
+        .route("/v1/admin/logs/stream", get(routes::logs::stream))
         .route("/v1/admin/provisioning/complete", post(routes::admin::provisionar))
         .route("/v1/admin/models/accept-licenses", post(routes::models::accept_licenses))
         .route("/v1/admin/models/download", post(routes::models::download))

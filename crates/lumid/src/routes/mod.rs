@@ -15,6 +15,7 @@ pub mod hardware_cpu;
 pub mod hello;
 pub mod images;
 pub mod indices;
+pub mod logs;
 pub mod map;
 pub mod network;
 pub mod perfil;
