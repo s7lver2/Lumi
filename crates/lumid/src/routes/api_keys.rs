@@ -73,15 +73,41 @@ pub async fn list_all(State(app): State<App>, headers: HeaderMap) -> Result<Json
     Ok(Json(listar(&app, None)))
 }
 
-fn crear_usuario_de_sistema(app: &App, name: &str) -> anyhow::Result<i64> {
+/// Encuentra la identidad de sistema por nombre, o la crea si es la primera
+/// vez. Sin esta comprobación, pedir una SEGUNDA clave para la misma
+/// identidad (rotar credenciales, o una clave más para el mismo bot) volvía
+/// a intentar `INSERT` el mismo `username` y fallaba con el error en crudo
+/// de la restricción `UNIQUE` de SQLite, en vez de reutilizar la fila que ya
+/// existía. Si el nombre ya lo tiene una cuenta de persona (no de sistema),
+/// se rechaza con un motivo claro en vez de esa misma restricción en crudo.
+fn usuario_de_sistema(app: &App, name: &str) -> Result<i64, (StatusCode, String)> {
+    let existente: Option<(i64, i64)> = app
+        .store
+        .conn()
+        .query_row("SELECT id, is_service FROM users WHERE username = ?1", [name], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .ok();
+    if let Some((id, is_service)) = existente {
+        return if is_service == 1 {
+            Ok(id)
+        } else {
+            Err((StatusCode::CONFLICT, format!("\"{name}\" ya es el nombre de una cuenta de persona; elige otro")))
+        };
+    }
     // Sin contraseña utilizable: un hash de un secreto aleatorio que nadie
     // conoce, así que ningún intento de login por formulario puede acertarlo.
-    let phc = lumi_proto::crypto::hash_password(&crate::routes::claim::new_token())?;
-    app.store.conn().execute(
+    let phc = lumi_proto::crypto::hash_password(&crate::routes::claim::new_token())
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let c = app.store.conn();
+    c.execute(
         "INSERT INTO users (username, password_phc, is_admin, is_service, created_at) VALUES (?1, ?2, 0, 1, ?3)",
         rusqlite::params![name, phc, now()],
-    )?;
-    Ok(app.store.conn().last_insert_rowid())
+    )
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let id = c.last_insert_rowid();
+    tracing::info!("identidad de sistema \"{name}\" creada (usuario {id})");
+    Ok(id)
 }
 
 pub async fn create(
@@ -105,8 +131,7 @@ pub async fn create(
                     .map(str::trim)
                     .filter(|s| !s.is_empty())
                     .ok_or((StatusCode::BAD_REQUEST, "falta el nombre de la identidad de sistema".to_string()))?;
-                crear_usuario_de_sistema(&app, name)
-                    .map_err(|e| (StatusCode::BAD_REQUEST, format!("no se pudo crear la identidad: {e}")))?
+                usuario_de_sistema(&app, name)?
             }
         }
     } else {
