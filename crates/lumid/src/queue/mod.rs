@@ -96,6 +96,12 @@ struct Vivo {
     /// Cuándo se lanzó. Solo se mira mientras `listo` es falso, para saber si
     /// se le ha pasado el plazo de arranque.
     desde: Instant,
+    /// Cuándo se le asignó el análisis que tiene ahora mismo en `trabajo`.
+    /// `None` mientras `trabajo` es `None`. Es lo que permite distinguir un
+    /// trabajo que tarda de uno que se ha quedado colgado a mitad — el
+    /// vigilante de `revisar()` solo cubre el caso de "nunca llegó a decir
+    /// listo"; esto cubre el caso posterior, que no tenía ninguna detección.
+    en_curso_desde: Option<Instant>,
     tx: mpsc::UnboundedSender<Job>,
     matar: Option<oneshot::Sender<()>>,
 }
@@ -431,6 +437,7 @@ impl Queue {
                             trabajo: None,
                             listo: false,
                             desde: Instant::now(),
+                            en_curso_desde: None,
                             tx: l.trabajos,
                             matar: Some(l.matar),
                         },
@@ -502,6 +509,46 @@ impl Queue {
         for d in faltan {
             self.apuntar_fallo(&d);
             self.lanzar_uno(&d);
+        }
+    }
+
+    /// Dispositivos cuyo trabajo actual lleva más de `umbral` sin que se le
+    /// haya asignado desde entonces — es decir, sin ningún evento de
+    /// progreso/resultado/fallo que reiniciara `en_curso_desde` (esos
+    /// eventos pasan por `soltar`/`repartir_ahora`, que son los dos únicos
+    /// sitios que tocan este campo). Devuelve (dispositivo, analysis_id).
+    pub fn colgados(&self, umbral: std::time::Duration) -> Vec<(String, i64)> {
+        let ahora = Instant::now();
+        match self.estado.lock() {
+            Ok(e) => e
+                .trabajadores
+                .iter()
+                .filter_map(|(d, w)| {
+                    let desde = w.en_curso_desde?;
+                    let id = w.trabajo?;
+                    (ahora.duration_since(desde) > umbral).then(|| (d.clone(), id))
+                })
+                .collect(),
+            Err(_) => vec![],
+        }
+    }
+
+    /// Mata al trabajador de `dispositivo` ya mismo, sin esperar al plazo de
+    /// `revisar()` — el mismo camino que ya usa el vigilante para el caso de
+    /// arranque colgado, aquí disparado a mano desde Doctor. El vigilante lo
+    /// relanzará en su siguiente tick, igual que si hubiera muerto solo.
+    /// `true` si había un trabajador vivo al que matar.
+    pub fn forzar_reinicio(&self, dispositivo: &str) -> bool {
+        let matar = match self.estado.lock() {
+            Ok(mut e) => e.trabajadores.get_mut(dispositivo).and_then(|w| w.matar.take()),
+            Err(_) => None,
+        };
+        match matar {
+            Some(tx) => {
+                let _ = tx.send(());
+                true
+            }
+            None => false,
         }
     }
 
@@ -946,6 +993,7 @@ impl Queue {
             if let Some(w) = e.trabajadores.get_mut(dispositivo) {
                 if w.trabajo == Some(id) {
                     w.trabajo = None;
+                    w.en_curso_desde = None;
                 }
             }
         }
@@ -1036,6 +1084,7 @@ impl Queue {
                 Ok(mut e) => match e.trabajadores.get_mut(&a.dispositivo) {
                     Some(w) => {
                         w.trabajo = Some(a.analysis_id);
+                        w.en_curso_desde = Some(Instant::now());
                         w.tx.send(Job::con_modelos(a.analysis_id, modelos, imagenes)).is_ok()
                     }
                     None => false,
