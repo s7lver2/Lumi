@@ -135,3 +135,67 @@ fn incluye_a(app: &App, aviso_id: i64, user_id: i64) -> bool {
         )
         .is_ok()
 }
+
+fn ahora() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Arrancada una vez en `main.rs`, no por cliente conectado — a diferencia
+/// del SSE de telemetría en vivo, esta tarea existe pase lo que pase, aunque
+/// no haya nadie mirando el panel.
+pub async fn muestrear_historial(app: App) {
+    loop {
+        let app2 = app.clone();
+        if let Ok(s) = tokio::task::spawn_blocking(move || sample(&app2, None)).await {
+            persistir(&app, &s);
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+    }
+}
+
+fn persistir(app: &App, s: &Sample) {
+    let gpus_json = serde_json::to_string(&s.gpus).unwrap_or_default();
+    let c = app.store.conn();
+    let _ = c.execute(
+        "INSERT INTO telemetry_historial (created_at, cpu_pct, ram_used_mb, disk_free_mb, queue_depth, gpus_json)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params![ahora(), s.cpu_pct, s.ram_used_mb, s.disk_free_mb, s.queue_depth, gpus_json],
+    );
+    // Poda en el mismo tick: una tabla que crece sin límite es peor que
+    // gastar un DELETE barato una vez por minuto.
+    let hace_7_dias = ahora() - 7 * 24 * 3600;
+    let _ = c.execute("DELETE FROM telemetry_historial WHERE created_at < ?1", [hace_7_dias]);
+}
+
+/// `rango` es `"1h"`, `"24h"` o `"7d"` — cualquier otro valor cae a 24h.
+pub fn historial(app: &App, rango: &str) -> Vec<lumi_proto::api::MuestraHistorial> {
+    let segundos = match rango {
+        "1h" => 3600,
+        "7d" => 7 * 24 * 3600,
+        _ => 24 * 3600,
+    };
+    let desde = ahora() - segundos;
+    let c = app.store.conn();
+    let Ok(mut q) = c.prepare(
+        "SELECT created_at, cpu_pct, ram_used_mb, disk_free_mb, queue_depth, gpus_json
+         FROM telemetry_historial WHERE created_at >= ?1 ORDER BY created_at",
+    ) else {
+        return vec![];
+    };
+    q.query_map([desde], |r| {
+        let gpus_json: String = r.get(5)?;
+        Ok(lumi_proto::api::MuestraHistorial {
+            created_at: r.get(0)?,
+            cpu_pct: r.get(1)?,
+            ram_used_mb: r.get(2)?,
+            disk_free_mb: r.get(3)?,
+            queue_depth: r.get(4)?,
+            gpus: serde_json::from_str(&gpus_json).unwrap_or_default(),
+        })
+    })
+    .map(|it| it.flatten().collect())
+    .unwrap_or_default()
+}

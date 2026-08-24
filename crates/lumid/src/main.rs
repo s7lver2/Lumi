@@ -123,6 +123,8 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    tokio::spawn(telemetry::muestrear_historial(app.clone()));
+
     tokio::spawn({
         let app = app.clone();
         async move {
