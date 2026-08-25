@@ -342,7 +342,9 @@
     box-shadow: 0 10px 30px rgba(0,0,0,.4);
   }
 
-  /* C — placa */
+  /* C — placa. Los pasos y el cuerpo son interactivos: click en un paso ya
+     hecho retrocede, "Siguiente"/"Instalar" avanza. Todo transiciona con
+     ease-out-expo, nunca instantáneo ni con rebote, por DESIGN.md. */
   .placa-lado {
     background: var(--space); border-right: 1px solid var(--border);
     padding: 24px 22px; display: flex; flex-direction: column;
@@ -352,21 +354,124 @@
     position: absolute; left: -90px; bottom: -130px;
     width: 240px; height: 240px; border-radius: 50%;
     background: #12161d; border: 1px solid #1b2029;
+    transition: transform 60s linear;
+    animation: lumi-planet-spin 70s linear infinite;
   }
-  .placa-pasos { display: flex; flex-direction: column; gap: 13px; position: relative; }
-  .placa-paso { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--subtle); }
+  @media (prefers-reduced-motion: reduce) { .placa-lado .globo { animation: none; } }
+  @keyframes lumi-planet-spin { to { transform: rotate(360deg); } }
+
+  .placa-pasos { display: flex; flex-direction: column; gap: 15px; position: relative; }
+  .placa-paso {
+    display: flex; align-items: center; gap: 11px; font-size: 12px;
+    color: var(--subtle); cursor: default;
+    transition: color .35s var(--ease);
+  }
+  .placa-paso .marca {
+    position: relative; width: 15px; height: 15px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+  }
   .placa-paso .bolita {
     width: 7px; height: 7px; border-radius: 50%;
     background: var(--border); flex: none;
+    transition: background-color .35s var(--ease), transform .35s var(--ease);
   }
+  .placa-paso .halo {
+    position: absolute; inset: -7px; border-radius: 50%;
+    background: var(--draw-fg); opacity: 0; filter: blur(7px);
+    transition: opacity .4s var(--ease);
+  }
+  .placa-paso .check {
+    position: absolute; inset: 0; opacity: 0;
+    stroke: var(--fg); stroke-width: 2; fill: none;
+    stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: 16; stroke-dashoffset: 16;
+    transition: opacity .2s var(--ease);
+  }
+
   .placa-paso.hecho { color: var(--muted); }
-  .placa-paso.hecho .bolita { background: var(--fg); }
+  .placa-paso.hecho .bolita { opacity: 0; transform: scale(.4); }
+  .placa-paso.hecho .check {
+    opacity: 1;
+    animation: jg-stroke-draw .45s var(--ease) forwards;
+  }
+  @keyframes jg-stroke-draw { to { stroke-dashoffset: 0; } }
+
   .placa-paso.ahora { color: var(--fg); }
-  .placa-paso.ahora .bolita { background: var(--draw-fg); }
+  .placa-paso.ahora .bolita { background: var(--draw-fg); transform: scale(1.15); }
+  .placa-paso.ahora .halo { opacity: .55; animation: jg-lock-breathe 2.6s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    .placa-paso, .placa-paso .bolita, .placa-paso .halo, .placa-paso .check { transition: none; animation: none; }
+  }
+
   .placa-cuerpo {
     background: var(--bg); padding: 30px 32px;
     display: flex; flex-direction: column; gap: 20px; justify-content: center;
+    position: relative; overflow: hidden;
   }
+  .cuerpo-pagina {
+    display: flex; flex-direction: column; gap: 20px;
+    transition: opacity .32s var(--ease), transform .32s var(--ease);
+  }
+  .cuerpo-pagina.saliendo-izq  { opacity: 0; transform: translateX(-10px); }
+  .cuerpo-pagina.saliendo-der  { opacity: 0; transform: translateX(10px); }
+  .cuerpo-pagina.entrando      { opacity: 0; transform: translateY(6px); }
+  @media (prefers-reduced-motion: reduce) {
+    .cuerpo-pagina { transition: opacity .12s linear; transform: none !important; }
+  }
+
+  .placa-titulo { font-size: 17px; color: var(--fg); }
+
+  .licencia-caja {
+    height: 118px; overflow-y: auto; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+    font-size: 12px; line-height: 1.7; color: var(--muted);
+  }
+  .check-linea {
+    display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--fg);
+  }
+  .check-caja {
+    width: 15px; height: 15px; border-radius: 4px; border: 1px solid var(--border);
+    flex: none; position: relative; transition: background-color .2s var(--ease), border-color .2s var(--ease);
+  }
+  .check-caja svg {
+    position: absolute; inset: 0; margin: auto; stroke: #101114; opacity: 0;
+    stroke-dasharray: 14; stroke-dashoffset: 14;
+    transition: opacity .15s var(--ease);
+  }
+  .check-caja.on { background: var(--accent); border-color: var(--accent); }
+  .check-caja.on svg { opacity: 1; animation: jg-stroke-draw .3s var(--ease) forwards; }
+
+  .progreso-inst { display: flex; flex-direction: column; gap: 10px; }
+  .progreso-inst .barra { height: 3px; }
+  .progreso-inst .barra i {
+    width: 0%; transition: width .25s linear; background: var(--fg);
+  }
+  .progreso-inst .cifras {
+    display: flex; justify-content: space-between; font-family: var(--mono);
+    font-size: 11px; color: var(--subtle);
+  }
+  .log-inst {
+    font-family: var(--mono); font-size: 11px; line-height: 1.85; color: var(--subtle);
+    height: 92px; overflow: hidden; display: flex; flex-direction: column;
+  }
+  .log-inst div { opacity: 0; transform: translateY(3px); animation: jg-fade-rise .3s var(--ease) forwards; }
+  .log-inst div.ok { color: var(--fg); }
+
+  .listo-marca {
+    width: 44px; height: 44px; border-radius: 50%;
+    border: 1px solid var(--border); display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .listo-marca svg {
+    stroke: var(--fg); stroke-width: 1.8; fill: none; stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: 20; stroke-dashoffset: 20;
+    animation: jg-stroke-draw .5s .1s var(--ease) forwards;
+  }
+  .listo-marca::before {
+    content: ""; position: absolute; inset: -8px; border-radius: 50%;
+    background: var(--draw-fg); opacity: .14; filter: blur(12px);
+  }
+
   .campo {
     display: flex; flex-direction: column; gap: 6px;
   }
@@ -875,6 +980,7 @@ clave recibida  8mTa…Lp=</div>
           derecha lo único que cambia. Es la que mejor aguanta cuando el instalador tiene que
           preguntar algo &mdash; carpeta, accesos directos, el componente de GPU &mdash; y la
           que más se parece a lo que pediste. También la que más trabajo de Pascal lleva.
+          <strong>Interactiva</strong>: los botones avanzan de verdad.
         </p>
         <div class="ventana">
           <div class="ventana-barra">
@@ -887,42 +993,237 @@ clave recibida  8mTa…Lp=</div>
               <div class="brandline" style="position:relative">
                 <span class="star">&#10022;</span> Lumi Station
               </div>
-              <div class="placa-pasos">
-                <div class="placa-paso hecho"><span class="bolita"></span> Licencia</div>
-                <div class="placa-paso hecho"><span class="bolita"></span> Ubicación</div>
-                <div class="placa-paso ahora"><span class="bolita"></span> Opciones</div>
-                <div class="placa-paso"><span class="bolita"></span> Instalar</div>
+              <div class="placa-pasos" id="placaPasos">
+                <div class="placa-paso" data-paso="0">
+                  <span class="marca">
+                    <span class="halo"></span><span class="bolita"></span>
+                    <svg class="check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                  </span>
+                  Licencia
+                </div>
+                <div class="placa-paso" data-paso="1">
+                  <span class="marca">
+                    <span class="halo"></span><span class="bolita"></span>
+                    <svg class="check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                  </span>
+                  Ubicación
+                </div>
+                <div class="placa-paso" data-paso="2">
+                  <span class="marca">
+                    <span class="halo"></span><span class="bolita"></span>
+                    <svg class="check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                  </span>
+                  Opciones
+                </div>
+                <div class="placa-paso" data-paso="3">
+                  <span class="marca">
+                    <span class="halo"></span><span class="bolita"></span>
+                    <svg class="check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                  </span>
+                  Instalar
+                </div>
               </div>
               <div class="mono" style="font-size:11px;color:var(--subtle);position:relative">
                 2.1.0
               </div>
             </div>
-            <div class="placa-cuerpo">
-              <div style="font-size:17px;color:var(--fg)">Opciones</div>
-              <div class="campo">
-                <span class="etiqueta">Carpeta de instalación</span>
-                <span class="val">C:\Program Files\Lumi Station <span class="act">Cambiar</span></span>
-              </div>
-              <div class="campo">
-                <span class="etiqueta">Al terminar</span>
-                <span class="val" style="font-family:var(--sans);font-size:12.5px;color:var(--fg)">
-                  Crear acceso directo en el escritorio
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                       stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M20 6 9 17l-5-5"/>
-                  </svg>
-                </span>
-              </div>
-              <div class="botones" style="margin-top:4px">
-                <button class="btn btn-primario">Instalar</button>
-                <button class="btn btn-secundario">Atrás</button>
-              </div>
-            </div>
+            <div class="placa-cuerpo" id="placaCuerpo"><!-- JS rellena aquí --></div>
           </div>
         </div>
       </div>
 
     </div>
+
+    <script>
+    (function () {
+      var reducido = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      var cuerpo = document.getElementById("placaCuerpo");
+      var pasos  = document.getElementById("placaPasos");
+      if (!cuerpo || !pasos) return;
+
+      var paso = 0;          // 0 licencia · 1 ubicación · 2 opciones · 3 instalando · 4 listo
+      var licenciaAceptada = false;
+      var accesoDirecto = true;
+      var instalando = false;
+
+      var NOMBRES = ["Licencia", "Ubicación", "Opciones", "Instalar", "Instalar"];
+
+      function pintarPasos() {
+        Array.prototype.forEach.call(pasos.children, function (el) {
+          var i = Number(el.dataset.paso);
+          el.classList.remove("hecho", "ahora");
+          var objetivo = Math.min(paso, 3);
+          if (i < objetivo) el.classList.add("hecho");
+          else if (i === objetivo) el.classList.add("ahora");
+        });
+      }
+
+      function paginaLicencia() {
+        return ''
+          + '<div class="placa-titulo">Acuerdo de licencia</div>'
+          + '<div class="licencia-caja">Lumi Station es software para investigación forense. '
+          + 'Al instalarlo aceptas usarlo dentro de la ley aplicable en tu jurisdicción y '
+          + 'reconoces que los resultados de geolocalización son hipótesis, no prueba '
+          + 'concluyente. El emparejamiento con un servidor exige la clave que te entregue '
+          + 'su administrador; esta aplicación no accede a ningún servidor por su cuenta.</div>'
+          + '<div class="check-linea" id="cajaLicencia" style="cursor:default">'
+          + '  <span class="check-caja' + (licenciaAceptada ? " on" : "") + '" id="cajaLicenciaCaja">'
+          + '    <svg width="10" height="10" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>'
+          + '  </span> He leído y acepto los términos'
+          + '</div>'
+          + '<div class="botones" style="margin-top:4px">'
+          + '  <button class="btn btn-primario" id="btnSig1"' + (licenciaAceptada ? "" : " disabled style=\"opacity:.4\"") + '>Siguiente</button>'
+          + '  <button class="btn btn-secundario">Cancelar</button>'
+          + '</div>';
+      }
+
+      function paginaUbicacion() {
+        return ''
+          + '<div class="placa-titulo">Carpeta de instalación</div>'
+          + '<div class="campo">'
+          + '  <span class="etiqueta">Instalar en</span>'
+          + '  <span class="val">C:\\Program Files\\Lumi Station <span class="act">Cambiar</span></span>'
+          + '</div>'
+          + '<div class="campo">'
+          + '  <span class="etiqueta">Espacio requerido</span>'
+          + '  <span class="val" style="font-family:var(--sans);font-size:12.5px;color:var(--muted)">214 MB &middot; 38.2 GB libres en C:</span>'
+          + '</div>'
+          + '<div class="botones" style="margin-top:4px">'
+          + '  <button class="btn btn-primario" id="btnSig2">Siguiente</button>'
+          + '  <button class="btn btn-secundario" id="btnAtras2">Atrás</button>'
+          + '</div>';
+      }
+
+      function paginaOpciones() {
+        return ''
+          + '<div class="placa-titulo">Opciones</div>'
+          + '<div class="campo">'
+          + '  <span class="etiqueta">Carpeta de instalación</span>'
+          + '  <span class="val">C:\\Program Files\\Lumi Station <span class="act">Cambiar</span></span>'
+          + '</div>'
+          + '<div class="check-linea" id="cajaAtajo" style="cursor:default">'
+          + '  <span class="check-caja' + (accesoDirecto ? " on" : "") + '" id="cajaAtajoCaja">'
+          + '    <svg width="10" height="10" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>'
+          + '  </span> Crear acceso directo en el escritorio'
+          + '</div>'
+          + '<div class="botones" style="margin-top:4px">'
+          + '  <button class="btn btn-primario" id="btnInstalar">Instalar</button>'
+          + '  <button class="btn btn-secundario" id="btnAtras3">Atrás</button>'
+          + '</div>';
+      }
+
+      function paginaInstalando() {
+        return ''
+          + '<div class="placa-titulo">Instalando</div>'
+          + '<div class="progreso-inst">'
+          + '  <div class="barra"><i id="barraInst"></i></div>'
+          + '  <div class="cifras"><span id="cifraPct">0 %</span><span id="cifraEta">quedan ~4 s</span></div>'
+          + '</div>'
+          + '<div class="log-inst" id="logInst"></div>';
+      }
+
+      function paginaListo() {
+        return ''
+          + '<div style="display:flex;align-items:center;gap:14px">'
+          + '  <span class="listo-marca"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>'
+          + '  <div><div class="placa-titulo">Instalación completa</div>'
+          + '  <div style="font-size:12.5px;color:var(--muted)">Lumi Station 2.1.0 está lista</div></div>'
+          + '</div>'
+          + '<div class="botones" style="margin-top:4px">'
+          + '  <button class="btn btn-primario" id="btnAbrir">Abrir Lumi Station</button>'
+          + '  <button class="btn btn-secundario" id="btnCerrarInst">Finalizar</button>'
+          + '</div>';
+      }
+
+      var PAGINAS = [paginaLicencia, paginaUbicacion, paginaOpciones, paginaInstalando, paginaListo];
+
+      function render(desde) {
+        var salienteClase = desde !== undefined && desde < paso ? "saliendo-der" : "saliendo-izq";
+        var actual = cuerpo.firstElementChild;
+
+        function insertar() {
+          var div = document.createElement("div");
+          div.className = "cuerpo-pagina" + (reducido ? "" : " entrando");
+          div.innerHTML = PAGINAS[paso]();
+          cuerpo.innerHTML = "";
+          cuerpo.appendChild(div);
+          if (!reducido) {
+            requestAnimationFrame(function () {
+              requestAnimationFrame(function () { div.classList.remove("entrando"); });
+            });
+          }
+          wire();
+          if (paso === 3 && !instalando) correrInstalacion();
+        }
+
+        if (actual && !reducido) {
+          actual.classList.add(salienteClase);
+          setTimeout(insertar, 160);
+        } else {
+          insertar();
+        }
+        pintarPasos();
+      }
+
+      function ir(n) { var desde = paso; paso = n; render(desde); }
+
+      function correrInstalacion() {
+        instalando = true;
+        var pasosLog = [
+          "verificando la firma del paquete",
+          "copiando 1 284 archivos",
+          "registrando el protocolo lumi://",
+          "creando accesos directos"
+        ];
+        var log = document.getElementById("logInst");
+        var barra = document.getElementById("barraInst");
+        var pct = document.getElementById("cifraPct");
+        var eta = document.getElementById("cifraEta");
+        var i = 0, p = 0;
+        var dur = reducido ? 60 : 900;
+
+        function paso1() {
+          if (i >= pasosLog.length) {
+            setTimeout(function () { instalando = false; ir(4); }, reducido ? 30 : 400);
+            return;
+          }
+          var linea = document.createElement("div");
+          if (i > 0) log.children[log.children.length - 1] && log.children[log.children.length - 1].classList.add("ok");
+          linea.textContent = pasosLog[i];
+          log.appendChild(linea);
+          if (log.children.length > 4) log.removeChild(log.firstElementChild);
+
+          p = Math.round(((i + 1) / pasosLog.length) * 100);
+          if (barra) barra.style.width = p + "%";
+          if (pct) pct.textContent = p + " %";
+          if (eta) eta.textContent = p >= 100 ? "listo" : "quedan ~" + Math.round((pasosLog.length - i - 1) * dur / 1000 + 1) + " s";
+          i++;
+          setTimeout(paso1, dur);
+        }
+        paso1();
+      }
+
+      function wire() {
+        var b;
+        if ((b = document.getElementById("cajaLicenciaCaja")) || (b = document.getElementById("cajaLicencia"))) {
+          document.getElementById("cajaLicencia").onclick = function () {
+            licenciaAceptada = !licenciaAceptada;
+            render();
+          };
+        }
+        if ((b = document.getElementById("btnSig1"))) b.onclick = function () { if (licenciaAceptada) ir(1); };
+        if ((b = document.getElementById("btnSig2"))) b.onclick = function () { ir(2); };
+        if ((b = document.getElementById("btnAtras2"))) b.onclick = function () { ir(0); };
+        if ((b = document.getElementById("cajaAtajo"))) b.onclick = function () { accesoDirecto = !accesoDirecto; render(); };
+        if ((b = document.getElementById("btnInstalar"))) b.onclick = function () { ir(3); };
+        if ((b = document.getElementById("btnAtras3"))) b.onclick = function () { ir(2); };
+        if ((b = document.getElementById("btnAbrir"))) b.onclick = function () { ir(0); };
+        if ((b = document.getElementById("btnCerrarInst"))) b.onclick = function () { ir(0); };
+      }
+
+      render();
+    })();
+    </script>
   </section>
 
   <!-- ============================ FUERA DE ALCANCE ============================ -->
