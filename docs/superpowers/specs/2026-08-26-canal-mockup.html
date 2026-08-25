@@ -375,11 +375,6 @@
     background: var(--border); flex: none;
     transition: background-color .35s var(--ease), transform .35s var(--ease);
   }
-  .placa-paso .halo {
-    position: absolute; inset: -7px; border-radius: 50%;
-    background: var(--draw-fg); opacity: 0; filter: blur(7px);
-    transition: opacity .4s var(--ease);
-  }
   .placa-paso .check {
     position: absolute; inset: 0; opacity: 0;
     stroke: var(--fg); stroke-width: 2; fill: none;
@@ -398,9 +393,8 @@
 
   .placa-paso.ahora { color: var(--fg); }
   .placa-paso.ahora .bolita { background: var(--draw-fg); transform: scale(1.15); }
-  .placa-paso.ahora .halo { opacity: .55; animation: jg-lock-breathe 2.6s ease-in-out infinite; }
   @media (prefers-reduced-motion: reduce) {
-    .placa-paso, .placa-paso .bolita, .placa-paso .halo, .placa-paso .check { transition: none; animation: none; }
+    .placa-paso, .placa-paso .bolita, .placa-paso .check { transition: none; animation: none; }
   }
 
   .placa-cuerpo {
@@ -512,7 +506,7 @@
 
   <!-- ============================ CABECERA ============================ -->
   <header style="display:flex;flex-direction:column;gap:16px">
-    <div class="brandline"><span class="star">&#10022;</span> Lumi Station &middot; Spec en curso</div>
+    <div class="brandline"><span class="star">&#10022;</span> Lumi &middot; Spec en curso</div>
     <h1>Canal de actualizaciones</h1>
     <p class="lede">
       Cómo se entera cada una de las tres piezas de que existe una versión nueva,
@@ -684,7 +678,7 @@
     <div class="ventana">
       <div class="ventana-barra">
         <span class="punto"></span><span class="punto"></span><span class="punto"></span>
-        <span style="margin-left:6px">Lumi Station</span>
+        <span style="margin-left:6px">Lumi</span>
       </div>
       <div class="app-marco">
         <div class="app-cinta">
@@ -907,13 +901,13 @@ clave recibida  8mTa…Lp=</div>
         <div class="ventana">
           <div class="ventana-barra">
             <span class="punto"></span><span class="punto"></span><span class="punto"></span>
-            <span style="margin-left:6px">Instalar Lumi Station 2.1.0</span>
+            <span style="margin-left:6px">Instalar Lumi 2.1.0</span>
           </div>
           <div class="inst inst-a">
             <div class="consola">
-              <div class="brandline"><span class="star">&#10022;</span> Lumi Station</div>
+              <div class="brandline"><span class="star">&#10022;</span> Lumi</div>
               <div class="consola-log"><span class="ok">verificada la firma del paquete</span>
-<span class="ok">C:\Program Files\Lumi Station</span>
+<span class="ok">C:\Program Files\Lumi</span>
 <span class="ok">1 284 archivos escritos</span>
 <span class="now">registrando el protocolo lumi://</span>
 <span style="opacity:.5">accesos directos</span></div>
@@ -942,7 +936,7 @@ clave recibida  8mTa…Lp=</div>
         <div class="ventana">
           <div class="ventana-barra">
             <span class="punto"></span><span class="punto"></span><span class="punto"></span>
-            <span style="margin-left:6px">Instalar Lumi Station 2.1.0</span>
+            <span style="margin-left:6px">Instalar Lumi 2.1.0</span>
           </div>
           <div class="inst inst-b">
             <div class="planeta">
@@ -953,7 +947,7 @@ clave recibida  8mTa…Lp=</div>
               <span class="estrella" style="top:140px;left:210px;opacity:.45"></span>
               <div class="globo"></div>
               <div class="cristal">
-                <div class="brandline"><span class="star">&#10022;</span> Lumi Station</div>
+                <div class="brandline"><span class="star">&#10022;</span> Lumi</div>
                 <div style="font-size:17px;color:var(--fg)">Instalando</div>
                 <div style="font-size:12.5px;color:var(--muted)">
                   Se está copiando la aplicación. Puedes dejarlo trabajando.
@@ -985,39 +979,39 @@ clave recibida  8mTa…Lp=</div>
         <div class="ventana">
           <div class="ventana-barra">
             <span class="punto"></span><span class="punto"></span><span class="punto"></span>
-            <span style="margin-left:6px">Instalar Lumi Station 2.1.0</span>
+            <span style="margin-left:6px">Instalar Lumi 2.1.0</span>
           </div>
           <div class="inst inst-c">
             <div class="placa-lado">
               <div class="globo"></div>
               <div class="brandline" style="position:relative">
-                <span class="star">&#10022;</span> Lumi Station
+                <span class="star">&#10022;</span> Lumi
               </div>
               <div class="placa-pasos" id="placaPasos">
                 <div class="placa-paso" data-paso="0">
                   <span class="marca">
-                    <span class="halo"></span><span class="bolita"></span>
+                    <span class="bolita"></span>
                     <svg class="check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
                   </span>
                   Licencia
                 </div>
                 <div class="placa-paso" data-paso="1">
                   <span class="marca">
-                    <span class="halo"></span><span class="bolita"></span>
+                    <span class="bolita"></span>
                     <svg class="check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
                   </span>
                   Ubicación
                 </div>
                 <div class="placa-paso" data-paso="2">
                   <span class="marca">
-                    <span class="halo"></span><span class="bolita"></span>
+                    <span class="bolita"></span>
                     <svg class="check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
                   </span>
                   Opciones
                 </div>
                 <div class="placa-paso" data-paso="3">
                   <span class="marca">
-                    <span class="halo"></span><span class="bolita"></span>
+                    <span class="bolita"></span>
                     <svg class="check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
                   </span>
                   Instalar
@@ -1061,7 +1055,7 @@ clave recibida  8mTa…Lp=</div>
       function paginaLicencia() {
         return ''
           + '<div class="placa-titulo">Acuerdo de licencia</div>'
-          + '<div class="licencia-caja">Lumi Station es software para investigación forense. '
+          + '<div class="licencia-caja">Lumi es software para investigación forense. '
           + 'Al instalarlo aceptas usarlo dentro de la ley aplicable en tu jurisdicción y '
           + 'reconoces que los resultados de geolocalización son hipótesis, no prueba '
           + 'concluyente. El emparejamiento con un servidor exige la clave que te entregue '
@@ -1082,7 +1076,7 @@ clave recibida  8mTa…Lp=</div>
           + '<div class="placa-titulo">Carpeta de instalación</div>'
           + '<div class="campo">'
           + '  <span class="etiqueta">Instalar en</span>'
-          + '  <span class="val">C:\\Program Files\\Lumi Station <span class="act">Cambiar</span></span>'
+          + '  <span class="val">C:\\Program Files\\Lumi <span class="act">Cambiar</span></span>'
           + '</div>'
           + '<div class="campo">'
           + '  <span class="etiqueta">Espacio requerido</span>'
@@ -1099,7 +1093,7 @@ clave recibida  8mTa…Lp=</div>
           + '<div class="placa-titulo">Opciones</div>'
           + '<div class="campo">'
           + '  <span class="etiqueta">Carpeta de instalación</span>'
-          + '  <span class="val">C:\\Program Files\\Lumi Station <span class="act">Cambiar</span></span>'
+          + '  <span class="val">C:\\Program Files\\Lumi <span class="act">Cambiar</span></span>'
           + '</div>'
           + '<div class="check-linea" id="cajaAtajo" style="cursor:default">'
           + '  <span class="check-caja' + (accesoDirecto ? " on" : "") + '" id="cajaAtajoCaja">'
@@ -1127,10 +1121,10 @@ clave recibida  8mTa…Lp=</div>
           + '<div style="display:flex;align-items:center;gap:14px">'
           + '  <span class="listo-marca"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>'
           + '  <div><div class="placa-titulo">Instalación completa</div>'
-          + '  <div style="font-size:12.5px;color:var(--muted)">Lumi Station 2.1.0 está lista</div></div>'
+          + '  <div style="font-size:12.5px;color:var(--muted)">Lumi 2.1.0 está lista</div></div>'
           + '</div>'
           + '<div class="botones" style="margin-top:4px">'
-          + '  <button class="btn btn-primario" id="btnAbrir">Abrir Lumi Station</button>'
+          + '  <button class="btn btn-primario" id="btnAbrir">Abrir Lumi</button>'
           + '  <button class="btn btn-secundario" id="btnCerrarInst">Finalizar</button>'
           + '</div>';
       }
