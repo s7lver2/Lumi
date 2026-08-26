@@ -13,7 +13,16 @@ document.getElementById("btn-cerrar").addEventListener("click", () => void venta
 
 const PANTALLAS = ["p_bienvenida", "p_productos", "p_ubicacion", "p_opciones", "p_instalando"];
 let indice = 0;
+// Placeholder solo hasta que resolverRutaPorDefecto() la reemplace por la
+// ruta real — nunca se manda a `instalar` tal cual (Rust no expande
+// sintaxis de variables de entorno de cmd.exe: mandado literal, creaba una
+// carpeta llamada "%LocalAppData%" donde se hubiera lanzado el instalador).
 let raiz = "%LocalAppData%\\Programs\\Lumi";
+
+async function resolverRutaPorDefecto() {
+  raiz = await invoke("ruta_instalacion_por_defecto");
+  document.getElementById("ruta-destino").textContent = raiz;
+}
 const seleccion = new Set(["cliente", "indexer"]);
 const opciones = new Set(["acceso_directo"]);
 
@@ -269,3 +278,4 @@ btnAtras.addEventListener("click", () => {
 
 mostrar(indice);
 pintarEstadoInstalados();
+resolverRutaPorDefecto();

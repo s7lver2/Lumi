@@ -25,6 +25,20 @@ pub struct InfoProducto {
     pub version: Option<String>,
 }
 
+/// La UI mostraba el string literal `%LocalAppData%\Programs\Lumi` y lo
+/// mandaba tal cual a `instalar` cuando el investigador no tocaba
+/// "Examinar" — Rust no expande sintaxis de variables de entorno de
+/// `cmd.exe`, así que `fs::create_dir_all` lo trataba como una ruta
+/// relativa de verdad y creaba una carpeta llamada literalmente
+/// `%LocalAppData%` donde fuera que se hubiera lanzado el instalador. Este
+/// comando resuelve la ruta real una sola vez, al cargar la pantalla de
+/// Ubicación, para que lo que se vea y lo que se instale sea lo mismo.
+#[tauri::command]
+pub fn ruta_instalacion_por_defecto() -> String {
+    let base = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| "C:\\".to_string());
+    format!("{base}\\Programs\\Lumi")
+}
+
 #[tauri::command]
 pub fn detectar_instalados() -> Vec<InfoProducto> {
     ["cliente", "indexer"]
