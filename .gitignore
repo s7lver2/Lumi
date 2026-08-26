@@ -16,3 +16,4 @@ recovery.txt
 __pycache__/
 *.pyc
 .lumi-indexer/
+.release-tmp/

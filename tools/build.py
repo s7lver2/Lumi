@@ -30,6 +30,16 @@ def run(cmd, cwd=None, **kw):
 
 def main():
     target = sys.argv[1] if len(sys.argv) > 1 else "dev"
+    if target == "release":
+        try:
+            import tsuki_ux  # noqa: F401
+        except ImportError:
+            print("falta tsuki-ux: pip install -r tools/requirements.txt", file=sys.stderr)
+            sys.exit(1)
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import release_flow
+        release_flow.lanzar(ROOT)
+        return
     if target == "build":
         run(["cargo", "build", "--release"])
         run([NPM, "run", "tauri", "build"], cwd=ROOT / "client")
