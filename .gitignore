@@ -15,3 +15,4 @@ client/src-tauri/target
 recovery.txt
 __pycache__/
 *.pyc
+.lumi-indexer/
