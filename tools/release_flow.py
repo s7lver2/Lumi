@@ -171,6 +171,56 @@ def construir(root: Path, productos: list[str]) -> dict[str, Path]:
     return artefactos
 
 
+def subir_github(version: str, productos: list[str], artefactos: dict[str, Path], notas: str) -> dict[str, str]:
+    section("Subiendo a GitHub Releases")
+    tag = f"v{version}"
+    assets = [str(artefactos[p]) for p in productos] + [str(artefactos["installer"])]
+    run(
+        ["gh", "release", "create", tag, *assets,
+         "--repo", REPO_GITHUB, "--title", tag, "--notes", notas or "(sin notas)"],
+        label="gh release create",
+    )
+    return {
+        p: f"https://github.com/{REPO_GITHUB}/releases/download/{tag}/{artefactos[p].name}"
+        for p in productos
+    }
+
+
+def armar_borrador(
+    root: Path, productos: list[str], version: str, notas: str,
+    artefactos: dict[str, Path], urls: dict[str, str],
+) -> Path:
+    section("Firmando el manifiesto")
+    manifiesto_actual = json.loads((root / "web" / "releases" / "versiones.json").read_text())
+    publicaciones = list(manifiesto_actual.get("publicaciones", []))
+
+    ahora = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for p in productos:
+        publicaciones.append({
+            "producto": p,
+            "version": version,
+            "publicado": ahora,
+            "notas": notas,
+            "retirada": False,
+            "artefactos": [{
+                "plataforma": PLATAFORMA[p],
+                "archivo": str(artefactos[p]),
+                "url": urls[p],
+            }],
+        })
+
+    tmp = root / ".release-tmp"
+    tmp.mkdir(exist_ok=True)
+    borrador_path = tmp / "borrador.json"
+    borrador_path.write_text(json.dumps({"version": 1, "publicaciones": publicaciones}, indent=2))
+    return borrador_path
+
+
+def firmar(root: Path, borrador_path: Path) -> None:
+    run([sys.executable, "tools/release.py", str(borrador_path)], cwd=str(root), label="firmar manifiesto")
+    success("web/releases/versiones.json actualizado")
+
+
 RE_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 
 
@@ -224,3 +274,6 @@ def lanzar(root: Path) -> None:
 
     escribir_version(root, version)
     artefactos = construir(root, productos)
+    urls = subir_github(version, productos, artefactos, notas)
+    borrador_path = armar_borrador(root, productos, version, notas, artefactos, urls)
+    firmar(root, borrador_path)
