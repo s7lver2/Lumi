@@ -90,6 +90,15 @@ body { background: #0e0f11; color: #e8e8e6; overflow: hidden; }
 }
 @media (prefers-reduced-motion: reduce) { .lumi-anim { animation: none !important; } }
 
+/* Preferencia explícita del investigador (ver lib/apariencia.ts), no solo la
+   del sistema operativo: las animaciones jg-* se aplican sobre todo por
+   `style` inline (mayor especificidad que una clase normal), así que hace
+   falta `!important` aquí para poder apagarlas de verdad. */
+:root.jg-reduce-motion *, :root.jg-reduce-motion *::before, :root.jg-reduce-motion *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
 /* Un botón que no responde al dedo se siente muerto. Esto es el mismo gesto
    que la v1 aplicaba a mano en cada botón, aquí una sola vez. */
 .jg-press { transition: transform .18s cubic-bezier(.16,1,.3,1), opacity .18s, border-color .3s cubic-bezier(.16,1,.3,1), background-color .3s cubic-bezier(.16,1,.3,1), color .3s cubic-bezier(.16,1,.3,1); }
