@@ -1,6 +1,52 @@
 {
   "version": 1,
   "clave_publica": "Bqttmsgcz+4FG6G7N05KrElgV7AO+U2TR57coWAznWw=",
-  "publicaciones": [],
-  "firma": "adEURp2OAbcRGbLWRHlpvtoEoDZ2yonZ9Dob0dgziLGUfVUtKy2gpYNEukDe8Row0dCdFs/N322nIp08iHnMDw=="
+  "publicaciones": [
+    {
+      "producto": "cliente",
+      "version": "2.0.0",
+      "publicado": "2026-08-26T19:37:11Z",
+      "notas": "first version than contains the update system",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.0/app.exe",
+          "bytes": 15738880,
+          "sha256": "656d52174bafe02fdb39735b72468de57cda03f61f98af0abe85ce94652f2b85"
+        }
+      ]
+    },
+    {
+      "producto": "indexer",
+      "version": "2.0.0",
+      "publicado": "2026-08-26T19:37:11Z",
+      "notas": "first version than contains the update system",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.0/indexer-app.exe",
+          "bytes": 22046208,
+          "sha256": "268efd4d9d9bd6e6455c7b5840dfd7aad8ecb517b2202f0925d2d3edb3d11270"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.0",
+      "publicado": "2026-08-26T19:37:11Z",
+      "notas": "first version than contains the update system",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.0/lumid",
+          "bytes": 20294144,
+          "sha256": "00bdbc2d4a686eea74f21ee310245ba46fa1ca73587a2600133b41a43e1838b0"
+        }
+      ]
+    }
+  ],
+  "firma": "grED+UiudaSJo+W4y/CDoONNA4mBDEp7fCdxpRyj616vwWtI2Wkz673RoNS4EmK0prVDAztm7nlqFcHtCrKpAQ=="
 }
