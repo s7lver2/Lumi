@@ -27,3 +27,4 @@ pub mod security;
 pub mod tasks;
 pub mod telemetry;
 pub mod models;
+pub mod version_mismatch;

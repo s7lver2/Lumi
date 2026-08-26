@@ -63,6 +63,14 @@ CREATE TABLE IF NOT EXISTS credit_requests (
     resolved_at     INTEGER,
     resolved_by     INTEGER
 );
+CREATE TABLE IF NOT EXISTS version_mismatch_requests (
+    id              INTEGER PRIMARY KEY,
+    version_cliente TEXT NOT NULL,
+    source_ip       TEXT NOT NULL,
+    created_at      INTEGER NOT NULL,
+    resolved_at     INTEGER,
+    resolved_by     INTEGER
+);
 CREATE TABLE IF NOT EXISTS devices (
     id         INTEGER PRIMARY KEY,
     user_id    INTEGER NOT NULL,
