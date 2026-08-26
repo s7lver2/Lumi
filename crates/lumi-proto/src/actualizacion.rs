@@ -131,21 +131,36 @@ impl Manifiesto {
             .iter()
             .any(|p| p.producto == producto && p.retirada && p.version == version_actual)
     }
+
+    /// La publicación de `producto` para `plataforma` cuya versión coincide
+    /// EXACTAMENTE con `version` (a diferencia de `mas_nueva`, que exige que
+    /// sea más nueva). Necesaria para downgrade y para igualar la versión de
+    /// un servidor que no sea la última publicada — ver
+    /// docs/superpowers/specs/2026-08-26-compatibilidad-de-version-design.md.
+    /// Una versión retirada no se ofrece tampoco aquí: "retirada" significa
+    /// "no instalar esto", sea cual sea la dirección.
+    pub fn version_exacta(&self, producto: Producto, version: &str, plataforma: &str) -> Option<&Publicacion> {
+        self.publicaciones
+            .iter()
+            .filter(|p| p.producto == producto && !p.retirada)
+            .filter(|p| p.artefactos.iter().any(|a| a.plataforma == plataforma))
+            .find(|p| comparar(&p.version, version) == std::cmp::Ordering::Equal)
+    }
 }
 
 /// Parseo a tupla de tres enteros. Ponytail: no hay sufijo de pre-release
 /// (`-rc1`) — el día que exista un canal beta que lo necesite, se añade
 /// entonces, no antes.
-fn partes(v: &str) -> (u32, u32, u32) {
+pub fn partes(v: &str) -> (u32, u32, u32) {
     let mut it = v.trim().splitn(3, '.').map(|p| p.parse::<u32>().unwrap_or(0));
     (it.next().unwrap_or(0), it.next().unwrap_or(0), it.next().unwrap_or(0))
 }
 
-fn comparar(a: &str, b: &str) -> std::cmp::Ordering {
+pub fn comparar(a: &str, b: &str) -> std::cmp::Ordering {
     partes(a).cmp(&partes(b))
 }
 
-fn es_mas_nueva(candidata: &str, actual: &str) -> bool {
+pub fn es_mas_nueva(candidata: &str, actual: &str) -> bool {
     comparar(candidata, actual) == std::cmp::Ordering::Greater
 }
 
@@ -241,6 +256,21 @@ mod tests {
     fn mas_nueva_ignora_otro_producto() {
         let m = manifiesto_de_prueba();
         assert!(m.mas_nueva(Producto::Cliente, "2.0.0", "linux-x86_64").is_none());
+    }
+
+    #[test]
+    fn version_exacta_encuentra_solo_la_igual() {
+        let m = manifiesto_de_prueba();
+        assert!(m.version_exacta(Producto::Lumid, "2.1.0", "linux-x86_64").is_some());
+        assert!(m.version_exacta(Producto::Lumid, "2.0.0", "linux-x86_64").is_none());
+        assert!(m.version_exacta(Producto::Lumid, "2.2.0", "linux-x86_64").is_none());
+    }
+
+    #[test]
+    fn version_exacta_ignora_retirada() {
+        let mut m = manifiesto_de_prueba();
+        m.publicaciones[0].retirada = true;
+        assert!(m.version_exacta(Producto::Lumid, "2.1.0", "linux-x86_64").is_none());
     }
 
     #[test]
