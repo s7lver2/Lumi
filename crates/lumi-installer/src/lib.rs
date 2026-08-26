@@ -7,6 +7,7 @@ pub mod aplicar;
 pub mod bitacora;
 pub mod error;
 pub mod manifiesto;
+#[cfg(windows)]
 pub mod marca;
 pub mod proceso;
 pub mod sha256;
