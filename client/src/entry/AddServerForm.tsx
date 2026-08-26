@@ -3,7 +3,7 @@ import { addrFromCard, api, fingerprintFromCard, isCard, parseVersionMismatch, t
 import { addServer } from "../lib/session";
 import { Icon } from "../ui/Icon";
 import { ServerProfileCard } from "./ServerProfileCard";
-import { VersionMismatchNotice } from "./VersionMismatchNotice";
+import { VersionMismatchModal } from "./VersionMismatchNotice";
 
 export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
   onAdded: (addr: string) => void; onOwnerKey: (key: string) => void; onBack?: () => void;
@@ -48,8 +48,11 @@ export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
     onAdded(addr);
   }
 
+  const mismatch = error ? parseVersionMismatch(error) : null;
+
   return (
     <>
+      {mismatch && <VersionMismatchModal {...mismatch} onClose={() => setError(null)} />}
       <label className="mb-[7px] block text-[11px] tracking-[.02em] text-muted">Clave del servidor</label>
       <input value={text} onChange={(e) => setText(e.target.value)} onBlur={verify}
         placeholder="lumi1s_192.168.1.40:7717_…"
@@ -102,12 +105,7 @@ export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
         </>
       )}
 
-      {error && parseVersionMismatch(error) ? (
-        <>
-          <div className="my-3 h-px bg-border" />
-          <VersionMismatchNotice {...parseVersionMismatch(error)!} />
-        </>
-      ) : error && (
+      {error && !mismatch && (
         <>
           <div className="my-3 h-px bg-border" />
           <div className="flex items-start gap-2.5 text-xs text-danger-fg">

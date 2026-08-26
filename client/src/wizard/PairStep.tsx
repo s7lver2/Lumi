@@ -3,7 +3,7 @@ import { addrFromKey, api, parseVersionMismatch } from "../lib/api";
 import { useServer } from "../lib/store";
 import { addServer, updateSession } from "../lib/session";
 import { Icon } from "../ui/Icon";
-import { VersionMismatchNotice } from "../entry/VersionMismatchNotice";
+import { VersionMismatchModal } from "../entry/VersionMismatchNotice";
 
 export function PairStep({ onDone }: { onDone: () => void }) {
   const { key, setKey, hello, setHello } = useServer();
@@ -49,8 +49,11 @@ export function PairStep({ onDone }: { onDone: () => void }) {
   // bootstrap inválida" con nombre y contraseña ya escritos.
   const alreadyClaimed = hello && hello.state !== "unclaimed";
 
+  const mismatch = error ? parseVersionMismatch(error) : null;
+
   return (
     <>
+      {mismatch && <VersionMismatchModal {...mismatch} onClose={() => setError(null)} />}
       <label className="mb-[7px] block text-[11px] tracking-[.02em] text-muted">Clave de vinculación</label>
       <input value={key} onChange={(e) => setKey(e.target.value)} onBlur={verify}
         placeholder="lumi1_192.168.1.40:7717_…"
@@ -96,12 +99,7 @@ export function PairStep({ onDone }: { onDone: () => void }) {
         </>
       )}
 
-      {error && parseVersionMismatch(error) ? (
-        <>
-          <div className="my-3 h-px bg-border" />
-          <VersionMismatchNotice {...parseVersionMismatch(error)!} />
-        </>
-      ) : error && (
+      {error && !mismatch && (
         <>
           <div className="my-3 h-px bg-border" />
           <div className="flex items-start gap-2.5 text-xs text-danger-fg">
