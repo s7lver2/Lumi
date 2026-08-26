@@ -96,7 +96,55 @@ def _preflight(root: Path) -> None:
         raise SystemExit(1)
 
 
+RE_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
+
+
+def preguntar_productos() -> list[str]:
+    elegidos = []
+    for p in PRODUCTOS:
+        r = input(f"¿publicar {p}? [S/n] ").strip().lower()
+        if r in ("", "s", "si", "sí", "y", "yes"):
+            elegidos.append(p)
+    if not elegidos:
+        fail("no elegiste ningún producto")
+        raise SystemExit(1)
+    return elegidos
+
+
+def preguntar_version() -> str:
+    while True:
+        v = input("versión (x.y.z): ").strip()
+        if RE_VERSION.match(v):
+            return v
+        warn("formato inválido, ejemplo: 2.1.0")
+
+
+def preguntar_notas() -> str:
+    return input("notas de esta versión: ").strip()
+
+
+def confirmar_plan(productos: list[str], version: str, notas: str) -> bool:
+    section("Vas a publicar")
+    config_table("plan", [
+        ConfigEntry("productos", ", ".join(productos)),
+        ConfigEntry("versión", version),
+        ConfigEntry("notas", notas or "(sin notas)"),
+    ])
+    r = input("¿seguir? [s/N] ").strip().lower()
+    return r in ("s", "si", "sí", "y", "yes")
+
+
 def lanzar(root: Path) -> None:
     _preflight(root)
     section("Estado actual")
     mostrar_tabla_ultimas(leer_ultimas_publicadas(root))
+
+    section("Qué publicar")
+    productos = preguntar_productos()
+    version = preguntar_version()
+    notas = preguntar_notas()
+    if not confirmar_plan(productos, version, notas):
+        warn("cancelado")
+        return
+
+    escribir_version(root, version)
