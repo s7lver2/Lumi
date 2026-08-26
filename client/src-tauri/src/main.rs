@@ -259,6 +259,29 @@ fn disparar_actualizacion_silenciosa(app: tauri::AppHandle, version_nueva: Strin
     Ok(())
 }
 
+/// Mismo camino que `disparar_actualizacion_silenciosa`, pero para igualar
+/// una versión concreta (downgrade, o la versión de un servidor que no es
+/// la última publicada) en vez de "la más nueva". Ver
+/// docs/superpowers/specs/2026-08-26-compatibilidad-de-version-design.md.
+#[tauri::command]
+fn disparar_actualizacion_a_version(app: tauri::AppHandle, version_objetivo: String) -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let carpeta = exe.parent().ok_or("sin carpeta padre")?;
+    let instalador = carpeta.join("installer.exe");
+    let pid = std::process::id();
+
+    std::process::Command::new(instalador)
+        .arg("--producto=cliente")
+        .arg(format!("--pid={pid}"))
+        .arg(format!("--version-objetivo={version_objetivo}"))
+        .arg("--silencioso")
+        .spawn()
+        .map_err(|e| e.to_string())?;
+
+    app.exit(0);
+    Ok(())
+}
+
 fn client_for(fingerprint: &str) -> Result<reqwest::Client, String> {
     let cfg = rustls::ClientConfig::builder()
         .dangerous()
@@ -279,7 +302,7 @@ fn client_for(fingerprint: &str) -> Result<reqwest::Client, String> {
 async fn connect(addr: &str, fingerprint: &str, state: &Shared) -> Result<serde_json::Value, String> {
     let client = client_for(fingerprint)?;
     let base = format!("https://{addr}");
-    let hello: serde_json::Value = client
+    let hello: lumi_proto::api::Hello = client
         .get(format!("{base}/v1/hello"))
         .send()
         .await
@@ -287,10 +310,25 @@ async fn connect(addr: &str, fingerprint: &str, state: &Shared) -> Result<serde_
         .json()
         .await
         .map_err(|e| e.to_string())?;
-    let mut c = state.lock().unwrap();
-    c.base = Some(base);
-    c.client = Some(client);
-    Ok(hello)
+
+    // El cliente HTTP se guarda ANTES de comprobar la versión, no después:
+    // si hay desajuste, la pantalla de bloqueo todavía necesita poder hacer
+    // `POST /v1/version-mismatch` a través de este mismo `state` (comando
+    // `request`, que exige `state.base`/`state.client` ya puestos). El
+    // pairing no se da por completado (no se guarda `hello` en el store de
+    // TS), pero el transporte HTTP sí queda listo.
+    {
+        let mut c = state.lock().unwrap();
+        c.base = Some(base);
+        c.client = Some(client);
+    }
+
+    let propia = env!("CARGO_PKG_VERSION");
+    if lumi_proto::actualizacion::comparar(&hello.version, propia) != std::cmp::Ordering::Equal {
+        return Err(format!("version incompatible|{propia}|{}", hello.version));
+    }
+
+    serde_json::to_value(&hello).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -675,7 +713,8 @@ fn main() {
             pair, pair_card, reconnect, request, start_telemetry, start_task_log,
             start_queue_events, start_indices_events, start_admin_events, start_logs_stream, set_auth,
             upload_images, read_image_as_data_url, upload_avatar_bytes, upload_server_avatar_bytes,
-            upload_server_banner_bytes, comprobar_actualizacion, error_actualizacion_pendiente, disparar_actualizacion_silenciosa
+            upload_server_banner_bytes, comprobar_actualizacion, error_actualizacion_pendiente, disparar_actualizacion_silenciosa,
+            disparar_actualizacion_a_version
         ])
         .run(tauri::generate_context!())
         .expect("error al arrancar Tauri");
