@@ -68,8 +68,11 @@ begin
 end;
 
 // Crea el panel y sus controles. Se llama una vez desde InitializeWizard()
-// en cada script concreto, con la lista de nombres de página de esa app.
-procedure CrearPanelLateral(NombresPasos: TArrayOfString);
+// en cada script concreto, con la lista de nombres de página de esa app y
+// el texto de marca a mostrar — "Lumi" para el cliente, "Lumi Indexer"
+// para el Indexer: son dos productos distintos (ver CLAUDE.md), y hasta
+// ahora el panel compartido los rotulaba a los dos igual.
+procedure CrearPanelLateral(NombresPasos: TArrayOfString; NombreMarca: String);
 var
   i: Integer;
   marca: TNewStaticText;
@@ -89,7 +92,7 @@ begin
   marca.Parent := PanelLateral;
   marca.Left := 22;
   marca.Top := 24;
-  marca.Caption := '* Lumi';
+  marca.Caption := '* ' + NombreMarca;
   marca.Font.Color := ColorFg;
   marca.Font.Size := 11;
   marca.AutoSize := True;

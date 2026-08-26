@@ -51,7 +51,7 @@ begin
   pasos[1] := 'Ubicacion';
   pasos[2] := 'Opciones';
   pasos[3] := 'Instalar';
-  CrearPanelLateral(pasos);
+  CrearPanelLateral(pasos, 'Lumi');
   ActualizarPasoActivo(0);
 end;
 

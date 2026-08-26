@@ -50,7 +50,7 @@ begin
   pasos[0] := 'Ubicacion';
   pasos[1] := 'Opciones';
   pasos[2] := 'Instalar';
-  CrearPanelLateral(pasos);
+  CrearPanelLateral(pasos, 'Lumi Indexer');
   ActualizarPasoActivo(0);
 end;
 
