@@ -9,7 +9,7 @@ import { ImageCropModal } from "../ui/ImageCropModal";
 import { UsageBar } from "../ui/UsageBar";
 import { UserTile } from "../ui/UserTile";
 import { ProfileSidebar, type ProfileSeccion } from "./ProfileSidebar";
-import { comprobarActualizacion, type EstadoActualizacion } from "../lib/actualizaciones";
+import { ActualizacionesSeccion } from "../settings/ActualizacionesSeccion";
 
 const AVATAR_SIDE = 256;
 
@@ -46,24 +46,7 @@ function PerfilPanel({ token }: { token: string }) {
   const [fotoTick, setFotoTick] = useState(0);
   const [recortando, setRecortando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [actEstado, setActEstado] = useState<EstadoActualizacion | null>(null);
-  const [actError, setActError] = useState<string | null>(null);
-  const [actComprobando, setActComprobando] = useState(false);
-
   useEffect(() => { api.get<Me>("/v1/auth/me", token).then(setMe).catch(() => setMe(null)); }, [token]);
-
-  async function comprobarAhora() {
-    setActComprobando(true);
-    setActError(null);
-    try {
-      setActEstado(await comprobarActualizacion());
-    } catch (e) {
-      setActEstado(null);
-      setActError(String(e));
-    } finally {
-      setActComprobando(false);
-    }
-  }
 
   async function cambiarFoto() {
     const path = await pickImagePath();
@@ -124,24 +107,8 @@ function PerfilPanel({ token }: { token: string }) {
         <Fila etiqueta="Servidor" valor={addr} mono />
       </div>
 
-      <div className="mt-4 rounded-card border border-border bg-panel p-[13px_16px]">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-[8.5px] uppercase tracking-[.15em] text-subtle">Lumi</span>
-        </div>
-        {actEstado?.tipo === "disponible" && (
-          <p className="text-[11px] text-draw-fg">Versión {actEstado.version} disponible — {actEstado.notas}</p>
-        )}
-        {actEstado?.tipo === "retirada" && (
-          <p className="text-[11px] text-warning-fg">Tu versión fue retirada. Actualiza en cuanto puedas.</p>
-        )}
-        {!actEstado && !actError && !actComprobando && (
-          <p className="text-[11px] text-muted">Sin comprobar en esta sesión.</p>
-        )}
-        {actError && <p className="text-[11px] text-subtle">No se pudo comprobar: {actError}</p>}
-        <button onClick={() => void comprobarAhora()} disabled={actComprobando}
-          className="jg-press mt-2.5 rounded-lg border border-white/15 px-2.5 py-1 text-[10.5px] text-fg disabled:opacity-40">
-          {actComprobando ? "Comprobando…" : "Comprobar ahora"}
-        </button>
+      <div className="mt-4">
+        <ActualizacionesSeccion />
       </div>
 
       {!esAdmin && me?.uso && (
