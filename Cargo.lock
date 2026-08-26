@@ -1585,10 +1585,12 @@ name = "lumi-cli"
 version = "2.0.0"
 dependencies = [
  "anyhow",
+ "base64",
  "bs58",
  "clap",
  "console",
  "dialoguer",
+ "ed25519-dalek",
  "indicatif",
  "lumi-proto",
  "nvml-wrapper",

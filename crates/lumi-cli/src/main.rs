@@ -1,9 +1,11 @@
 mod admin;
 mod detect;
+mod firmar;
 mod install;
 mod ui;
 
 use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "lumi", version, about = "Servidor Lumi")]
@@ -46,6 +48,11 @@ enum Cmd {
         #[command(subcommand)]
         action: AdminAction,
     },
+    /// Firma del manifiesto de versiones (web/releases/versiones.json)
+    Actualizaciones {
+        #[command(subcommand)]
+        action: ActualizacionAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -63,6 +70,14 @@ enum AdminAction {
     Requests,
     /// Abre o cierra la aceptación de nuevas solicitudes de acceso
     AcceptRequests { on: String },
+}
+
+#[derive(Subcommand)]
+enum ActualizacionAction {
+    /// Genera la clave Ed25519 que firma releases y la guarda en ~/.lumi/release.key
+    GenerarClave,
+    /// Firma un borrador de manifiesto y escribe el resultado firmado
+    Firmar { borrador: PathBuf, salida: PathBuf },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -128,6 +143,10 @@ fn main() -> anyhow::Result<()> {
                 admin::accept(on)?;
                 println!("\n  solicitudes de acceso: {}\n", if on { "abiertas" } else { "cerradas" });
             }
+        },
+        Cmd::Actualizaciones { action } => match action {
+            ActualizacionAction::GenerarClave => firmar::generar_clave()?,
+            ActualizacionAction::Firmar { borrador, salida } => firmar::firmar(&borrador, &salida)?,
         },
     }
     Ok(())

@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 /// Rotarla exige una versión puente que sepa validar con la vieja y la
 /// nueva a la vez — no está resuelto, es el techo que anota la spec
 /// (docs/superpowers/specs/2026-08-26-canal-de-actualizaciones-design.md).
-pub const CLAVE_PUBLICA: [u8; 32] = [0u8; 32];
+pub const CLAVE_PUBLICA: [u8; 32] = [6, 171, 109, 154, 200, 28, 207, 238, 5, 27, 161, 187, 55, 78, 74, 172, 73, 96, 87, 176, 14, 249, 77, 147, 71, 158, 220, 161, 96, 51, 157, 108];
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum ActualizacionError {
