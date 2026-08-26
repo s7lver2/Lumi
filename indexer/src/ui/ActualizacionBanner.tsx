@@ -1,23 +1,34 @@
 import { abrirDescarga, type EstadoActualizacion } from "../lib/actualizaciones";
 import { Icon } from "./Icon";
 
-/** Vive en `ui/`, no en `settings/`: `App.tsx` la monta una sola vez para
- *  toda la app. Es local y descartable — cerrarla no vuelve a comprobar
- *  hasta el próximo arranque o hasta "Comprobar ahora" en Ajustes → Debug. */
+/** Vive en `ui/`, no en `admin/`, igual que `MantenimientoBanner`: `App.tsx`
+ *  la monta una sola vez para toda la app. A diferencia de mantenimiento,
+ *  esto no es un estado del servidor: es local y descartable — cerrarla no
+ *  vuelve a comprobar hasta el próximo arranque o hasta "Comprobar ahora"
+ *  en Perfil. */
 export function ActualizacionBanner({ estado, onCerrar }: {
   estado: EstadoActualizacion;
   onCerrar: () => void;
 }) {
+  const esError = estado.tipo === "error";
   const retirada = estado.tipo === "retirada";
   return (
     <div
       className={`relative flex shrink-0 items-center gap-2.5 border-b px-4 py-2 text-[11px] ${
-        retirada ? "border-warning/25 bg-warning/[.06] text-warning-fg" : "border-draw/25 bg-draw/[.06] text-draw-fg"
+        esError
+          ? "border-danger/25 bg-danger/[.06] text-danger-fg"
+          : retirada
+          ? "border-warning/25 bg-warning/[.06] text-warning-fg"
+          : "border-draw/25 bg-draw/[.06] text-draw-fg"
       }`}
       style={{ animation: "jg-fade-rise .5s cubic-bezier(.16,1,.3,1) both" }}
     >
-      <Icon name={retirada ? "alert" : "refresh"} size={13} />
-      {retirada ? (
+      <Icon name={esError ? "alert" : retirada ? "alert" : "refresh"} size={13} />
+      {esError ? (
+        <span className="flex-1 truncate">
+          <b className="font-medium text-fg">No se pudo actualizar.</b> {estado.motivo}
+        </span>
+      ) : retirada ? (
         <span className="flex-1 truncate">
           <b className="font-medium text-fg">Tu versión fue retirada.</b> Actualiza en cuanto puedas.
         </span>
@@ -27,7 +38,7 @@ export function ActualizacionBanner({ estado, onCerrar }: {
           <span className="truncate text-subtle">— {estado.notas}</span>
         </span>
       )}
-      {!retirada && estado.url && (
+      {!esError && !retirada && estado.url && (
         <button
           onClick={() => void abrirDescarga(estado.url)}
           className="shrink-0 rounded-[6px] border border-border px-2.5 py-1 font-medium text-fg

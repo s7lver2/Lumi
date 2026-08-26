@@ -144,6 +144,16 @@ async fn comprobar_actualizacion() -> Result<Option<actualizacion::EstadoActuali
 }
 
 #[tauri::command]
+fn error_actualizacion_pendiente() -> Option<String> {
+    actualizacion::error_pendiente()
+}
+
+#[tauri::command]
+fn disparar_actualizacion_silenciosa(app: tauri::AppHandle, version_nueva: String) -> Result<(), String> {
+    actualizacion::disparar_silenciosa(app, version_nueva)
+}
+
+#[tauri::command]
 async fn rendimiento_leer() -> Result<perf::Rendimiento, String> {
     tokio::task::spawn_blocking(perf::leer).await.map_err(|e| e.to_string())
 }
@@ -1645,6 +1655,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             saludo,
             comprobar_actualizacion,
+            error_actualizacion_pendiente,
+            disparar_actualizacion_silenciosa,
             ubicacion_leer,
             ubicacion_por_defecto,
             ubicacion_migrar,

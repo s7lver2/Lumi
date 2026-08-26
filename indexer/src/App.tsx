@@ -20,7 +20,7 @@ import { SetupWizard } from "./setup/SetupWizard";
 import { TerritoryView } from "./territory/TerritoryView";
 import { PlanetBackground } from "./ui/PlanetBackground";
 import { ActualizacionBanner } from "./ui/ActualizacionBanner";
-import { comprobarActualizacion, type EstadoActualizacion } from "./lib/actualizaciones";
+import { comprobarActualizacion, dispararActualizacionSilenciosa, errorActualizacionPendiente, type EstadoActualizacion } from "./lib/actualizaciones";
 import { PublishToast } from "./ui/PublishToast";
 import { Rail, type Destino } from "./ui/Rail";
 import { WindowFrame } from "./ui/WindowFrame";
@@ -67,7 +67,16 @@ export function App() {
   const [actualizacionCerrada, setActualizacionCerrada] = useState(false);
 
   useEffect(() => {
-    comprobarActualizacion().then(setActualizacion).catch(() => setActualizacion(null));
+    errorActualizacionPendiente().then((motivo) => {
+      if (motivo) setActualizacion({ tipo: "error", motivo });
+    });
+    comprobarActualizacion().then((estado) => {
+      if (estado?.tipo === "disponible") {
+        void dispararActualizacionSilenciosa(estado.version);
+        return; // la app va a cerrarse; no hace falta pintar nada más
+      }
+      setActualizacion(estado);
+    }).catch(() => setActualizacion(null));
   }, []);
 
   useEffect(() => {

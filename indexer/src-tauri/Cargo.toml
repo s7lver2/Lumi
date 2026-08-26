@@ -35,6 +35,7 @@ log = "0.4"
 tokio = { version = "1", features = ["full"] }
 lumi-index = { path = "../../crates/lumi-index" }
 lumi-proto = { path = "../../crates/lumi-proto" }
+lumi-installer = { path = "../../crates/lumi-installer" }
 rusqlite = { version = "0.32", features = ["bundled"] }
 chacha20poly1305 = "0.10"
 rand = "0.8"
