@@ -3,10 +3,131 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lumi Indexer</title>
+    <title>Instalador de Lumi</title>
+    <style>
+      :root {
+        --bg: #0e0f11;
+        --space: #05070a;
+        --panel: #1a1b1e;
+        --elevated: #202226;
+        --border: #26282c;
+        --fg: #e8e8e6;
+        --muted: #9a9a95;
+        --subtle: #6a6c70;
+        --accent: #f2f3f5;
+        --draw-fg: #85b7eb;
+        --danger-fg: #e88f8f;
+        --font-sans: "Segoe UI", system-ui, sans-serif;
+        --font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-sans);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .stage { position: relative; flex: 1; background: var(--bg); }
+      .pane {
+        position: absolute; inset: 0; display: none; flex-direction: column;
+        align-items: center; padding: 44px 40px 20px;
+      }
+      .pane.active { display: flex; }
+      .brandline { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--subtle); margin-bottom: 32px; align-self: flex-start; }
+      .brandline .mark { color: var(--draw-fg); font-size: 14px; }
+      .pane-body { width: 100%; max-width: 460px; flex: 1; }
+      .pane-body h2 { font-size: 17px; font-weight: 600; margin: 0 0 10px; }
+      .pane-body p.desc { font-size: 14px; color: var(--muted); line-height: 1.55; margin: 0 0 28px; max-width: 46ch; }
+      .center { text-align: center; }
+      .center .pane-body { display: flex; flex-direction: column; align-items: center; }
+      .field-label { font-size: 11px; color: var(--muted); margin-bottom: 7px; display: block; }
+      .path-row { display: flex; gap: 8px; }
+      .path-row .path { flex: 1; border: 1px solid var(--border); background: #0d0f12; border-radius: 8px; padding: 10px 12px; font-family: var(--font-mono); font-size: 12.5px; color: var(--fg); }
+      .path-row button.browse { border: 1px solid var(--border); background: var(--elevated); color: var(--fg); border-radius: 8px; padding: 0 16px; font-size: 12px; cursor: pointer; }
+      .option-row { display: flex; align-items: center; gap: 10px; padding: 13px 0; border-top: 1px solid var(--border); cursor: pointer; }
+      .option-row:last-child { border-bottom: 1px solid var(--border); }
+      .checkbox { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--border); background: var(--elevated); display: grid; place-items: center; flex-shrink: 0; }
+      .checkbox.checked { background: var(--accent); border-color: var(--accent); }
+      .checkbox svg { width: 11px; height: 11px; stroke: transparent; stroke-width: 2.4; fill: none; }
+      .checkbox.checked svg { stroke: var(--bg); }
+      .option-row .label { font-size: 13px; }
+      .option-row .sub { font-size: 11.5px; color: var(--subtle); margin-top: 2px; }
+      .option-row.disabled { cursor: default; opacity: .55; }
+      .progress-track { width: 100%; height: 3px; background: var(--elevated); border-radius: 2px; overflow: hidden; margin-bottom: 14px; }
+      .progress-fill { height: 100%; width: 0%; background: var(--draw-fg); border-radius: 2px; transition: width .3s cubic-bezier(.16,1,.3,1); }
+      .progress-status { font-family: var(--font-mono); font-size: 11px; color: var(--subtle); }
+      .footer { height: 56px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; flex-shrink: 0; }
+      .footer .ver { font-family: var(--font-mono); font-size: 10.5px; color: var(--subtle); }
+      .footer .actions { display: flex; gap: 10px; }
+      .btn { font-size: 12px; border-radius: 8px; padding: 8px 18px; border: none; cursor: pointer; font-family: var(--font-sans); }
+      .btn.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+      .btn.primary { background: var(--accent); color: var(--bg); font-weight: 500; }
+      .btn:disabled { opacity: .4; cursor: default; }
+      .error-box { border: 1px solid var(--danger-fg); background: rgba(232,143,143,.08); border-radius: 8px; padding: 10px 12px; font-size: 12px; color: var(--danger-fg); margin-top: 16px; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div class="stage">
+      <div class="pane center active" id="p_bienvenida">
+        <div class="brandline"><span class="mark">*</span> Lumi</div>
+        <div class="pane-body">
+          <h2>Instalar Lumi</h2>
+          <p class="desc">Este asistente instala el cliente de investigación y/o Lumi Indexer.</p>
+        </div>
+      </div>
+
+      <div class="pane" id="p_productos">
+        <div class="brandline"><span class="mark">*</span> Lumi</div>
+        <div class="pane-body">
+          <h2>Productos</h2>
+          <p class="desc">Elige qué instalar.</p>
+          <div class="option-row" data-producto="cliente">
+            <div class="checkbox checked"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></div>
+            <div><div class="label">Lumi</div><div class="sub" data-estado="cliente"></div></div>
+          </div>
+          <div class="option-row" data-producto="indexer">
+            <div class="checkbox checked"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></div>
+            <div><div class="label">Lumi Indexer</div><div class="sub" data-estado="indexer"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane" id="p_ubicacion">
+        <div class="brandline"><span class="mark">*</span> Lumi</div>
+        <div class="pane-body">
+          <h2>Carpeta de destino</h2>
+          <p class="desc">Cada producto elegido va en su propia subcarpeta.</p>
+          <span class="field-label">Ubicación</span>
+          <div class="path-row">
+            <div class="path" id="ruta-destino">%LocalAppData%\Programs\Lumi</div>
+            <button class="browse" id="btn-examinar">Examinar…</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane" id="p_instalando">
+        <div class="brandline"><span class="mark">*</span> Lumi</div>
+        <div class="pane-body">
+          <h2 id="titulo-instalando">Instalando</h2>
+          <p class="desc" id="desc-instalando">Esto tarda unos segundos.</p>
+          <div class="progress-track"><div class="progress-fill" id="barra"></div></div>
+          <div class="progress-status" id="estado-texto"></div>
+          <div class="error-box" id="caja-error" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span class="ver">0.1.0</span>
+      <div class="actions">
+        <button class="btn ghost" id="btn-atras">Atrás</button>
+        <button class="btn primary" id="btn-siguiente">Siguiente</button>
+      </div>
+    </div>
+
+    <script type="module" src="./instalador.js"></script>
   </body>
 </html>
