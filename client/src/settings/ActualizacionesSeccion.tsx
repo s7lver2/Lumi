@@ -9,12 +9,18 @@ export function ActualizacionesSeccion() {
   const [estado, setEstado] = useState<EstadoActualizacion | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [comprobando, setComprobando] = useState(false);
+  // `comprobarActualizacion()` devuelve `null` tanto si nunca se ha llamado
+  // como si ya se llamó y no hay nada nuevo — sin esto, comprobar y no
+  // encontrar nada se veía exactamente igual que no haber comprobado nunca,
+  // y el botón parecía no hacer nada.
+  const [comprobado, setComprobado] = useState(false);
 
   async function comprobarAhora() {
     setComprobando(true);
     setError(null);
     try {
       setEstado(await comprobarActualizacion());
+      setComprobado(true);
     } catch (e) {
       setEstado(null);
       setError(String(e));
@@ -35,7 +41,9 @@ export function ActualizacionesSeccion() {
         <p className="text-[11px] text-warning-fg">Tu versión fue retirada. Actualiza en cuanto puedas.</p>
       )}
       {!estado && !error && !comprobando && (
-        <p className="text-[11px] text-muted">Sin comprobar en esta sesión.</p>
+        <p className="text-[11px] text-muted">
+          {comprobado ? "Ya tienes la última versión." : "Sin comprobar en esta sesión."}
+        </p>
       )}
       {error && <p className="text-[11px] text-subtle">No se pudo comprobar: {error}</p>}
       <div className="mt-2.5 flex items-center gap-2">
