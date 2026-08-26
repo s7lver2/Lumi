@@ -35,10 +35,14 @@ export function AdminEventToast({ token, onIr }: { token: string; onIr: (s: Secc
 
   const titulo = "SolicitudCredito" in ev
     ? `${ev.SolicitudCredito.username} pidió más cupo ${ev.SolicitudCredito.tipo}`
-    : `${ev.SolicitudAcceso.display_name} pide una cuenta`;
+    : "SolicitudAcceso" in ev
+    ? `${ev.SolicitudAcceso.display_name} pide una cuenta`
+    : `Cliente en versión ${ev.SolicitudVersion.version_cliente} no pudo conectar`;
   const detalle = "SolicitudCredito" in ev
     ? `${ev.SolicitudCredito.valor_actual} → ${ev.SolicitudCredito.valor_propuesto}`
-    : ev.SolicitudAcceso.message.slice(0, 48);
+    : "SolicitudAcceso" in ev
+    ? ev.SolicitudAcceso.message.slice(0, 48)
+    : "actualiza el servidor para que pueda entrar";
 
   return (
     <div className="jg-press pointer-events-auto flex items-start gap-2.5 rounded-[11px] border border-white/[.14]

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type AdminRequest, type CreditRequestInfo } from "../lib/api";
+import { api, type AdminRequest, type CreditRequestInfo, type VersionMismatchInfo } from "../lib/api";
 import { KNOWN_MODELS as MODELS } from "../lib/models";
 import { Icon } from "../ui/Icon";
 
@@ -19,25 +19,37 @@ function Dato({ k, v }: { k: string; v: string }) {
 /** Icono circular por tipo, mismo tratamiento que ya usa
  *  `NotificationsPopover` para distinguir acceso/aviso — nunca una columna
  *  nueva en el grid, que ya está ajustado a mano para 4. */
-function TipoIcono({ tipo }: { tipo: "acceso" | "credito" }) {
-  return tipo === "acceso" ? (
-    <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full bg-warning/[.12] text-warning-fg">
-      <Icon name="shield" size={12} />
-    </span>
-  ) : (
-    <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full bg-draw/[.12] text-draw-fg">
-      <Icon name="lock" size={12} />
+function TipoIcono({ tipo }: { tipo: "acceso" | "credito" | "version" }) {
+  if (tipo === "acceso") {
+    return (
+      <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full bg-warning/[.12] text-warning-fg">
+        <Icon name="shield" size={12} />
+      </span>
+    );
+  }
+  if (tipo === "credito") {
+    return (
+      <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full bg-draw/[.12] text-draw-fg">
+        <Icon name="lock" size={12} />
+      </span>
+    );
+  }
+  return (
+    <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full bg-muted/[.12] text-muted">
+      <Icon name="refresh" size={12} />
     </span>
   );
 }
 
 type Fila =
   | { tipo: "acceso"; r: AdminRequest }
-  | { tipo: "credito"; r: CreditRequestInfo };
+  | { tipo: "credito"; r: CreditRequestInfo }
+  | { tipo: "version"; r: VersionMismatchInfo };
 
 export function RequestsView({ token }: { token: string }) {
   const [acceso, setAcceso] = useState<AdminRequest[]>([]);
   const [credito, setCredito] = useState<CreditRequestInfo[]>([]);
+  const [version, setVersion] = useState<VersionMismatchInfo[]>([]);
   const [granted, setGranted] = useState<Record<number, string[]>>({});
   const [comoAdmin, setComoAdmin] = useState<Record<number, boolean>>({});
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +58,7 @@ export function RequestsView({ token }: { token: string }) {
   const load = () => {
     api.get<AdminRequest[]>("/v1/admin/access-requests", token).then(setAcceso).catch((e) => setError(String(e)));
     api.get<CreditRequestInfo[]>("/v1/admin/credit-requests", token).then(setCredito).catch((e) => setError(String(e)));
+    api.get<VersionMismatchInfo[]>("/v1/admin/version-mismatch", token).then(setVersion).catch((e) => setError(String(e)));
   };
 
   useEffect(() => { load(); }, []);
@@ -65,6 +78,13 @@ export function RequestsView({ token }: { token: string }) {
     } catch (e) { setError(String(e)); load(); }
   }
 
+  async function descartarVersion(id: number) {
+    try {
+      await api.post(`/v1/admin/version-mismatch/${id}/resolve`, {}, token);
+      load();
+    } catch (e) { setError(String(e)); load(); }
+  }
+
   const toggle = (id: number, m: string) =>
     setGranted((g) => {
       const cur = g[id] ?? ["mini"];
@@ -74,9 +94,11 @@ export function RequestsView({ token }: { token: string }) {
   const filas: Fila[] = [
     ...acceso.map((r): Fila => ({ tipo: "acceso", r })),
     ...credito.map((r): Fila => ({ tipo: "credito", r })),
+    ...version.map((r): Fila => ({ tipo: "version", r })),
   ].sort((a, b) => b.r.created_at - a.r.created_at);
 
-  const pendientes = filas.filter((f) => f.r.status === "pending").length;
+  const pendiente = (f: Fila) => f.tipo === "version" ? f.r.resolved_at === null : f.r.status === "pending";
+  const pendientes = filas.filter(pendiente).length;
   const key = (f: Fila) => `${f.tipo}:${f.r.id}`;
 
   return (
@@ -96,15 +118,17 @@ export function RequestsView({ token }: { token: string }) {
         const k = key(f);
         const abiertaAqui = abierta === k;
         return (
-          <div key={k} className={`border-t border-border first:border-t-0 ${f.r.status !== "pending" ? "opacity-45" : ""}`}>
+          <div key={k} className={`border-t border-border first:border-t-0 ${!pendiente(f) ? "opacity-45" : ""}`}>
             <button onClick={() => setAbierta(abiertaAqui ? null : k)}
               className="grid w-full grid-cols-[1fr_122px_92px_22px] items-center gap-3 px-3.5 py-3 text-left transition-[background-color,padding-left] duration-[400ms] ease-expo hover:bg-white/[.03] hover:pl-[17px]">
               <span className="flex min-w-0 items-center gap-2 text-[11.5px] text-fg">
                 <TipoIcono tipo={f.tipo} />
                 <span className="flex min-w-0 items-baseline gap-2">
-                  {f.tipo === "acceso" ? f.r.display_name : f.r.username}
+                  {f.tipo === "acceso" ? f.r.display_name : f.tipo === "version" ? f.r.source_ip : f.r.username}
                   <small className="truncate text-[9.5px] text-subtle">
-                    {f.tipo === "acceso" ? f.r.message.slice(0, 48) : `${f.r.tipo} ${f.r.valor_actual} → ${f.r.valor_propuesto}`}
+                    {f.tipo === "acceso" ? f.r.message.slice(0, 48)
+                      : f.tipo === "version" ? `versión ${f.r.version_cliente}`
+                      : `${f.r.tipo} ${f.r.valor_actual} → ${f.r.valor_propuesto}`}
                   </small>
                 </span>
               </span>
@@ -134,7 +158,7 @@ export function RequestsView({ token }: { token: string }) {
                     </div>
                     <div className="col-span-2 flex items-center gap-2.5 pt-1">
                       <span className="mr-auto text-[10px] text-subtle">Al aprobar entra con los límites globales; se ajustan luego en Usuarios.</span>
-                      {f.r.status === "pending" && (
+                      {pendiente(f) && (
                         <div className="flex items-center gap-2">
                           <button onClick={() => resolveAcceso(f.r.id, true)} className="rounded-lg bg-accent px-3 py-1.5 text-[11px] font-medium text-black active:translate-y-px">Aprobar</button>
                           <button onClick={() => resolveAcceso(f.r.id, false)} className="rounded-lg border border-white/15 px-3 py-1.5 text-[11px] text-fg active:translate-y-px">Rechazar</button>
@@ -167,6 +191,21 @@ export function RequestsView({ token }: { token: string }) {
                       )}
                     </div>
                   </div>
+                ) : f.tipo === "version" ? (
+                  <div className="grid grid-cols-[1fr_262px] gap-5 px-3.5 pb-4 pt-0.5">
+                    <div className="flex flex-col">
+                      <Dato k="versión del cliente" v={f.r.version_cliente} />
+                      <Dato k="dirección" v={f.r.source_ip} />
+                    </div>
+                    <div className="flex items-end justify-end gap-2">
+                      {f.r.resolved_at === null && (
+                        <button onClick={() => descartarVersion(f.r.id)}
+                          className="rounded-lg border border-white/15 px-3 py-1.5 text-[11px] text-fg active:translate-y-px">
+                          Descartar
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 ) : (
                   <div className="grid grid-cols-[1fr_262px] gap-5 px-3.5 pb-4 pt-0.5">
                     <div className="flex flex-col">
@@ -175,7 +214,7 @@ export function RequestsView({ token }: { token: string }) {
                       {f.r.mensaje && <Dato k="motivo" v={f.r.mensaje} />}
                     </div>
                     <div className="flex items-end justify-end gap-2">
-                      {f.r.status === "pending" && (
+                      {pendiente(f) && (
                         <>
                           <button onClick={() => resolveCredito(f.r.id, false)} className="rounded-lg border border-white/15 px-3 py-1.5 text-[11px] text-fg active:translate-y-px">Rechazar</button>
                           <button onClick={() => resolveCredito(f.r.id, true)} className="rounded-lg bg-accent px-3 py-1.5 text-[11px] font-medium text-black active:translate-y-px">Aprobar</button>
