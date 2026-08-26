@@ -89,7 +89,7 @@ export function EntryScreen({ onSignedIn, onOwnerKey }: {
     );
   } else {
     pane = (
-      <Pane title="Lumi Station" subtitle="inicia sesión en tu servidor.">
+      <Pane title="Lumi" subtitle="inicia sesión en tu servidor.">
         <LoginForm server={server} onServer={setServer} onAdd={() => setView("add")}
           onRequest={() => setView("request")} onSignedIn={onSignedIn}
           onMustChange={() => setView("password")} />

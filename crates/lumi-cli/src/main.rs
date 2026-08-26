@@ -6,7 +6,7 @@ mod ui;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "lumi", version, about = "Servidor Lumi Station")]
+#[command(name = "lumi", version, about = "Servidor Lumi")]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,

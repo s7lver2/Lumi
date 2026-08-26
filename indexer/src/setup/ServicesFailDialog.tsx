@@ -8,7 +8,7 @@ import { LogBox } from "./LogBox";
 const TOPE_SONDEOS = 40;
 
 /** El popup cuando Redis y/o Qdrant no arrancaron solos al abrir la app.
- *  Misma composición que los estados anómalos de Lumi Station (DESIGN.md):
+ *  Misma composición que los estados anómalos de Lumi (DESIGN.md):
  *  icono grande centrado con halo, título corto, una línea de contexto, el
  *  detalle crudo, fila de botones.
  *

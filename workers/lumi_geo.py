@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Trabajador de geolocalizacion de Lumi Station (subsistema 5a).
+"""Trabajador de geolocalizacion de Lumi (subsistema 5a).
 
 Solo embebe: convierte la imagen de consulta en un vector y contesta la ruta
 de un fichero temporal. No busca, no agrupa, no atribuye — eso vive en el

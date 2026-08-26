@@ -72,7 +72,7 @@ export function NetworkView({ token }: { token: string }) {
       <div className="mt-4 rounded-card border border-border bg-panel">
         <ToggleFila
           titulo="QUIC / HTTP-3"
-          sub="Listener adicional del lado servidor. El cliente de Lumi Station sigue hablando TCP+TLS: activarlo no cambia nada hoy, es infraestructura para el futuro."
+          sub="Listener adicional del lado servidor. El cliente de Lumi sigue hablando TCP+TLS: activarlo no cambia nada hoy, es infraestructura para el futuro."
           on={borrador.quic_enabled}
           onClick={() => setBorrador({ ...borrador, quic_enabled: !borrador.quic_enabled })}
         />

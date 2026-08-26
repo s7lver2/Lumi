@@ -1,6 +1,6 @@
-# Lumi Station
+# Lumi
 
-Reescritura completa de Lumi. Cliente de escritorio Tauri + servidor de inferencia
+Reescritura completa de Lumi v1. Cliente de escritorio Tauri + servidor de inferencia
 autoalojado. Contexto completo en [PRODUCT.md](PRODUCT.md) y [DESIGN.md](DESIGN.md).
 
 Este README cubre solo el **subsistema 1**: instalador CLI y vinculación. Spec en
@@ -335,6 +335,6 @@ cd client && npm run build   # frontend
 
 ## Licencia
 
-AGPL-3.0-or-later (ver [LICENSE](LICENSE)). Al ser Lumi Station un servicio pensado para
+AGPL-3.0-or-later (ver [LICENSE](LICENSE)). Al ser Lumi un servicio pensado para
 correr en un servidor propio, la AGPL cierra el hueco de la GPL normal: si alguien ofrece una
 versión modificada como servicio de red, también debe compartir su código fuente.

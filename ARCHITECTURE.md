@@ -1,4 +1,4 @@
-# Lumi Station — documento general
+# Lumi — documento general
 
 Documento paraguas del proyecto: qué es, cómo se divide, qué decisiones atraviesan todos
 los subsistemas y en qué estado está cada pieza. Los documentos hermanos cubren su parte:
@@ -170,7 +170,7 @@ verificar, y quien produce el índice es el 7. Se consideró que el 5 fijara el 
 un índice de juguete construido a mano, y se descartó a propósito: el motor habría pasado su
 desarrollo entero contra material de mentira, y la primera vez que viera un índice real sería
 después de darlo por terminado. El coste asumido es el simétrico — el Indexer se diseña sin
-que su consumidor exista todavía, y Lumi Station sigue sin resolver ni un análisis durante dos
+que su consumidor exista todavía, y Lumi sigue sin resolver ni un análisis durante dos
 subsistemas más.
 
 ### Los tres nuevos, en una frase cada uno
@@ -178,7 +178,7 @@ subsistemas más.
 Están anotados aquí para no perderlos, **no diseñados**. Cada uno abre su ciclo
 spec → plan cuando le toque, y el owner aportará el detalle entonces.
 
-- **7a/7b · Lumi Indexer.** Aplicación Tauri **independiente** de Lumi Station, no una
+- **7a/7b · Lumi Indexer.** Aplicación Tauri **independiente** de Lumi, no una
   sección suya, y sin cuentas ni servidor: un solo operador sobre su propia máquina.
   Separada porque quien indexa y quien investiga no son la misma persona ni trabajan en el
   mismo equipo. Sus specs están en
@@ -257,7 +257,7 @@ app donde algo aparezca deshabilitado.
 ### Tres bases de datos
 
 Decidido por el owner durante el diseño del 7a, y aplica a **los dos lados** — el daemon de
-Lumi Station y el Indexer:
+Lumi y el Indexer:
 
 | Base | Qué guarda |
 |---|---|

@@ -231,7 +231,7 @@ export default function App() {
    *  sin que cada vista se lo cuente. */
   const crumbs =
     mode === "entry" || mode === "wizard"
-      ? [{ label: "Lumi Station" }]
+      ? [{ label: "Lumi" }]
       : mode === "admin"
         ? [{ label: "Proyectos", onClick: () => setMode("picker") }, { label: "Administración" }]
         : mode === "profile"
@@ -307,7 +307,7 @@ export default function App() {
       ) : mode === "profile" ? (
         <ProfileView token={useServer.getState().token!} onBack={() => setMode("picker")} />
       ) : mode === "wizard" ? (
-        <Wizard step={step} title="Lumi Station" subtitle="vincular servidor"
+        <Wizard step={step} title="Lumi" subtitle="vincular servidor"
           // Del paso 3 (runtime) no se puede volver al 2 (admin): la cuenta ya
           // se creó y el token de bootstrap ya se consumió, así que no hay
           // nada que "deshacer" volviendo atrás.

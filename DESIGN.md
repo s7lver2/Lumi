@@ -1,4 +1,4 @@
-# Lumi Station — sistema de diseño
+# Lumi — sistema de diseño
 
 Heredado de Lumi v1 (`apps/web/tailwind.config.ts`, `app/globals.css`,
 `components/PlanetBackground.tsx`). Los valores están fijados por decisión del owner: el

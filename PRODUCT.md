@@ -1,4 +1,4 @@
-# Lumi Station — contexto de producto
+# Lumi — contexto de producto
 
 ## Qué es
 

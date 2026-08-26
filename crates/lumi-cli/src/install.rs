@@ -19,7 +19,7 @@ const BIN: &str = "/usr/local/bin/lumid";
 
 const UNIT: &str = "\
 [Unit]
-Description=Lumi Station control daemon
+Description=Lumi control daemon
 After=network-online.target
 Wants=network-online.target
 
@@ -46,7 +46,7 @@ const QDRANT_DIR: &str = "/var/lib/lumi/qdrant";
 
 const QDRANT_UNIT: &str = "\
 [Unit]
-Description=Qdrant vector database (Lumi Station)
+Description=Qdrant vector database (Lumi)
 After=network.target
 
 [Service]

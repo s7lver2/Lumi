@@ -1,6 +1,6 @@
 //! Lumi Indexer: la aplicación.
 //!
-//! Independiente de Lumi Station. No se vincula a ningún servidor, no tiene
+//! Independiente de Lumi. No se vincula a ningún servidor, no tiene
 //! cuentas ni sesiones: es una herramienta de un solo operador sobre su propia
 //! máquina. Lo que produce son paquetes `.lumidx` sellados.
 

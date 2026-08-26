@@ -1,4 +1,4 @@
-# Lumi Station — ideas a futuro
+# Lumi — ideas a futuro
 
 Lo que se propuso, se entendió, y se decidió **no** construir todavía. No es una lista de
 deseos: cada entrada dice por qué se aparcó y qué habría que hacer para retomarla. Si algo
@@ -197,7 +197,7 @@ que pasa las reglas resulta insoportable en la práctica.
 
 ### El árbol de dependencias dibujado
 
-`InstallDialog` (Lumi Station) resuelve el grafo y suma el peso, pero lo enseña como una
+`InstallDialog` (Lumi) resuelve el grafo y suma el peso, pero lo enseña como una
 lista, no como un árbol con sus conectores. El grafo (`lumi_index::grafo::resolver`) ya trae
 la profundidad de cada nodo; falta solo el dibujo. Se aparcó porque la lista ya deja decidir
 —peso total, cobertura, quién falta— y un árbol visual es una mejora de lectura, no de
@@ -223,7 +223,7 @@ Hoy el catálogo remoto se navega desde dentro del Indexer (`territory.rs`/`publ
 operador ve qué hay publicado y reclama territorio, pero no hay ninguna superficie de control
 fuera de esas dos apps de escritorio. La idea a futuro es que la web del subsistema 9 sea
 además **el buscador desde el que cualquiera descarga índices publicados** — no solo un
-escaparate — y que traiga su propio panel administrativo (aparte del de Lumi Station, que es
+escaparate — y que traiga su propio panel administrativo (aparte del de Lumi, que es
 por-servidor): moderar publicaciones, aplicar el criterio de desreclamo de arriba, y en
 general todo lo que hoy no tiene dueño porque no hay ningún sitio central que lo posea. Depende
 de que exista la web; no tiene sentido diseñarlo en detalle antes de eso.

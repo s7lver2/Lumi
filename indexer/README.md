@@ -1,13 +1,13 @@
 # Lumi Indexer
 
-Una aplicación Tauri **independiente** de Lumi Station: no se vincula a ningún
+Una aplicación Tauri **independiente** de Lumi: no se vincula a ningún
 servidor, no tiene cuentas ni sesiones. Es una herramienta de un solo operador
 sobre su propia máquina. Lo que produce son paquetes `.lumidx` sellados —
 territorio indexado, con su procedencia y su verificación.
 
 Lo que **no** es: no es el motor de inferencia (ese es el subsistema 5), no es
 el catálogo público de índices (ese es el 8), y no habla con `lumid` ni con el
-cliente de Lumi Station. Comparte con ellos solo el vocabulario visual
+cliente de Lumi. Comparte con ellos solo el vocabulario visual
 (`client/src/ui`) y, en Rust, el crate `lumi-index`, que es lógica pura sin
 GPU, sin servicios y sin ventana.
 
@@ -16,7 +16,7 @@ GPU, sin servicios y sin ventana.
 Redis **no publica binarios oficiales para Windows**. En Linux (y macOS) los
 servicios corren nativos. En Windows, el Indexer se instala **dentro de
 WSL** — es la misma postura que `ARCHITECTURE.md` §7 ya fija para el servidor
-de Lumi Station, y no una decisión nueva de este subsistema.
+de Lumi, y no una decisión nueva de este subsistema.
 
 Empaquetar un puerto de terceros (como Memurai) metería una dependencia con su
 propia licencia dentro de un proyecto de código abierto; el Indexer prefiere

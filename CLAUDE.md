@@ -4,10 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Lumi Station v2: a complete rewrite of Lumi, a self-hosted image-geolocation tool for forensic
+Lumi v2: a complete rewrite of Lumi v1, a self-hosted image-geolocation tool for forensic
 investigation ("give it a photo, it tells you where it was taken"). Two independent halves:
 
-- **Lumi Station** (`crates/lumid`, `crates/lumi-cli`, `client/`) — the investigator-facing
+- **Lumi** (`crates/lumid`, `crates/lumi-cli`, `client/`) — the investigator-facing
   product: a Tauri desktop client paired over TLS to a Rust daemon (`lumid`) that the server
   owner installs on their own GPU box.
 - **Lumi Indexer** (`indexer/`, `crates/lumi-index`) — a *separate*, single-operator Tauri app
@@ -27,7 +27,7 @@ specs/plans under `docs/superpowers/{specs,plans}/`.
 ## Commands
 
 ```bash
-# Lumi Station: daemon + Tauri client together (fixed port 7717)
+# Lumi: daemon + Tauri client together (fixed port 7717)
 python tools/build.py
 
 # Lumi Indexer alone (no daemon involved — it's autonomous)
@@ -70,7 +70,7 @@ crates/lumid           the daemon: TLS, HTTP API (routes/), task runner, queue (
 crates/lumi-cli        `lumi` binary: install, uninstall, key reissue, status
 crates/lumi-index      pure logic (no GPU/services/window) shared by the Indexer: manifest, tiles,
                        vectors, coverage, budget, embed, streets, network, legacy-import
-client/                Lumi Station's Tauri v2 + React + Tailwind app
+client/                Lumi's Tauri v2 + React + Tailwind app
   src-tauri/            fingerprint verification, SSE bridge to lumid
   src/                  wizard, admin, work (projects/cases/map), dev harness
 indexer/               Lumi Indexer's Tauri v2 + React + Tailwind app (independent npm project)
@@ -109,7 +109,7 @@ work is reconstructed from SQLite. Never persist per-job progress; it's retransm
 and forgotten. In the Indexer specifically, the queue rebuilds from SQLite by checking which
 images still lack a vector.
 
-### Trust & transport (Lumi Station)
+### Trust & transport (Lumi)
 
 Pairing key: `lumi1_<host:port>_<fingerprint>_<secret>` — self-signed TLS, fingerprint pinned
 inside the out-of-band key. Client compares the live cert fingerprint against the key; mismatch
@@ -125,7 +125,7 @@ Capability matrix: every capped capability travels with a human-readable `reason
 disabled features with the real cause, never hides them. Single source of truth; apply this
 pattern anywhere something is disabled in either app.
 
-### Queue & scheduling (Lumi Station subsystem 4, done)
+### Queue & scheduling (Lumi subsystem 4, done)
 
 One worker per device (GPU, or CPU if none) starts with the daemon and stays warm between jobs.
 Scheduling order: drop what can't run (owner blocked / owner disconnected without
