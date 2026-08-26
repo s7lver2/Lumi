@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { addrFromCard, api, fingerprintFromCard, isCard, type Hello, type ServerProfileSettings } from "../lib/api";
+import { addrFromCard, api, fingerprintFromCard, isCard, parseVersionMismatch, type Hello, type ServerProfileSettings } from "../lib/api";
 import { addServer } from "../lib/session";
 import { Icon } from "../ui/Icon";
 import { ServerProfileCard } from "./ServerProfileCard";
+import { VersionMismatchNotice } from "./VersionMismatchNotice";
 
 export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
   onAdded: (addr: string) => void; onOwnerKey: (key: string) => void; onBack?: () => void;
@@ -101,7 +102,12 @@ export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
         </>
       )}
 
-      {error && (
+      {error && parseVersionMismatch(error) ? (
+        <>
+          <div className="my-3 h-px bg-border" />
+          <VersionMismatchNotice {...parseVersionMismatch(error)!} />
+        </>
+      ) : error && (
         <>
           <div className="my-3 h-px bg-border" />
           <div className="flex items-start gap-2.5 text-xs text-danger-fg">

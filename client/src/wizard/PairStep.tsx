@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { addrFromKey, api } from "../lib/api";
+import { addrFromKey, api, parseVersionMismatch } from "../lib/api";
 import { useServer } from "../lib/store";
 import { addServer, updateSession } from "../lib/session";
 import { Icon } from "../ui/Icon";
+import { VersionMismatchNotice } from "../entry/VersionMismatchNotice";
 
 export function PairStep({ onDone }: { onDone: () => void }) {
   const { key, setKey, hello, setHello } = useServer();
@@ -95,7 +96,12 @@ export function PairStep({ onDone }: { onDone: () => void }) {
         </>
       )}
 
-      {error && (
+      {error && parseVersionMismatch(error) ? (
+        <>
+          <div className="my-3 h-px bg-border" />
+          <VersionMismatchNotice {...parseVersionMismatch(error)!} />
+        </>
+      ) : error && (
         <>
           <div className="my-3 h-px bg-border" />
           <div className="flex items-start gap-2.5 text-xs text-danger-fg">

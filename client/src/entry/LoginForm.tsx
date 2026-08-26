@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { api, type LoginRes, type Me } from "../lib/api";
+import { api, parseVersionMismatch, type LoginRes, type Me } from "../lib/api";
 import { announcePresence, setAuth } from "../lib/bridge";
 import { deviceId, deviceName, updateSession, type Server } from "../lib/session";
 import { useServer } from "../lib/store";
 import { Icon } from "../ui/Icon";
 import { ServerSelect } from "./ServerSelect";
+import { VersionMismatchNotice } from "./VersionMismatchNotice";
 
 export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMustChange }: {
   server: Server | null; onServer: (s: Server) => void; onAdd: () => void;
@@ -84,7 +85,9 @@ export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMu
         onKeyDown={(e) => e.key === "Enter" && submit()}
         className="w-full rounded-lg border border-border bg-[#0d0f12] px-3 py-2.5 text-[12.5px] text-fg outline-none transition-[border-color,box-shadow] duration-300 ease-expo focus:border-white/40 focus:shadow-[0_0_0_3px_rgba(242,243,245,.055)]" />
 
-      {error && (
+      {error && parseVersionMismatch(error) ? (
+        <VersionMismatchNotice {...parseVersionMismatch(error)!} />
+      ) : error && (
         <div className="mt-3.5 flex items-start gap-2.5 text-xs">
           <Icon name="alert" className="mt-0.5 text-danger-fg" />
           <span className="text-muted">{error}</span>
