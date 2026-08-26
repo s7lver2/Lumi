@@ -8,8 +8,10 @@ import { ResolvedScreen } from "./ResolvedScreen";
 import { ChangePasswordForm } from "./ChangePasswordForm";
 import { WavesBackground } from "./WavesBackground";
 import type { AccessStatus } from "../lib/api";
+import { AjustesView } from "../settings/AjustesView";
+import { Icon } from "../ui/Icon";
 
-export type EntryView = "login" | "add" | "request" | "waiting" | "resolved" | "password";
+export type EntryView = "login" | "add" | "request" | "waiting" | "resolved" | "password" | "ajustes";
 
 /** Marco compartido: la marca, el subtítulo y la tarjeta. Mismo esqueleto que
  *  el wizard, sin el stepper: aquí no hay pasos numerados que recorrer. */
@@ -42,6 +44,10 @@ export function EntryScreen({ onSignedIn, onOwnerKey }: {
   // que el usuario estaba haciendo y sobrevive a cerrar la app.
   const [view, setView] = useState<EntryView>(loadSession()?.ticket ? "waiting" : "login");
   const [resolved, setResolved] = useState<AccessStatus | null>(null);
+
+  if (view === "ajustes") {
+    return <AjustesView onBack={() => setView("login")} />;
+  }
 
   // Fuera de las ramas de `view`: EntryScreen no se remonta al cambiar de
   // vista, así que esto tampoco — la animación de las capas sigue su ciclo
@@ -100,5 +106,17 @@ export function EntryScreen({ onSignedIn, onOwnerKey }: {
   // El fondo va FUERA del if/else: EntryScreen no se remonta al cambiar de
   // vista, así que esto tampoco — la animación de las capas sigue su ciclo
   // sin reiniciarse cada vez que pasas de login a "añadir servidor" y vuelta.
-  return <><WavesBackground />{pane}</>;
+  return (
+    <>
+      <WavesBackground />
+      {pane}
+      <button onClick={() => setView("ajustes")}
+        className="fixed bottom-4 left-4 z-10 grid h-8 w-8 place-items-center rounded-full
+          border border-white/15 bg-[rgba(16,19,25,.66)] text-subtle backdrop-blur-xl
+          transition-colors duration-300 ease-expo hover:text-fg"
+        title="Ajustes">
+        <Icon name="ajustes" size={14} />
+      </button>
+    </>
+  );
 }
