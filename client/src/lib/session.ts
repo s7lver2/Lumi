@@ -19,15 +19,30 @@ export interface Session {
   username?: string;
 }
 
-/** Servidor recordado. Solo datos públicos: dirección y huella. */
+/** Servidor recordado. `folderId`/`avatarDataUrl` son organización PERSONAL
+ *  de este cliente — el servidor no sabe nada de esto ni lo transporta. */
 export interface Server {
   addr: string;
   fingerprint: string;
   label: string;
+  folderId?: string;
+  /** Caché local del avatar que el servidor publica en
+   *  `/v1/server-profile/avatar` — nunca se sube nada desde el cliente. Se
+   *  guarda al añadir el servidor y se refresca en cada reconexión
+   *  correcta (ver `lib/bridge.ts::fetchLumiAvatarDataUrl`). */
+  avatarDataUrl?: string;
+}
+
+/** Carpeta local para organizar la lista de servidores guardados. */
+export interface ServerFolder {
+  id: string;
+  nombre: string;
 }
 
 const KEY = "lumi.session";
 const SERVERS = "lumi.servers";
+const SERVER_FOLDERS = "lumi.server-folders";
+const SERVER_FOLDERS_COLAPSADAS = "lumi.server-folders.colapsadas";
 const DEVICE = "lumi.device";
 const ENV_PARAM = "env";
 
@@ -140,4 +155,54 @@ export function resetEnv() {
 
 export function deviceName(): string {
   return navigator.platform || "equipo";
+}
+
+export function loadServerFolders(): ServerFolder[] {
+  try {
+    return JSON.parse(localStorage.getItem(nsKey(SERVER_FOLDERS)) ?? "[]") as ServerFolder[];
+  } catch {
+    return [];
+  }
+}
+
+export function createServerFolder(nombre: string): ServerFolder {
+  const folder: ServerFolder = { id: crypto.randomUUID(), nombre };
+  localStorage.setItem(nsKey(SERVER_FOLDERS), JSON.stringify([...loadServerFolders(), folder]));
+  return folder;
+}
+
+/** No borra si todavía tiene servidores dentro — la UI ya deshabilita el
+ *  botón en ese caso (ver `ServerSelect.tsx`), esto es la red de seguridad
+ *  contra dejar servidores con un `folderId` que ya no existe. */
+export function deleteServerFolder(id: string) {
+  if (loadServers().some((s) => s.folderId === id)) return;
+  localStorage.setItem(nsKey(SERVER_FOLDERS), JSON.stringify(loadServerFolders().filter((f) => f.id !== id)));
+}
+
+export function moveServerToFolder(addr: string, folderId: string | undefined) {
+  const servers = loadServers().map((s) => (s.addr === addr ? { ...s, folderId } : s));
+  localStorage.setItem(nsKey(SERVERS), JSON.stringify(servers));
+}
+
+/** Se llama tras pedir el avatar de verdad (`fetchLumiAvatarDataUrl` en
+ *  `lib/bridge.ts`) — nunca borra la caché anterior si la petición falla,
+ *  solo la reemplaza cuando hay un dato nuevo que guardar. */
+export function updateServerAvatar(addr: string, avatarDataUrl: string) {
+  const servers = loadServers().map((s) => (s.addr === addr ? { ...s, avatarDataUrl } : s));
+  localStorage.setItem(nsKey(SERVERS), JSON.stringify(servers));
+}
+
+export function loadCarpetasColapsadas(): Record<string, boolean> {
+  try {
+    return JSON.parse(localStorage.getItem(nsKey(SERVER_FOLDERS_COLAPSADAS)) ?? "{}") as Record<string, boolean>;
+  } catch {
+    return {};
+  }
+}
+
+export function toggleCarpetaColapsada(id: string): Record<string, boolean> {
+  const cur = loadCarpetasColapsadas();
+  cur[id] = !cur[id];
+  localStorage.setItem(nsKey(SERVER_FOLDERS_COLAPSADAS), JSON.stringify(cur));
+  return cur;
 }
