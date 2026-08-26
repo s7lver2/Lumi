@@ -117,12 +117,17 @@ export interface CreateCreditReq {
 export interface ResolveCreditReq {
   approve: boolean; valor_final?: number; reason?: string;
 }
+export interface VersionMismatchInfo {
+  id: number; version_cliente: string; source_ip: string;
+  created_at: number; resolved_at: number | null;
+}
 export type EventoAdmin =
   | { SolicitudCredito: {
       user_id: number; username: string; tipo: "diario" | "semanal";
       valor_actual: number; valor_propuesto: number;
     } }
   | { SolicitudAcceso: { id: number; display_name: string; message: string } }
+  | { SolicitudVersion: { version_cliente: string } }
   | "ColaCambio";
 export interface SessionInfo {
   public_id: string; device_name: string | null; os: string | null;
@@ -221,6 +226,31 @@ export interface Hello {
   fingerprint: string;
   capabilities: Capability[];
   gpus: GpuInfo[];
+}
+
+/** `partes`/`comparar` de `lumi-proto::actualizacion`, mismo criterio en TS:
+ *  tuplas de tres enteros, sin sufijo de pre-release. */
+function partesVersion(v: string): [number, number, number] {
+  const [a, b, c] = v.trim().split(".");
+  return [Number(a) || 0, Number(b) || 0, Number(c) || 0];
+}
+
+/** `true` si `a` es estrictamente más nueva que `b`. */
+export function versionMayor(a: string, b: string): boolean {
+  const pa = partesVersion(a), pb = partesVersion(b);
+  for (let i = 0; i < 3; i++) {
+    if (pa[i] !== pb[i]) return pa[i] > pb[i];
+  }
+  return false;
+}
+
+/** El error que lanza `pair`/`reconnect`/`pair_card` cuando la versión del
+ *  cliente y la del servidor no coinciden (ver `connect()` en
+ *  `client/src-tauri/src/main.rs`) trae el formato
+ *  `version incompatible|<propia>|<servidor>`. `null` si `msg` no es eso. */
+export function parseVersionMismatch(msg: string): { propia: string; servidor: string } | null {
+  const m = /^version incompatible\|([^|]+)\|([^|]+)$/.exec(msg.trim());
+  return m ? { propia: m[1], servidor: m[2] } : null;
 }
 
 /** `lumi1_<host:puerto>_<huella>_<secreto>`. Se parte desde la derecha porque

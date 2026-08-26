@@ -30,3 +30,11 @@ export function errorActualizacionPendiente(): Promise<string | null> {
 export function dispararActualizacionSilenciosa(versionNueva: string): Promise<void> {
   return invoke("disparar_actualizacion_silenciosa", { versionNueva });
 }
+
+/** Mismo camino que `dispararActualizacionSilenciosa`, pero para igualar
+ *  una versión exacta (downgrade, o la versión de un servidor que no es la
+ *  última publicada) en vez de "la más nueva". No vuelve — la ventana se
+ *  cierra dentro del comando de Rust. */
+export function dispararActualizacionAVersion(versionObjetivo: string): Promise<void> {
+  return invoke("disparar_actualizacion_a_version", { versionObjetivo });
+}
