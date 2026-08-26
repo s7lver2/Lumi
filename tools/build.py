@@ -38,11 +38,10 @@ def main():
     if target == "installer":
         # El instalador compartido reemplaza Inno/NSIS (ver
         # docs/superpowers/specs/2026-08-26-instalador-compartido-design.md):
-        # instalador.exe (Tauri) + instalador-cli.exe (sin ventana, lo usan
-        # cliente/Indexer para autoactualizarse) se compilan y se dejan
-        # junto a cada producto para que ya estén ahí cuando el producto
-        # los necesite.
-        run(["cargo", "build", "--release", "--manifest-path", str(ROOT / "instalador-cli" / "Cargo.toml")])
+        # un solo installer.exe (Tauri) — con --silencioso resuelve la
+        # actualización sin ventana, si no abre la UI interactiva. El
+        # cliente/Indexer lo dejan junto a sí mismos en la instalación
+        # inicial y lo relanzan con ese flag para autoactualizarse.
         run([NPM, "run", "tauri", "build"], cwd=ROOT / "installer")
         return
     if target == "indexer":

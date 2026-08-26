@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Permisos del instalador de Lumi","local":true,"windows":["main"],"permissions":["core:default","dialog:default","log:default"]}}
+{"default":{"identifier":"default","description":"Permisos del instalador de Lumi","local":true,"windows":["main"],"permissions":["core:default","dialog:default","log:default","core:window:allow-minimize","core:window:allow-close","core:window:allow-start-dragging"]}}

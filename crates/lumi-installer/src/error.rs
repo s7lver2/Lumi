@@ -1,6 +1,6 @@
-//! Error único para todo `lumi-installer` — lo consumen tanto
-//! `instalador-cli` (para decidir el mensaje de log) como los comandos de
-//! Tauri de `installer/` (para mostrarlo en la UI).
+//! Error único para todo `lumi-installer` — lo consume tanto el camino
+//! `--silencioso` de `installer/` (para decidir el mensaje de log) como sus
+//! comandos de Tauri (para mostrarlo en la UI).
 
 use std::fmt;
 

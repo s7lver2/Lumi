@@ -225,23 +225,24 @@ async fn comprobar_actualizacion() -> Result<Option<EstadoActualizacion>, String
     }))
 }
 
-/// Se llama una vez al arrancar (ver App.tsx) — si `instalador-cli` dejó un
-/// error de la última actualización silenciosa, se muestra aquí una sola
-/// vez (la lectura ya lo borra).
+/// Se llama una vez al arrancar (ver App.tsx) — si `installer.exe
+/// --silencioso` dejó un error de la última actualización silenciosa, se
+/// muestra aquí una sola vez (la lectura ya lo borra).
 #[tauri::command]
 fn error_actualizacion_pendiente() -> Option<String> {
     lumi_installer::bitacora::leer_y_borrar_marca_error("cliente").map(|e| e.motivo)
 }
 
-/// Cierra esta app y lanza `instalador-cli.exe --producto=cliente` con el
-/// PID propio, para que aplique `version_nueva` en segundo plano. Vive
-/// junto al propio ejecutable — el instalador ya lo dejó ahí en la
-/// instalación inicial (ver installer/src-tauri/src/comandos.rs).
+/// Cierra esta app y lanza `installer.exe --producto=cliente --silencioso`
+/// con el PID propio, para que aplique `version_nueva` en segundo plano —
+/// mismo binario que la instalación interactiva, sin ventana en este
+/// camino. Vive junto al propio ejecutable — el instalador ya lo dejó ahí
+/// en la instalación inicial (ver installer/src-tauri/src/comandos.rs).
 #[tauri::command]
 fn disparar_actualizacion_silenciosa(app: tauri::AppHandle, version_nueva: String) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let carpeta = exe.parent().ok_or("sin carpeta padre")?;
-    let instalador = carpeta.join("instalador-cli.exe");
+    let instalador = carpeta.join("installer.exe");
     let pid = std::process::id();
     let version_actual = env!("CARGO_PKG_VERSION");
 
@@ -253,7 +254,7 @@ fn disparar_actualizacion_silenciosa(app: tauri::AppHandle, version_nueva: Strin
         .spawn()
         .map_err(|e| e.to_string())?;
 
-    let _ = version_nueva; // informativo para quien lea el log; instalador-cli vuelve a resolver la version real contra el manifiesto
+    let _ = version_nueva; // informativo para quien lea el log; el camino --silencioso vuelve a resolver la version real contra el manifiesto
     app.exit(0);
     Ok(())
 }

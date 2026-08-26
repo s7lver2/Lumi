@@ -21,3 +21,5 @@ tauri-plugin-dialog = "2"
 lumi-installer = { path = "../../crates/lumi-installer" }
 lumi-proto = { path = "../../crates/lumi-proto" }
 mslnk = "0.1.8"
+winreg = "0.56.0"
+windows-sys = { version = "0.61.2", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }

@@ -1,10 +1,13 @@
-//! Disparo silencioso de una actualización — sin ventana, en milisegundos.
-//! El cliente/Indexer lo lanzan y se cierran antes (spec, Flujo B): esto
-//! solo confirma que de verdad pasó, con margen, antes de tocar archivos.
+//! Camino silencioso del instalador: sin ventana, en milisegundos. El
+//! cliente/Indexer lo lanzan y se cierran antes (spec, Flujo B) — esto solo
+//! confirma que de verdad pasó, con margen, antes de tocar archivos.
 //!
-//! Uso: instalador-cli --producto=cliente --pid=1234 --version-actual=2.3.0 --silencioso
+//! Vive en el mismo binario que la UI interactiva — `main.rs` mira
+//! `--silencioso` antes de arrancar Tauri y decide qué camino tomar — para
+//! que solo haya un `.exe` que instalar/actualizar, no dos.
+//!
+//! Uso: installer.exe --producto=cliente --pid=1234 --version-actual=2.3.0 --silencioso
 
-use std::path::PathBuf;
 use std::time::Duration;
 
 use lumi_installer::aplicar::{aplicar_producto, Fase};
@@ -17,6 +20,10 @@ struct Args {
     producto: String,
     pid: u32,
     version_actual: String,
+}
+
+pub fn es_invocacion_silenciosa() -> bool {
+    std::env::args().any(|a| a == "--silencioso")
 }
 
 fn parsear_args() -> Option<Args> {
@@ -32,11 +39,7 @@ fn parsear_args() -> Option<Args> {
             version_actual = Some(v.to_string());
         }
     }
-    Some(Args {
-        producto: producto?,
-        pid: pid?,
-        version_actual: version_actual?,
-    })
+    Some(Args { producto: producto?, pid: pid?, version_actual: version_actual? })
 }
 
 fn producto_enum(producto: &str) -> Option<Producto> {
@@ -55,18 +58,17 @@ fn nombre_ejecutable(producto: &str) -> &'static str {
     }
 }
 
-fn main() {
+/// No vuelve: sale del proceso con el codigo de salida correspondiente, sin
+/// llegar nunca a `tauri::Builder::run` — el camino silencioso no crea
+/// ventana en ningun momento.
+pub fn ejecutar_y_salir() -> ! {
     let Some(args) = parsear_args() else {
-        bitacora::registrar("instalador-cli: argumentos invalidos, abortando");
+        bitacora::registrar("installer --silencioso: argumentos invalidos, abortando");
         std::process::exit(1);
     };
 
     if !esperar_cierre(args.pid, Duration::from_secs(10)) {
-        bitacora::dejar_marca_error(
-            &args.producto,
-            "desconocida",
-            "el proceso anterior no cerro a tiempo",
-        );
+        bitacora::dejar_marca_error(&args.producto, "desconocida", "el proceso anterior no cerro a tiempo");
         std::process::exit(1);
     }
 
@@ -113,6 +115,7 @@ fn main() {
     match resultado {
         Ok(()) => {
             bitacora::registrar(&format!("{}: actualizacion aplicada", args.producto));
+            std::process::exit(0);
         }
         Err(e) => {
             bitacora::dejar_marca_error(&args.producto, &args.version_actual, &e.to_string());

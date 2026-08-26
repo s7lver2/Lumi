@@ -1,7 +1,7 @@
 //! Red de seguridad antes de sustituir los archivos de un producto: el
 //! camino principal es que la propia app se cierre sola antes de lanzar
-//! `instalador-cli` (ver spec, Flujo B paso 2) — esto es lo que confirma
-//! que de verdad ocurrió, con un margen, antes de tocar ningún archivo.
+//! `installer.exe --silencioso` (ver spec, Flujo B paso 2) — esto es lo que
+//! confirma que de verdad ocurrió, con un margen, antes de tocar archivos.
 
 use std::time::{Duration, Instant};
 use sysinfo::{Pid, ProcessesToUpdate, System};

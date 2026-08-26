@@ -58,7 +58,7 @@ pub fn error_pendiente() -> Option<String> {
 pub fn disparar_silenciosa(app: tauri::AppHandle, version_nueva: String) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let carpeta = exe.parent().ok_or("sin carpeta padre")?;
-    let instalador = carpeta.join("instalador-cli.exe");
+    let instalador = carpeta.join("installer.exe");
     let pid = std::process::id();
     let version_actual = env!("CARGO_PKG_VERSION");
 

@@ -31,8 +31,8 @@ Fuera de alcance (con motivo):
 
 - **`lumid`**: sigue como en la spec del canal — el owner lo actualiza a mano desde el panel.
   No es un instalador Windows, no aplica nada de esto.
-- **Auto-actualización del propio instalador** (`instalador.exe` / `instalador-cli.exe`): si
-  `lumi-installer` necesita un fix, se resuelve republicando el producto — la siguiente
+- **Auto-actualización del propio instalador** (`installer.exe`): si `lumi-installer` necesita
+  un fix, se resuelve republicando el producto — la siguiente
   instalación completa trae el instalador nuevo. No hay canal de update recursivo para el
   propio updater; añadir uno es visible el día que un bug del instalador bloquee
   actualizaciones reales, no antes.
@@ -54,25 +54,33 @@ crates/lumi-installer/          logica pura, sin UI — nueva crate del workspac
     marca.rs                      lee/escribe la entrada de "ya instalado" (registro de Windows)
     error.rs                      tipo de error compartido + log en disco
 
-installer/                       app Tauri v2 — UI interactiva (primera instalación)
-  src-tauri/    depende de lumi-installer + lumi-proto
+installer/                       app Tauri v2 — un solo binario para los dos modos
+  src-tauri/
+    src/main.rs   mira --silencioso antes de arrancar Tauri: si esta, resuelve la
+                  actualizacion sin ventana y sale; si no, abre la UI interactiva normal
+    src/silencioso.rs   el camino sin ventana — parsea --producto=cliente|indexer --pid=<n>
+                  --version-actual=<x.y.z> --silencioso, sin depender de nada de Tauri/WebView2
+    src/comandos.rs     los comandos de la UI interactiva (detectar_instalados, instalar)
   src/          reusa client/src/ui (mismo patron que ya comparten client e indexer)
-
-instalador-cli/                  bin puro, sin Tauri/WebView2 — el disparo silencioso
-  src/main.rs   parsea --producto=cliente|indexer --pid=<n> --silencioso
 ```
 
-`instalador.exe` e `instalador-cli.exe` se instalan junto a **cualquier** producto elegido, en
-la carpeta raíz compartida — el cliente/Indexer no descargan nada para autoactualizarse, ya
-tienen `instalador-cli.exe` local, solo lo lanzan.
+Un solo `.exe` para los dos caminos — no dos binarios separados como se planteó al principio:
+más simple de distribuir y de mantener sincronizado, al coste de que la actualización
+silenciosa carga (aunque no muestra) el runtime de WebView2 antes de decidir que no hace falta
+ventana; con el ahorro de red/CPU real de una actualización (descargar+copiar unos MB) ese coste
+es insignificante en la práctica.
 
-`crates/lumi-installer` entra al workspace (`Cargo.toml` raíz); `installer/src-tauri` e
-`instalador-cli` son proyectos Cargo aparte excluidos del workspace, igual que
-`client/src-tauri` e `indexer/src-tauri` ya lo están.
+`installer.exe` se instala junto a **cualquier** producto elegido, en la carpeta raíz
+compartida — el cliente/Indexer no descargan nada para autoactualizarse, ya tienen
+`installer.exe` local, solo lo relanzan con `--silencioso`.
+
+`crates/lumi-installer` entra al workspace (`Cargo.toml` raíz); `installer/src-tauri` es un
+proyecto Cargo aparte excluido del workspace, igual que `client/src-tauri` e
+`indexer/src-tauri` ya lo están.
 
 ## 2. Flujo A — primera instalación (interactiva)
 
-1. El investigador descarga `instalador.exe` de la web — una sola entrada, sin variantes por
+1. El investigador descarga `installer.exe` de la web — una sola entrada, sin variantes por
    producto.
 2. UI del mockup: Bienvenida → **Productos** (Lumi / Lumi Indexer, cada casilla marcada "Ya
    instalado" si `marca::detectar()` encuentra su entrada de registro; desmarcada por defecto
@@ -89,17 +97,19 @@ tienen `instalador-cli.exe` local, solo lo lanzan.
 1. Cliente/Indexer, en su `comprobar_actualizacion()` ya existente (arranque + botón manual),
    ve una versión más nueva de **sí mismo**.
 2. En vez de solo mostrar la cinta: cierra su propia ventana/proceso limpiamente, y lanza
-   `instalador-cli.exe --producto=cliente --pid=<su-propio-pid> --silencioso` (ya vive en su
-   misma carpeta de instalación).
-3. `instalador-cli` espera hasta 10s a que ese PID desaparezca de verdad — red de seguridad,
-   no el camino principal (el proceso ya se cerró solo en el paso 2). Si sigue vivo pasado el
-   margen, aborta sin tocar ningún archivo y registra el error; no fuerza el cierre.
+   `installer.exe --producto=cliente --pid=<su-propio-pid> --version-actual=<x.y.z>
+   --silencioso` (ya vive en su misma carpeta de instalación) — el mismo binario que la
+   instalación interactiva, pero `--silencioso` hace que nunca llegue a arrancar Tauri ni abrir
+   ventana.
+3. El proceso espera hasta 10s a que ese PID desaparezca de verdad — red de seguridad, no el
+   camino principal (el proceso ya se cerró solo en el paso 2). Si sigue vivo pasado el margen,
+   aborta sin tocar ningún archivo y registra el error; no fuerza el cierre.
 4. Descarga, verifica `sha256`, sustituye los archivos, sale. Sin ventana en ningún momento.
 5. Si falla cualquier paso (red, hash, proceso vivo, sin permisos de escritura): se escribe en
    `%LocalAppData%\Lumi\instalador.log` **y** se deja una marca de error que el producto lee al
    arrancar la siguiente vez, mostrando un aviso claro ("No se pudo actualizar a la versión X —
    motivo") reusando el componente de la cinta que ya existe (`ActualizacionBanner.tsx`).
-6. Si todo va bien, `instalador-cli` relanza la nueva versión del producto al terminar.
+6. Si todo va bien, relanza la nueva versión del producto al terminar.
 
 ## 4. Detección de "ya instalado"
 
@@ -107,7 +117,7 @@ Entrada estándar de Windows en
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\<AppId>` (mismo patrón que cualquier
 instalador de Windows: `DisplayName`, `DisplayVersion`, `InstallLocation`,
 `UninstallString`). La usa tanto el instalador interactivo (pintar "Ya instalado") como el
-propio producto en runtime (saber dónde vive `instalador-cli.exe` junto a él — mismo
+propio producto en runtime (saber dónde vive `installer.exe` junto a él — mismo
 `InstallLocation`).
 
 ## 5. Errores — resumen
@@ -129,5 +139,5 @@ Esta spec deja sin efecto la sección 5 de la spec del canal de actualizaciones 
 esta sesión en NSIS. Al implementar, se retiran: `client/installer/lumi.iss`,
 `indexer/installer/lumi-indexer.iss`, `tools/installer/lumi_panel.iss`,
 `indexer/installer/lumi-indexer.nsi`, `tools/installer/lumi_panel.nsh`, y el target
-`installer` de `tools/build.py` se reescribe para compilar `installer/` e
-`instalador-cli/` en vez de invocar ISCC/makensis.
+`installer` de `tools/build.py` se reescribe para compilar `installer/` (un solo binario) en
+vez de invocar ISCC/makensis.

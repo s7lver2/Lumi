@@ -1,6 +1,6 @@
-//! Lógica compartida del instalador de Lumi/Lumi Indexer: la usan tanto
-//! `instalador-cli` (actualización silenciosa) como `installer/src-tauri`
-//! (primera instalación interactiva). Ver
+//! Lógica compartida del instalador de Lumi/Lumi Indexer: la usa
+//! `installer/src-tauri` tanto en su camino `--silencioso` (actualización)
+//! como en la UI interactiva (primera instalación) — un solo binario. Ver
 //! docs/superpowers/specs/2026-08-26-instalador-compartido-design.md.
 
 pub mod aplicar;
