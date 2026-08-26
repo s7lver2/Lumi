@@ -19,6 +19,8 @@ import { ServicesPanel } from "./setup/ServicesPanel";
 import { SetupWizard } from "./setup/SetupWizard";
 import { TerritoryView } from "./territory/TerritoryView";
 import { PlanetBackground } from "./ui/PlanetBackground";
+import { ActualizacionBanner } from "./ui/ActualizacionBanner";
+import { comprobarActualizacion, type EstadoActualizacion } from "./lib/actualizaciones";
 import { PublishToast } from "./ui/PublishToast";
 import { Rail, type Destino } from "./ui/Rail";
 import { WindowFrame } from "./ui/WindowFrame";
@@ -61,6 +63,12 @@ export function App() {
   // «Descarga»: se ve desde cualquier pantalla que algo sigue corriendo
   // detrás, sin tener que entrar a comprobarlo.
   const [embebiendoActivo, setEmbebiendoActivo] = useState(false);
+  const [actualizacion, setActualizacion] = useState<EstadoActualizacion | null>(null);
+  const [actualizacionCerrada, setActualizacionCerrada] = useState(false);
+
+  useEffect(() => {
+    comprobarActualizacion().then(setActualizacion).catch(() => setActualizacion(null));
+  }, []);
 
   useEffect(() => {
     if (!dentro) return;
@@ -123,6 +131,9 @@ export function App() {
   return (
     <WindowFrame>
       <div className="relative h-full w-full overflow-hidden bg-bg">
+        {dentro && actualizacion && !actualizacionCerrada && (
+          <ActualizacionBanner estado={actualizacion} onCerrar={() => setActualizacionCerrada(true)} />
+        )}
         {!dentro && <PlanetBackground />}
         <div className="relative flex h-full items-center justify-center">
           {(!saludo || setupListo === null) && <Booting />}
