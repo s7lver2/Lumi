@@ -3,6 +3,7 @@
 //! (primera instalación interactiva). Ver
 //! docs/superpowers/specs/2026-08-26-instalador-compartido-design.md.
 
+pub mod bitacora;
 pub mod error;
 pub mod marca;
 pub mod proceso;
