@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/lumi-proto", "crates/lumi-index", "crates/lumid", "crates/lumi-cli"]
+members = ["crates/lumi-proto", "crates/lumi-index", "crates/lumid", "crates/lumi-cli", "crates/lumi-installer"]
 # ponytail: client/src-tauri e indexer/src-tauri son proyectos Cargo aparte
 # (los gestiona `tauri`, no este workspace); sin excluirlos, cargo los reclama
 # igual por estar bajo este árbol de directorios.
