@@ -4,7 +4,7 @@
   python tools/build.py            lumid en el puerto fijo + cliente
   python tools/build.py indexer    solo el Indexer (no necesita daemon)
   python tools/build.py build      empaqueta los dos (bundler de Tauri)
-  python tools/build.py installer  instalador Inno de cliente + Indexer (Windows)
+  python tools/build.py installer  instalador compartido (Tauri) de cliente + Indexer (Windows)
 """
 import shutil, subprocess, sys, os
 from pathlib import Path
@@ -18,21 +18,6 @@ ROOT = Path(__file__).resolve().parent.parent
 # real una vez aquí en vez de necesitar shell=True (y su superficie de
 # inyección) en cada llamada.
 NPM = shutil.which("npm") or "npm"
-
-def find_iscc():
-    # ponytail: `winget install JRSoftware.InnoSetup` no siempre instala en
-    # "C:\Program Files (x86)\Inno Setup 6" — en máquina sin privilegios de
-    # admin cae a instalación por usuario bajo %LOCALAPPDATA%\Programs. Se
-    # prueban las rutas conocidas en vez de asumir una sola.
-    candidatas = [
-        Path(r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"),
-        Path(r"C:\Program Files\Inno Setup 6\ISCC.exe"),
-        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Inno Setup 6" / "ISCC.exe",
-    ]
-    for c in candidatas:
-        if c.exists():
-            return str(c)
-    sys.exit("ISCC.exe no encontrado (instala Inno Setup 6: winget install JRSoftware.InnoSetup)")
 
 def run(cmd, cwd=None, **kw):
     print(f"$ {' '.join(cmd)}")
@@ -51,11 +36,14 @@ def main():
         run([NPM, "run", "tauri", "build"], cwd=ROOT / "indexer")
         return
     if target == "installer":
-        iscc = find_iscc()
-        run([NPM, "run", "tauri", "build", "--", "--no-bundle"], cwd=ROOT / "client")
-        run([iscc, str(ROOT / "client" / "installer" / "lumi.iss")])
-        run([NPM, "run", "tauri", "build", "--", "--no-bundle"], cwd=ROOT / "indexer")
-        run([iscc, str(ROOT / "indexer" / "installer" / "lumi-indexer.iss")])
+        # El instalador compartido reemplaza Inno/NSIS (ver
+        # docs/superpowers/specs/2026-08-26-instalador-compartido-design.md):
+        # instalador.exe (Tauri) + instalador-cli.exe (sin ventana, lo usan
+        # cliente/Indexer para autoactualizarse) se compilan y se dejan
+        # junto a cada producto para que ya estén ahí cuando el producto
+        # los necesite.
+        run(["cargo", "build", "--release", "--manifest-path", str(ROOT / "instalador-cli" / "Cargo.toml")])
+        run([NPM, "run", "tauri", "build"], cwd=ROOT / "installer")
         return
     if target == "indexer":
         # El Indexer no habla con el daemon: es una app autónoma, así que aquí
