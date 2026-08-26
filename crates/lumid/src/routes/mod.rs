@@ -1,4 +1,5 @@
 pub mod access;
+pub mod actualizacion;
 pub mod actividad;
 pub mod admin;
 pub mod api_keys;
