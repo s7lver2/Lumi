@@ -6,11 +6,18 @@
   python tools/build.py build      empaqueta los dos (bundler de Tauri)
   python tools/build.py installer  instalador Inno de cliente + Indexer (Windows)
 """
-import subprocess, sys, os
+import shutil, subprocess, sys, os
 from pathlib import Path
 
 PORT = 7717
 ROOT = Path(__file__).resolve().parent.parent
+# En Windows "npm" es en realidad npm.cmd, y CreateProcess (a diferencia de
+# cmd.exe) no aplica PATHEXT para resolverlo sin shell=True — subprocess.run
+# fallaba con WinError 2 aunque `npm` funcionara perfectamente a mano en la
+# misma terminal. shutil.which sí aplica PATHEXT, así que resuelve la ruta
+# real una vez aquí en vez de necesitar shell=True (y su superficie de
+# inyección) en cada llamada.
+NPM = shutil.which("npm") or "npm"
 
 def find_iscc():
     # ponytail: `winget install JRSoftware.InnoSetup` no siempre instala en
@@ -40,26 +47,26 @@ def main():
     target = sys.argv[1] if len(sys.argv) > 1 else "dev"
     if target == "build":
         run(["cargo", "build", "--release"])
-        run(["npm", "run", "tauri", "build"], cwd=ROOT / "client")
-        run(["npm", "run", "tauri", "build"], cwd=ROOT / "indexer")
+        run([NPM, "run", "tauri", "build"], cwd=ROOT / "client")
+        run([NPM, "run", "tauri", "build"], cwd=ROOT / "indexer")
         return
     if target == "installer":
         iscc = find_iscc()
-        run(["npm", "run", "tauri", "build", "--", "--no-bundle"], cwd=ROOT / "client")
+        run([NPM, "run", "tauri", "build", "--", "--no-bundle"], cwd=ROOT / "client")
         run([iscc, str(ROOT / "client" / "installer" / "lumi.iss")])
-        run(["npm", "run", "tauri", "build", "--", "--no-bundle"], cwd=ROOT / "indexer")
+        run([NPM, "run", "tauri", "build", "--", "--no-bundle"], cwd=ROOT / "indexer")
         run([iscc, str(ROOT / "indexer" / "installer" / "lumi-indexer.iss")])
         return
     if target == "indexer":
         # El Indexer no habla con el daemon: es una app autónoma, así que aquí
         # no se levanta lumid. Levantarlo solo confundiría a quien mire los
         # logs buscando por qué el Indexer no se conecta a nada.
-        run(["npm", "run", "tauri", "dev"], cwd=ROOT / "indexer")
+        run([NPM, "run", "tauri", "dev"], cwd=ROOT / "indexer")
         return
     env = {**os.environ, "LUMI_PORT": str(PORT), "LUMI_DATA": str(ROOT / ".dev-data")}
     daemon = subprocess.Popen(["cargo", "run", "-p", "lumid"], cwd=ROOT, env=env)
     try:
-        run(["npm", "run", "tauri", "dev"], cwd=ROOT / "client")
+        run([NPM, "run", "tauri", "dev"], cwd=ROOT / "client")
     finally:
         daemon.terminate()
 
