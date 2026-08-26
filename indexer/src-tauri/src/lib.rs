@@ -4,6 +4,7 @@
 //! cuentas ni sesiones: es una herramienta de un solo operador sobre su propia
 //! máquina. Lo que produce son paquetes `.lumidx` sellados.
 
+mod actualizacion;
 mod catalogo;
 mod crypto;
 mod download;
@@ -135,6 +136,11 @@ fn saludo(estado: tauri::State<'_, Estado>) -> serde_json::Value {
         "so": std::env::consts::OS,
         "dir": estado.dir.display().to_string(),
     })
+}
+
+#[tauri::command]
+async fn comprobar_actualizacion() -> Result<Option<actualizacion::EstadoActualizacion>, String> {
+    actualizacion::comprobar().await
 }
 
 #[tauri::command]
@@ -1618,6 +1624,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(Estado {
             dir,
             almacen,
@@ -1637,6 +1644,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             saludo,
+            comprobar_actualizacion,
             ubicacion_leer,
             ubicacion_por_defecto,
             ubicacion_migrar,
