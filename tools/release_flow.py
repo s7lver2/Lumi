@@ -171,6 +171,24 @@ def construir(root: Path, productos: list[str]) -> dict[str, Path]:
     return artefactos
 
 
+VERSION_PATHS = [rel for rel, _ in VERSION_FILES] + ["web/releases/versiones.json"]
+
+
+def confirmar_y_comitear(root: Path, version: str) -> None:
+    section("Último paso")
+    r = subprocess.run(["git", "status", "--short", *VERSION_PATHS], cwd=root, capture_output=True, text=True)
+    print(r.stdout)
+    resp = input("¿comitear y pushear? [s/N] ").strip().lower()
+    if resp not in ("s", "si", "sí", "y", "yes"):
+        warn("el release de GitHub ya está publicado; versiones.json y los bumps de versión "
+             "quedan sin comitear — revísalos y comitéalos a mano cuando quieras")
+        return
+    run(["git", "add", *VERSION_PATHS], cwd=str(root), label="git add")
+    run(["git", "commit", "-m", f"chore: publicar versión {version}"], cwd=str(root), label="git commit")
+    run(["git", "push"], cwd=str(root), label="git push")
+    success(f"versión {version} publicada y comiteada")
+
+
 def subir_github(version: str, productos: list[str], artefactos: dict[str, Path], notas: str) -> dict[str, str]:
     section("Subiendo a GitHub Releases")
     tag = f"v{version}"
@@ -277,3 +295,4 @@ def lanzar(root: Path) -> None:
     urls = subir_github(version, productos, artefactos, notas)
     borrador_path = armar_borrador(root, productos, version, notas, artefactos, urls)
     firmar(root, borrador_path)
+    confirmar_y_comitear(root, version)
