@@ -14,6 +14,8 @@ import { EntryScreen } from "./entry/EntryScreen";
 import { AdminPanel } from "./admin/AdminPanel";
 import { ConnectionBanner } from "./ui/ConnectionBanner";
 import { MantenimientoBanner } from "./ui/MantenimientoBanner";
+import { ActualizacionBanner } from "./ui/ActualizacionBanner";
+import { comprobarActualizacion, type EstadoActualizacion } from "./lib/actualizaciones";
 import { DebugOrb } from "./dev/DebugOrb";
 import { useServer } from "./lib/store";
 import { useWorkspace } from "./lib/workspace";
@@ -43,6 +45,13 @@ export default function App() {
    *  desmontarse: la campana y el selector son hermanos y no se enteran solos
    *  de los cambios del otro. */
   const [projectsTick, setProjectsTick] = useState(0);
+  const [actualizacion, setActualizacion] = useState<EstadoActualizacion | null>(null);
+  const [actualizacionCerrada, setActualizacionCerrada] = useState(false);
+  // Una comprobación por arranque, silenciosa si falla (sin red, o el
+  // manifiesto no verifica). El botón manual de Perfil sí muestra el error.
+  useEffect(() => {
+    comprobarActualizacion().then(setActualizacion).catch(() => setActualizacion(null));
+  }, []);
   const hello = useServer((s) => s.hello);
   const isAdmin = useServer((s) => s.isAdmin);
   // Suscrito (no `getState().sample` suelto) a propósito: esta es la única
@@ -265,6 +274,9 @@ export default function App() {
       {/* `mode !== "entry"` de más: sin sesión no hay nadie a quien avisar,
           y es la red de seguridad si alguna vez una `sample` vieja se cuela
           sin limpiarse (como pasaba antes de vaciarla en `signOut`). */}
+      {mode !== "entry" && actualizacion && !actualizacionCerrada && (
+        <ActualizacionBanner estado={actualizacion} onCerrar={() => setActualizacionCerrada(true)} />
+      )}
       {mode !== "entry" && sample?.maintenance && <MantenimientoBanner mensaje={sample.maintenance_message} />}
       <ResizeHandles />
       {/* Para app/admin, la desconexión es un banner + bloqueo, no una
