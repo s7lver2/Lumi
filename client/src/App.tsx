@@ -15,7 +15,7 @@ import { AdminPanel } from "./admin/AdminPanel";
 import { ConnectionBanner } from "./ui/ConnectionBanner";
 import { MantenimientoBanner } from "./ui/MantenimientoBanner";
 import { ActualizacionBanner } from "./ui/ActualizacionBanner";
-import { comprobarActualizacion, type EstadoActualizacion } from "./lib/actualizaciones";
+import { comprobarActualizacion, dispararActualizacionSilenciosa, errorActualizacionPendiente, type EstadoActualizacion } from "./lib/actualizaciones";
 import { DebugOrb } from "./dev/DebugOrb";
 import { useServer } from "./lib/store";
 import { useWorkspace } from "./lib/workspace";
@@ -50,7 +50,16 @@ export default function App() {
   // Una comprobación por arranque, silenciosa si falla (sin red, o el
   // manifiesto no verifica). El botón manual de Perfil sí muestra el error.
   useEffect(() => {
-    comprobarActualizacion().then(setActualizacion).catch(() => setActualizacion(null));
+    errorActualizacionPendiente().then((motivo) => {
+      if (motivo) setActualizacion({ tipo: "error", motivo });
+    });
+    comprobarActualizacion().then((estado) => {
+      if (estado?.tipo === "disponible") {
+        void dispararActualizacionSilenciosa(estado.version);
+        return; // la app va a cerrarse; no hace falta pintar nada más
+      }
+      setActualizacion(estado);
+    }).catch(() => setActualizacion(null));
   }, []);
   const hello = useServer((s) => s.hello);
   const isAdmin = useServer((s) => s.isAdmin);

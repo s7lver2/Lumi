@@ -183,6 +183,7 @@ const VERSIONES_URL: &str = "https://lumi-web.vercel.app/api/versiones";
 enum EstadoActualizacion {
     Disponible { version: String, notas: String, url: String },
     Retirada,
+    Error { motivo: String },
 }
 
 /// `Err` significa "no se pudo comprobar" (sin red, manifiesto sin firmar o
@@ -222,6 +223,39 @@ async fn comprobar_actualizacion() -> Result<Option<EstadoActualizacion>, String
         notas: publi.notas.clone(),
         url,
     }))
+}
+
+/// Se llama una vez al arrancar (ver App.tsx) — si `instalador-cli` dejó un
+/// error de la última actualización silenciosa, se muestra aquí una sola
+/// vez (la lectura ya lo borra).
+#[tauri::command]
+fn error_actualizacion_pendiente() -> Option<String> {
+    lumi_installer::bitacora::leer_y_borrar_marca_error("cliente").map(|e| e.motivo)
+}
+
+/// Cierra esta app y lanza `instalador-cli.exe --producto=cliente` con el
+/// PID propio, para que aplique `version_nueva` en segundo plano. Vive
+/// junto al propio ejecutable — el instalador ya lo dejó ahí en la
+/// instalación inicial (ver installer/src-tauri/src/comandos.rs).
+#[tauri::command]
+fn disparar_actualizacion_silenciosa(app: tauri::AppHandle, version_nueva: String) -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let carpeta = exe.parent().ok_or("sin carpeta padre")?;
+    let instalador = carpeta.join("instalador-cli.exe");
+    let pid = std::process::id();
+    let version_actual = env!("CARGO_PKG_VERSION");
+
+    std::process::Command::new(instalador)
+        .arg(format!("--producto=cliente"))
+        .arg(format!("--pid={pid}"))
+        .arg(format!("--version-actual={version_actual}"))
+        .arg("--silencioso")
+        .spawn()
+        .map_err(|e| e.to_string())?;
+
+    let _ = version_nueva; // informativo para quien lea el log; instalador-cli vuelve a resolver la version real contra el manifiesto
+    app.exit(0);
+    Ok(())
 }
 
 fn client_for(fingerprint: &str) -> Result<reqwest::Client, String> {
@@ -640,7 +674,7 @@ fn main() {
             pair, pair_card, reconnect, request, start_telemetry, start_task_log,
             start_queue_events, start_indices_events, start_admin_events, start_logs_stream, set_auth,
             upload_images, read_image_as_data_url, upload_avatar_bytes, upload_server_avatar_bytes,
-            upload_server_banner_bytes, comprobar_actualizacion
+            upload_server_banner_bytes, comprobar_actualizacion, error_actualizacion_pendiente, disparar_actualizacion_silenciosa
         ])
         .run(tauri::generate_context!())
         .expect("error al arrancar Tauri");
