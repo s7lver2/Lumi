@@ -7,7 +7,7 @@ use lumi_proto::actualizacion::Manifiesto;
 
 use crate::error::InstaladorError;
 
-const VERSIONES_URL: &str = "https://lumi-web.vercel.app/api/versiones";
+const VERSIONES_URL: &str = "https://lumi.s7lver.xyz/api/versiones";
 
 pub fn obtener_verificado() -> Result<Manifiesto, InstaladorError> {
     let manifiesto: Manifiesto = reqwest::blocking::get(VERSIONES_URL)

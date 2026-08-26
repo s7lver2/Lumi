@@ -10,7 +10,7 @@ use crate::App;
 use lumi_proto::actualizacion::{Manifiesto, Producto};
 use serde::{Deserialize, Serialize};
 
-const VERSIONES_URL: &str = "https://lumi-web.vercel.app/api/versiones";
+const VERSIONES_URL: &str = "https://lumi.s7lver.xyz/api/versiones";
 const META_ESTADO: &str = "actualizacion_estado";
 const BIN_ACTUAL: &str = "/usr/local/bin/lumid";
 

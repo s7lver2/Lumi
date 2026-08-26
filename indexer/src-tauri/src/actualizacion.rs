@@ -7,7 +7,7 @@ use lumi_proto::actualizacion::{Manifiesto, Producto};
 /// Misma URL que el cliente (`client/src-tauri/src/main.rs`) — duplicada a
 /// propósito, no compartida por una constante en `lumi-proto`, porque es
 /// configuración de red de cada app, no parte del protocolo.
-const VERSIONES_URL: &str = "https://lumi-web.vercel.app/api/versiones";
+const VERSIONES_URL: &str = "https://lumi.s7lver.xyz/api/versiones";
 
 #[derive(serde::Serialize)]
 #[serde(tag = "tipo", rename_all = "lowercase")]

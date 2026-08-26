@@ -176,7 +176,7 @@ async fn upload_server_banner_bytes(data_base64: String, state: tauri::State<'_,
 /// propio y NO el `PinnedVerifier` de arriba: eso habla con el servidor
 /// `lumid` emparejado, esto habla con Vercel, que valida contra las CA del
 /// sistema como cualquier sitio normal.
-const VERSIONES_URL: &str = "https://lumi-web.vercel.app/api/versiones";
+const VERSIONES_URL: &str = "https://lumi.s7lver.xyz/api/versiones";
 
 #[derive(serde::Serialize)]
 #[serde(tag = "tipo", rename_all = "lowercase")]
