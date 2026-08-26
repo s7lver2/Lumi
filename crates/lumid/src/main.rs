@@ -3,6 +3,7 @@ mod assets;
 mod exif;
 mod hardware;
 mod hardware_cpu;
+mod actualizacion;
 mod agentar;
 mod indices;
 mod logging;
@@ -155,6 +156,7 @@ async fn main() -> anyhow::Result<()> {
     });
 
     tokio::spawn(telemetry::muestrear_historial(app.clone()));
+    tokio::spawn(actualizacion::tick(app.clone()));
 
     tokio::spawn({
         let app = app.clone();
