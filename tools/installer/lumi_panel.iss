@@ -37,6 +37,7 @@ begin
   PanelLateral.Parent := WizardForm;
   PanelLateral.SetBounds(0, 0, PanelAncho, WizardForm.ClientHeight);
   PanelLateral.Color := ColorSpace;
+  PanelLateral.ParentBackground := False;
   PanelLateral.BevelOuter := bvNone;
   // Ancla arriba+abajo para que el panel ocupe toda la altura si la
   // ventana cambia de tamaño (Inno permite redimensionar por defecto).
