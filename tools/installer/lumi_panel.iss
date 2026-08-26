@@ -54,17 +54,41 @@ begin
   WizardForm.FinishedHeadingLabel.Font.Color := ColorFg;
 
   // Licencia/Carpeta/Tareas/Listo/Preparando/Instalando viven en
-  // InnerNotebook. Se intentó recolorear también su fondo (misma técnica
-  // que arriba) y una captura real mostró un hueco blanco sin pintar
-  // dentro de la página: sus controles internos no se realinean al mover
-  // el notebook contenedor, así que .Color deja un rectángulo mal
-  // encajado en vez de cubrir toda la página. Se revirtió esa parte —
-  // quedan con el fondo claro por defecto de Windows, y por eso aquí NO
-  // se tocan sus colores de texto (el negro por defecto es legible sobre
-  // ese fondo; ponerlos claros los habría dejado ilegibles). Techo
-  // anotado: recolorear estas seis páginas necesitaría entender por qué
-  // sus hijos no siguen el resize del notebook, o forzar un realineado
-  // manual — no resuelto en esta pasada.
+  // InnerNotebook, y ESA página en sí se queda con el fondo claro por
+  // defecto de Windows — probado a fondo y descartado, no es un olvido:
+  //
+  //   1. La página ocupa el 100% del ancho disponible (confirmado con un
+  //      sondeo que escribe a fichero: SelectDirPage.Width termina siendo
+  //      exactamente igual a InnerNotebook.Width tras el resize — no es
+  //      un problema de geometría).
+  //   2. .Color en la página se ignora igual con o sin
+  //      ParentBackground := False.
+  //   3. Se probó también SetWindowTheme(pagina.Handle, '', '')
+  //      (uxtheme.dll), la técnica estándar para apagar el tema visual de
+  //      Windows sobre un control — compilaba, pero una captura real
+  //      mostró que seguía sin pintar. El chrome del notebook lo dibuja
+  //      Windows en una capa que Pascal Script no expone; ir más allá
+  //      exigiría enganchar el WndProc del control a mano, que es
+  //      inestable para un instalador.
+  //
+  // Lo que SÍ se recolorea con éxito (confirmado con capturas) son los
+  // controles de cada página que tienen su propio .Color de fondo — el
+  // cuadro de texto de la carpeta, la lista de tareas, los memos —, así
+  // que esos sí quedan oscuros con texto claro encima. El resto de
+  // etiquetas de esas seis páginas se dejan con su color por defecto
+  // (negro): sobre un fondo que sigue siendo blanco, negro es lo legible
+  // — ponerlas claras aquí las habría dejado prácticamente invisibles.
+  WizardForm.LicenseMemo.Font.Color := ColorFg;
+  WizardForm.LicenseMemo.Color := ColorPanel;
+
+  WizardForm.DirEdit.Font.Color := ColorFg;
+  WizardForm.DirEdit.Color := ColorPanel;
+
+  WizardForm.TasksList.Font.Color := ColorFg;
+  WizardForm.TasksList.Color := ColorPanel;
+
+  WizardForm.ReadyMemo.Font.Color := ColorFg;
+  WizardForm.ReadyMemo.Color := ColorPanel;
 end;
 
 // Crea el panel y sus controles. Se llama una vez desde InitializeWizard()
