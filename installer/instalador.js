@@ -25,7 +25,11 @@ function mostrar(i) {
     document.getElementById(id).classList.toggle("active", n === i);
   });
   btnAtras.style.visibility = i === 0 ? "hidden" : "visible";
-  btnSiguiente.textContent = i === PANTALLAS.length - 1 ? "Instalar" : "Siguiente";
+  // Nunca dice "Instalar": llegar a la última pantalla ya dispara la
+  // instalación sola (ver `irA`), así que no hay ninguna acción pendiente
+  // que ese texto describiera — solo confundía a quien esperaba que
+  // "Siguiente" tras Opciones ya fuera instalar, y le tocaba pulsar otra vez.
+  btnSiguiente.textContent = "Siguiente";
   document.getElementById("progreso-pasos-fill").style.width = `${((i + 1) / PANTALLAS.length) * 100}%`;
 }
 
@@ -150,7 +154,19 @@ async function pintarEstadoInstalados() {
   }
 }
 
-const PORCENTAJE_POR_FASE = { descargando: 33, verificando: 66, copiando: 90 };
+// Tres fases por producto, mismo orden en el que las emite `aplicar.rs`. El
+// progreso global es el paso actual (producto × fase) sobre el total de
+// pasos de TODOS los productos elegidos — no el porcentaje de un producto
+// suelto, que reiniciaba a 33% cada vez que empezaba el siguiente y parecía
+// ir hacia atrás.
+const FASES = ["descargando", "verificando", "copiando"];
+
+function formatearTiempo(segundos) {
+  if (segundos < 60) return `${segundos}s`;
+  const min = Math.floor(segundos / 60);
+  const seg = segundos % 60;
+  return `${min}m ${seg}s`;
+}
 
 async function ejecutarInstalacion() {
   document.getElementById("btn-siguiente").disabled = true;
@@ -158,16 +174,39 @@ async function ejecutarInstalacion() {
 
   const estado = document.getElementById("estado-texto");
   const texto = estado.querySelector(".texto");
+  const tiempoRestante = document.getElementById("tiempo-restante");
   const barra = document.getElementById("barra");
   const icono = document.getElementById("icono-estado");
   estado.classList.add("activo");
   icono.className = "icono-estado en-curso";
 
   const productos = [...seleccion];
+  const totalPasos = productos.length * FASES.length;
+  const inicio = Date.now();
+  // Nunca hacia atrás ni se reinicia: cada paso nuevo solo puede subir el
+  // máximo ya alcanzado, aunque un evento llegase desordenado.
+  let pasoMax = 0;
+
   const cancelarEscucha = await listen("progreso", (evento) => {
     const { producto, fase } = evento.payload;
+    const indiceProducto = productos.indexOf(producto);
+    const indiceFase = FASES.indexOf(fase);
+    if (indiceProducto >= 0 && indiceFase >= 0) {
+      pasoMax = Math.max(pasoMax, indiceProducto * FASES.length + indiceFase + 1);
+    }
+
     texto.textContent = `${producto}: ${fase}`;
-    barra.style.width = `${PORCENTAJE_POR_FASE[fase] ?? 0}%`;
+    // Se detiene en 99%, no en 100%: el 100% real lo pone el `try` de abajo
+    // al confirmar que `invoke("instalar")` terminó de verdad, no una
+    // estimación que podría llegar antes de que el último archivo se copie.
+    barra.style.width = `${Math.min(99, Math.round((pasoMax / totalPasos) * 100))}%`;
+
+    if (pasoMax > 0) {
+      const transcurridoS = (Date.now() - inicio) / 1000;
+      const ritmoPorPaso = transcurridoS / pasoMax;
+      const restanteS = Math.round(ritmoPorPaso * (totalPasos - pasoMax));
+      tiempoRestante.textContent = restanteS > 1 ? `~${formatearTiempo(restanteS)} restantes` : "";
+    }
   });
 
   try {
@@ -184,13 +223,19 @@ async function ejecutarInstalacion() {
     document.getElementById("titulo-instalando").textContent = "Instalación completa";
     document.getElementById("desc-instalando").textContent = "Ya puedes cerrar esta ventana.";
     texto.textContent = "";
+    tiempoRestante.textContent = "";
     barra.style.width = "100%";
     btnSiguiente.textContent = "Finalizar";
     btnSiguiente.disabled = false;
-    btnSiguiente.onclick = () => window.close();
+    // `ventana.close()` (API de Tauri), no `window.close()` (API del DOM):
+    // esta última solo vacía el contenido de la página en un WebView de
+    // Tauri, sin cerrar la ventana del sistema operativo — se quedaba
+    // completamente en blanco en vez de cerrarse.
+    btnSiguiente.onclick = () => void ventana.close();
   } catch (err) {
     estado.classList.remove("activo");
     icono.className = "icono-estado error";
+    tiempoRestante.textContent = "";
     const caja = document.getElementById("caja-error");
     caja.style.display = "block";
     caja.textContent = String(err);
@@ -200,13 +245,20 @@ async function ejecutarInstalacion() {
   }
 }
 
-btnSiguiente.addEventListener("click", () => {
+// Al llegar a la última pantalla, instalar arranca sola — no hace falta un
+// segundo clic en un botón que además cambiaba de texto a "Instalar" justo
+// al llegar, dando la sensación de que hacía falta "confirmar" dos veces.
+function irA(i) {
+  indice = i;
+  mostrar(indice);
   if (indice === PANTALLAS.length - 1) {
     ejecutarInstalacion();
-    return;
   }
-  indice += 1;
-  mostrar(indice);
+}
+
+btnSiguiente.addEventListener("click", () => {
+  if (indice >= PANTALLAS.length - 1) return; // instalando o ya terminado: el clic final lo maneja `onclick` arriba
+  irA(indice + 1);
 });
 
 btnAtras.addEventListener("click", () => {

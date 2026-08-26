@@ -196,6 +196,7 @@
       .progress-track { width: 100%; height: 3px; background: var(--elevated); border-radius: 2px; overflow: hidden; margin-bottom: 14px; }
       .progress-fill { height: 100%; width: 0%; background: var(--draw-fg); border-radius: 2px; transition: width .3s cubic-bezier(.16,1,.3,1); }
       .progress-status { display: flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 11px; color: var(--subtle); }
+      .progress-status .tiempo-restante { margin-left: auto; }
       .spinner {
         width: 10px; height: 10px; border-radius: 50%;
         border: 1.5px solid var(--border); border-top-color: var(--draw-fg);
@@ -346,7 +347,7 @@
           <h2 id="titulo-instalando" style="text-align:center">Instalando</h2>
           <p class="desc" id="desc-instalando" style="text-align:center;margin-left:auto;margin-right:auto">Esto tarda unos segundos.</p>
           <div class="progress-track"><div class="progress-fill" id="barra"></div></div>
-          <div class="progress-status" id="estado-texto"><span class="spinner"></span><span class="texto"></span></div>
+          <div class="progress-status" id="estado-texto"><span class="spinner"></span><span class="texto"></span><span class="tiempo-restante" id="tiempo-restante"></span></div>
           <div class="error-box" id="caja-error" style="display:none"></div>
         </div>
       </div>
