@@ -1,0 +1,11 @@
+{
+  "id": "lumi-2",
+  "nombre": "Lumi 2",
+  "base": "BoQ + DINOv2 (congelado)",
+  "version": "1.0",
+  "dims": 12288,
+  "familia": "foundation",
+  "licencia": "MIT",
+  "pesos_url": "https://huggingface.co/amaralibey/BoQ/resolve/main/dinov2_boq.pth",
+  "sha256": ""
+}

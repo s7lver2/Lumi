@@ -1,0 +1,11 @@
+{
+  "id": "lumi-preview",
+  "nombre": "Lumi Preview",
+  "base": "MegaLoc (congelado)",
+  "version": "1.0",
+  "dims": 8448,
+  "familia": "foundation",
+  "licencia": "MIT",
+  "pesos_url": "https://huggingface.co/gmberton/MegaLoc/resolve/main/megaloc.pth",
+  "sha256": ""
+}

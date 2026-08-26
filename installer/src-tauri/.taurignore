@@ -1,0 +1,6 @@
+# Algo (todavía sin identificar — posiblemente un efecto colateral de
+# arrancar `redis-server`/`wsl.exe`, no código de este repo) toca esta ruta al
+# levantar los servicios, y el watcher de `tauri dev` lo confunde con un
+# cambio de fuente y reconstruye en bucle. Se excluye del watcher: no es
+# código, y aunque se identifique el origen no hay razón para vigilarla.
+snapshots/

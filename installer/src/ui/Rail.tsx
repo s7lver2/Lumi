@@ -1,0 +1,59 @@
+import { Icon } from "./Icon";
+
+export type Destino = "indices" | "territorio" | "descarga" | "revision" | "ajustes" | "embebido";
+
+/** El carril de 44 px de `client/src/work/Rail.tsx`, mismo vocabulario: iconos
+ *  sin etiqueta, translúcido, la pestaña de 2 px marcando el activo.
+ *
+ *  «Descarga» y «Ajustes» van juntos al fondo: ninguno de los dos es "hacer
+ *  algo con el territorio" como sí lo son Índices/Territorio/Revisión — uno
+ *  es vigilancia de una cola de fondo, el otro es configuración.
+ *
+ *  Las pestañas están SIEMPRE visibles, incluida «Descarga»: antes se ocultaba
+ *  salvo que hubiera una descarga en marcha, y sin el icono a la vista no
+ *  había forma de saber que ese destino existía. Ahora, si se entra sin
+ *  trabajo activo, la pantalla lo explica en vez de mostrarse vacía — es la
+ *  pantalla, no el carril, la que decide si hay algo que enseñar.
+ *
+ *  El punto naranja en «Descarga» mientras `descargaActiva` es distinto de
+ *  estar en esa pestaña: es lo que dice, desde cualquier otro sitio, que algo
+ *  sigue corriendo detrás y que ahí hay un "Detener" al alcance. */
+export function Rail({ activo, descargaActiva, embebiendoActivo, onIr }: {
+  activo: Destino; descargaActiva?: boolean; embebiendoActivo?: boolean; onIr: (d: Destino) => void;
+}) {
+  return (
+    <nav className="absolute inset-y-0 left-0 z-30 flex w-11 flex-col items-center gap-[3px]
+      border-r border-border bg-[rgba(13,15,17,.9)] py-2 backdrop-blur">
+      <RailBtn icon="layers" title="Índices" on={activo === "indices"} onClick={() => onIr("indices")} />
+      <RailBtn icon="territorio" title="Territorio" on={activo === "territorio"} onClick={() => onIr("territorio")} />
+      <RailBtn icon="check" title="Revisión" on={activo === "revision"} onClick={() => onIr("revision")} />
+      <div className="flex-1" />
+      {/* Justo encima de «Descarga»: la cola de embebido vivía dentro del
+          detalle de cada índice, y esa pantalla depende de cuál esté
+          abierto — cualquier cambio ahí (borrar el índice, cerrar el
+          diálogo, sellar) se la llevaba por delante. Un destino propio en
+          el carril, como Descarga, no depende de nada de eso. */}
+      <RailBtn icon="embebido" title="Embebido" on={activo === "embebido"} activo={embebiendoActivo}
+        onClick={() => onIr("embebido")} />
+      <RailBtn icon="ingesta" title="Descarga" on={activo === "descarga"} activo={descargaActiva}
+        onClick={() => onIr("descarga")} />
+      <RailBtn icon="ajustes" title="Ajustes" on={activo === "ajustes"} onClick={() => onIr("ajustes")} />
+    </nav>
+  );
+}
+
+function RailBtn({ icon, title, on, activo, onClick }: {
+  icon: "layers" | "territorio" | "ingesta" | "ajustes" | "check" | "embebido";
+  title: string; on: boolean; activo?: boolean; onClick: () => void;
+}) {
+  return (
+    <button onClick={onClick} title={title} aria-label={title} aria-current={on || undefined}
+      className={`jg-press relative grid h-[30px] w-[30px] place-items-center rounded-lg ${
+        on ? "bg-white/[.07] text-fg" : "text-subtle hover:bg-white/[.04] hover:text-fg"
+      }`}>
+      {on && <span className="absolute inset-y-[7px] -left-[10px] w-0.5 rounded-r bg-fg" />}
+      {activo && !on && <span className="absolute right-[3px] top-[3px] h-1.5 w-1.5 rounded-full bg-warning" />}
+      <Icon name={icon} size={15} />
+    </button>
+  );
+}
