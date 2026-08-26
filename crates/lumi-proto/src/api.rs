@@ -434,6 +434,20 @@ pub struct ResolveCreditReq {
     pub reason: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VersionMismatchReq {
+    pub version_cliente: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VersionMismatchInfo {
+    pub id: i64,
+    pub version_cliente: String,
+    pub source_ip: String,
+    pub created_at: i64,
+    pub resolved_at: Option<i64>,
+}
+
 /// Lo que llega por `/v1/admin/events`. Nace pensado para crecer, igual que
 /// `Cambio` en la cola.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -449,6 +463,13 @@ pub enum EventoAdmin {
         id: i64,
         display_name: String,
         message: String,
+    },
+    /// Un cliente detectó que su versión no coincide con la del servidor y
+    /// pidió que se avise. No hay nada que aprobar/conceder — a diferencia
+    /// de `SolicitudAcceso`/`SolicitudCredito`, el admin solo se entera y
+    /// actualiza `lumid` por su cuenta (`ActualizacionesView.tsx`).
+    SolicitudVersion {
+        version_cliente: String,
     },
     /// Sin payload: es una señal ("algo cambió en la cola"), no un
     /// snapshot — quien la recibe reacciona pidiendo `GET /v1/queue` de
