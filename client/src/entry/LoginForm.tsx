@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api, parseVersionMismatch, type LoginRes, type Me } from "../lib/api";
-import { announcePresence, setAuth } from "../lib/bridge";
-import { deviceId, deviceName, updateSession, type Server } from "../lib/session";
+import { announcePresence, fetchLumiAvatarDataUrl, setAuth } from "../lib/bridge";
+import { deviceId, deviceName, updateServerAvatar, updateSession, type Server } from "../lib/session";
 import { useServer } from "../lib/store";
 import { Icon } from "../ui/Icon";
 import { ServerSelect } from "./ServerSelect";
@@ -26,6 +26,10 @@ export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMu
       // el asistente del owner se queda sin heartbeat para siempre.
       const h = await api.reconnect(server.addr, server.fingerprint);
       useServer.getState().setHello(h);
+      // En segundo plano — un avatar desactualizado no debe retrasar el
+      // login, y un fallo aquí (servidor sin avatar, sin red un instante)
+      // no es un error de inicio de sesión.
+      void fetchLumiAvatarDataUrl().then((d) => { if (d) updateServerAvatar(server.addr, d); });
       const res = await api.post<LoginRes>("/v1/auth/login", {
         username, password,
         device: { client_id: deviceId(), name: deviceName(), os: navigator.userAgent },

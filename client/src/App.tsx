@@ -20,8 +20,8 @@ import { DebugOrb } from "./dev/DebugOrb";
 import { useServer } from "./lib/store";
 import { useWorkspace } from "./lib/workspace";
 import { api, type Hello, type Me, type Sample, type TaskStatus } from "./lib/api";
-import { announcePresence, setAuth } from "./lib/bridge";
-import { loadSession, updateSession } from "./lib/session";
+import { announcePresence, fetchLumiAvatarDataUrl, setAuth } from "./lib/bridge";
+import { loadSession, updateServerAvatar, updateSession } from "./lib/session";
 import { ProjectPicker } from "./work/ProjectPicker";
 import { ProjectView } from "./work/ProjectView";
 import { CaseView } from "./work/CaseView";
@@ -98,6 +98,7 @@ export default function App() {
         const h = await api.reconnect(session.addr, session.fingerprint);
         useServer.getState().setHello(h);
         useServer.getState().setAddr(session.addr);
+        void fetchLumiAvatarDataUrl().then((d) => { if (d) updateServerAvatar(session.addr, d); });
 
         // Servidor sin reclamar: esto es el flujo del owner, no el de entrada.
         if (h.state === "unclaimed") {

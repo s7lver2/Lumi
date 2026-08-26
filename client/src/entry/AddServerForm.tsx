@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { addrFromCard, api, fingerprintFromCard, isCard, parseVersionMismatch, type Hello, type ServerProfileSettings } from "../lib/api";
+import { fetchLumiAvatarDataUrl } from "../lib/bridge";
 import { addServer } from "../lib/session";
 import { Icon } from "../ui/Icon";
 import { ServerProfileCard } from "./ServerProfileCard";
@@ -12,6 +13,7 @@ export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
   const [label, setLabel] = useState("");
   const [hello, setHello] = useState<Hello | null>(null);
   const [perfil, setPerfil] = useState<ServerProfileSettings | null>(null);
+  const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Una clave lumi1_ pegada aquí no es un error: significa "soy el owner y
@@ -30,9 +32,12 @@ export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
       // dejaría un hueco en blanco mientras se decide si hay algo que
       // mostrar.
       try {
-        setPerfil(await api.serverProfilePublic());
+        const p = await api.serverProfilePublic();
+        setPerfil(p);
+        setAvatarDataUrl(p.has_avatar ? await fetchLumiAvatarDataUrl() : null);
       } catch {
         setPerfil(null);
+        setAvatarDataUrl(null);
       }
     } catch (e) {
       setHello(null);
@@ -44,7 +49,10 @@ export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
 
   function save() {
     const addr = addrFromCard(text);
-    addServer({ addr, fingerprint: fingerprintFromCard(text), label: label.trim() || addr });
+    addServer({
+      addr, fingerprint: fingerprintFromCard(text), label: label.trim() || addr,
+      avatarDataUrl: avatarDataUrl ?? undefined,
+    });
     onAdded(addr);
   }
 

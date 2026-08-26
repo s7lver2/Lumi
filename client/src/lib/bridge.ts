@@ -76,6 +76,30 @@ export function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+/** Convierte a `data:` URL los bytes del avatar público del servidor
+ *  CONECTADO AHORA MISMO — `lumiUrl(...)` sale por el cliente TLS anclado
+ *  del lado Rust, que es un singleton (`state.base`/`state.client`), así
+ *  que esto solo puede pedirse justo tras un `pair`/`pairCard`/`reconnect`
+ *  con éxito contra ESE servidor, nunca para uno cualquiera de la lista
+ *  guardada. Por eso se cachea en `Server.avatarDataUrl` (ver
+ *  `lib/session.ts`) en vez de pedirse en cada render de la lista. `null`
+ *  si el servidor no tiene avatar o si falla la petición — nunca lanza. */
+export async function fetchLumiAvatarDataUrl(): Promise<string | null> {
+  try {
+    const res = await fetch(lumiUrl("/v1/server-profile/avatar"));
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
 /** Selector de archivos del sistema. Devuelve rutas, nunca bytes, y no sube
  *  nada: quien llama decide qué hacer con ellas. Antes esto subía por su
  *  cuenta, y por eso no había hueco donde enseñar lo elegido ni elegir modelo
