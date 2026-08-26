@@ -22,6 +22,14 @@ REPO_GITHUB = "s7lver2/Lumi"
 WSL_RUTA_LUMI = "~/Lumi"
 PRODUCTOS = ("cliente", "indexer", "lumid")
 
+PLATAFORMA = {"cliente": "windows-x86_64", "indexer": "windows-x86_64", "lumid": "linux-x86_64"}
+
+RUTA_BINARIO = {
+    "cliente": "client/src-tauri/target/release/app.exe",
+    "indexer": "indexer/src-tauri/target/release/indexer-app.exe",
+    "installer": "installer/src-tauri/target/release/installer.exe",
+}
+
 # (ruta relativa a la raiz del repo, tipo de archivo)
 VERSION_FILES = [
     ("Cargo.toml", "cargo"),
@@ -96,6 +104,73 @@ def _preflight(root: Path) -> None:
         raise SystemExit(1)
 
 
+def _ruta_montada_en_wsl(root: Path) -> str:
+    """`E:\\Lumi Station` → `/mnt/e/Lumi Station` — WSL monta cada unidad de
+    Windows bajo /mnt/<letra minúscula>. No asume que el repo vive en E:,
+    lo calcula de la ruta real."""
+    letra = root.drive.rstrip(":").lower()
+    resto = str(root)[len(root.drive):].replace("\\", "/")
+    return f"/mnt/{letra}{resto}"
+
+
+def _construir_wsl_lumid(root: Path) -> Path:
+    spinner = Spinner("Compilando lumid en WSL…")
+    spinner.start()
+    r = subprocess.run(
+        ["wsl.exe", "--", "bash", "-lc", f"cd {WSL_RUTA_LUMI} && git pull && cargo build --release -p lumid"],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        spinner.stop(ok=False, msg="falló la compilación en WSL")
+        print(r.stdout, file=sys.stderr)
+        print(r.stderr, file=sys.stderr)
+        raise SystemExit(1)
+    spinner.stop(ok=True)
+
+    destino_dir = root / ".release-tmp"
+    destino_dir.mkdir(exist_ok=True)
+    destino = destino_dir / "lumid"
+    # `wsl.exe cp` en vez de leer /home/... desde Windows: la ruta \\wsl$\...
+    # no siempre está montada, y esto funciona igual sin depender de eso.
+    # Comillas simples alrededor del destino: la ruta del repo puede llevar
+    # espacios ("Lumi Station").
+    destino_wsl = f"{_ruta_montada_en_wsl(root)}/.release-tmp/lumid"
+    r = subprocess.run(
+        ["wsl.exe", "--", "bash", "-lc", f"cp {WSL_RUTA_LUMI}/target/release/lumid '{destino_wsl}'"],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0 or not destino.exists():
+        fail("no se pudo copiar el binario de lumid desde WSL")
+        print(r.stdout, file=sys.stderr)
+        print(r.stderr, file=sys.stderr)
+        raise SystemExit(1)
+    return destino
+
+
+def construir(root: Path, productos: list[str]) -> dict[str, Path]:
+    section("Construyendo")
+    npm = shutil.which("npm") or "npm"
+    artefactos: dict[str, Path] = {}
+
+    if "cliente" in productos:
+        run([npm, "run", "tauri", "build"], cwd=str(root / "client"), label="cliente")
+        artefactos["cliente"] = root / RUTA_BINARIO["cliente"]
+    if "indexer" in productos:
+        run([npm, "run", "tauri", "build"], cwd=str(root / "indexer"), label="indexer")
+        artefactos["indexer"] = root / RUTA_BINARIO["indexer"]
+    if "lumid" in productos:
+        artefactos["lumid"] = _construir_wsl_lumid(root)
+
+    run([npm, "run", "tauri", "build"], cwd=str(root / "installer"), label="installer")
+    artefactos["installer"] = root / RUTA_BINARIO["installer"]
+
+    for nombre, ruta in artefactos.items():
+        if not ruta.exists():
+            fail(f"{nombre}: no se encontró el binario esperado en {ruta}")
+            raise SystemExit(1)
+    return artefactos
+
+
 RE_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 
 
@@ -148,3 +223,4 @@ def lanzar(root: Path) -> None:
         return
 
     escribir_version(root, version)
+    artefactos = construir(root, productos)
