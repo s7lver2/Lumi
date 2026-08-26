@@ -39,6 +39,14 @@ export interface CpuDevice {
   perfil: CpuProfile | null;
 }
 export interface PatchCpuReq { pl1_w?: number; pl2_w?: number; confirmado?: boolean }
+export interface PublicacionInfo { version: string; notas: string; publicado: string }
+export interface EstadoActualizacionLumid {
+  version_instalada: string;
+  disponible: PublicacionInfo | null;
+  retirada: boolean;
+  comprobado_en: number | null;
+  error: string | null;
+}
 export interface AvisoInfo {
   id: number;
   /** Documento JSON de Tiptap — opaco para el resto del cliente, solo lo

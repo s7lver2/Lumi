@@ -16,6 +16,7 @@ import { ResumenView } from "./ResumenView";
 import { CustomizacionView } from "./CustomizacionView";
 import { HardwareView } from "./HardwareView";
 import { DoctorView } from "./DoctorView";
+import { ActualizacionesView } from "./ActualizacionesView";
 import { Sidebar, type Seccion } from "./Sidebar";
 import { UsersView } from "./UsersView";
 import { NetworkView } from "./NetworkView";
@@ -77,6 +78,7 @@ export function AdminPanel({ token }: { token: string }) {
           : seccion === "notificaciones" ? <NotificacionesView token={token} />
           : seccion === "hardware" ? <HardwareView token={token} />
           : seccion === "doctor" ? <DoctorView token={token} onIr={setSeccion} />
+          : seccion === "actualizaciones" ? <ActualizacionesView token={token} />
                     : <Seccion titulo="Índices instalados" grupo="Servidor"
               accion={
                 <button disabled title="Abrirá el catálogo remoto; todavía no hace nada"
