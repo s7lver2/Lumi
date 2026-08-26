@@ -172,6 +172,58 @@ async fn upload_server_banner_bytes(data_base64: String, state: tauri::State<'_,
     subir_bytes("/v1/admin/server-profile/banner", &data_base64, &state).await
 }
 
+/// URL del canal de actualizaciones (Plan 1 de la spec). Cliente `reqwest`
+/// propio y NO el `PinnedVerifier` de arriba: eso habla con el servidor
+/// `lumid` emparejado, esto habla con Vercel, que valida contra las CA del
+/// sistema como cualquier sitio normal.
+const VERSIONES_URL: &str = "https://lumi-web.vercel.app/api/versiones";
+
+#[derive(serde::Serialize)]
+#[serde(tag = "tipo", rename_all = "lowercase")]
+enum EstadoActualizacion {
+    Disponible { version: String, notas: String, url: String },
+    Retirada,
+}
+
+/// `Err` significa "no se pudo comprobar" (sin red, manifiesto sin firmar o
+/// con firma inválida) — el lado TS decide no pintar nada ante un error,
+/// nunca una alarma. `Ok(None)` significa "se comprobó y no hay nada nuevo".
+#[tauri::command]
+async fn comprobar_actualizacion() -> Result<Option<EstadoActualizacion>, String> {
+    let manifiesto: lumi_proto::actualizacion::Manifiesto = reqwest::Client::new()
+        .get(VERSIONES_URL)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json()
+        .await
+        .map_err(|e| e.to_string())?;
+    manifiesto.comprobar().map_err(|e| e.to_string())?;
+
+    let version_actual = env!("CARGO_PKG_VERSION");
+    if manifiesto.version_retirada(lumi_proto::actualizacion::Producto::Cliente, version_actual) {
+        return Ok(Some(EstadoActualizacion::Retirada));
+    }
+    let Some(publi) = manifiesto.mas_nueva(
+        lumi_proto::actualizacion::Producto::Cliente,
+        version_actual,
+        "windows-x86_64",
+    ) else {
+        return Ok(None);
+    };
+    let url = publi
+        .artefactos
+        .iter()
+        .find(|a| a.plataforma == "windows-x86_64")
+        .map(|a| a.url.clone())
+        .unwrap_or_default();
+    Ok(Some(EstadoActualizacion::Disponible {
+        version: publi.version.clone(),
+        notas: publi.notas.clone(),
+        url,
+    }))
+}
+
 fn client_for(fingerprint: &str) -> Result<reqwest::Client, String> {
     let cfg = rustls::ClientConfig::builder()
         .dangerous()
@@ -520,6 +572,7 @@ fn main() {
     rustls::crypto::ring::default_provider().install_default().ok();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(Shared::default())
         // Bytes del daemon al webview sin que el webview vea el certificado.
         // En Windows el webview lo pide como http://lumi.localhost/<ruta>; en
@@ -587,7 +640,7 @@ fn main() {
             pair, pair_card, reconnect, request, start_telemetry, start_task_log,
             start_queue_events, start_indices_events, start_admin_events, start_logs_stream, set_auth,
             upload_images, read_image_as_data_url, upload_avatar_bytes, upload_server_avatar_bytes,
-            upload_server_banner_bytes
+            upload_server_banner_bytes, comprobar_actualizacion
         ])
         .run(tauri::generate_context!())
         .expect("error al arrancar Tauri");
