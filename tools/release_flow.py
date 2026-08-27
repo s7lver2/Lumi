@@ -18,6 +18,16 @@ from tsuki_ux import (
     ConfigEntry, Spinner, config_table, fail, header, run, section, step, success, warn,
 )
 
+# `tsuki_ux` imprime símbolos fuera de la BMP (por ejemplo un emoji de luna
+# en `header()`), y la consola de Windows suele quedarse en el codepage
+# heredado (cp1252) salvo que algo fuerce UTF-8 — sin esto, la primera
+# llamada a `header()` reventaba con `UnicodeEncodeError` antes de imprimir
+# nada. `errors="replace"` es la red de seguridad para cualquier símbolo que
+# ni así se pueda representar.
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 REPO_GITHUB = "s7lver2/Lumi"
 WSL_RUTA_LUMI = "~/Lumi"
 PRODUCTOS = ("cliente", "indexer", "lumid")
