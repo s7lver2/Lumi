@@ -157,11 +157,19 @@ async function pintarEstadoInstalados() {
   for (const item of info) {
     const sub = document.querySelector(`[data-estado="${item.producto}"]`);
     if (item.ya_instalado) {
-      sub.textContent = `Ya instalado (${item.version}) — clic para reinstalar`;
+      const desactualizado = item.version_disponible && item.version_disponible !== item.version;
+      // `version_disponible` es `null` sin red — no se muestra la
+      // comparación en ese caso, no tiene sentido inventar un "última: ?".
+      const comparacion = item.version_disponible
+        ? ` · última ${item.version_disponible}${desactualizado ? " ⚠" : ""}`
+        : "";
+      sub.textContent = `Instalada ${item.version}${comparacion} — clic para reinstalar`;
       const tarjeta = document.querySelector(`.product-card[data-producto="${item.producto}"]`);
       tarjeta.classList.add("instalado");
       tarjeta.querySelector(".checkbox").classList.remove("checked");
       seleccion.delete(item.producto);
+    } else if (item.version_disponible) {
+      sub.textContent = `última versión: ${item.version_disponible}`;
     }
   }
 }

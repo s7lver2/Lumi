@@ -23,6 +23,11 @@ pub struct InfoProducto {
     pub producto: String,
     pub ya_instalado: bool,
     pub version: Option<String>,
+    /// La más reciente publicada en el manifiesto, para poder mostrar
+    /// "instalada X · última Y" en la pantalla de Productos. `None` si no
+    /// se pudo pedir el manifiesto (sin red) — la pantalla sigue funcionando
+    /// igual, solo sin ese dato de más.
+    pub version_disponible: Option<String>,
 }
 
 /// La UI mostraba el string literal `%LocalAppData%\Programs\Lumi` y lo
@@ -41,11 +46,26 @@ pub fn ruta_instalacion_por_defecto() -> String {
 
 #[tauri::command]
 pub fn detectar_instalados() -> Vec<InfoProducto> {
+    // Un solo intento de red para los dos productos, no uno por tarjeta —
+    // y si falla (sin conexión), la pantalla sigue mostrando lo instalado,
+    // solo sin la comparación contra la última versión.
+    let manifiesto = lumi_installer::manifiesto::obtener_verificado().ok();
+
     ["cliente", "indexer"]
         .into_iter()
-        .map(|p| match marca::leer(p) {
-            Some(m) => InfoProducto { producto: p.to_string(), ya_instalado: true, version: Some(m.version) },
-            None => InfoProducto { producto: p.to_string(), ya_instalado: false, version: None },
+        .map(|p| {
+            let version_disponible = manifiesto.as_ref().and_then(|m| {
+                m.mas_nueva(producto_enum(p), "0.0.0", "windows-x86_64")
+                    .map(|publi| publi.version.clone())
+            });
+            match marca::leer(p) {
+                Some(m) => InfoProducto {
+                    producto: p.to_string(), ya_instalado: true, version: Some(m.version), version_disponible,
+                },
+                None => InfoProducto {
+                    producto: p.to_string(), ya_instalado: false, version: None, version_disponible,
+                },
+            }
         })
         .collect()
 }
