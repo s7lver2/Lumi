@@ -46,7 +46,52 @@
           "sha256": "00bdbc2d4a686eea74f21ee310245ba46fa1ca73587a2600133b41a43e1838b0"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.1",
+      "publicado": "2026-08-27T12:19:08Z",
+      "notas": "prueba del canal de actualizaciones interactivo",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.1/app.exe",
+          "bytes": 15739392,
+          "sha256": "5ca845cbd27bcdd8f3382153a096f8f0f487268e13273db4c18d78ac03b09492"
+        }
+      ]
+    },
+    {
+      "producto": "indexer",
+      "version": "2.0.1",
+      "publicado": "2026-08-27T12:19:08Z",
+      "notas": "prueba del canal de actualizaciones interactivo",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.1/indexer-app.exe",
+          "bytes": 22046208,
+          "sha256": "7a1554730088f4abd8d48e525f6c399a183d04b27e70127b74e221c030c7854d"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.1",
+      "publicado": "2026-08-27T12:19:08Z",
+      "notas": "prueba del canal de actualizaciones interactivo",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.1/lumid",
+          "bytes": 20294144,
+          "sha256": "00bdbc2d4a686eea74f21ee310245ba46fa1ca73587a2600133b41a43e1838b0"
+        }
+      ]
     }
   ],
-  "firma": "grED+UiudaSJo+W4y/CDoONNA4mBDEp7fCdxpRyj616vwWtI2Wkz673RoNS4EmK0prVDAztm7nlqFcHtCrKpAQ=="
+  "firma": "4fyFhgT3us6lClPrT046KkZqbWoWUUw5HmkreeGzDvbG7HQitc8KgAmr4ANX7EA5MaEmYlt4XDxDNqpbNFKcBQ=="
 }
