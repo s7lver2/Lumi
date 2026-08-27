@@ -14,6 +14,7 @@ export function ActualizacionesSeccion() {
   // encontrar nada se veía exactamente igual que no haber comprobado nunca,
   // y el botón parecía no hacer nada.
   const [comprobado, setComprobado] = useState(false);
+  const [aplicando, setAplicando] = useState(false);
 
   async function comprobarAhora() {
     setComprobando(true);
@@ -26,6 +27,22 @@ export function ActualizacionesSeccion() {
       setError(String(e));
     } finally {
       setComprobando(false);
+    }
+  }
+
+  // Si sale bien, la app se cierra sola dentro del comando de Rust — nunca
+  // llega a este `catch`. Si sale mal (no encuentra installer.exe junto a
+  // sí misma, sin permisos de escritura...), antes se perdía: el botón
+  // descartaba la promesa con `void` sin capturar el rechazo, así que un
+  // fallo no mostraba nada y parecía que "no ocurría nada" al pulsar.
+  async function actualizarAhora(version: string) {
+    setAplicando(true);
+    setError(null);
+    try {
+      await dispararActualizacionSilenciosa(version);
+    } catch (e) {
+      setError(String(e));
+      setAplicando(false);
     }
   }
 
@@ -52,9 +69,9 @@ export function ActualizacionesSeccion() {
           {comprobando ? "Comprobando…" : "Comprobar ahora"}
         </button>
         {estado?.tipo === "disponible" && (
-          <button onClick={() => void dispararActualizacionSilenciosa(estado.version)}
-            className="jg-press rounded-lg bg-accent px-2.5 py-1 text-[10.5px] font-medium text-black">
-            Actualizar ahora
+          <button onClick={() => void actualizarAhora(estado.version)} disabled={aplicando}
+            className="jg-press rounded-lg bg-accent px-2.5 py-1 text-[10.5px] font-medium text-black disabled:opacity-40">
+            {aplicando ? "Aplicando…" : "Actualizar ahora"}
           </button>
         )}
       </div>

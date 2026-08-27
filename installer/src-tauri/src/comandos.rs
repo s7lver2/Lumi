@@ -123,6 +123,13 @@ pub fn instalar(
         marca::escribir(producto, nombre_mostrado(producto), &publicacion.version, &carpeta)
             .map_err(|e| e.to_string())?;
 
+        // El cliente/Indexer buscan installer.exe junto a sí mismos para
+        // autoactualizarse en silencio (ver disparar_actualizacion_silenciosa
+        // en client/src-tauri/src/main.rs) — sin copiarse aquí, esa
+        // búsqueda nunca encuentra nada y el botón "Actualizar ahora" falla
+        // en silencio (la promesa rechazada nunca se captura del lado TS).
+        copiar_instalador_junto_al_producto(&carpeta)?;
+
         if acceso_directo {
             crear_acceso_directo(producto, &destino)?;
         }
@@ -139,6 +146,28 @@ pub fn instalar(
         }
     }
 
+    Ok(())
+}
+
+/// Se copia a sí mismo (el `installer.exe` que está corriendo ahora mismo,
+/// el mismo binario tanto para la instalación interactiva como para
+/// `--silencioso`) junto al ejecutable del producto. No hace nada si ya
+/// está ahí y es exactamente el mismo archivo — evita fallar por "archivo
+/// en uso" al reinstalar sobre una instalación existente.
+fn copiar_instalador_junto_al_producto(carpeta: &Path) -> Result<(), String> {
+    let actual = std::env::current_exe().map_err(|e| e.to_string())?;
+    let destino = carpeta.join("installer.exe");
+    if destino == actual {
+        return Ok(());
+    }
+    if destino.exists() {
+        let mismo_tamano = fs::metadata(&actual).ok().map(|m| m.len())
+            == fs::metadata(&destino).ok().map(|m| m.len());
+        if mismo_tamano {
+            return Ok(());
+        }
+    }
+    fs::copy(&actual, &destino).map_err(|e| e.to_string())?;
     Ok(())
 }
 
