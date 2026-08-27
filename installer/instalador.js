@@ -98,7 +98,10 @@ function volarAlTitulo() {
 
 document.querySelectorAll(".product-card[data-producto]").forEach((tarjeta) => {
   tarjeta.addEventListener("click", () => {
-    if (tarjeta.classList.contains("instalado")) return;
+    // Ya instalado no bloquea el clic: sigue seleccionable a propósito,
+    // para poder reinstalar/sobrescribir si hace falta (una versión rota,
+    // un archivo corrupto). Por defecto llega desmarcado (pintarEstadoInstalados),
+    // así que no se pisa nada sin que el investigador lo pida.
     const producto = tarjeta.dataset.producto;
     const casilla = tarjeta.querySelector(".checkbox");
     if (seleccion.has(producto)) {
@@ -154,7 +157,7 @@ async function pintarEstadoInstalados() {
   for (const item of info) {
     const sub = document.querySelector(`[data-estado="${item.producto}"]`);
     if (item.ya_instalado) {
-      sub.textContent = `Ya instalado (${item.version})`;
+      sub.textContent = `Ya instalado (${item.version}) — clic para reinstalar`;
       const tarjeta = document.querySelector(`.product-card[data-producto="${item.producto}"]`);
       tarjeta.classList.add("instalado");
       tarjeta.querySelector(".checkbox").classList.remove("checked");
