@@ -125,6 +125,16 @@ pub fn instalar(
         let carpeta = raiz.join(if producto == "cliente" { "Cliente" } else { "Indexer" });
         let destino = carpeta.join(nombre_ejecutable(producto));
 
+        // Reinstalar sobre una instalación existente con la app abierta
+        // fallaba con el error de disco crudo de Windows al intentar
+        // sobrescribir el .exe en uso — se cierra sola antes de tocar nada.
+        if !lumi_installer::proceso::cerrar_por_nombre(nombre_ejecutable(producto), std::time::Duration::from_secs(5)) {
+            return Err(format!(
+                "{}: cierra la aplicación antes de reinstalar",
+                nombre_mostrado(producto)
+            ));
+        }
+
         let producto_evento = producto.clone();
         let app_evento = app.clone();
         aplicar_producto(&publicacion, "windows-x86_64", &destino, move |fase| {

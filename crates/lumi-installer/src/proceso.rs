@@ -3,6 +3,7 @@
 //! `installer.exe --silencioso` (ver spec, Flujo B paso 2) — esto es lo que
 //! confirma que de verdad ocurrió, con un margen, antes de tocar archivos.
 
+use std::ffi::OsStr;
 use std::time::{Duration, Instant};
 use sysinfo::{Pid, ProcessesToUpdate, System};
 
@@ -15,6 +16,43 @@ pub fn esperar_cierre(pid: u32, timeout: Duration) -> bool {
     loop {
         sistema.refresh_processes(ProcessesToUpdate::Some(&[Pid::from_u32(pid)]), true);
         if sistema.process(Pid::from_u32(pid)).is_none() {
+            return true;
+        }
+        if inicio.elapsed() >= timeout {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    }
+}
+
+/// La instalación interactiva no tiene un PID que esperar (a diferencia de
+/// `--silencioso`, que lo recibe del proceso que lo lanzó): si el
+/// investigador dejó `app.exe` abierto y le da a reinstalar, sobrescribir
+/// el archivo fallaba con el error de disco crudo de Windows ("el proceso
+/// no tiene acceso al archivo..."). Busca por NOMBRE de ejecutable, cierra
+/// lo que encuentre, y espera a que de verdad suelte el archivo. `true` si
+/// al final no queda nada corriendo con ese nombre (no había, o se cerró a
+/// tiempo); `false` si seguía vivo cuando se agotó el margen.
+pub fn cerrar_por_nombre(nombre_exe: &str, timeout: Duration) -> bool {
+    let mut sistema = System::new_all();
+    sistema.refresh_processes(ProcessesToUpdate::All, true);
+    let encontrados: Vec<Pid> = sistema
+        .processes_by_name(OsStr::new(nombre_exe))
+        .map(|p| p.pid())
+        .collect();
+    if encontrados.is_empty() {
+        return true;
+    }
+    for pid in &encontrados {
+        if let Some(proceso) = sistema.process(*pid) {
+            proceso.kill();
+        }
+    }
+
+    let inicio = Instant::now();
+    loop {
+        sistema.refresh_processes(ProcessesToUpdate::Some(&encontrados), true);
+        if encontrados.iter().all(|pid| sistema.process(*pid).is_none()) {
             return true;
         }
         if inicio.elapsed() >= timeout {
