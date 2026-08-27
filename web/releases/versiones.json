@@ -91,7 +91,52 @@
           "sha256": "00bdbc2d4a686eea74f21ee310245ba46fa1ca73587a2600133b41a43e1838b0"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.2",
+      "publicado": "2026-08-27T13:15:40Z",
+      "notas": "prueba: instalador se cierra solo antes de reinstalar, actualizar ahora ya no falla en silencio",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.2/app.exe",
+          "bytes": 15738880,
+          "sha256": "26dbdf1e64dfbeb6c2be232e7288e3a7d4b1e54ba1c3d14bbeae23dee75d6aec"
+        }
+      ]
+    },
+    {
+      "producto": "indexer",
+      "version": "2.0.2",
+      "publicado": "2026-08-27T13:15:40Z",
+      "notas": "prueba: instalador se cierra solo antes de reinstalar, actualizar ahora ya no falla en silencio",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.2/indexer-app.exe",
+          "bytes": 22046208,
+          "sha256": "c737a629d5368c47b5bd7e090763070925e6da044379798b18b45e88c8bc6d82"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.2",
+      "publicado": "2026-08-27T13:15:40Z",
+      "notas": "prueba: instalador se cierra solo antes de reinstalar, actualizar ahora ya no falla en silencio",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.2/lumid",
+          "bytes": 20297336,
+          "sha256": "53eb4dec3b527a894d4a61f5722bb7b330d4224b6b9364d33ee8382efddd48cd"
+        }
+      ]
     }
   ],
-  "firma": "4fyFhgT3us6lClPrT046KkZqbWoWUUw5HmkreeGzDvbG7HQitc8KgAmr4ANX7EA5MaEmYlt4XDxDNqpbNFKcBQ=="
+  "firma": "wg5f8JY1qvPmKnB9IYdV8+aa263y6D8J5sNyytif53yU2puE/4ZPK2jZGnTqQVuqcqfYzO02UYwN8QXOTypHCg=="
 }
