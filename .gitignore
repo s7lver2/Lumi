@@ -17,3 +17,4 @@ __pycache__/
 *.pyc
 .lumi-indexer/
 .release-tmp/
+.dev-data/

@@ -1592,6 +1592,7 @@ dependencies = [
  "dialoguer",
  "ed25519-dalek",
  "indicatif",
+ "lumi-installer",
  "lumi-proto",
  "nvml-wrapper",
  "rand 0.8.7",
