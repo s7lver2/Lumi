@@ -267,6 +267,16 @@ fn version_cliente() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+/// `true` solo cuando `installer.exe --silencioso` acaba de relanzar esta
+/// app tras un downgrade/versión exacta (ver `silencioso.rs`) — la marca
+/// vive en el entorno de este único proceso, nunca se guarda. Sin esto, el
+/// chequeo normal de "¿hay algo más nuevo?" al arrancar deshacía el
+/// downgrade en el acto.
+#[tauri::command]
+fn sin_autoactualizar_este_arranque() -> bool {
+    std::env::var("LUMI_SIN_AUTOACTUALIZAR").is_ok()
+}
+
 /// Se llama una vez al arrancar (ver App.tsx) — si `installer.exe
 /// --silencioso` dejó un error de la última actualización silenciosa, se
 /// muestra aquí una sola vez (la lectura ya lo borra).
@@ -756,7 +766,8 @@ fn main() {
             start_queue_events, start_indices_events, start_admin_events, start_logs_stream, set_auth,
             upload_images, read_image_as_data_url, upload_avatar_bytes, upload_server_avatar_bytes,
             upload_server_banner_bytes, comprobar_actualizacion, error_actualizacion_pendiente, disparar_actualizacion_silenciosa,
-            disparar_actualizacion_a_version, version_cliente, historial_actualizaciones
+            disparar_actualizacion_a_version, version_cliente, historial_actualizaciones,
+            sin_autoactualizar_este_arranque
         ])
         .run(tauri::generate_context!())
         .expect("error al arrancar Tauri");

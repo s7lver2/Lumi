@@ -119,9 +119,20 @@ pub fn ejecutar_y_salir() -> ! {
         )
         .map_err(|e| lumi_installer::InstaladorError::Disco(e.to_string()))?;
 
-        std::process::Command::new(&destino)
-            .spawn()
-            .map_err(|e| lumi_installer::InstaladorError::Disco(e.to_string()))?;
+        let mut comando = std::process::Command::new(&destino);
+        // Solo en un downgrade/versión exacta: relanzar así y dejar que el
+        // arranque normal compruebe "¿hay algo más nuevo?" deshacía el
+        // downgrade en el acto — la versión vieja arrancaba, se veía a sí
+        // misma desactualizada frente al manifiesto, y se auto-actualizaba
+        // de vuelta a la última antes de que nadie llegara a usarla (de ahí
+        // el ciclo cerrar → abrir en blanco → cerrar → reabrir). La marca
+        // solo vive en el entorno de ESTE proceso hijo, así que la próxima
+        // vez que alguien abra la app a mano (doble clic, no esto) vuelve a
+        // comprobar actualizaciones con normalidad.
+        if args.version_objetivo.is_some() {
+            comando.env("LUMI_SIN_AUTOACTUALIZAR", "1");
+        }
+        comando.spawn().map_err(|e| lumi_installer::InstaladorError::Disco(e.to_string()))?;
 
         Ok(())
     })();

@@ -15,7 +15,7 @@ import { AdminPanel } from "./admin/AdminPanel";
 import { ConnectionBanner } from "./ui/ConnectionBanner";
 import { MantenimientoBanner } from "./ui/MantenimientoBanner";
 import { ActualizacionBanner } from "./ui/ActualizacionBanner";
-import { comprobarActualizacion, dispararActualizacionSilenciosa, errorActualizacionPendiente, type EstadoActualizacion } from "./lib/actualizaciones";
+import { comprobarActualizacion, dispararActualizacionSilenciosa, errorActualizacionPendiente, sinAutoactualizarEsteArranque, type EstadoActualizacion } from "./lib/actualizaciones";
 import { DebugOrb } from "./dev/DebugOrb";
 import { useServer } from "./lib/store";
 import { useWorkspace } from "./lib/workspace";
@@ -53,13 +53,22 @@ export default function App() {
     errorActualizacionPendiente().then((motivo) => {
       if (motivo) setActualizacion({ tipo: "error", motivo });
     });
-    comprobarActualizacion().then((estado) => {
-      if (estado?.tipo === "disponible") {
-        void dispararActualizacionSilenciosa(estado.version);
-        return; // la app va a cerrarse; no hace falta pintar nada más
-      }
-      setActualizacion(estado);
-    }).catch(() => setActualizacion(null));
+    sinAutoactualizarEsteArranque().then((saltar) => {
+      // Justo tras un downgrade a propósito (versión mismatch → "Descargar
+      // versión del servidor"), este chequeo normal ("¿hay algo más
+      // nuevo?") deshacía el downgrade en el acto: la versión vieja
+      // arrancaba, se veía desactualizada frente al manifiesto y se
+      // auto-actualizaba de vuelta a la última antes de que nadie llegara a
+      // usarla — abrir, cerrar, reabrir en bucle. Se salta una sola vez.
+      if (saltar) return;
+      comprobarActualizacion().then((estado) => {
+        if (estado?.tipo === "disponible") {
+          void dispararActualizacionSilenciosa(estado.version);
+          return; // la app va a cerrarse; no hace falta pintar nada más
+        }
+        setActualizacion(estado);
+      }).catch(() => setActualizacion(null));
+    });
   }, []);
   const hello = useServer((s) => s.hello);
   const isAdmin = useServer((s) => s.isAdmin);

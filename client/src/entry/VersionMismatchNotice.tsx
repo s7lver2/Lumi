@@ -48,7 +48,13 @@ export function VersionMismatchModal({ propia, servidor, onClose }: {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-6"
+    // Fondo y tarjeta SÓLIDOS a propósito, no el cristal translúcido de
+    // Pane/StatusOverlay: aquella tarjeta está pensada para sentarse UNA vez
+    // sobre WavesBackground, y aquí se apila encima de un Pane que ya es
+    // translúcido — dos capas de cristal juntas dejaban el texto de detrás
+    // (título/botones del formulario) sangrando a través del popup,
+    // ilegible y con los clics cayendo en el elemento equivocado.
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-bg/95 p-6"
       style={{ animation: "jg-backdrop-in .28s ease both" }}>
       <div className="w-full max-w-sm" style={{ animation: "jg-fade-rise .5s cubic-bezier(.16,1,.3,1) both" }}>
         <div className="mb-1 flex items-center gap-2.5">
@@ -59,7 +65,7 @@ export function VersionMismatchModal({ propia, servidor, onClose }: {
           Este cliente ({propia}) no coincide con la versión del servidor ({servidor}).
         </p>
 
-        <div className="rounded-card border border-white/[.13] bg-[rgba(16,19,25,.66)] p-5 shadow-lg shadow-black/40 backdrop-blur-xl">
+        <div className="rounded-card border border-border bg-panel p-5 shadow-lg shadow-black/40">
           {error && <p className="mb-3 text-xs text-danger-fg">{error}</p>}
           <div className="flex flex-wrap items-center justify-end gap-2">
             {clienteEsMasNuevo && (

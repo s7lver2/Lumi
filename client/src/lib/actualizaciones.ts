@@ -59,3 +59,9 @@ export interface PublicacionInfo {
 export function historialActualizaciones(): Promise<PublicacionInfo[]> {
   return invoke<PublicacionInfo[]>("historial_actualizaciones");
 }
+
+/** `true` solo en el arranque justo después de un downgrade/versión exacta
+ *  — ver `sin_autoactualizar_este_arranque` en `main.rs`. */
+export function sinAutoactualizarEsteArranque(): Promise<boolean> {
+  return invoke<boolean>("sin_autoactualizar_este_arranque");
+}
