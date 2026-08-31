@@ -67,7 +67,7 @@ WantedBy=multi-user.target
 /// Docker, clave maestra automática) y los imprime igual que si se hubieran
 /// elegido a mano. "Nada desaparece en silencio": el modo se ve, solo que no
 /// se pregunta.
-pub fn run(auto: bool) -> Result<PairKey> {
+pub fn run(auto: bool, version: Option<&str>) -> Result<PairKey> {
     if !Path::new("/run/systemd/system").exists() {
         bail!("este host no usa systemd; instala en modo Docker o en una máquina con systemd");
     }
@@ -190,8 +190,13 @@ pub fn run(auto: bool) -> Result<PairKey> {
     ui::ok("registros y workers copiados a /var/lib/lumi");
 
     let pb = ui::step("instalando el daemon");
-    let src = std::env::current_exe()?.with_file_name("lumid");
-    fs::copy(&src, BIN).with_context(|| format!("no se pudo copiar {src:?} a {BIN}"))?;
+    match version {
+        Some(v) => descargar_lumid(v)?,
+        None => {
+            let src = std::env::current_exe()?.with_file_name("lumid");
+            fs::copy(&src, BIN).with_context(|| format!("no se pudo copiar {src:?} a {BIN}"))?;
+        }
+    }
     fs::write("/etc/systemd/system/lumid.service", UNIT)?;
     run_ok("systemctl", &["daemon-reload"])?;
     run_ok("systemctl", &["enable", "--now", "lumid.service"])?;
@@ -254,6 +259,65 @@ pub fn run(auto: bool) -> Result<PairKey> {
     )?;
 
     Ok(key)
+}
+
+/// Descarga y verifica una publicación de `lumid` del canal de
+/// actualizaciones firmado (el mismo `lumi-installer` que usa el instalador
+/// de Windows para cliente/Indexer) en vez de copiar el binario que ya
+/// estuviera compilado junto a este `lumi` — para poder fijar una versión
+/// concreta, o "latest" para la más reciente publicada.
+fn descargar_lumid(version: &str) -> Result<()> {
+    let manifiesto = lumi_installer::manifiesto::obtener_verificado()
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let encontrada = if version == "latest" {
+        manifiesto.mas_nueva(lumi_proto::actualizacion::Producto::Lumid, "0.0.0", "linux-x86_64")
+    } else {
+        manifiesto.version_exacta(lumi_proto::actualizacion::Producto::Lumid, version, "linux-x86_64")
+    };
+    let publicacion = encontrada
+        .ok_or_else(|| anyhow::anyhow!("no hay publicación de lumid para la versión {version}"))?
+        .clone();
+
+    lumi_installer::aplicar::aplicar_producto(&publicacion, "linux-x86_64", Path::new(BIN), |_| {})
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
+    // `aplicar_producto` solo escribe los bytes — el bit de ejecución no
+    // sobrevive a una copia genérica, y sin él `systemctl start` falla con
+    // "Permission denied" sin más explicación.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(BIN, fs::Permissions::from_mode(0o755))?;
+    }
+    Ok(())
+}
+
+/// Todo el histórico de `lumid` publicado, más reciente primero — para
+/// `lumi install --listar-versiones`, saber qué pasarle a `--version` sin
+/// tener que adivinar mirando el manifiesto a mano.
+pub fn listar_versiones() -> Result<()> {
+    let manifiesto = lumi_installer::manifiesto::obtener_verificado()
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let mut publicaciones: Vec<_> = manifiesto
+        .publicaciones
+        .iter()
+        .filter(|p| p.producto == lumi_proto::actualizacion::Producto::Lumid)
+        .filter(|p| p.artefactos.iter().any(|a| a.plataforma == "linux-x86_64"))
+        .collect();
+    publicaciones.sort_by(|a, b| b.publicado.cmp(&a.publicado));
+
+    if publicaciones.is_empty() {
+        println!("sin publicaciones de lumid todavía");
+        return Ok(());
+    }
+    for p in publicaciones {
+        let marca = if p.retirada { " (retirada)" } else { "" };
+        println!("{:<10} {}{}", p.version, p.publicado, marca);
+        if !p.notas.is_empty() {
+            println!("           {}", p.notas);
+        }
+    }
+    Ok(())
 }
 
 fn seed_master(sealed: bool, passphrase: Option<&str>) -> Result<()> {

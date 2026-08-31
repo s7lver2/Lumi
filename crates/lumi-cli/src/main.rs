@@ -22,6 +22,16 @@ enum Cmd {
         /// defectos recomendados. Se imprimen igual, solo que no se piden.
         #[arg(short = 'y', long)]
         yes: bool,
+        /// Versión exacta de lumid a descargar del canal de actualizaciones
+        /// firmado, en vez del binario ya compilado junto a este `lumi`
+        /// (comportamiento por defecto, sin red). "latest" para la más
+        /// reciente publicada.
+        #[arg(long)]
+        version: Option<String>,
+        /// Imprime las versiones de lumid publicadas y termina, sin
+        /// instalar nada.
+        #[arg(long)]
+        listar_versiones: bool,
     },
     /// Detiene el servicio y borra el binario y todo su estado en /var/lib/lumi
     Uninstall {
@@ -94,8 +104,11 @@ fn main() -> anyhow::Result<()> {
             }
             println!("{}", detect::cpu_summary());
         }
-        Cmd::Install { yes } => {
-            let key = install::run(yes)?;
+        Cmd::Install { yes, version, listar_versiones } => {
+            if listar_versiones {
+                return install::listar_versiones();
+            }
+            let key = install::run(yes, version.as_deref())?;
             println!();
             println!("  ────────────────────────────────────────────────────────");
             println!("  Clave de vinculación · un solo uso · caduca en 24 h");
