@@ -186,11 +186,7 @@ enum EstadoActualizacion {
     Error { motivo: String },
 }
 
-/// `Err` significa "no se pudo comprobar" (sin red, manifiesto sin firmar o
-/// con firma inválida) — el lado TS decide no pintar nada ante un error,
-/// nunca una alarma. `Ok(None)` significa "se comprobó y no hay nada nuevo".
-#[tauri::command]
-async fn comprobar_actualizacion() -> Result<Option<EstadoActualizacion>, String> {
+async fn manifiesto_verificado() -> Result<lumi_proto::actualizacion::Manifiesto, String> {
     let manifiesto: lumi_proto::actualizacion::Manifiesto = reqwest::Client::new()
         .get(VERSIONES_URL)
         .send()
@@ -200,6 +196,15 @@ async fn comprobar_actualizacion() -> Result<Option<EstadoActualizacion>, String
         .await
         .map_err(|e| e.to_string())?;
     manifiesto.comprobar().map_err(|e| e.to_string())?;
+    Ok(manifiesto)
+}
+
+/// `Err` significa "no se pudo comprobar" (sin red, manifiesto sin firmar o
+/// con firma inválida) — el lado TS decide no pintar nada ante un error,
+/// nunca una alarma. `Ok(None)` significa "se comprobó y no hay nada nuevo".
+#[tauri::command]
+async fn comprobar_actualizacion() -> Result<Option<EstadoActualizacion>, String> {
+    let manifiesto = manifiesto_verificado().await?;
 
     let version_actual = env!("CARGO_PKG_VERSION");
     if manifiesto.version_retirada(lumi_proto::actualizacion::Producto::Cliente, version_actual) {
@@ -223,6 +228,36 @@ async fn comprobar_actualizacion() -> Result<Option<EstadoActualizacion>, String
         notas: publi.notas.clone(),
         url,
     }))
+}
+
+#[derive(serde::Serialize)]
+struct PublicacionInfo {
+    version: String,
+    publicado: String,
+    notas: String,
+    retirada: bool,
+}
+
+/// Historial completo de publicaciones del cliente, más recientes primero
+/// — a diferencia de `comprobar_actualizacion` (solo "¿hay algo nuevo?"),
+/// esto es para la sección de Actualizaciones de Ajustes/Perfil, donde
+/// tiene sentido ver qué cambió en cada versión, no solo la última.
+#[tauri::command]
+async fn historial_actualizaciones() -> Result<Vec<PublicacionInfo>, String> {
+    let manifiesto = manifiesto_verificado().await?;
+    let mut publicaciones: Vec<PublicacionInfo> = manifiesto
+        .publicaciones
+        .iter()
+        .filter(|p| p.producto == lumi_proto::actualizacion::Producto::Cliente)
+        .map(|p| PublicacionInfo {
+            version: p.version.clone(),
+            publicado: p.publicado.clone(),
+            notas: p.notas.clone(),
+            retirada: p.retirada,
+        })
+        .collect();
+    publicaciones.sort_by(|a, b| b.publicado.cmp(&a.publicado));
+    Ok(publicaciones)
 }
 
 /// La versión de este binario — la misma que ya se compara en `connect()`
@@ -721,7 +756,7 @@ fn main() {
             start_queue_events, start_indices_events, start_admin_events, start_logs_stream, set_auth,
             upload_images, read_image_as_data_url, upload_avatar_bytes, upload_server_avatar_bytes,
             upload_server_banner_bytes, comprobar_actualizacion, error_actualizacion_pendiente, disparar_actualizacion_silenciosa,
-            disparar_actualizacion_a_version, version_cliente
+            disparar_actualizacion_a_version, version_cliente, historial_actualizaciones
         ])
         .run(tauri::generate_context!())
         .expect("error al arrancar Tauri");

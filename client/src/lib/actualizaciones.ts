@@ -44,3 +44,18 @@ export function dispararActualizacionAVersion(versionObjetivo: string): Promise<
 export function versionCliente(): Promise<string> {
   return invoke<string>("version_cliente");
 }
+
+export interface PublicacionInfo {
+  version: string;
+  publicado: string;
+  notas: string;
+  retirada: boolean;
+}
+
+/** Todas las publicaciones del cliente, más recientes primero — a
+ *  diferencia de `comprobarActualizacion` (solo "¿hay algo nuevo?"), esto
+ *  es el historial completo para quien quiera ver qué cambió en cada
+ *  versión. */
+export function historialActualizaciones(): Promise<PublicacionInfo[]> {
+  return invoke<PublicacionInfo[]>("historial_actualizaciones");
+}

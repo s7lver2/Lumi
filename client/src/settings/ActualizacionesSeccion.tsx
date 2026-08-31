@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { comprobarActualizacion, dispararActualizacionSilenciosa, type EstadoActualizacion } from "../lib/actualizaciones";
+import {
+  comprobarActualizacion, dispararActualizacionSilenciosa, historialActualizaciones,
+  type EstadoActualizacion, type PublicacionInfo,
+} from "../lib/actualizaciones";
+import { Icon } from "../ui/Icon";
 
 /** El bloque de "comprobar actualizaciones" — antes vivía solo dentro de
  *  `ProfileView.tsx` (con sesión). Ahora lo reusa también `AjustesView.tsx`
@@ -74,6 +78,68 @@ export function ActualizacionesSeccion() {
             {aplicando ? "Aplicando…" : "Actualizar ahora"}
           </button>
         )}
+      </div>
+
+      <Historial />
+    </div>
+  );
+}
+
+/** Colapsado por defecto: la mayoría de las veces a nadie le importa qué
+ *  cambió en versiones viejas, así que no vale la pena pedir el manifiesto
+ *  otra vez (`comprobarActualizacion` ya lo hizo arriba, pero solo trae "lo
+ *  más nuevo", no la lista completa) hasta que alguien lo pide de verdad. */
+function Historial() {
+  const [abierto, setAbierto] = useState(false);
+  const [publicaciones, setPublicaciones] = useState<PublicacionInfo[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [cargando, setCargando] = useState(false);
+
+  async function alternar() {
+    const abrir = !abierto;
+    setAbierto(abrir);
+    if (abrir && !publicaciones && !cargando) {
+      setCargando(true);
+      setError(null);
+      try {
+        setPublicaciones(await historialActualizaciones());
+      } catch (e) {
+        setError(String(e));
+      } finally {
+        setCargando(false);
+      }
+    }
+  }
+
+  return (
+    <div className="mt-3 border-t border-border pt-3">
+      <button onClick={() => void alternar()}
+        className="flex w-full items-center justify-between text-left text-[10.5px] text-subtle hover:text-fg">
+        <span>Historial de versiones</span>
+        <Icon name="chevron" size={11}
+          className={`transition-transform duration-300 ease-expo ${abierto ? "rotate-180" : ""}`} />
+      </button>
+
+      <div className={`grid transition-[grid-template-rows] duration-[450ms] ease-expo ${abierto ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+        <div className="overflow-hidden">
+          <div className="mt-2.5 flex flex-col gap-2.5">
+            {cargando && <p className="text-[10.5px] text-subtle">Cargando…</p>}
+            {error && <p className="text-[10.5px] text-danger-fg">{error}</p>}
+            {publicaciones?.length === 0 && <p className="text-[10.5px] text-subtle">Sin publicaciones todavía.</p>}
+            {publicaciones?.map((p) => (
+              <div key={p.version} className="border-l-2 border-border pl-2.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="font-mono text-[10.5px] text-fg">{p.version}</span>
+                  <span className="shrink-0 font-mono text-[9.5px] text-subtle">
+                    {new Date(p.publicado).toLocaleDateString(undefined, { dateStyle: "medium" })}
+                  </span>
+                </div>
+                {p.notas && <p className="mt-0.5 text-[10px] leading-relaxed text-muted">{p.notas}</p>}
+                {p.retirada && <p className="mt-0.5 text-[9.5px] text-warning-fg">retirada</p>}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
