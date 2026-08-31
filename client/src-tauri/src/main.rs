@@ -372,7 +372,7 @@ fn client_for(fingerprint: &str) -> Result<reqwest::Client, String> {
         .map_err(|e| e.to_string())
 }
 
-async fn connect(addr: &str, fingerprint: &str, state: &Shared) -> Result<serde_json::Value, String> {
+async fn connect(addr: &str, fingerprint: &str, state: &Shared, forzar: bool) -> Result<serde_json::Value, String> {
     let client = client_for(fingerprint)?;
     let base = format!("https://{addr}");
     let hello: lumi_proto::api::Hello = client
@@ -397,7 +397,12 @@ async fn connect(addr: &str, fingerprint: &str, state: &Shared) -> Result<serde_
     }
 
     let propia = env!("CARGO_PKG_VERSION");
-    if lumi_proto::actualizacion::comparar(&hello.version, propia) != std::cmp::Ordering::Equal {
+    // `forzar` es la salida de emergencia: sin ella, un desajuste de
+    // versión bloquea el pairing ANTES de que exista ninguna sesión, así
+    // que un administrador no tenía forma de entrar a su propio panel de
+    // Actualizaciones a arreglarlo — se quedaba fuera de su propio
+    // servidor. Solo la pantalla de aviso la ofrece, nunca el flujo normal.
+    if !forzar && lumi_proto::actualizacion::comparar(&hello.version, propia) != std::cmp::Ordering::Equal {
         return Err(format!("version incompatible|{propia}|{}", hello.version));
     }
 
@@ -405,9 +410,9 @@ async fn connect(addr: &str, fingerprint: &str, state: &Shared) -> Result<serde_
 }
 
 #[tauri::command]
-async fn pair(key: String, state: tauri::State<'_, Shared>) -> Result<serde_json::Value, String> {
+async fn pair(key: String, forzar: bool, state: tauri::State<'_, Shared>) -> Result<serde_json::Value, String> {
     let pk = PairKey::parse(&key).map_err(|e| e.to_string())?;
-    connect(&pk.addr, &pk.fingerprint, &state).await
+    connect(&pk.addr, &pk.fingerprint, &state, forzar).await
 }
 
 /// Reestablece el cliente TLS anclado tras reabrir la app, sin la clave de
@@ -415,17 +420,17 @@ async fn pair(key: String, state: tauri::State<'_, Shared>) -> Result<serde_json
 /// falta la dirección y la huella, que sí sobreviven (se persisten en el
 /// lado TS tras el primer `pair` con éxito).
 #[tauri::command]
-async fn reconnect(addr: String, fingerprint: String, state: tauri::State<'_, Shared>) -> Result<serde_json::Value, String> {
-    connect(&addr, &fingerprint, &state).await
+async fn reconnect(addr: String, fingerprint: String, forzar: bool, state: tauri::State<'_, Shared>) -> Result<serde_json::Value, String> {
+    connect(&addr, &fingerprint, &state, forzar).await
 }
 
 /// La tarjeta pública NO lleva secreto: solo dirección y huella. Se parsea en
 /// Rust y no en TS para que el error sea el mismo que el de la clave de
 /// vinculación, escrito una sola vez en `lumi-proto`.
 #[tauri::command]
-async fn pair_card(card: String, state: tauri::State<'_, Shared>) -> Result<serde_json::Value, String> {
+async fn pair_card(card: String, forzar: bool, state: tauri::State<'_, Shared>) -> Result<serde_json::Value, String> {
     let c = lumi_proto::key::ServerCard::parse(&card).map_err(|e| e.to_string())?;
-    connect(&c.addr, &c.fingerprint, &state).await
+    connect(&c.addr, &c.fingerprint, &state, forzar).await
 }
 
 #[tauri::command]

@@ -453,11 +453,15 @@ const call = (method: string, path: string, body: unknown, token?: string, ticke
   });
 
 export const api = {
-  pair: (key: string) => invoke<Hello>("pair", { key }),
-  pairCard: (card: string) => invoke<Hello>("pair_card", { card }),
+  // `forzar`: salida de emergencia del popup de versión incompatible — sin
+  // ella un admin no tiene forma de entrar a su propio panel de
+  // Actualizaciones a arreglar el desajuste (ver VersionMismatchModal).
+  pair: (key: string, forzar = false) => invoke<Hello>("pair", { key, forzar }),
+  pairCard: (card: string, forzar = false) => invoke<Hello>("pair_card", { card, forzar }),
   /** Reestablece el cliente TLS anclado sin la clave original (ya gastada):
    *  basta con la dirección y la huella persistidas. */
-  reconnect: (addr: string, fingerprint: string) => invoke<Hello>("reconnect", { addr, fingerprint }),
+  reconnect: (addr: string, fingerprint: string, forzar = false) =>
+    invoke<Hello>("reconnect", { addr, fingerprint, forzar }),
   get: <T>(path: string, token?: string) => call("GET", path, undefined, token).then(t => JSON.parse(t) as T),
   post: <T>(path: string, body: unknown, token?: string) =>
     call("POST", path, body, token).then(t => (t ? (JSON.parse(t) as T) : (null as T))),

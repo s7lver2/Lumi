@@ -10,10 +10,10 @@ export function PairStep({ onDone }: { onDone: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function verify() {
+  async function verify(forzar = false) {
     setBusy(true); setError(null);
     try {
-      const h = await api.pair(key.trim());
+      const h = await api.pair(key.trim(), forzar);
       setHello(h);
       const addr = addrFromKey(key);
       useServer.getState().setAddr(addr);
@@ -53,9 +53,9 @@ export function PairStep({ onDone }: { onDone: () => void }) {
 
   return (
     <>
-      {mismatch && <VersionMismatchModal {...mismatch} onClose={() => setError(null)} />}
+      {mismatch && <VersionMismatchModal {...mismatch} onClose={() => setError(null)} onForzar={() => verify(true)} />}
       <label className="mb-[7px] block text-[11px] tracking-[.02em] text-muted">Clave de vinculación</label>
-      <input value={key} onChange={(e) => setKey(e.target.value)} onBlur={verify}
+      <input value={key} onChange={(e) => setKey(e.target.value)} onBlur={() => verify()}
         placeholder="lumi1_192.168.1.40:7717_…"
         className="w-full rounded-lg border border-border bg-[#0d0f12] px-3 py-2.5 font-mono text-[12.5px] text-fg outline-none transition-[border-color,box-shadow] duration-300 ease-expo focus:border-white/40 focus:shadow-[0_0_0_3px_rgba(242,243,245,.055)]" />
 

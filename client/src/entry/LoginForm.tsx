@@ -15,6 +15,10 @@ export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMu
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Sobrevive al cierre del popup: una vez que se aceptó el desajuste de
+  // versión, el siguiente intento de "Entrar" no debe volver a chocar con
+  // el mismo bloqueo.
+  const [forzarVersion, setForzarVersion] = useState(false);
 
   async function submit() {
     if (!server || !username || !password) return;
@@ -24,7 +28,7 @@ export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMu
       // no se muestra (exige `hello`) y el sondeo de conexión ni arranca
       // (depende de `hello !== null`) — quien entra por aquí en vez de por
       // el asistente del owner se queda sin heartbeat para siempre.
-      const h = await api.reconnect(server.addr, server.fingerprint);
+      const h = await api.reconnect(server.addr, server.fingerprint, forzarVersion);
       useServer.getState().setHello(h);
       // En segundo plano — un avatar desactualizado no debe retrasar el
       // login, y un fallo aquí (servidor sin avatar, sin red un instante)
@@ -71,9 +75,17 @@ export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMu
 
   const mismatch = error ? parseVersionMismatch(error) : null;
 
+  async function forzarEntrada() {
+    if (!server) return;
+    const h = await api.reconnect(server.addr, server.fingerprint, true);
+    useServer.getState().setHello(h);
+    setForzarVersion(true);
+    setError(null);
+  }
+
   return (
     <>
-      {mismatch && <VersionMismatchModal {...mismatch} onClose={() => setError(null)} />}
+      {mismatch && <VersionMismatchModal {...mismatch} onClose={() => setError(null)} onForzar={forzarEntrada} />}
       <label className="mb-[7px] block text-[11px] tracking-[.02em] text-muted">Servidor</label>
       <ServerSelect value={server} onChange={onServer} onAdd={onAdd} />
       {server && (

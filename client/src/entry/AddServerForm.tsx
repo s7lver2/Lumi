@@ -21,6 +21,17 @@ export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
   // clic explícito, igual que guardar un servidor espera "Guardar servidor".
   const ownerKey = isCard(text.trim()) ? null : text.trim() || null;
 
+  async function cargarPerfilTrasHello() {
+    try {
+      const p = await api.serverProfilePublic();
+      setPerfil(p);
+      setAvatarDataUrl(p.has_avatar ? await fetchLumiAvatarDataUrl() : null);
+    } catch {
+      setPerfil(null);
+      setAvatarDataUrl(null);
+    }
+  }
+
   async function verify() {
     const s = text.trim();
     if (!s || !isCard(s)) return;
@@ -31,20 +42,21 @@ export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
       // esto, "Servidor verificado" (la línea de siempre) desaparecería y
       // dejaría un hueco en blanco mientras se decide si hay algo que
       // mostrar.
-      try {
-        const p = await api.serverProfilePublic();
-        setPerfil(p);
-        setAvatarDataUrl(p.has_avatar ? await fetchLumiAvatarDataUrl() : null);
-      } catch {
-        setPerfil(null);
-        setAvatarDataUrl(null);
-      }
+      await cargarPerfilTrasHello();
     } catch (e) {
       setHello(null);
       setError(String(e));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function forzarEntrada() {
+    const s = text.trim();
+    if (!s || !isCard(s)) return;
+    setHello(await api.pairCard(s, true));
+    setError(null);
+    await cargarPerfilTrasHello();
   }
 
   function save() {
@@ -60,7 +72,7 @@ export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
 
   return (
     <>
-      {mismatch && <VersionMismatchModal {...mismatch} onClose={() => setError(null)} />}
+      {mismatch && <VersionMismatchModal {...mismatch} onClose={() => setError(null)} onForzar={forzarEntrada} />}
       <label className="mb-[7px] block text-[11px] tracking-[.02em] text-muted">Clave del servidor</label>
       <input value={text} onChange={(e) => setText(e.target.value)} onBlur={verify}
         placeholder="lumi1s_192.168.1.40:7717_…"

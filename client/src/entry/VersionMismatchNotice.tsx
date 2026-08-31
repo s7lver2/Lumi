@@ -15,14 +15,35 @@ import { dispararActualizacionAVersion } from "../lib/actualizaciones";
  *  `connect()` en `client/src-tauri/src/main.rs` y la spec de
  *  compatibilidad de versión. Cliente más nuevo: dos caminos (pedir al
  *  servidor que actualice, o descargar la versión del servidor). Servidor
- *  más nuevo: uno solo (actualizar el cliente). */
-export function VersionMismatchModal({ propia, servidor, onClose }: {
-  propia: string; servidor: string; onClose: () => void;
+ *  más nuevo: uno solo (actualizar el cliente).
+ *
+ *  `onForzar` es la salida de emergencia: sin ella, un administrador cuyo
+ *  servidor se atrasó no tenía NINGUNA forma de entrar a su propio panel
+ *  de Actualizaciones a arreglarlo — el bloqueo de versión pasa antes de
+ *  que exista sesión, así que ni loguearse podía. Vuelve a intentar el
+ *  mismo pairing/login pero aceptando el desajuste esta vez. */
+export function VersionMismatchModal({ propia, servidor, onClose, onForzar }: {
+  propia: string; servidor: string; onClose: () => void; onForzar: () => Promise<void>;
 }) {
   const clienteEsMasNuevo = versionMayor(propia, servidor);
   const [enviada, setEnviada] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aplicando, setAplicando] = useState(false);
+  const [forzando, setForzando] = useState(false);
+  const [mostrarForzar, setMostrarForzar] = useState(false);
+  const [textoConfirmar, setTextoConfirmar] = useState("");
+  const confirmado = textoConfirmar.trim() === "CONTINUAR";
+
+  async function forzar() {
+    setForzando(true);
+    setError(null);
+    try {
+      await onForzar();
+    } catch (e) {
+      setError(String(e));
+      setForzando(false);
+    }
+  }
 
   async function pedirActualizacion() {
     setError(null);
@@ -86,6 +107,36 @@ export function VersionMismatchModal({ propia, servidor, onClose }: {
               className="jg-press rounded-lg bg-accent px-3.5 py-1.5 text-[11px] font-medium text-black disabled:opacity-40">
               {aplicando ? "Aplicando…" : clienteEsMasNuevo ? "Descargar versión del servidor" : "Actualizar cliente"}
             </button>
+          </div>
+
+          {/* Salida de emergencia, deliberadamente discreta y separada del
+              resto: es la única forma de que un admin entre a su propio
+              panel si el servidor se atrasó, pero no es el camino normal —
+              escribir CONTINUAR es la misma fricción que ConfirmarPeligro.tsx
+              usa para cualquier acción que se salta una protección. */}
+          <div className="mt-4 border-t border-border pt-3">
+            {!mostrarForzar ? (
+              <button onClick={() => setMostrarForzar(true)}
+                className="text-[10.5px] text-subtle underline-offset-2 hover:text-fg hover:underline">
+                Entrar de todas formas (arriesgado)
+              </button>
+            ) : (
+              <div>
+                <p className="mb-1.5 text-[10.5px] text-muted">
+                  Vas a usar este cliente con un servidor de otra versión sin resolver el
+                  desajuste. Escribe <b className="font-mono text-fg">CONTINUAR</b> para seguir.
+                </p>
+                <div className="flex items-center gap-2">
+                  <input value={textoConfirmar} onChange={(e) => setTextoConfirmar(e.target.value)}
+                    placeholder="CONTINUAR"
+                    className="w-full rounded-lg border border-border bg-[#0d0f12] px-2.5 py-1.5 font-mono text-[11px] text-fg outline-none focus:border-white/40" />
+                  <button onClick={() => void forzar()} disabled={!confirmado || forzando}
+                    className="jg-press shrink-0 rounded-lg border border-danger/40 px-3 py-1.5 text-[11px] text-danger-fg disabled:opacity-40">
+                    {forzando ? "Entrando…" : "Entrar"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
