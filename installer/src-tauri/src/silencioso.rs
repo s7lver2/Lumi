@@ -79,13 +79,28 @@ pub fn ejecutar_y_salir() -> ! {
         std::process::exit(1);
     };
 
+    // Ninguno de los dos abortos de aquí abajo había tocado nunca el binario
+    // — relanzar la instalación que ya había (sin cambios) es siempre
+    // seguro, y sin esto el investigador se quedaba sin ningún proceso
+    // abierto en absoluto tras un fallo temprano (ver el mismo razonamiento
+    // en el `Err` de más abajo).
+    fn relanzar_lo_que_ya_habia(producto: &str) {
+        if let Some(marca) = marca::leer(producto) {
+            let destino = marca.ruta.join(nombre_ejecutable(producto));
+            let _ = std::process::Command::new(&destino).spawn();
+        }
+    }
+
     if !esperar_cierre(args.pid, Duration::from_secs(10)) {
         bitacora::dejar_marca_error(&args.producto, "desconocida", "el proceso anterior no cerro a tiempo");
+        relanzar_lo_que_ya_habia(&args.producto);
         std::process::exit(1);
     }
 
     let Some(marca_previa) = marca::leer(&args.producto) else {
         bitacora::dejar_marca_error(&args.producto, "desconocida", "no se encontro la instalacion previa");
+        // No hay `marca` que relanzar: es justo lo que falta aquí. Nada que
+        // hacer salvo dejar el error registrado para quien mire los logs.
         std::process::exit(1);
     };
 
@@ -155,10 +170,7 @@ pub fn ejecutar_y_salir() -> ! {
             // descarga falló antes de escribir nada) para que el aviso se
             // muestre de inmediato en vez de quedar guardado sin que nadie
             // lo vea hasta la próxima vez que alguien abra la app a mano.
-            if let Some(marca_previa) = marca::leer(&args.producto) {
-                let destino = marca_previa.ruta.join(nombre_ejecutable(&args.producto));
-                let _ = std::process::Command::new(&destino).spawn();
-            }
+            relanzar_lo_que_ya_habia(&args.producto);
             std::process::exit(1);
         }
     }
