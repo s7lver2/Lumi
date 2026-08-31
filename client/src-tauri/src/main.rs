@@ -285,6 +285,27 @@ fn error_actualizacion_pendiente() -> Option<String> {
     lumi_installer::bitacora::leer_y_borrar_marca_error("cliente").map(|e| e.motivo)
 }
 
+/// `installer.exe` solo vive junto al ejecutable en una instalación real
+/// (lo copia `installer/src-tauri/src/comandos.rs` al instalar) — en un
+/// build de desarrollo (`cargo run`/`tauri dev`) no hay ninguno, y sin este
+/// chequeo el error que llega a la interfaz es el crudo de Windows ("no se
+/// puede encontrar el archivo especificado", os error 2), que no dice nada
+/// de por qué. Para probar este camino de verdad hace falta correr desde
+/// una instalación hecha con `installer.exe` (el que se sube a GitHub
+/// Releases), no desde `cargo run`.
+fn ruta_instalador(carpeta: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    let instalador = carpeta.join("installer.exe");
+    if !instalador.exists() {
+        return Err(format!(
+            "no se encontró installer.exe junto a esta app ({}) — \
+             en un build de desarrollo no lo hay; hace falta instalar desde \
+             el installer.exe real para que esto funcione",
+            carpeta.display()
+        ));
+    }
+    Ok(instalador)
+}
+
 /// Cierra esta app y lanza `installer.exe --producto=cliente --silencioso`
 /// con el PID propio, para que aplique `version_nueva` en segundo plano —
 /// mismo binario que la instalación interactiva, sin ventana en este
@@ -294,7 +315,7 @@ fn error_actualizacion_pendiente() -> Option<String> {
 fn disparar_actualizacion_silenciosa(app: tauri::AppHandle, version_nueva: String) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let carpeta = exe.parent().ok_or("sin carpeta padre")?;
-    let instalador = carpeta.join("installer.exe");
+    let instalador = ruta_instalador(carpeta)?;
     let pid = std::process::id();
     let version_actual = env!("CARGO_PKG_VERSION");
 
@@ -319,7 +340,7 @@ fn disparar_actualizacion_silenciosa(app: tauri::AppHandle, version_nueva: Strin
 fn disparar_actualizacion_a_version(app: tauri::AppHandle, version_objetivo: String) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let carpeta = exe.parent().ok_or("sin carpeta padre")?;
-    let instalador = carpeta.join("installer.exe");
+    let instalador = ruta_instalador(carpeta)?;
     let pid = std::process::id();
 
     std::process::Command::new(instalador)
