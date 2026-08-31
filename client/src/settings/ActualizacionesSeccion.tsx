@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
-  comprobarActualizacion, dispararActualizacionSilenciosa, historialActualizaciones,
-  type EstadoActualizacion, type PublicacionInfo,
+  comprobarActualizacion, dispararActualizacionAVersion, dispararActualizacionSilenciosa,
+  historialActualizaciones, versionCliente, type EstadoActualizacion, type PublicacionInfo,
 } from "../lib/actualizaciones";
 import { Icon } from "../ui/Icon";
 
@@ -92,8 +92,12 @@ export function ActualizacionesSeccion() {
 function Historial() {
   const [abierto, setAbierto] = useState(false);
   const [publicaciones, setPublicaciones] = useState<PublicacionInfo[] | null>(null);
+  const [propia, setPropia] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
+  // Solo una descarga a la vez tiene sentido — si sale bien la app se
+  // cierra sola, así que no hay "varias a la vez" que gestionar.
+  const [descargando, setDescargando] = useState<string | null>(null);
 
   async function alternar() {
     const abrir = !abierto;
@@ -102,12 +106,25 @@ function Historial() {
       setCargando(true);
       setError(null);
       try {
-        setPublicaciones(await historialActualizaciones());
+        const [lista, version] = await Promise.all([historialActualizaciones(), versionCliente()]);
+        setPublicaciones(lista);
+        setPropia(version);
       } catch (e) {
         setError(String(e));
       } finally {
         setCargando(false);
       }
+    }
+  }
+
+  async function descargar(version: string) {
+    setDescargando(version);
+    setError(null);
+    try {
+      await dispararActualizacionAVersion(version);
+    } catch (e) {
+      setError(String(e));
+      setDescargando(null);
     }
   }
 
@@ -129,13 +146,21 @@ function Historial() {
             {publicaciones?.map((p) => (
               <div key={p.version} className="border-l-2 border-border pl-2.5">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="font-mono text-[10.5px] text-fg">{p.version}</span>
+                  <span className="font-mono text-[10.5px] text-fg">
+                    {p.version}{p.version === propia && <span className="ml-1.5 text-subtle">(esta)</span>}
+                  </span>
                   <span className="shrink-0 font-mono text-[9.5px] text-subtle">
                     {new Date(p.publicado).toLocaleDateString(undefined, { dateStyle: "medium" })}
                   </span>
                 </div>
                 {p.notas && <p className="mt-0.5 text-[10px] leading-relaxed text-muted">{p.notas}</p>}
                 {p.retirada && <p className="mt-0.5 text-[9.5px] text-warning-fg">retirada</p>}
+                {p.version !== propia && (
+                  <button onClick={() => void descargar(p.version)} disabled={!!descargando}
+                    className="jg-press mt-1.5 rounded-lg border border-white/15 px-2 py-[3px] text-[9.5px] text-fg disabled:opacity-40">
+                    {descargando === p.version ? "Aplicando…" : "Descargar esta versión"}
+                  </button>
+                )}
               </div>
             ))}
           </div>
