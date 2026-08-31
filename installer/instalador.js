@@ -123,29 +123,51 @@ document.querySelectorAll(".product-card[data-producto]").forEach((tarjeta) => {
   });
 });
 
-let otrosCardadas = false;
+// Popup aparte (no una lista desplegada bajo las tarjetas): panel lateral
+// para elegir el producto, lista de versiones de ESE producto a la derecha.
+let todasLasVersiones = null;
+let productoActivoOtros = "cliente";
+const NOMBRE_PRODUCTO = { cliente: "Lumi", indexer: "Lumi Indexer" };
 
-document.getElementById("btn-otros-toggle").addEventListener("click", async (e) => {
-  const boton = e.currentTarget;
-  const lista = document.getElementById("lista-otros");
-  const abrir = lista.style.display === "none";
-  lista.style.display = abrir ? "block" : "none";
-  boton.classList.toggle("abierto", abrir);
-  if (abrir && !otrosCardadas) {
-    otrosCardadas = true;
+document.getElementById("btn-otros-toggle").addEventListener("click", async () => {
+  document.getElementById("modal-otros").style.display = "flex";
+  if (!todasLasVersiones) {
+    const lista = document.getElementById("lista-otros");
+    lista.innerHTML = `<div class="version-row"><span class="sub">Cargando…</span></div>`;
     try {
-      const versiones = await invoke("listar_versiones_disponibles");
-      pintarListaOtros(versiones);
+      todasLasVersiones = await invoke("listar_versiones_disponibles");
     } catch (err) {
       lista.innerHTML = `<div class="version-row"><span class="sub">No se pudo pedir la lista: ${String(err)}</span></div>`;
+      return;
     }
   }
+  pintarListaOtros();
 });
 
-function pintarListaOtros(versiones) {
+document.getElementById("btn-otros-cerrar").addEventListener("click", () => {
+  document.getElementById("modal-otros").style.display = "none";
+});
+// Clic en el fondo oscurecido (fuera de la tarjeta) también cierra.
+document.getElementById("modal-otros").addEventListener("click", (e) => {
+  if (e.target.id === "modal-otros") e.currentTarget.style.display = "none";
+});
+
+document.querySelectorAll(".modal-otros-producto[data-producto]").forEach((boton) => {
+  boton.addEventListener("click", () => {
+    productoActivoOtros = boton.dataset.producto;
+    document.querySelectorAll(".modal-otros-producto").forEach((b) => b.classList.toggle("activo", b === boton));
+    pintarListaOtros();
+  });
+});
+
+function pintarListaOtros() {
   const lista = document.getElementById("lista-otros");
   lista.innerHTML = "";
-  const NOMBRE = { cliente: "Lumi", indexer: "Lumi Indexer" };
+  const versiones = (todasLasVersiones ?? []).filter((v) => v.producto === productoActivoOtros);
+  if (versiones.length === 0) {
+    lista.innerHTML = `<div class="version-row"><span class="sub">Sin publicaciones todavía.</span></div>`;
+    return;
+  }
   for (const v of versiones) {
     const fila = document.createElement("div");
     fila.className = "version-row";
@@ -154,7 +176,7 @@ function pintarListaOtros(versiones) {
     const fecha = new Date(v.publicado).toLocaleDateString();
     fila.innerHTML = `
       <div class="info">
-        <div class="label">${NOMBRE[v.producto] ?? v.producto} v${v.version}${v.retirada ? " · retirada" : ""}</div>
+        <div class="label">${NOMBRE_PRODUCTO[v.producto] ?? v.producto} v${v.version}${v.retirada ? " · retirada" : ""}</div>
         <div class="sub">${v.notas ? v.notas : ""}</div>
       </div>
       <span class="fecha">${fecha}</span>

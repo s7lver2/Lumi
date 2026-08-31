@@ -158,9 +158,42 @@
         transition: color .15s cubic-bezier(.22,1,.36,1);
       }
       .otros-toggle:hover { color: var(--fg); }
-      .otros-toggle svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: transform .25s cubic-bezier(.22,1,.36,1); }
-      .otros-toggle.abierto svg { transform: rotate(180deg); }
-      #lista-otros { margin-top: 6px; max-height: 220px; overflow-y: auto; }
+      .otros-toggle svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+      /* Popup aparte, no una lista desplegada bajo las tarjetas: panel
+         lateral de productos + lista de versiones del producto activo. */
+      .modal-otros-overlay {
+        position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+        background: rgba(5,7,10,.72); backdrop-filter: blur(6px);
+      }
+      .modal-otros {
+        width: 460px; height: 360px; display: flex; border-radius: 14px; overflow: hidden;
+        border: 1px solid var(--border); background: var(--panel); box-shadow: 0 20px 60px rgba(0,0,0,.5);
+      }
+      .modal-otros-sidebar {
+        width: 132px; flex-shrink: 0; border-right: 1px solid var(--border); background: var(--space);
+        padding: 10px 6px; display: flex; flex-direction: column; gap: 2px;
+      }
+      .modal-otros-producto {
+        display: flex; align-items: center; gap: 8px; padding: 8px 9px; border-radius: 8px;
+        background: none; border: none; color: var(--subtle); font-size: 12px; font-family: inherit; text-align: left; cursor: pointer;
+        transition: background-color .15s cubic-bezier(.22,1,.36,1), color .15s cubic-bezier(.22,1,.36,1);
+      }
+      .modal-otros-producto img { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; }
+      .modal-otros-producto:hover { background: rgba(255,255,255,.04); color: var(--fg); }
+      .modal-otros-producto.activo { background: rgba(255,255,255,.07); color: var(--fg); }
+      .modal-otros-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+      .modal-otros-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 12px 14px; border-bottom: 1px solid var(--border);
+      }
+      .modal-otros-header h3 { font-size: 13px; font-weight: 500; margin: 0; }
+      .modal-otros-cerrar {
+        width: 22px; height: 22px; display: grid; place-items: center; border-radius: 6px;
+        background: none; border: none; color: var(--subtle); cursor: pointer;
+      }
+      .modal-otros-cerrar:hover { background: rgba(255,255,255,.06); color: var(--fg); }
+      #lista-otros { flex: 1; overflow-y: auto; }
       .version-row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; cursor: pointer; }
       .version-row:hover { background: rgba(255,255,255,.035); }
       .version-row.seleccionada { background: rgba(255,255,255,.055); }
@@ -305,9 +338,8 @@
 
           <button class="otros-toggle" id="btn-otros-toggle" type="button">
             <span>Otros — elegir una versión concreta</span>
-            <svg viewBox="0 0 24 24" width="12" height="12"><path d="M6 9l6 6 6-6"/></svg>
+            <svg viewBox="0 0 24 24" width="12" height="12"><path d="M9 6l6 6-6 6"/></svg>
           </button>
-          <div class="lista-opciones" id="lista-otros" style="display:none"></div>
         </div>
       </div>
 
@@ -385,6 +417,28 @@
       <div class="actions">
         <button class="btn ghost" id="btn-atras">Atrás</button>
         <button class="btn primary" id="btn-siguiente">Siguiente</button>
+      </div>
+    </div>
+
+    <div class="modal-otros-overlay" id="modal-otros" style="display:none">
+      <div class="modal-otros">
+        <aside class="modal-otros-sidebar">
+          <button class="modal-otros-producto activo" data-producto="cliente" type="button">
+            <img src="/icono-cliente.png" alt="" />Lumi
+          </button>
+          <button class="modal-otros-producto" data-producto="indexer" type="button">
+            <img src="/icono-indexer.png" alt="" />Lumi Indexer
+          </button>
+        </aside>
+        <div class="modal-otros-main">
+          <div class="modal-otros-header">
+            <h3>Otras versiones</h3>
+            <button class="modal-otros-cerrar" id="btn-otros-cerrar" type="button">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div id="lista-otros"></div>
+        </div>
       </div>
     </div>
 
