@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { versionCliente } from "../lib/actualizaciones";
 import { useServer } from "../lib/store";
 import { Avatar } from "./Avatar";
 import { Icon, LockIcon } from "./Icon";
@@ -33,6 +34,8 @@ export function TitleBar({ crumbs, onOpenAdmin, onProfile, onSignOut, onProjectA
   const username = useServer((s) => s.username);
   const userId = useServer((s) => s.userId);
   const signedIn = useServer((s) => s.token) !== null;
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => { versionCliente().then(setVersion).catch(() => setVersion(null)); }, []);
 
   return (
     <header data-tauri-drag-region
@@ -41,6 +44,7 @@ export function TitleBar({ crumbs, onOpenAdmin, onProfile, onSignOut, onProjectA
       <span className="grid h-[18px] w-[18px] shrink-0 place-items-center text-fg">
         <Icon name="logo" size={15} />
       </span>
+      {version && <span className="shrink-0 font-mono text-[9.5px] text-subtle">v{version}</span>}
 
       <nav data-tauri-drag-region className="flex min-w-0 items-center gap-[7px] text-[11.5px]">
         {crumbs.map((c, i) => (

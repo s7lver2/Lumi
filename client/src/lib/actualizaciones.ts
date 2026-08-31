@@ -38,3 +38,9 @@ export function dispararActualizacionSilenciosa(versionNueva: string): Promise<v
 export function dispararActualizacionAVersion(versionObjetivo: string): Promise<void> {
   return invoke("disparar_actualizacion_a_version", { versionObjetivo });
 }
+
+/** La misma versión que `connect()` ya compara contra `hello.version` —
+ *  para pintarla junto a la marca en la barra de título. */
+export function versionCliente(): Promise<string> {
+  return invoke<string>("version_cliente");
+}

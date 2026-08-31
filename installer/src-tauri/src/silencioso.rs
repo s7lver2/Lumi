@@ -134,6 +134,20 @@ pub fn ejecutar_y_salir() -> ! {
         Err(e) => {
             let version_para_log = args.version_objetivo.as_deref().or(args.version_actual.as_deref()).unwrap_or("desconocida");
             bitacora::dejar_marca_error(&args.producto, version_para_log, &e.to_string());
+            // Sin esto, un fallo aquí dejaba al investigador sin nada
+            // abierto: el producto ya se había cerrado él solo antes de
+            // lanzar este proceso (spec, Flujo B), y si la actualización
+            // fallaba (versión no publicada, sin red...) el error se
+            // guardaba pero nunca se veía — `error_actualizacion_pendiente()`
+            // solo se lee al ARRANCAR el producto, y nada volvía a
+            // arrancarlo. Se relanza la versión vieja (sin tocar, la
+            // descarga falló antes de escribir nada) para que el aviso se
+            // muestre de inmediato en vez de quedar guardado sin que nadie
+            // lo vea hasta la próxima vez que alguien abra la app a mano.
+            if let Some(marca_previa) = marca::leer(&args.producto) {
+                let destino = marca_previa.ruta.join(nombre_ejecutable(&args.producto));
+                let _ = std::process::Command::new(&destino).spawn();
+            }
             std::process::exit(1);
         }
     }

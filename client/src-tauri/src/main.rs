@@ -225,6 +225,13 @@ async fn comprobar_actualizacion() -> Result<Option<EstadoActualizacion>, String
     }))
 }
 
+/// La versión de este binario — la misma que ya se compara en `connect()`
+/// contra `hello.version`, expuesta para pintarla en la barra de título.
+#[tauri::command]
+fn version_cliente() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 /// Se llama una vez al arrancar (ver App.tsx) — si `installer.exe
 /// --silencioso` dejó un error de la última actualización silenciosa, se
 /// muestra aquí una sola vez (la lectura ya lo borra).
@@ -714,7 +721,7 @@ fn main() {
             start_queue_events, start_indices_events, start_admin_events, start_logs_stream, set_auth,
             upload_images, read_image_as_data_url, upload_avatar_bytes, upload_server_avatar_bytes,
             upload_server_banner_bytes, comprobar_actualizacion, error_actualizacion_pendiente, disparar_actualizacion_silenciosa,
-            disparar_actualizacion_a_version
+            disparar_actualizacion_a_version, version_cliente
         ])
         .run(tauri::generate_context!())
         .expect("error al arrancar Tauri");
