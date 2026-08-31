@@ -25,6 +25,11 @@ async function resolverRutaPorDefecto() {
 }
 const seleccion = new Set(["cliente", "indexer"]);
 const opciones = new Set(["acceso_directo"]);
+// Pestaña "Otros": producto -> versión exacta a instalar en vez de "la más
+// nueva". Elegir una versión concreta aquí y marcar la tarjeta normal del
+// mismo producto son excluyentes — no tiene sentido pedir "la última" y
+// "exactamente 2.0.1" a la vez.
+const versionesExactas = new Map();
 
 const btnAtras = document.getElementById("btn-atras");
 const btnSiguiente = document.getElementById("btn-siguiente");
@@ -110,9 +115,74 @@ document.querySelectorAll(".product-card[data-producto]").forEach((tarjeta) => {
     } else {
       seleccion.add(producto);
       casilla.classList.add("checked");
+      // Esta tarjeta pide "la más nueva" — si Otros tenía una versión
+      // concreta fijada para el mismo producto, deja de aplicar.
+      versionesExactas.delete(producto);
+      pintarSeleccionOtros();
     }
   });
 });
+
+let otrosCardadas = false;
+
+document.getElementById("btn-otros-toggle").addEventListener("click", async (e) => {
+  const boton = e.currentTarget;
+  const lista = document.getElementById("lista-otros");
+  const abrir = lista.style.display === "none";
+  lista.style.display = abrir ? "block" : "none";
+  boton.classList.toggle("abierto", abrir);
+  if (abrir && !otrosCardadas) {
+    otrosCardadas = true;
+    try {
+      const versiones = await invoke("listar_versiones_disponibles");
+      pintarListaOtros(versiones);
+    } catch (err) {
+      lista.innerHTML = `<div class="version-row"><span class="sub">No se pudo pedir la lista: ${String(err)}</span></div>`;
+    }
+  }
+});
+
+function pintarListaOtros(versiones) {
+  const lista = document.getElementById("lista-otros");
+  lista.innerHTML = "";
+  const NOMBRE = { cliente: "Lumi", indexer: "Lumi Indexer" };
+  for (const v of versiones) {
+    const fila = document.createElement("div");
+    fila.className = "version-row";
+    fila.dataset.producto = v.producto;
+    fila.dataset.version = v.version;
+    const fecha = new Date(v.publicado).toLocaleDateString();
+    fila.innerHTML = `
+      <div class="info">
+        <div class="label">${NOMBRE[v.producto] ?? v.producto} v${v.version}${v.retirada ? " · retirada" : ""}</div>
+        <div class="sub">${v.notas ? v.notas : ""}</div>
+      </div>
+      <span class="fecha">${fecha}</span>
+    `;
+    fila.addEventListener("click", () => {
+      const yaFijada = versionesExactas.get(v.producto) === v.version;
+      if (yaFijada) {
+        versionesExactas.delete(v.producto);
+      } else {
+        versionesExactas.set(v.producto, v.version);
+        seleccion.add(v.producto);
+        // La tarjeta normal pasa a mostrarse desmarcada: la versión que se
+        // va a instalar ahora la decide esta fila, no "la más nueva".
+        const casilla = document.querySelector(`.product-card[data-producto="${v.producto}"] .checkbox`);
+        casilla?.classList.remove("checked");
+      }
+      pintarSeleccionOtros();
+    });
+    lista.appendChild(fila);
+  }
+}
+
+function pintarSeleccionOtros() {
+  document.querySelectorAll(".version-row").forEach((fila) => {
+    const fijada = versionesExactas.get(fila.dataset.producto) === fila.dataset.version;
+    fila.classList.toggle("seleccionada", fijada);
+  });
+}
 
 // La casilla de atajos de terminal depende de la de PATH — sin PATH el
 // comando no se encontraría, así que se muestra deshabilitada con el
@@ -237,6 +307,7 @@ async function ejecutarInstalacion() {
       agregarPath: opciones.has("agregar_path"),
       atajosTerminal: opciones.has("atajos_terminal"),
       iniciarConSistema: opciones.has("iniciar_con_sistema"),
+      versionesExactas: Object.fromEntries(versionesExactas),
     });
     estado.classList.remove("activo");
     icono.className = "icono-estado hecho";

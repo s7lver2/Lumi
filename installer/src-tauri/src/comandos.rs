@@ -8,6 +8,7 @@
 //! (`silencioso.rs`, mismo binario) nunca las toca: ya existen o no
 //! existían, y no es su trabajo cambiarlas.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -70,6 +71,40 @@ pub fn detectar_instalados() -> Vec<InfoProducto> {
         .collect()
 }
 
+#[derive(serde::Serialize)]
+pub struct VersionDisponible {
+    pub producto: String,
+    pub version: String,
+    pub publicado: String,
+    pub notas: String,
+    pub retirada: bool,
+}
+
+/// Todo el histórico de cliente e Indexer publicado — no solo la última,
+/// como `detectar_instalados` — para la pestaña "Otros" de la pantalla de
+/// Productos: instalar una versión concreta en vez de siempre la más
+/// nueva. `lumid` no aparece aquí porque este instalador nunca lo toca (es
+/// Linux-only, se instala con `lumi install`, no con este binario).
+#[tauri::command]
+pub fn listar_versiones_disponibles() -> Result<Vec<VersionDisponible>, String> {
+    let manifiesto = lumi_installer::manifiesto::obtener_verificado().map_err(|e| e.to_string())?;
+    let mut lista: Vec<VersionDisponible> = manifiesto
+        .publicaciones
+        .iter()
+        .filter(|p| p.producto == Producto::Cliente || p.producto == Producto::Indexer)
+        .filter(|p| p.artefactos.iter().any(|a| a.plataforma == "windows-x86_64"))
+        .map(|p| VersionDisponible {
+            producto: if p.producto == Producto::Cliente { "cliente" } else { "indexer" }.to_string(),
+            version: p.version.clone(),
+            publicado: p.publicado.clone(),
+            notas: p.notas.clone(),
+            retirada: p.retirada,
+        })
+        .collect();
+    lista.sort_by(|a, b| b.publicado.cmp(&a.publicado));
+    Ok(lista)
+}
+
 fn nombre_ejecutable(producto: &str) -> &'static str {
     match producto {
         "cliente" => "app.exe",
@@ -112,13 +147,23 @@ pub fn instalar(
     agregar_path: bool,
     atajos_terminal: bool,
     iniciar_con_sistema: bool,
+    // Pestaña "Otros": producto → versión exacta a instalar, en vez de
+    // siempre "la más nueva". Un producto ausente de este mapa se
+    // resuelve como hasta ahora (`mas_nueva`). El lado TS siempre manda
+    // este campo (objeto vacío si no aplica) — el parámetro de un comando
+    // de Tauri no admite `#[serde(default)]`.
+    versiones_exactas: HashMap<String, String>,
 ) -> Result<(), String> {
     let manifiesto = lumi_installer::manifiesto::obtener_verificado().map_err(|e| e.to_string())?;
     let raiz = PathBuf::from(raiz);
 
     for producto in &productos {
-        let publicacion = manifiesto
-            .mas_nueva(producto_enum(producto), "0.0.0", "windows-x86_64")
+        let encontrada = if let Some(version) = versiones_exactas.get(producto) {
+            manifiesto.version_exacta(producto_enum(producto), version, "windows-x86_64")
+        } else {
+            manifiesto.mas_nueva(producto_enum(producto), "0.0.0", "windows-x86_64")
+        };
+        let publicacion = encontrada
             .ok_or_else(|| format!("{producto}: sin publicacion disponible"))?
             .clone();
 
