@@ -136,7 +136,52 @@
           "sha256": "53eb4dec3b527a894d4a61f5722bb7b330d4224b6b9364d33ee8382efddd48cd"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.3",
+      "publicado": "2026-08-31T21:41:54Z",
+      "notas": "popup de version rediseÃ±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.3/app.exe",
+          "bytes": 15770624,
+          "sha256": "d85a33d1c1a8461626cf785e04cf53e52075dc4681babb52a5fb6de1778fa8ce"
+        }
+      ]
+    },
+    {
+      "producto": "indexer",
+      "version": "2.0.3",
+      "publicado": "2026-08-31T21:41:54Z",
+      "notas": "popup de version rediseÃ±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.3/indexer-app.exe",
+          "bytes": 22046208,
+          "sha256": "3ddad8e0b3598453cd52f284fa9d2f8d5b252f43e87b232a3fbbf3b8b444d677"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.3",
+      "publicado": "2026-08-31T21:41:54Z",
+      "notas": "popup de version rediseÃ±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.3/lumid",
+          "bytes": 20293192,
+          "sha256": "371221dbeab251a1bf7d289fa05fb56dee9c104a7700b8dc46fc92056bb15f81"
+        }
+      ]
     }
   ],
-  "firma": "wg5f8JY1qvPmKnB9IYdV8+aa263y6D8J5sNyytif53yU2puE/4ZPK2jZGnTqQVuqcqfYzO02UYwN8QXOTypHCg=="
+  "firma": "yda9tOI3M1tggINcZyUnCK9YfBFGpLshJoGfPiu5oGzQGGQ2dRLpBW1+v07yF0Pg+a4c/5f38qM4+b+zZByjCQ=="
 }
