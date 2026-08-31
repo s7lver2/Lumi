@@ -141,7 +141,7 @@
       "producto": "cliente",
       "version": "2.0.3",
       "publicado": "2026-08-31T21:41:54Z",
-      "notas": "popup de version rediseÃƒÂ±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
+      "notas": "popup de version rediseÃƒÆ’Ã‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
       "retirada": false,
       "artefactos": [
         {
@@ -156,7 +156,7 @@
       "producto": "indexer",
       "version": "2.0.3",
       "publicado": "2026-08-31T21:41:54Z",
-      "notas": "popup de version rediseÃƒÂ±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
+      "notas": "popup de version rediseÃƒÆ’Ã‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
       "retirada": false,
       "artefactos": [
         {
@@ -171,7 +171,7 @@
       "producto": "lumid",
       "version": "2.0.3",
       "publicado": "2026-08-31T21:41:54Z",
-      "notas": "popup de version rediseÃƒÂ±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
+      "notas": "popup de version rediseÃƒÆ’Ã‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
       "retirada": false,
       "artefactos": [
         {
@@ -226,7 +226,52 @@
           "sha256": "4f13ac1e1d18d2e139d4fded16ebb49e59c4f70147c8040d27132604070975b8"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.5",
+      "publicado": "2026-08-31T23:36:57Z",
+      "notas": "salida de emergencia entrar de todas formas en el bloqueo de version, otros con panel lateral en el instalador, lumi install --version",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.5/app.exe",
+          "bytes": 15774208,
+          "sha256": "6d279aa2769e158e3bde7c58e6330445e3da4eba3f665a01cb9d854015344ecc"
+        }
+      ]
+    },
+    {
+      "producto": "indexer",
+      "version": "2.0.5",
+      "publicado": "2026-08-31T23:36:57Z",
+      "notas": "salida de emergencia entrar de todas formas en el bloqueo de version, otros con panel lateral en el instalador, lumi install --version",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.5/indexer-app.exe",
+          "bytes": 22046208,
+          "sha256": "ed1127da69bcbb6c56be76a5ed24f65a934eab42526f2e4cb7351c5bb2158ff3"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.5",
+      "publicado": "2026-08-31T23:36:57Z",
+      "notas": "salida de emergencia entrar de todas formas en el bloqueo de version, otros con panel lateral en el instalador, lumi install --version",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.5/lumid",
+          "bytes": 20293080,
+          "sha256": "26bbd12e9c105e5ccd98241c8424c87e310129c9ab0fc3c6a762f23aa1e2aa39"
+        }
+      ]
     }
   ],
-  "firma": "gaiXm5zMggvivdlgFSfVCDwSttRce9MaQd89ByiAfhNsV7fkQpAk60vnArnaGgNvqHmxWh+Tdy83F3lkKFYPDQ=="
+  "firma": "UOj9pOss/ZnfOF11LANrxkJjXuGPJaieNx7OmTshKgeGXEYAATJkYcTqbC5zMZC+5G7ZVTXx9jfD9VhOWqtqCA=="
 }
