@@ -163,26 +163,49 @@ pub fn run(auto: bool, version: Option<&str>) -> Result<PairKey> {
     ui::head("instalación");
     fs::create_dir_all(DATA).context("no se pudo crear /var/lib/lumi")?;
 
-    let pb = ui::step("generando certificado autofirmado");
-    let cert = rcgen::generate_simple_self_signed(vec![
-        local_ip().unwrap_or_else(|| "localhost".into()),
-        "localhost".into(),
-    ])
-    .context("rcgen falló")?;
-    let der = cert.cert.der().to_vec();
-    fs::write(format!("{DATA}/cert.der"), &der)?;
-    fs::write(format!("{DATA}/key.pem"), cert.key_pair.serialize_pem())?;
-    pb.finish_and_clear();
-    ui::ok("certificado ed25519 · 10 años");
-
-    let pb = ui::step("sembrando clave maestra");
-    seed_master(sealed, passphrase)?;
-    pb.finish_and_clear();
-    ui::ok(if sealed {
-        "clave maestra sellada · se desbloquea desde la app tras cada reinicio"
+    // Ni el certificado ni la clave maestra se regeneran si ya existen —
+    // esto es lo que hace seguro volver a correr `lumi install` sobre una
+    // instalación real (para fijar otra versión de lumid, por ejemplo).
+    // Regenerar el certificado cambia su huella y desempareja a todo
+    // cliente que ya la tuviera pineada; regenerar la clave maestra deja
+    // indescifrable cualquier dato sellado con la anterior. Ninguna de las
+    // dos cosas se nota en el momento — el fallo aparece después, como
+    // "se perdieron los servidores guardados" o peor.
+    let ruta_cert = format!("{DATA}/cert.der");
+    let pb = ui::step("certificado TLS");
+    let der = if Path::new(&ruta_cert).exists() {
+        pb.finish_and_clear();
+        ui::ok("certificado existente conservado (no se reemparejan los clientes ya emparejados)");
+        fs::read(&ruta_cert).context("no se pudo leer el certificado existente")?
     } else {
-        "clave maestra automática · systemd-creds"
-    });
+        let cert = rcgen::generate_simple_self_signed(vec![
+            local_ip().unwrap_or_else(|| "localhost".into()),
+            "localhost".into(),
+        ])
+        .context("rcgen falló")?;
+        let der = cert.cert.der().to_vec();
+        fs::write(&ruta_cert, &der)?;
+        fs::write(format!("{DATA}/key.pem"), cert.key_pair.serialize_pem())?;
+        pb.finish_and_clear();
+        ui::ok("certificado ed25519 · 10 años (nuevo)");
+        der
+    };
+
+    let ya_sembrada = Path::new(&format!("{DATA}/master.cred")).exists()
+        || Path::new(&format!("{DATA}/master.salt")).exists();
+    let pb = ui::step("clave maestra");
+    if ya_sembrada {
+        pb.finish_and_clear();
+        ui::ok("clave maestra existente conservada (los datos sellados con ella siguen siendo legibles)");
+    } else {
+        seed_master(sealed, passphrase)?;
+        pb.finish_and_clear();
+        ui::ok(if sealed {
+            "clave maestra sellada · se desbloquea desde la app tras cada reinicio (nueva)"
+        } else {
+            "clave maestra automática · systemd-creds (nueva)"
+        });
+    }
 
     let pb = ui::step("copiando registros/ y workers/");
     copiar_assets()?;
@@ -230,9 +253,12 @@ pub fn run(auto: bool, version: Option<&str>) -> Result<PairKey> {
     // lumid.service acaba de arrancar (paso anterior) y abre este mismo
     // fichero por su cuenta: sin busy_timeout, esta conexión puede llegar
     // a la vez y morir al instante con "database is locked" en vez de
-    // esperar los segundos que tarda lumid en terminar su propio arranque.
+    // esperar a que lumid termine su propio arranque (migraciones,
+    // catálogo, detección de hardware...). 5s se quedaba corto en la
+    // práctica; 30s da margen sin bloquear para siempre si algo real se
+    // atasca.
     let db = rusqlite::Connection::open(format!("{DATA}/lumi.db"))?;
-    db.busy_timeout(std::time::Duration::from_secs(5))?;
+    db.busy_timeout(std::time::Duration::from_secs(30))?;
     db.execute_batch(
         "CREATE TABLE IF NOT EXISTS pair_key (
             id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -627,7 +653,7 @@ pub fn reissue() -> Result<PairKey> {
     // instalación) y tiene su propia conexión abierta al mismo fichero: el
     // mismo busy_timeout que en `run()`, misma razón.
     let db = rusqlite::Connection::open(format!("{DATA}/lumi.db"))?;
-    db.busy_timeout(std::time::Duration::from_secs(5))?;
+    db.busy_timeout(std::time::Duration::from_secs(30))?;
     let addr = direccion_publica(&db);
     let key = PairKey::generate(&addr, &der);
     db.execute(
