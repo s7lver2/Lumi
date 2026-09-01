@@ -70,14 +70,14 @@ export function ActualizacionesView({ token }: { token: string }) {
           <div className="mt-4 flex flex-wrap items-center gap-2.5">
             <button
               onClick={() => void actualizarServidor()}
-              disabled={!estado.disponible || aplicando}
+              disabled={!estado.disponible || aplicando || comprobando}
               className="jg-press rounded-lg bg-accent px-3 py-1.5 text-[11.5px] font-medium text-black disabled:opacity-40"
             >
               {aplicando ? "Actualizando…" : "Actualizar servidor"}
             </button>
             <button
               onClick={() => void comprobarAhora()}
-              disabled={comprobando}
+              disabled={comprobando || aplicando}
               className="jg-press rounded-lg border border-white/15 px-3 py-1.5 text-[11.5px] text-fg disabled:opacity-40"
             >
               {comprobando ? "Comprobando…" : "Comprobar ahora"}
