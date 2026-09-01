@@ -9,6 +9,17 @@ function fecha(epochSeg: string): string {
   return Number.isFinite(n) && n > 0 ? new Date(n * 1000).toLocaleDateString("es-ES") : "—";
 }
 
+/// El `owner/repo` de donde salió un asset publicado — misma extracción que
+/// `catalogo::mios` en Rust, sobre la URL de descarga
+/// (`https://github.com/{owner}/{repo}/releases/download/{tag}/{asset}`).
+/// Hace falta para pedir la liberación: `paquete` solo no localiza la ficha.
+function repoDeUrl(url: string): string | null {
+  const sinDescarga = url.split("/download/")[0];
+  const sinDominio = sinDescarga?.replace(/^https:\/\/github\.com\//, "");
+  if (!sinDominio || sinDominio === sinDescarga) return null;
+  return sinDominio.replace(/\/releases$/, "");
+}
+
 function km2(n: number): string {
   return n.toLocaleString("es-ES", { maximumFractionDigits: n < 10 ? 1 : 0 });
 }
@@ -20,9 +31,27 @@ function km2(n: number): string {
 export function ProfileDialog({ cuenta, onCerrar }: { cuenta: string; onCerrar: () => void }) {
   const [perfil, setPerfil] = useState<Perfil | null>(null);
   const [github, setGithub] = useState<PerfilGithub | null>(null);
+  const [cuentaPropia, setCuentaPropia] = useState(false);
+  // `paquete → "pidiendo" | "pedida" | mensaje de error`: por paquete, no
+  // global, porque nada impide pedir la liberación de dos publicaciones
+  // distintas en la misma visita a este diálogo.
+  const [liberando, setLiberando] = useState<Record<string, "pidiendo" | "pedida" | string>>({});
 
   useEffect(() => { void api.catalogoPerfil(cuenta).then(setPerfil); }, [cuenta]);
   useEffect(() => { void api.catalogoPerfilGithub(cuenta).then(setGithub, () => {}); }, [cuenta]);
+  useEffect(() => {
+    void api.identidadLeer().then((s) => setCuentaPropia(s?.cuenta === cuenta), () => {});
+  }, [cuenta]);
+
+  function pedirLiberacion(paquete: string, url: string, quadkeys: string[]) {
+    const repo = repoDeUrl(url);
+    if (!repo) return;
+    setLiberando((l) => ({ ...l, [paquete]: "pidiendo" }));
+    api.catalogoSolicitarLiberacion(repo, paquete, quadkeys).then(
+      () => setLiberando((l) => ({ ...l, [paquete]: "pedida" })),
+      (e) => setLiberando((l) => ({ ...l, [paquete]: String(e) })),
+    );
+  }
 
   const publica = perfil ? perfil.publicaciones.length > 0 : false;
   const urlGithub = github?.url ?? `https://github.com/${cuenta}`;
@@ -76,18 +105,37 @@ export function ProfileDialog({ cuenta, onCerrar }: { cuenta: string; onCerrar: 
             <div className="mt-[9px] flex flex-col gap-2">
               {perfil!.publicaciones.map((p, i) => {
                 const pct = totalTeselasPublicadas > 0 ? (p.teselas / totalTeselasPublicadas) * 100 : 0;
+                const estado = liberando[p.paquete];
                 return (
-                  <div key={p.paquete} className="flex items-center gap-2 text-[10.5px] text-muted">
-                    <s className="block h-[7px] w-[7px] shrink-0 rounded-sm no-underline"
-                      style={{ background: opacidadSegmento(i) }} />
-                    <a href={p.url} target="_blank" rel="noreferrer"
-                      className="flex-1 truncate text-fg hover:underline">
-                      {p.nombre}
-                    </a>
-                    <span className="shrink-0 font-mono text-[9.5px] text-subtle">
-                      {pct.toFixed(0)}% · {p.teselas} teselas{p.numero_version > 1 ? ` · v${p.numero_version}` : ""}
-                      {p.viva ? "" : " · no disponible"}
-                    </span>
+                  <div key={p.paquete} className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2 text-[10.5px] text-muted">
+                      <s className="block h-[7px] w-[7px] shrink-0 rounded-sm no-underline"
+                        style={{ background: opacidadSegmento(i) }} />
+                      <a href={p.url} target="_blank" rel="noreferrer"
+                        className="flex-1 truncate text-fg hover:underline">
+                        {p.nombre}
+                      </a>
+                      <span className="shrink-0 font-mono text-[9.5px] text-subtle">
+                        {pct.toFixed(0)}% · {p.teselas} teselas{p.numero_version > 1 ? ` · v${p.numero_version}` : ""}
+                        {p.viva ? "" : " · no disponible"}
+                      </span>
+                      {cuentaPropia && p.viva && estado !== "pedida" && (
+                        <button
+                          disabled={estado === "pidiendo"}
+                          onClick={() => pedirLiberacion(p.paquete, p.url, p.quadkeys)}
+                          className="jg-press shrink-0 rounded-[5px] border border-white/[.15] px-2 py-[3px] text-[9.5px] text-fg disabled:opacity-50">
+                          {estado === "pidiendo" ? "Pidiendo…" : "Liberar"}
+                        </button>
+                      )}
+                    </div>
+                    {estado === "pedida" && (
+                      <p className="pl-[15px] text-[9.5px] text-subtle">
+                        Solicitud enviada — se procesará en la próxima actualización del catálogo, no es instantánea.
+                      </p>
+                    )}
+                    {estado && estado !== "pidiendo" && estado !== "pedida" && (
+                      <p className="pl-[15px] text-[9.5px] text-warning-fg">{estado}</p>
+                    )}
                   </div>
                 );
               })}

@@ -317,8 +317,7 @@ pub fn cerrar_sesion(almacen: &Almacen, claves: &Claves<'_>) -> Result<()> {
     claves.guardar(PROVEEDOR_TESTIGO, "")
 }
 
-/// Lo consume `publicar.rs`, que todavía no existe.
-#[allow(dead_code)]
+/// Lo consume `publicar.rs` y `catalogo::solicitar_liberacion`.
 pub fn leer_testigo(claves: &Claves<'_>) -> Result<String> {
     claves
         .leer(PROVEEDOR_TESTIGO)?

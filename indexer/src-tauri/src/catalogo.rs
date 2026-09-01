@@ -25,6 +25,12 @@ pub(crate) const ETIQUETA: &str = "lumi-index";
 /// que sirve el manifiesto de versiones (`web/app/api/versiones`).
 const URL_DESRECLAMOS: &str = "https://lumi.s7lver.xyz/api/desreclamos";
 
+/// Pedir la liberación no la concede: solo la apunta en una cola que el
+/// operador revisa a mano con `firmar_desreclamos` (subsistema 9, fase 2 de
+/// la liberación de teselas — BUG_BOUNTY #38). La clave que de verdad la
+/// concede nunca toca esta URL ni ningún otro servidor.
+const URL_SOLICITAR_LIBERACION: &str = "https://lumi.s7lver.xyz/api/desreclamos/solicitar";
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Reclamo {
     pub quadkey: String,
@@ -52,6 +58,10 @@ pub struct FichaResumen {
     pub publicada_en: String,
     /// Versión de CONTENIDO del índice publicado — 1 para lo de siempre.
     pub numero_version: u32,
+    /// Los quadkeys que reclama este paquete. Solo hace falta para pedir la
+    /// liberación de teselas propias (`solicitar_liberacion`) — el resto de
+    /// la pantalla se conforma con `teselas` (el recuento).
+    pub quadkeys: Vec<String>,
 }
 
 /// El mismo cálculo que `lumi_index::manifest::porcentajes`, pero sobre
@@ -147,6 +157,7 @@ fn resumen(f: &Ficha, url: &str, viva: bool) -> FichaResumen {
         capas: f.capas.len(),
         publicada_en: f.publicada_en.clone(),
         numero_version: f.numero_version,
+        quadkeys: f.fuentes_por_quadkey.iter().map(|(qk, _)| qk.clone()).collect(),
     }
 }
 
@@ -368,6 +379,27 @@ pub fn mios(almacen: &Almacen, cuenta: &str) -> Result<Vec<RepoRemoto>> {
         por_repo.entry(repo).or_default().push(resumen(&f, &url, viva));
     }
     Ok(por_repo.into_iter().map(|(repo, paquetes)| RepoRemoto { repo, paquetes }).collect())
+}
+
+/// Pide a la web que apunte una liberación de teselas propias en la cola
+/// pendiente (BUG_BOUNTY #38). No libera nada por sí sola: la web verifica
+/// contra la ficha real que `repo`/`paquete` son de quien firma este
+/// testigo, y guarda `{repo, paquete, quadkeys}` para que el operador la
+/// incorpore a mano con `firmar_desreclamos` la próxima vez que firme. La
+/// clave privada que de verdad libera territorio nunca pasa por aquí.
+pub async fn solicitar_liberacion(repo: &str, paquete: &str, quadkeys: &[String], testigo: &str) -> Result<()> {
+    let r = cliente_http()
+        .post(URL_SOLICITAR_LIBERACION)
+        .bearer_auth(testigo)
+        .header("user-agent", "lumi-indexer")
+        .json(&serde_json::json!({ "repo": repo, "paquete": paquete, "quadkeys": quadkeys }))
+        .send()
+        .await?;
+    if !r.status().is_success() {
+        let cuerpo = r.text().await.unwrap_or_default();
+        anyhow::bail!("la web rechazó la solicitud de liberación: {cuerpo}");
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Serialize)]

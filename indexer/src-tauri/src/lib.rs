@@ -1395,6 +1395,22 @@ async fn catalogo_capas(
     catalogo::capas(&estado.almacen).map_err(|e| e.to_string())
 }
 
+/// Pide la liberación de teselas propias (BUG_BOUNTY #38). El testigo es el
+/// mismo que ya usa `publicar` — sin sesión de GitHub no hay quién verificar.
+#[tauri::command]
+async fn catalogo_solicitar_liberacion(
+    estado: tauri::State<'_, Estado>,
+    repo: String,
+    paquete: String,
+    quadkeys: Vec<String>,
+) -> Result<(), String> {
+    let claves = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
+    let testigo = identidad::leer_testigo(&claves).map_err(|e| e.to_string())?;
+    catalogo::solicitar_liberacion(&repo, &paquete, &quadkeys, &testigo)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 // --- Publicar --------------------------------------------------------------
 
 #[tauri::command]
@@ -1820,6 +1836,7 @@ pub fn run() {
             catalogo_reclamos,
             catalogo_dependencias_rotas,
             catalogo_capas,
+            catalogo_solicitar_liberacion,
             publicar_capa_arrancar
         ])
         .build(tauri::generate_context!())

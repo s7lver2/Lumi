@@ -202,6 +202,7 @@ export interface FichaResumen {
   paquete: string; nombre: string; autor: string; url: string;
   teselas: number; viva: boolean; por_fuente: PctFuente[];
   capas: number; publicada_en: string; numero_version: number;
+  quadkeys: string[];
 }
 export interface Resultados { indices: FichaResumen[]; cuentas: string[] }
 export interface Perfil {
@@ -376,6 +377,8 @@ export const api = {
     indiceId, cuerpoSha256, cuerpoPaquete, cuerpoAutor, cuerpoUrl, modelo, repo,
   }),
   catalogoMios: () => invoke<RepoRemoto[]>("catalogo_mios"),
+  catalogoSolicitarLiberacion: (repo: string, paquete: string, quadkeys: string[]) =>
+    invoke<void>("catalogo_solicitar_liberacion", { repo, paquete, quadkeys }),
   catalogoReclamos: (quadkeys: string[]) => invoke<unknown[]>("catalogo_reclamos", { quadkeys }),
   publicarRepos: () => invoke<Repo[]>("publicar_repos"),
   proyectosLista: () => invoke<Proyecto[]>("proyectos_lista"),
