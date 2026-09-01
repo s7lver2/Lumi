@@ -140,6 +140,8 @@ async fn main() -> anyhow::Result<()> {
         log_filter,
     };
 
+    actualizacion::limpiar_estado_colgado_al_arrancar(&app);
+
     // LUMI_PORT (env) es la escotilla de emergencia: gana siempre sobre lo
     // guardado en `meta`, igual que ya ganaba sobre la constante fija antes
     // de que existiera un ajuste editable desde el panel.

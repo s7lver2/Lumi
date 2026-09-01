@@ -43,6 +43,31 @@ pub fn set_aplicando(app: &App, on: bool) {
     let _ = app.store.set_meta(META_APLICANDO, if on { "1" } else { "0" });
 }
 
+/// A ejecutar al arrancar, antes de servir tráfico: ni el camino de éxito
+/// de `aplicar()` (paso 6, `systemctl restart`, el proceso muere sin volver
+/// a pasar por aquí) ni una caída/`systemctl restart` manual a mitad de
+/// actualización limpian `META_APLICANDO`/mantenimiento — solo lo hace el
+/// tope de 10 min DENTRO del mismo proceso, que un reinicio se salta por
+/// completo. Sin esto, cada actualización (incluso una que sale bien) deja
+/// el servidor pegado en mantenimiento para siempre tras reiniciar, porque
+/// `/var/lib/lumi` sobrevive a una reinstalación — justo lo que bloqueó el
+/// setup entero de un servidor recién reemparejado.
+///
+/// `META_APLICANDO` se limpia siempre: un proceso recién arrancado nunca
+/// puede estar de verdad "aplicando" algo de una vida anterior. El
+/// mantenimiento y su mensaje de sistema solo se apagan si fue ESTE flujo
+/// quien los encendió (`mantenimiento_mensaje_sistema` no vacío) — si el
+/// admin activó mantenimiento a mano por su cuenta, eso no se toca.
+pub fn limpiar_estado_colgado_al_arrancar(app: &App) {
+    let _ = app.store.set_meta(META_APLICANDO, "0");
+    let sistema = app.store.get_meta("mantenimiento_mensaje_sistema").unwrap_or_default();
+    if !sistema.trim().is_empty() {
+        tracing::warn!("mantenimiento seguia activo por una actualizacion interrumpida por el reinicio anterior; se limpia");
+        let _ = mantenimiento::set_activo(app, false);
+        let _ = mantenimiento::set_mensaje_sistema(app, "");
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublicacionInfo {
     pub version: String,

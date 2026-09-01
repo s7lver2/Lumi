@@ -145,7 +145,7 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
 
         {sellando && (
           <Overlay>
-            <SealDialog indiceId={id} nombre={detalle.nombre} onSellado={() => setSellando(false)} />
+            <SealDialog indiceId={id} nombre={detalle.nombre} onSellado={() => { setSellando(false); refrescar(); }} />
           </Overlay>
         )}
         {importando && (
