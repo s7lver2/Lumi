@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { addrFromKey, api, parseVersionMismatch } from "../lib/api";
 import { useServer } from "../lib/store";
 import { addServer, updateSession } from "../lib/session";
@@ -41,6 +41,20 @@ export function PairStep({ onDone }: { onDone: () => void }) {
       setBusy(false);
     }
   }
+
+  // La clave ya se pegó una vez en AddServerForm, que la reconoció como de
+  // administrador y trajo aquí mismo el valor (App.tsx: setKey + entrar al
+  // asistente). Sin este auto-verify, este primer paso se veía como si
+  // pidiera la clave otra vez: el campo llegaba relleno pero inerte hasta
+  // que el usuario lo tocara y sacara el foco (`onBlur`) — un paso extra
+  // que en la práctica se sentía como "vuelve a escribirla".
+  const yaVerificadoAlMontar = useRef(false);
+  useEffect(() => {
+    if (yaVerificadoAlMontar.current) return;
+    yaVerificadoAlMontar.current = true;
+    if (key.trim()) verify();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fp = hello?.fingerprint ?? "";
   // Sin esto, una clave lumi1_ de un servidor ya reclamado (huella válida,

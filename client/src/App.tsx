@@ -332,7 +332,19 @@ export default function App() {
       ) : mode === "entry" ? (
         <EntryScreen
           onSignedIn={() => setMode(useServer.getState().isAdmin ? "admin" : "picker")}
-          onOwnerKey={(key) => { useServer.getState().setKey(key); setStep(0); setMode("wizard"); }} />
+          onOwnerKey={(key) => {
+            // `hello` de una visita anterior al asistente (otro servidor,
+            // otro intento) sobrevivía en el store: `nextDisabled` de abajo
+            // solo mira `hello`, así que con uno stale ya "unclaimed" el
+            // botón Siguiente se habilitaba antes de que PairStep llegara a
+            // verificar esta clave nueva — el popup de versión incompatible
+            // aparecía ya en el paso 1, tarde, en vez de bloquear la salida
+            // del paso 0.
+            useServer.getState().setHello(null);
+            useServer.getState().setKey(key);
+            setStep(0);
+            setMode("wizard");
+          }} />
       ) : mode === "admin" ? (
         <AdminPanel token={useServer.getState().token!} />
       ) : mode === "profile" ? (

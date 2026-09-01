@@ -6,8 +6,8 @@
 - [x] no se parecen estar creando correctamente las carpertas de los servidores registrados
 - [ ] el icono de todas las apps es el por defecto de tauri, y quiero que sea el de lumi, pero con una variaci'on para el indexer, que sea la estrella pero con unas gafas o algo asi
 - [ ] en el indexer, si me registre con github, y ya tenia una cuenta de antes, no tendr'ia porque haberme regenerado unas nuevas claves de recuperacion, deberian de haber sido las mismas, porque ya tengo cuenta
-- [ ] bug en el setup de un servidor nuevo de lumi, en el cual se le pide introducir la clave al usuario 2 veces, una para saber que servidor vamos a configurar, y la siguiente en el primer paso de la propia configuracion, inecesario, eliminar
-- [ ] el popup de version incompatible al intentar hacer el setup entro tarde, cuando ya estabamos haciendo el paso 1 del setup en un servidor nuevo
+- [x] bug en el setup de un servidor nuevo de lumi, en el cual se le pide introducir la clave al usuario 2 veces, una para saber que servidor vamos a configurar, y la siguiente en el primer paso de la propia configuracion, inecesario, eliminar
+- [x] el popup de version incompatible al intentar hacer el setup entro tarde, cuando ya estabamos haciendo el paso 1 del setup en un servidor nuevo
 - [x] al hacer click izquierdo en el cliente, en muchos lugares, aparecen opciones de edge, no quiero que estas mismas aparezcan
 - [x] en la parte inferior del instalador, la version de este mismo no es correcta
 - [x] en el instalador, la barra de scroll es la por defecto de los navegadores, quiero una que concuerde con la estetica
