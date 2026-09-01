@@ -133,13 +133,16 @@ export function App() {
 
   // Al terminar la descarga se salta a revisión SOLO si hay algo que revisar:
   // una descarga de puro street view no tiene sueltas, y mandar al operador a
-  // una rejilla vacía sería un paso de más.
+  // una rejilla vacía sería un paso de más. Si no hay nada que revisar, se
+  // queda en "descarga" — con `descargaIndiceId` ya a `null` esa pestaña pasa
+  // a pintar el embebido a pantalla completa (#63), en vez de mandar a
+  // Proyectos y dejar el embebido corriendo invisible de fondo.
   async function alTerminarDescarga() {
     const indiceId = descargaIndiceId ?? indiceAbierto ?? 0;
     setDescargaIndiceId(null);
     setImagenesEstimadas(null);
     const pendientes = await api.revisionPendientes(indiceId);
-    setDestino(pendientes.length > 0 ? "revision" : "proyectos");
+    if (pendientes.length > 0) setDestino("revision");
   }
 
   return (
