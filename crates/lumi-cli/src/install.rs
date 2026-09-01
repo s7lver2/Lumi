@@ -223,6 +223,17 @@ pub fn run(auto: bool, version: Option<&str>) -> Result<PairKey> {
                 .with_context(|| format!("no se pudo copiar {src:?} a {BIN}"))?;
         }
     }
+    // Reinstalar conserva `/var/lib/lumi` (certificado, clave maestra,
+    // registros) por diseño, pero un puerto de red personalizado desde una
+    // vida anterior también sobrevivía a través de `meta` — y como la clave
+    // que se emite más abajo SIEMPRE anuncia el puerto por defecto
+    // (`lumi_proto::PORT`), esa combinación dejaba la clave recién impresa
+    // apuntando a un puerto donde lumid ya no iba a escuchar tras
+    // reiniciar. Se resetea ANTES de (re)arrancar el servicio, para que
+    // arranque ya con el puerto por defecto y la clave coincida.
+    if let Ok(db) = rusqlite::Connection::open(format!("{DATA}/lumi.db")) {
+        let _ = db.execute("DELETE FROM meta WHERE k LIKE 'red\\_%' ESCAPE '\\'", []);
+    }
     fs::write("/etc/systemd/system/lumid.service", UNIT)?;
     run_ok("systemctl", &["daemon-reload"])?;
     run_ok("systemctl", &["enable", "lumid.service"])?;
@@ -257,8 +268,6 @@ pub fn run(auto: bool, version: Option<&str>) -> Result<PairKey> {
         }
     }
 
-    let addr = format!("{}:{}", local_ip().unwrap_or_else(|| "127.0.0.1".into()), lumi_proto::PORT);
-    let key = PairKey::generate(&addr, &der);
     // lumid.service acaba de arrancar (paso anterior) y abre este mismo
     // fichero por su cuenta: sin busy_timeout, esta conexión puede llegar
     // a la vez y morir al instante con "database is locked" en vez de
@@ -277,6 +286,8 @@ pub fn run(auto: bool, version: Option<&str>) -> Result<PairKey> {
         );
         CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);",
     )?;
+    let addr = format!("{}:{}", local_ip().unwrap_or_else(|| "127.0.0.1".into()), lumi_proto::PORT);
+    let key = PairKey::generate(&addr, &der);
     let expires = if std::env::var("LUMI_NO_EXPIRY").is_ok() {
         None
     } else {
