@@ -206,6 +206,77 @@ pub async fn revoke(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(serde::Deserialize)]
+pub struct RegenerarClaveReq {
+    pub password: String,
+}
+
+/// No hay "ver de nuevo": el secreto se guarda como hash
+/// (`lumi_proto::crypto::hash_token`), no en claro, y volverlo reversible
+/// para poder enseñarlo sería el mismo retroceso de seguridad que ya se
+/// corrigió una vez (ver el comentario de `map_row`). Regenerar sustituye el
+/// secreto por uno nuevo sin tocar la política (mismo `label`/`expires_at`/
+/// `ips`/`devices`), y exige la contraseña de quien hace la acción — la
+/// sesión actual, no necesariamente la dueña de la clave: un admin
+/// regenerando la clave de otro confirma la SUYA, igual que
+/// `auth::change_password` — porque lo que hace falta comprobar es que quien
+/// pide sustituir un secreto vivo es quien dice ser.
+pub async fn regenerate(
+    State(app): State<App>,
+    Path(public_id): Path<String>,
+    headers: HeaderMap,
+    Json(req): Json<RegenerarClaveReq>,
+) -> Result<Json<IssuedApiKey>, (StatusCode, String)> {
+    let (uid, is_admin) =
+        require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
+    let owner: i64 = app
+        .store
+        .conn()
+        .query_row(
+            "SELECT user_id FROM sessions WHERE public_id = ?1 AND kind = 'api_key'",
+            [&public_id],
+            |r| r.get(0),
+        )
+        .map_err(|_| (StatusCode::NOT_FOUND, "no existe esa clave".to_string()))?;
+    if owner != uid && !is_admin {
+        return Err((StatusCode::FORBIDDEN, "no es tu clave".to_string()));
+    }
+
+    let phc: String = app
+        .store
+        .conn()
+        .query_row("SELECT password_phc FROM users WHERE id = ?1", [uid], |r| r.get(0))
+        .map_err(|_| (StatusCode::UNAUTHORIZED, "sesión inválida".to_string()))?;
+    let password = req.password.clone();
+    let verificado =
+        tokio::task::spawn_blocking(move || lumi_proto::crypto::verify_password(&password, &phc))
+            .await
+            .unwrap_or(false);
+    if !verificado {
+        return Err((StatusCode::UNAUTHORIZED, "la contraseña no es correcta".into()));
+    }
+
+    let secret = format!("lumi_ak_{}", crate::routes::claim::new_token());
+    let prefix = if secret.len() > 20 {
+        format!("{}…{}", &secret[..16], &secret[secret.len() - 4..])
+    } else {
+        secret.clone()
+    };
+    app.store
+        .conn()
+        .execute(
+            "UPDATE sessions SET token = ?1, token_prefix = ?2, last_seen = ?3
+             WHERE public_id = ?4 AND kind = 'api_key'",
+            rusqlite::params![lumi_proto::crypto::hash_token(&secret), prefix, now(), public_id],
+        )
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let info = key_row(&app, &public_id)
+        .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "no se pudo releer la clave regenerada".to_string()))?;
+    tracing::info!("clave de API {public_id} regenerada por el usuario {uid}");
+    Ok(Json(IssuedApiKey { key: secret, info }))
+}
+
 pub async fn patch_ips(
     State(app): State<App>,
     Path(public_id): Path<String>,

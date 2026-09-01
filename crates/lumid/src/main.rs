@@ -261,6 +261,7 @@ async fn main() -> anyhow::Result<()> {
             "/v1/api-keys/:public_id",
             axum::routing::delete(routes::api_keys::revoke).patch(routes::api_keys::patch_ips),
         )
+        .route("/v1/api-keys/:public_id/regenerate", post(routes::api_keys::regenerate))
         .route("/v1/admin/security", get(routes::security::get_security).patch(routes::security::patch_security))
         .route(
             "/v1/admin/security/allowlist",

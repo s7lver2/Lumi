@@ -59,6 +59,12 @@ export function ApiKeysView({ token, onIr }: { token: string; onIr: (s: SeccionI
     void cargarClaves();
   }
 
+  async function regenerar(publicId: string, password: string) {
+    const r = await api.post<IssuedApiKey>(`/v1/api-keys/${publicId}/regenerate`, { password }, token);
+    setRevelada(r);
+    void cargarClaves();
+  }
+
   return (
     <Seccion titulo="API Keys" grupo="Servidor">
       <p className="text-[11px] text-muted">Credenciales de terceros y claves para llamar a la API.</p>
@@ -118,7 +124,11 @@ export function ApiKeysView({ token, onIr }: { token: string; onIr: (s: SeccionI
       </div>
       <div className="rounded-card border border-border bg-panel">
         {(claves ?? []).length === 0 && <p className="p-6 text-center text-[11px] text-subtle">Sin claves.</p>}
-        {(claves ?? []).map((k) => <FilaClave key={k.public_id} clave={k} onRevocar={() => void revocar(k.public_id)} />)}
+        {(claves ?? []).map((k) => (
+          <FilaClave key={k.public_id} clave={k}
+            onRevocar={() => void revocar(k.public_id)}
+            onRegenerar={(password) => regenerar(k.public_id, password)} />
+        ))}
       </div>
 
       {emitiendo && (
@@ -151,10 +161,13 @@ function ListaIp({ titulo, sub, valores, onAgregar, onQuitar }: {
   );
 }
 
-function FilaClave({ clave, onRevocar }: { clave: ApiKeyInfo; onRevocar: () => void }) {
+function FilaClave({ clave, onRevocar, onRegenerar }: {
+  clave: ApiKeyInfo; onRevocar: () => void; onRegenerar: (password: string) => Promise<unknown>;
+}) {
   const [confirmando, setConfirmando] = useState(false);
+  const [regenerando, setRegenerando] = useState(false);
   return (
-    <div className="grid grid-cols-[auto_1.3fr_1fr_auto_auto] items-center gap-3 border-b border-border p-[11px_16px] last:border-b-0">
+    <div className="grid grid-cols-[auto_1.3fr_1fr_auto_auto_auto] items-center gap-3 border-b border-border p-[11px_16px] last:border-b-0">
       <div className={`grid h-6 w-6 place-items-center rounded-lg border text-[9.5px] text-muted ${clave.owner_is_service ? "border-dashed" : "border-border bg-elevated"}`}>
         {clave.owner_is_service ? <Icon name="boxes" size={12} /> : clave.owner_username.slice(0, 2).toUpperCase()}
       </div>
@@ -168,6 +181,9 @@ function FilaClave({ clave, onRevocar }: { clave: ApiKeyInfo; onRevocar: () => v
           </span>
         ))}
       </div>
+      <button onClick={() => setRegenerando(true)} className="rounded-lg border border-white/15 px-2.5 py-1 text-[9.5px] text-fg">
+        Regenerar
+      </button>
       {confirmando ? (
         <div className="flex items-center gap-2 text-[10.5px]">
           <span className="text-warning-fg">¿Seguro?</span>
@@ -177,6 +193,56 @@ function FilaClave({ clave, onRevocar }: { clave: ApiKeyInfo; onRevocar: () => v
       ) : (
         <button onClick={() => setConfirmando(true)} className="rounded-lg border border-danger/40 px-2.5 py-1 text-[9.5px] text-danger-fg">Revocar</button>
       )}
+      {regenerando && (
+        <ModalRegenerar onCancelar={() => setRegenerando(false)}
+          onConfirmar={async (password) => { await onRegenerar(password); setRegenerando(false); }} />
+      )}
+    </div>
+  );
+}
+
+/** La clave ya no se puede volver a enseñar (se guarda como hash, ver
+ *  `regenerate` en `crates/lumid/src/routes/api_keys.rs`) — regenerar la
+ *  sustituye por una nueva sin tocar caducidad/IPs/dispositivos, y pide la
+ *  contraseña de quien lo hace antes de sustituir un secreto vivo. */
+function ModalRegenerar({ onCancelar, onConfirmar }: {
+  onCancelar: () => void; onConfirmar: (password: string) => Promise<void>;
+}) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
+
+  async function confirmar() {
+    setEnviando(true); setError(null);
+    try {
+      await onConfirmar(password);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6" onClick={(e) => { if (e.target === e.currentTarget) onCancelar(); }}>
+      <div className="w-full max-w-[380px] rounded-2xl border border-white/[.13] bg-[rgba(16,19,25,.92)] p-[20px_22px] backdrop-blur-xl">
+        <h3 className="mb-2 text-[14px] font-medium">Regenerar clave</h3>
+        <p className="mb-3 text-[11px] text-muted">
+          La clave actual deja de funcionar de inmediato. Confirma tu contraseña para sustituirla por una nueva.
+        </p>
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && password) void confirmar(); }}
+          placeholder="tu contraseña" autoFocus
+          className="mb-1 w-full rounded-lg border border-border bg-elevated px-2.5 py-2 text-[11.5px] text-fg outline-none focus:border-white/40" />
+        {error && <p className="mt-1.5 text-[10px] text-danger-fg">{error}</p>}
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={onCancelar} className="rounded-lg px-3 py-1.5 text-[10.5px] text-subtle">Cancelar</button>
+          <button onClick={() => void confirmar()} disabled={!password || enviando}
+            className="rounded-lg bg-accent px-3 py-1.5 text-[10.5px] font-medium text-black disabled:opacity-40">
+            {enviando ? "Regenerando…" : "Regenerar"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
