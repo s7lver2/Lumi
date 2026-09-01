@@ -4,7 +4,7 @@
 - [ ] cuando activas la opcionde animaciones reducidas, el fondo de login se congela por completo, deber'ia de ser remplazado por uno plano
 - [x] al hacer click izquierdo en el cliente, en uno de los servidores registrados, el menu contextual de opciones que deberia de aparecer en el lugar en el que clickaste aparece en la esquina inferior
 - [x] no se parecen estar creando correctamente las carpertas de los servidores registrados
-- [ ] el icono de todas las apps es el por defecto de tauri, y quiero que sea el de lumi, pero con una variaci'on para el indexer, que sea la estrella pero con unas gafas o algo asi
+- [x] el icono de todas las apps es el por defecto de tauri, y quiero que sea el de lumi, pero con una variaci'on para el indexer, que sea la estrella pero con unas gafas o algo asi
 - [x] en el indexer, si me registre con github, y ya tenia una cuenta de antes, no tendr'ia porque haberme regenerado unas nuevas claves de recuperacion, deberian de haber sido las mismas, porque ya tengo cuenta
 - [x] bug en el setup de un servidor nuevo de lumi, en el cual se le pide introducir la clave al usuario 2 veces, una para saber que servidor vamos a configurar, y la siguiente en el primer paso de la propia configuracion, inecesario, eliminar
 - [x] el popup de version incompatible al intentar hacer el setup entro tarde, cuando ya estabamos haciendo el paso 1 del setup en un servidor nuevo
