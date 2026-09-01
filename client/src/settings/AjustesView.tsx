@@ -42,8 +42,12 @@ function AparienciaPanel() {
         </span>
         <button role="switch" aria-checked={activo}
           onClick={() => { const v = !activo; setActivo(v); setReducirMovimiento(v); }}
-          className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-300 ease-expo ${activo ? "bg-accent" : "bg-white/15"}`}>
-          <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-black transition-transform duration-300 ease-expo ${activo ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+          className={`relative h-5 w-9 shrink-0 rounded-full border transition-colors duration-300 ease-expo ${activo ? "border-accent bg-accent" : "border-white/15 bg-white/10"}`}>
+          {/* El pomo era negro sobre un riel oscuro translúcido en el estado
+              apagado — sin contraste, invisible. `bg-fg` (casi blanco) se ve
+              en los dos estados; sobre el riel encendido (bg-accent, casi
+              blanco también) se distingue por el aro oscuro. */}
+          <span className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-fg ring-1 ring-black/20 transition-transform duration-300 ease-expo ${activo ? "translate-x-[18px]" : "translate-x-0.5"}`} />
         </button>
       </label>
     </Seccion>

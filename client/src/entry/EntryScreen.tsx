@@ -110,9 +110,13 @@ export function EntryScreen({ onSignedIn, onOwnerKey }: {
     <>
       <WavesBackground />
       {pane}
+      {/* Esquinita pegada al borde, no un punto flotando en medio de la nada:
+          mismo color y desenfoque que la barra de título (bg-[rgba(13,15,17,.92)],
+          TitleBar.tsx), solo con el icono — se lee como parte del chrome de
+          la ventana, no como un elemento suelto encima del fondo. */}
       <button onClick={() => setView("ajustes")}
-        className="fixed bottom-4 left-4 z-10 grid h-8 w-8 place-items-center rounded-full
-          border border-white/15 bg-[rgba(16,19,25,.66)] text-subtle backdrop-blur-xl
+        className="fixed bottom-0 left-0 z-10 grid h-8 w-8 place-items-center rounded-tr-lg
+          border-r border-t border-border bg-[rgba(13,15,17,.92)] text-subtle backdrop-blur-md
           transition-colors duration-300 ease-expo hover:text-fg"
         title="Ajustes">
         <Icon name="ajustes" size={14} />

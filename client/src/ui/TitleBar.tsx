@@ -41,8 +41,13 @@ export function TitleBar({ crumbs, onOpenAdmin, onProfile, onSignOut, onProjectA
     <header data-tauri-drag-region
       className="relative z-[60] flex h-[38px] shrink-0 items-center gap-2.5 border-b border-border
         bg-[rgba(13,15,17,.92)] pl-2.5 backdrop-blur-md">
+      {/* La estrella real de la marca (mismo path que Pane/EntryScreen), no
+          el rombo genérico "logo" de Icon.tsx — la barra de título debe
+          llevar la misma identidad que el resto del cliente. */}
       <span className="grid h-[18px] w-[18px] shrink-0 place-items-center text-fg">
-        <Icon name="logo" size={15} />
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+          <path d="M12 2c.7 4.4 2.7 6.4 7 7-4.3.7-6.3 2.7-7 7-.7-4.4-2.7-6.4-7-7 4.3-.7 6.3-2.7 7-7z" />
+        </svg>
       </span>
       {version && <span className="shrink-0 font-mono text-[9.5px] text-subtle">v{version}</span>}
 

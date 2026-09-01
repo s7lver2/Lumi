@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-import { Icon } from "./Icon";
 import { PerfPill } from "./PerfPill";
 
 /** Botones de ventana propios. La ventana va sin decoración del sistema
@@ -110,8 +109,12 @@ export function WindowFrame({ children }: { children: React.ReactNode }) {
       <header data-tauri-drag-region
         className="relative z-[60] flex h-[38px] shrink-0 items-center gap-2.5 border-b border-border
           bg-[rgba(13,15,17,.92)] pl-2.5 backdrop-blur-md">
+        {/* La estrella real de la marca, no el rombo generico "logo" de
+            Icon.tsx — misma identidad que el cliente. */}
         <span className="grid h-[18px] w-[18px] shrink-0 place-items-center text-fg">
-          <Icon name="logo" size={15} />
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <path d="M12 2c.7 4.4 2.7 6.4 7 7-4.3.7-6.3 2.7-7 7-.7-4.4-2.7-6.4-7-7 4.3-.7 6.3-2.7 7-7z" />
+          </svg>
         </span>
         <span data-tauri-drag-region className="text-[11.5px] text-fg">Lumi Indexer</span>
         <span data-tauri-drag-region className="h-full flex-1" />
