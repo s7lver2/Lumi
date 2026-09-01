@@ -51,6 +51,26 @@ pub fn set_mensaje(app: &App, msg: &str) -> anyhow::Result<()> {
     app.store.set_meta("mantenimiento_mensaje", msg)
 }
 
+/// Migración de una sola vez, a ejecutar al arrancar antes de construir
+/// `App`: antes de que existiera `mantenimiento_mensaje_sistema`, el flujo
+/// de actualización escribía su propio mensaje directo en
+/// `mantenimiento_mensaje` — el mismo campo que ahora se trata como "puesto
+/// por el admin a mano" y por eso gana prioridad siempre (ver `mensaje()`).
+/// Un valor viejo así se queda contaminando esa prioridad para siempre, sin
+/// que ninguna actualización nueva pueda desplazarlo. Se reconoce por el
+/// prefijo exacto que ese flujo antiguo usaba y, si coincide, se traslada al
+/// campo de sistema (donde sigue siendo el mismo dato, solo que ya no
+/// bloquea al de verdad) en vez de perderse sin más.
+pub fn migrar_mensaje_contaminado(store: &crate::store::Store) -> anyhow::Result<()> {
+    if let Some(actual) = store.get_meta("mantenimiento_mensaje") {
+        if actual.starts_with("Actualizando a ") {
+            store.set_meta("mantenimiento_mensaje_sistema", &actual)?;
+            store.set_meta("mantenimiento_mensaje", "")?;
+        }
+    }
+    Ok(())
+}
+
 /// Mensaje "de sistema": lo pone el propio flujo de actualización, nunca el
 /// admin a mano. Vive en su propia clave para no pisar `set_mensaje` — ver
 /// la nota en `mensaje()` sobre la prioridad entre ambos.

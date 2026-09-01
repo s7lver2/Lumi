@@ -90,6 +90,7 @@ async fn main() -> anyhow::Result<()> {
     // haya guardado en `meta` (Doctor > Logs > Ajustes), y para eso hace
     // falta la base de datos ya abierta.
     let store = Arc::new(store::Store::open(&dir)?);
+    mantenimiento::migrar_mensaje_contaminado(&store)?;
 
     // Sin `with_ansi(false)` en la capa de formato, `tracing_subscriber`
     // decide colorear según crea que su salida es una terminal — y bajo
