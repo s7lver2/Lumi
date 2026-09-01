@@ -139,6 +139,10 @@ pub async fn patch(
     Json(req): Json<lumi_proto::api::PatchServerProfileReq>,
 ) -> Result<Json<perfil::ServerProfile>, (StatusCode, String)> {
     let admin = require_admin(&app, &bearer(&headers)).map_err(|c| (c, "hace falta ser administrador".to_string()))?;
+    if let Some(on) = req.active {
+        perfil::set_activo(&app.store, on).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        tracing::info!("perfil del servidor {} por el administrador {admin}", if on { "activado" } else { "desactivado" });
+    }
     if let Some(title) = &req.title {
         perfil::set_titulo(&app.store, title).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         tracing::info!("título del servidor cambiado por el administrador {admin}: {title}");

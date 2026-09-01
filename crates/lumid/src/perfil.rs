@@ -46,6 +46,11 @@ pub fn guardar_recortada(bytes: &[u8], w: u32, h: u32, ruta: &Path) -> anyhow::R
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerProfile {
+    /// Mismo patrón que `politicas::Settings.active` (#77): el perfil
+    /// existe siempre en `meta`, pero solo se muestra en "Añadir servidor"
+    /// si el admin lo activa explícitamente — evita que un servidor a medio
+    /// configurar (título en blanco, sin foto) se enseñe por defecto.
+    pub active: bool,
     pub title: String,
     pub description: serde_json::Value,
     pub member_count: i64,
@@ -63,6 +68,7 @@ pub fn leer_servidor(store: &Store, app_dir: &Path) -> ServerProfile {
         .query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0))
         .unwrap_or(0);
     ServerProfile {
+        active: activo(store),
         title: store.get_meta("servidor_titulo").unwrap_or_default(),
         description: store
             .get_meta("servidor_descripcion")
@@ -72,6 +78,14 @@ pub fn leer_servidor(store: &Store, app_dir: &Path) -> ServerProfile {
         has_avatar: ruta_avatar_servidor(app_dir).exists(),
         has_banner: ruta_banner_servidor(app_dir).exists(),
     }
+}
+
+pub fn activo(store: &Store) -> bool {
+    store.get_meta("servidor_perfil_activo").as_deref() == Some("1")
+}
+
+pub fn set_activo(store: &Store, on: bool) -> anyhow::Result<()> {
+    store.set_meta("servidor_perfil_activo", if on { "1" } else { "0" })
 }
 
 pub fn set_titulo(store: &Store, title: &str) -> anyhow::Result<()> {

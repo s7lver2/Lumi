@@ -160,6 +160,7 @@ export interface PoliciesSettings {
   content: unknown;
 }
 export interface ServerProfileSettings {
+  active: boolean;
   title: string;
   /** Documento Tiptap JSON — opaco aquí, solo lo entiende `AvisoEditor`. */
   description: unknown;
@@ -510,7 +511,7 @@ export const api = {
     api.patch<PoliciesSettings>("/v1/admin/policies", patch, token),
   serverProfilePublic: () => api.get<ServerProfileSettings>("/v1/server-profile"),
   serverProfileGet: (token: string) => api.get<ServerProfileSettings>("/v1/admin/server-profile", token),
-  serverProfilePatch: (patch: Partial<Pick<ServerProfileSettings, "title" | "description">>, token: string) =>
+  serverProfilePatch: (patch: Partial<Pick<ServerProfileSettings, "active" | "title" | "description">>, token: string) =>
     api.patch<ServerProfileSettings>("/v1/admin/server-profile", patch, token),
   actividadGet: (token: string) => api.get<ActividadItem[]>("/v1/admin/actividad", token),
 };

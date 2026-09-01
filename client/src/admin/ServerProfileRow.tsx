@@ -84,38 +84,71 @@ export function ServerProfileRow({ token }: { token: string }) {
 
   const cambiado = titulo !== cfg.title || JSON.stringify(descripcion) !== JSON.stringify(cfg.description);
 
+  async function alternar() {
+    if (!cfg) return;
+    setError(null);
+    try {
+      setCfg(await api.serverProfilePatch({ active: !cfg.active }, token));
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
   return (
     <div className="mt-4 rounded-card border border-border p-3.5">
-      <p className="mb-3 text-[12.5px] text-fg">Perfil del servidor</p>
-
-      <div className="mb-3.5 flex items-center gap-3.5">
-        <button key={`banner-${tick}`} onClick={() => void elegir("banner")} disabled={busyImg !== null}
-          className="jg-press relative h-[70px] w-[130px] shrink-0 overflow-hidden rounded-lg border border-border bg-elevated text-[9.5px] text-subtle disabled:opacity-40">
-          {cfg.has_banner ? (
-            <img src={lumiUrl(`/v1/server-profile/banner?v=${tick}`)} alt="" className="h-full w-full object-cover" />
-          ) : (busyImg === "banner" ? "Subiendo…" : "Banner · subir")}
+      <div className="flex items-center gap-3.5">
+        <button onClick={() => void alternar()}
+          className={`relative h-[21px] w-9 shrink-0 cursor-pointer rounded-full border transition-colors duration-300 ease-expo ${
+            cfg.active ? "border-white/30 bg-white/[.14]" : "border-border bg-elevated"}`}>
+          <span className={`absolute left-[2px] top-[2px] h-[15px] w-[15px] rounded-full transition-transform duration-300 ease-expo ${
+            cfg.active ? "translate-x-[15px] bg-fg" : "bg-subtle"}`} />
         </button>
-        <button key={`avatar-${tick}`} onClick={() => void elegir("avatar")} disabled={busyImg !== null}
-          className="jg-press relative h-14 w-14 shrink-0 overflow-hidden rounded-[12px] border border-border bg-elevated text-[9px] text-subtle disabled:opacity-40">
-          {cfg.has_avatar ? (
-            <img src={lumiUrl(`/v1/server-profile/avatar?v=${tick}`)} alt="" className="h-full w-full object-cover" />
-          ) : (busyImg === "avatar" ? "…" : "Foto")}
-        </button>
+        <div className="min-w-0">
+          <p className="text-[12.5px] text-fg">Perfil del servidor</p>
+          <p className="mt-0.5 text-[10px] text-subtle">
+            Foto, banner, título y descripción que ve quien todavía no tiene cuenta al añadir este servidor.
+          </p>
+        </div>
+        <span className="ml-auto shrink-0 text-[10px] text-subtle">{cfg.member_count} miembros</span>
       </div>
 
-      <label className="mb-1.5 block text-[9.5px] uppercase tracking-[.06em] text-muted">Título</label>
-      <input value={titulo} onChange={(e) => setTitulo(e.target.value)}
-        placeholder="Laboratorio Forense León"
-        className="mb-3 w-full rounded-lg border border-border bg-elevated px-2.5 py-2 text-[11.5px] text-fg outline-none focus:border-white/40" />
-      <label className="mb-1.5 block text-[9.5px] uppercase tracking-[.06em] text-muted">Descripción</label>
-      <AvisoEditor contenido={descripcion} onChange={setDescripcion} />
+      {/* Mismo patrón `grid-template-rows` que PolicyRow/SecurityView: el
+          perfil requiere activarse explícitamente antes de poder editarlo,
+          igual que las políticas de aceptación (#77). */}
+      <div className="grid transition-[grid-template-rows] duration-[420ms] ease-expo"
+        style={{ gridTemplateRows: cfg.active ? "1fr" : "0fr" }}>
+        <div className="overflow-hidden">
+          <div className="mt-3.5 border-t border-border pt-3">
+            <div className="mb-3.5 flex items-center gap-3.5">
+              <button key={`banner-${tick}`} onClick={() => void elegir("banner")} disabled={busyImg !== null}
+                className="jg-press relative h-[70px] w-[130px] shrink-0 overflow-hidden rounded-lg border border-border bg-elevated text-[9.5px] text-subtle disabled:opacity-40">
+                {cfg.has_banner ? (
+                  <img src={lumiUrl(`/v1/server-profile/banner?v=${tick}`)} alt="" className="h-full w-full object-cover" />
+                ) : (busyImg === "banner" ? "Subiendo…" : "Banner · subir")}
+              </button>
+              <button key={`avatar-${tick}`} onClick={() => void elegir("avatar")} disabled={busyImg !== null}
+                className="jg-press relative h-14 w-14 shrink-0 overflow-hidden rounded-[12px] border border-border bg-elevated text-[9px] text-subtle disabled:opacity-40">
+                {cfg.has_avatar ? (
+                  <img src={lumiUrl(`/v1/server-profile/avatar?v=${tick}`)} alt="" className="h-full w-full object-cover" />
+                ) : (busyImg === "avatar" ? "…" : "Foto")}
+              </button>
+            </div>
 
-      <div className="mt-3 flex items-center gap-2">
-        <button onClick={guardar} disabled={busy || !cambiado}
-          className="jg-press rounded-lg bg-accent px-3.5 py-1.5 text-[11px] font-medium text-black disabled:opacity-40">
-          Guardar cambios
-        </button>
-        <span className="text-[10px] text-subtle">{cfg.member_count} miembros</span>
+            <label className="mb-1.5 block text-[9.5px] uppercase tracking-[.06em] text-muted">Título</label>
+            <input value={titulo} onChange={(e) => setTitulo(e.target.value)}
+              placeholder="Laboratorio Forense León"
+              className="mb-3 w-full rounded-lg border border-border bg-elevated px-2.5 py-2 text-[11.5px] text-fg outline-none focus:border-white/40" />
+            <label className="mb-1.5 block text-[9.5px] uppercase tracking-[.06em] text-muted">Descripción</label>
+            <AvisoEditor contenido={descripcion} onChange={setDescripcion} />
+
+            <div className="mt-3 flex items-center gap-2">
+              <button onClick={guardar} disabled={busy || !cambiado}
+                className="jg-press rounded-lg bg-accent px-3.5 py-1.5 text-[11px] font-medium text-black disabled:opacity-40">
+                Guardar cambios
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
       {error && <p className="mt-2.5 text-[11px] text-danger-fg">{error}</p>}
 

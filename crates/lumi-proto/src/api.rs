@@ -192,6 +192,7 @@ pub struct PatchPoliciesReq {
 
 #[derive(Debug, Deserialize)]
 pub struct PatchServerProfileReq {
+    pub active: Option<bool>,
     pub title: Option<String>,
     pub description: Option<serde_json::Value>,
 }
