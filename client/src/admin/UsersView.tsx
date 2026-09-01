@@ -64,6 +64,10 @@ export function UsersView({ token, abrirUserId }: { token: string; abrirUserId?:
   if (detail) {
     const u = detail.user;
     return (
+      // Sin esto el detalle sustituía a la lista de golpe (#79) — mismo
+      // valor de animación que las filas de la lista/rejilla de abajo, solo
+      // que aquí es la sección entera la que entra.
+      <div key={u.id} style={{ animation: "jg-fade-rise .5s cubic-bezier(.16,1,.3,1) both" }}>
       <Seccion
         titulo={
           <span className="flex items-center gap-2.5">
@@ -173,6 +177,7 @@ export function UsersView({ token, abrirUserId }: { token: string; abrirUserId?:
             onCerrar={() => setEditando(null)} />
         )}
       </Seccion>
+      </div>
     );
   }
 
