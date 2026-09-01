@@ -42,6 +42,7 @@ pub enum Producto {
     Cliente,
     Lumid,
     Indexer,
+    Instalador,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

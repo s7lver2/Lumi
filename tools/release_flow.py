@@ -30,9 +30,12 @@ if sys.platform == "win32":
 
 REPO_GITHUB = "s7lver2/Lumi"
 WSL_RUTA_LUMI = "~/Lumi"
-PRODUCTOS = ("cliente", "indexer", "lumid")
+PRODUCTOS = ("cliente", "indexer", "lumid", "installer")
 
-PLATAFORMA = {"cliente": "windows-x86_64", "indexer": "windows-x86_64", "lumid": "linux-x86_64"}
+PLATAFORMA = {
+    "cliente": "windows-x86_64", "indexer": "windows-x86_64", "lumid": "linux-x86_64",
+    "installer": "windows-x86_64",
+}
 
 RUTA_BINARIO = {
     "cliente": "client/src-tauri/target/release/app.exe",
@@ -182,6 +185,10 @@ def construir(root: Path, productos: list[str]) -> dict[str, Path]:
     if "lumid" in productos:
         artefactos["lumid"] = _construir_wsl_lumid(root)
 
+    # El instalador se construye SIEMPRE, esté o no en `productos` — todo
+    # release necesita su .exe como asset (es lo que instala cliente/indexer
+    # nuevos), independientemente de si esta vez se está publicando además
+    # una `Publicacion` nueva para `producto=installer` en el manifiesto.
     _forzar_reembebido_icono(root, "installer")
     run([npm, "run", "tauri", "build"], cwd=str(root / "installer"), label="installer")
     artefactos["installer"] = root / RUTA_BINARIO["installer"]
@@ -214,7 +221,14 @@ def confirmar_y_comitear(root: Path, version: str) -> None:
 def subir_github(version: str, productos: list[str], artefactos: dict[str, Path], notas: str) -> dict[str, str]:
     section("Subiendo a GitHub Releases")
     tag = f"v{version}"
-    assets = [str(artefactos[p]) for p in productos] + [str(artefactos["installer"])]
+    # El instalador siempre se construye (ver `construir()`) y siempre se
+    # sube como asset — pero solo una vez: si el investigador también eligió
+    # publicarlo como producto (`"installer" in productos`), ya está en la
+    # primera lista y añadirlo de nuevo duplicaría el asset en `gh release
+    # create`.
+    assets = [str(artefactos[p]) for p in productos]
+    if "installer" not in productos:
+        assets.append(str(artefactos["installer"]))
     run(
         ["gh", "release", "create", tag, *assets,
          "--repo", REPO_GITHUB, "--title", tag, "--notes", notas or "(sin notas)"],
