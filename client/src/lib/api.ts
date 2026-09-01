@@ -46,6 +46,7 @@ export interface EstadoActualizacionLumid {
   retirada: boolean;
   comprobado_en: number | null;
   error: string | null;
+  aplicando: boolean;
 }
 export interface AvisoInfo {
   id: number;
@@ -247,9 +248,17 @@ export function versionMayor(a: string, b: string): boolean {
 /** El error que lanza `pair`/`reconnect`/`pair_card` cuando la versión del
  *  cliente y la del servidor no coinciden (ver `connect()` en
  *  `client/src-tauri/src/main.rs`) trae el formato
- *  `version incompatible|<propia>|<servidor>`. `null` si `msg` no es eso. */
+ *  `version incompatible|<propia>|<servidor>`. `null` si `msg` no es eso.
+ *
+ *  Además del prefijo exacto (ya anclado con `^`/`$`, así que un mensaje
+ *  distinto que solo contenga esa frase como subcadena no puede colarse),
+ *  se exige que ambas versiones tengan pinta de versión real
+ *  (`número.número.número`, igual que `partesVersion` de más abajo) — un
+ *  mensaje de error genérico que por casualidad reutilizara este formato
+ *  con texto libre en vez de números no debe disparar el modal de versión
+ *  incompatible por encima del error real. */
 export function parseVersionMismatch(msg: string): { propia: string; servidor: string } | null {
-  const m = /^version incompatible\|([^|]+)\|([^|]+)$/.exec(msg.trim());
+  const m = /^version incompatible\|(\d+\.\d+\.\d+)\|(\d+\.\d+\.\d+)$/.exec(msg.trim());
   return m ? { propia: m[1], servidor: m[2] } : null;
 }
 

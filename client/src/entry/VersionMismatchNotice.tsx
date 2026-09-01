@@ -75,19 +75,23 @@ export function VersionMismatchModal({ propia, servidor, onClose, onForzar }: {
     // translúcido — dos capas de cristal juntas dejaban el texto de detrás
     // (título/botones del formulario) sangrando a través del popup,
     // ilegible y con los clics cayendo en el elemento equivocado.
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-bg/95 p-6"
+    // z-[70], no z-[60]: la barra de título (`TitleBar.tsx`) también usa
+    // z-[60] — con el mismo valor, cuál gana depende del orden en el DOM en
+    // vez de la intención ("este popup bloquea todo"), frágil ante un
+    // reordenamiento futuro. Este aviso debe quedar SIEMPRE por encima.
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-bg/95 p-6"
       style={{ animation: "jg-backdrop-in .28s ease both" }}>
       <div className="w-full max-w-sm" style={{ animation: "jg-fade-rise .5s cubic-bezier(.16,1,.3,1) both" }}>
-        <div className="mb-1 flex items-center gap-2.5">
+        <div className="mb-1 flex items-center justify-center gap-2.5">
           <span className="text-fg" style={{ animation: "jg-lock-breathe 2.4s ease-in-out infinite" }}>✦</span>
           <span className="text-[17px] font-medium text-fg">Versión incompatible</span>
         </div>
-        <p className="mb-6 text-xs text-muted">
+        <p className="mb-6 text-center text-xs text-muted">
           Este cliente ({propia}) no coincide con la versión del servidor ({servidor}).
         </p>
 
         <div className="rounded-card border border-border bg-panel p-5 shadow-lg shadow-black/40">
-          {error && <p className="mb-3 text-xs text-danger-fg">{error}</p>}
+          {error && <p className="mb-3 break-words text-center text-xs text-danger-fg">{error}</p>}
           <div className="flex flex-wrap items-center justify-end gap-2">
             {clienteEsMasNuevo && (
               enviada ? (
