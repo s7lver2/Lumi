@@ -217,7 +217,10 @@ pub fn run(auto: bool, version: Option<&str>) -> Result<PairKey> {
         Some(v) => descargar_lumid(v)?,
         None => {
             let src = std::env::current_exe()?.with_file_name("lumid");
-            fs::copy(&src, BIN).with_context(|| format!("no se pudo copiar {src:?} a {BIN}"))?;
+            let bytes = fs::read(&src).with_context(|| format!("no se pudo leer {src:?}"))?;
+            lumi_installer::aplicar::escribir_binario_atomico(Path::new(BIN), &bytes)
+                .map_err(|e| anyhow::anyhow!(e.to_string()))
+                .with_context(|| format!("no se pudo copiar {src:?} a {BIN}"))?;
         }
     }
     fs::write("/etc/systemd/system/lumid.service", UNIT)?;

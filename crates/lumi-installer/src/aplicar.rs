@@ -54,7 +54,27 @@ pub fn aplicar_producto(
     if let Some(padre) = destino_exe.parent() {
         fs::create_dir_all(padre).map_err(|e| InstaladorError::Disco(e.to_string()))?;
     }
-    fs::write(destino_exe, &bytes).map_err(|e| InstaladorError::Disco(e.to_string()))?;
+    escribir_binario_atomico(destino_exe, &bytes)?;
 
+    Ok(())
+}
+
+/// Escribe `bytes` en un fichero temporal junto a `destino` y lo mueve
+/// encima con `rename`, en vez de abrir `destino` directo para escritura.
+/// En Linux, sobrescribir el binario de un servicio que está corriendo con
+/// `fs::write` falla con "Text file busy" (ETXTBSY, os error 26) porque el
+/// kernel tiene el fichero mapeado para ejecución — `rename` no lo pide
+/// (el proceso en marcha se queda con el inodo viejo hasta que termine,
+/// exactamente el comportamiento que se busca al actualizar en caliente).
+pub fn escribir_binario_atomico(destino: &Path, bytes: &[u8]) -> Result<(), InstaladorError> {
+    let temporal = destino.with_extension(format!("tmp-{}", std::process::id()));
+    fs::write(&temporal, bytes).map_err(|e| InstaladorError::Disco(e.to_string()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&temporal, fs::Permissions::from_mode(0o755))
+            .map_err(|e| InstaladorError::Disco(e.to_string()))?;
+    }
+    fs::rename(&temporal, destino).map_err(|e| InstaladorError::Disco(e.to_string()))?;
     Ok(())
 }

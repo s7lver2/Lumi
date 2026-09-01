@@ -36,13 +36,53 @@ pub enum ActualizacionError {
     Codificacion(String),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+/// Un binario que un CLI/cliente viejo no reconoce (`Otro`) no debe tirar
+/// abajo la lectura de TODO el manifiesto — `canonico()` re-serializa el
+/// documento entero para comprobar la firma, así que si un producto nuevo
+/// se perdiera al deserializar, el manifiesto entero dejaría de verificar
+/// en cualquier binario más viejo que la fecha en que se añadió. `Otro`
+/// conserva el texto exacto para que el redondeo serialize→deserialize→
+/// serialize sea idéntico byte a byte, y solo deja de "verse" en las
+/// búsquedas por variante conocida (`mas_nueva`, `version_exacta`) — el
+/// comportamiento correcto para un producto que ese binario no instala.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Producto {
     Cliente,
     Lumid,
     Indexer,
     Instalador,
+    Otro(String),
+}
+
+impl Producto {
+    fn como_str(&self) -> &str {
+        match self {
+            Producto::Cliente => "cliente",
+            Producto::Lumid => "lumid",
+            Producto::Indexer => "indexer",
+            Producto::Instalador => "instalador",
+            Producto::Otro(s) => s,
+        }
+    }
+}
+
+impl Serialize for Producto {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.como_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for Producto {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let texto = String::deserialize(d)?;
+        Ok(match texto.as_str() {
+            "cliente" => Producto::Cliente,
+            "lumid" => Producto::Lumid,
+            "indexer" => Producto::Indexer,
+            "instalador" => Producto::Instalador,
+            _ => Producto::Otro(texto),
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -230,6 +270,35 @@ mod tests {
     fn sin_firma_falla_con_su_propio_error() {
         let m = manifiesto_de_prueba();
         assert_eq!(m.verificar_contra(&[0u8; 32]), Err(ActualizacionError::SinFirmar));
+    }
+
+    #[test]
+    fn producto_desconocido_no_rompe_deserializar_ni_la_firma() {
+        // Un binario compilado antes de que exista un producto nuevo debe
+        // poder leer el manifiesto igual (solo ese producto le es invisible
+        // para mas_nueva/version_exacta), y la firma tiene que seguir
+        // verificando porque el redondeo serialize→deserialize→serialize
+        // preserva el texto exacto vía `Producto::Otro`.
+        let k = clave_prueba();
+        let mut m = manifiesto_de_prueba();
+        m.publicaciones.push(Publicacion {
+            producto: Producto::Otro("un-producto-del-futuro".into()),
+            version: "9.0.0".into(),
+            publicado: "2026-09-01T00:00:00Z".into(),
+            notas: "".into(),
+            retirada: false,
+            artefactos: vec![],
+        });
+        m.firmar(&k);
+
+        let texto = serde_json::to_string(&m).unwrap();
+        let releido: Manifiesto = serde_json::from_str(&texto).unwrap();
+        assert!(releido.verificar_contra(&k.verifying_key().to_bytes()).is_ok());
+        assert_eq!(releido.publicaciones[1].producto, Producto::Otro("un-producto-del-futuro".into()));
+        assert_eq!(
+            releido.mas_nueva(Producto::Lumid, "2.0.0", "linux-x86_64").map(|p| p.version.as_str()),
+            Some("2.1.0")
+        );
     }
 
     #[test]
