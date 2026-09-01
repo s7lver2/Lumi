@@ -63,12 +63,24 @@ pub fn coberturas_locales(dir_paquetes: &Path) -> Vec<Cobertura> {
 }
 
 pub fn clasificar_area(
-    poligono: &[Punto],
+    poligonos: &[Vec<Punto>],
     fuentes: &[String],
     locales: &[Cobertura],
     catalogo: &[Cobertura],
 ) -> Result<Clasificacion> {
-    let pedidas = teselas_de_poligono(poligono);
+    // Varios anillos significa «varias piezas del área», nunca un agujero: el
+    // sistema no modela huecos interiores, y combinar formas (Task 8, sumar o
+    // restar) puede partir el área en trozos separados. Deduplicar por
+    // quadkey antes de clasificar es lo único que hace falta para tratar
+    // todos los trozos como una sola área.
+    let mut vistas = std::collections::BTreeSet::new();
+    for anillo in poligonos {
+        for qk in teselas_de_poligono(anillo) {
+            vistas.insert(qk);
+        }
+    }
+    let pedidas: Vec<String> = vistas.into_iter().collect();
+
     let teselas = clasificar(&pedidas, locales, catalogo);
     let Reparto { locales: l, catalogo: c, nuevas, reclamadas, bytes_a_descargar } = repartir(&teselas);
 

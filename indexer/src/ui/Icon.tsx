@@ -113,6 +113,14 @@ const PATHS: Record<string, React.JSX.Element> = {
   poligono: <><path d="M4 4h7l9 9-7 7-9-9z" /><circle cx="8.5" cy="8.5" r=".6" fill="currentColor" stroke="none" /></>,
   rectangulo: <rect x="4" y="4" width="16" height="16" rx="2" />,
   circulo: <circle cx="12" cy="12" r="8" />,
+  // Un lápiz: la herramienta que edita un trazo ya cerrado, distinta de
+  // dibujar uno nuevo.
+  editar: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></>,
+  // Deshacer/rehacer como un par de flechas en espejo, mismo trazo, para que
+  // se lean como opuestos a simple vista.
+  deshacer: <><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></>,
+  rehacer: <><path d="M15 14l5-5-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></>,
+  restar: <path d="M5 12h14" />,
   mano: (
     <>
       <path d="M12 2v20M2 12h20" />

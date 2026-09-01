@@ -115,6 +115,7 @@ export interface FichaOrigen {
   usd_por_mil: number;
   redistribuye: boolean;
 }
+export interface LugarReciente { nombre: string; lat: number; lng: number }
 export interface SondeoTesela {
   quadkey: string;
   fuente: string;
@@ -306,10 +307,13 @@ export const api = {
   indiceTeselas: (id: number) => invoke<[string, TrabajoDe][]>("indice_teselas", { id }),
   teselaLiberar: (indiceId: number, quadkey: string) =>
     invoke<void>("tesela_liberar", { indiceId, quadkey }),
-  territorioClasificar: (poligono: Punto[], fuentes: string[]) =>
-    invoke<Clasificacion>("territorio_clasificar", { poligono, fuentes }),
+  territorioClasificar: (poligonos: Punto[][], fuentes: string[]) =>
+    invoke<Clasificacion>("territorio_clasificar", { poligonos, fuentes }),
   territorioHeredar: (indiceId: number, heredadas: [string, string, string][]) =>
     invoke<void>("territorio_heredar", { indiceId, heredadas }),
+  territorioRecientesLeer: () => invoke<LugarReciente[]>("territorio_recientes_leer"),
+  territorioRecientesAnadir: (nombre: string, lat: number, lng: number) =>
+    invoke<void>("territorio_recientes_anadir", { nombre, lat, lng }),
   mapboxClaveGuardar: (clave: string) => invoke<void>("mapbox_clave_guardar", { clave }),
   mapboxClave: () => invoke<string | null>("mapbox_clave_leer"),
   paqueteSellarArrancar: (indiceId: number, destino: string) =>

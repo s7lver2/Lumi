@@ -24,6 +24,7 @@ pub const TOPE_MENSUAL_EUR_POR_DEFECTO: f64 = 100.0;
 // otro proveedor.
 pub const CLAVE_MAPBOX: &str = "mapbox";
 pub const CLAVE_TOPE: &str = "tope_mensual_eur";
+pub const TERRITORIO_RECIENTES: &str = "territorio_recientes";
 
 /// La clave de ajuste donde vive el secreto de un proveedor.
 pub fn ajuste_de(proveedor: &str) -> String {

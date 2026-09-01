@@ -1,8 +1,10 @@
+import { lineString } from "@turf/helpers";
+import { nearestPointOnLine } from "@turf/nearest-point-on-line";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useEffect, useRef, useState } from "react";
 
-import { api, type Clasificacion, type Punto, type SondeoTesela } from "../lib/api";
+import { api, type Clasificacion, type LugarReciente, type Punto, type SondeoTesela } from "../lib/api";
 import { color } from "../lib/origenes";
 import { teselaAPoligono, type Poligono } from "../lib/quadkey";
 import { Icon } from "../ui/Icon";
@@ -29,6 +31,38 @@ function poligonoGeoJSON(puntos: Punto[]): Poligono {
     properties: {},
     geometry: { type: "Polygon", coordinates: [anillo] },
   };
+}
+
+/** Pinta el trazo en curso sobre la fuente "dibujo". Función de módulo (no un
+ *  closure dentro de `load`) para poder llamarla también desde el efecto que
+ *  sincroniza la herramienta "editar" con el prop `dibujo`, fuera de ese
+ *  closure. */
+function pintarDibujoEn(m: mapboxgl.Map, pts: Punto[]) {
+  (m.getSource("dibujo") as mapboxgl.GeoJSONSource | undefined)?.setData({
+    type: "FeatureCollection",
+    features: pts.length >= 3 ? [poligonoGeoJSON(pts)] : [],
+  });
+}
+
+function verticesGeoJSON(anillo: Punto[]) {
+  return {
+    type: "FeatureCollection" as const,
+    features: anillo.map((p, i) => ({
+      type: "Feature" as const,
+      properties: { i },
+      geometry: { type: "Point" as const, coordinates: [p.lng, p.lat] },
+    })),
+  };
+}
+
+/** Divide el `place_name` de Mapbox en el nombre principal y el contexto que
+ *  desambigua (país/región) — hoy se pintan en dos líneas separadas en vez de
+ *  truncar el contexto en una sola. */
+function partirNombre(nombre: string): { principal: string; contexto: string } {
+  const i = nombre.indexOf(",");
+  return i === -1
+    ? { principal: nombre, contexto: "" }
+    : { principal: nombre.slice(0, i), contexto: nombre.slice(i + 1).trim() };
 }
 
 /** Haversine, metros. Solo hace falta para el radio en vivo del círculo: no
@@ -69,26 +103,29 @@ function rectanguloAPuntos(a: Punto, b: Punto): Punto[] {
   ];
 }
 
-type Herramienta = "mano" | "poligono" | "rectangulo" | "circulo";
+type Herramienta = "mano" | "poligono" | "rectangulo" | "circulo" | "editar";
 
-const HERRAMIENTAS: { id: Herramienta; icon: "mano" | "poligono" | "rectangulo" | "circulo"; titulo: string }[] = [
+const HERRAMIENTAS: { id: Herramienta; icon: "mano" | "poligono" | "rectangulo" | "circulo" | "editar"; titulo: string }[] = [
   { id: "mano", icon: "mano", titulo: "Mover el mapa — arrastra para desplazarte, sin dibujar nada" },
   { id: "poligono", icon: "poligono", titulo: "Polígono a mano — clic por esquina, doble clic para cerrar" },
   { id: "rectangulo", icon: "rectangulo", titulo: "Rectángulo — arrastra de una esquina a la opuesta" },
   { id: "circulo", icon: "circulo", titulo: "Círculo — arrastra del centro hacia fuera" },
+  { id: "editar", icon: "editar", titulo: "Editar — arrastra un vértice, doble clic en un lado para añadir uno, clic derecho para borrarlo" },
 ];
 
 export function MapCanvas({
   dibujo,
   clasificacion,
   onPoligonoListo,
+  onVerticeEditado,
   activos,
   sondeos,
   tokenMapillary,
 }: {
-  dibujo: Punto[];
+  dibujo: Punto[][];
   clasificacion: Clasificacion | null;
   onPoligonoListo: (p: Punto[]) => void;
+  onVerticeEditado?: (anillo: Punto[]) => void;
   activos?: Set<string>;
   sondeos?: SondeoTesela[];
   tokenMapillary?: string | null;
@@ -106,6 +143,14 @@ export function MapCanvas({
   // primer render para siempre — el mismo bug de cierre que dejaba los puntos
   // de Mapillary sin pintar (ver más abajo).
   const onPoligonoListoRef = useRef(onPoligonoListo);
+  const onVerticeEditadoRef = useRef(onVerticeEditado);
+  useEffect(() => { onVerticeEditadoRef.current = onVerticeEditado; }, [onVerticeEditado]);
+  // El anillo que se está editando ahora mismo — se resincroniza cada vez
+  // que cambian la herramienta activa o el trazo confirmado, y el arrastre
+  // lee/escribe aquí en vez de en el estado de React para no re-renderizar
+  // en cada `mousemove`.
+  const anilloEditando = useRef<Punto[]>([]);
+  const arrastrandoVertice = useRef<number | null>(null);
   // `null` mientras se pregunta, `false` cuando se sabe que no hay clave. Sin
   // este estado el mapa se quedaba en un `<div>` vacío para siempre y nadie
   // decía por qué: exactamente el fallo silencioso que PRODUCT.md prohíbe.
@@ -117,6 +162,10 @@ export function MapCanvas({
   const [sugerencias, setSugerencias] = useState<{ nombre: string; lng: number; lat: number }[]>([]);
   const [buscando, setBuscando] = useState(false);
   const sondeoBusqueda = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [recientes, setRecientes] = useState<LugarReciente[]>([]);
+  const [foco, setFoco] = useState(false);
+
+  useEffect(() => { void api.territorioRecientesLeer().then(setRecientes); }, []);
 
   useEffect(() => { herramientaRef.current = herramienta; }, [herramienta]);
   useEffect(() => { onPoligonoListoRef.current = onPoligonoListo; }, [onPoligonoListo]);
@@ -187,12 +236,19 @@ export function MapCanvas({
           },
         }, "teselas-borde");
 
-        const pintarDibujo = (pts: Punto[]) => {
-          (m.getSource("dibujo") as mapboxgl.GeoJSONSource)?.setData({
-            type: "FeatureCollection",
-            features: pts.length >= 3 ? [poligonoGeoJSON(pts)] : [],
-          });
-        };
+        // Los vértices del trazo actual, editables con la herramienta
+        // "editar". Fuente aparte de "dibujo": esta pinta puntos arrastrables,
+        // no la línea/relleno del trazo.
+        m.addSource("vertices", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        m.addLayer({
+          id: "vertices-puntos", type: "circle", source: "vertices",
+          paint: {
+            "circle-radius": 4.5,
+            "circle-color": "#85b7eb",
+            "circle-stroke-width": 1.4,
+            "circle-stroke-color": "#0c0e12",
+          },
+        });
 
         // El cursor cambia sobre una tesela reclamada, con la herramienta
         // "mano": es la única pista de que ahí hay algo que mirar antes de
@@ -234,13 +290,83 @@ export function MapCanvas({
         // --- Polígono a mano: clic añade esquina, doble clic cierra. -------
         m.on("click", (e) => {
           if (herramientaRef.current !== "poligono") return;
+          // Cerrar acercándose al primer vértice, además del doble clic que
+          // ya funciona: 12px de radio en pantalla, no en metros, porque el
+          // gesto tiene que sentirse igual de fácil a cualquier zoom.
+          if (puntos.current.length >= 3) {
+            const inicio = m.project([puntos.current[0].lng, puntos.current[0].lat]);
+            const aqui = m.project(e.lngLat);
+            if (Math.hypot(inicio.x - aqui.x, inicio.y - aqui.y) < 12) {
+              onPoligonoListoRef.current(puntos.current);
+              return;
+            }
+          }
           puntos.current = [...puntos.current, { lat: e.lngLat.lat, lng: e.lngLat.lng }];
-          pintarDibujo(puntos.current);
+          pintarDibujoEn(m, puntos.current);
         });
         m.on("dblclick", (e) => {
           if (herramientaRef.current !== "poligono") return;
           e.preventDefault();
           if (puntos.current.length >= 3) onPoligonoListoRef.current(puntos.current);
+        });
+
+        // Backspace quita solo la última esquina en vez de obligar a borrar
+        // el trazo entero por un clic de más.
+        m.getContainer().tabIndex = 0;
+        m.getContainer().addEventListener("keydown", (e) => {
+          if (e.key !== "Backspace" || herramientaRef.current !== "poligono") return;
+          if (puntos.current.length === 0) return;
+          e.preventDefault();
+          puntos.current = puntos.current.slice(0, -1);
+          pintarDibujoEn(m, puntos.current);
+        });
+
+        // --- Editar: arrastrar, insertar y borrar vértices. ----------------
+        m.on("mousedown", "vertices-puntos", (e) => {
+          if (herramientaRef.current !== "editar") return;
+          const i = Number(propsDe(e.features?.[0]).i);
+          arrastrandoVertice.current = i;
+          m.dragPan.disable();
+        });
+        m.on("mousemove", (e) => {
+          if (arrastrandoVertice.current === null) return;
+          const i = arrastrandoVertice.current;
+          const anillo = [...anilloEditando.current];
+          anillo[i] = { lat: e.lngLat.lat, lng: e.lngLat.lng };
+          anilloEditando.current = anillo;
+          (m.getSource("vertices") as mapboxgl.GeoJSONSource)?.setData(verticesGeoJSON(anillo));
+          pintarDibujoEn(m, anillo);
+        });
+        m.on("mouseup", () => {
+          if (arrastrandoVertice.current === null) return;
+          arrastrandoVertice.current = null;
+          m.dragPan.enable();
+          onVerticeEditadoRef.current?.(anilloEditando.current);
+        });
+
+        // Doble clic sobre el borde inserta un vértice ahí — `nearestPointOnLine`
+        // da el índice del segmento donde cae, y el punto nuevo se inserta justo
+        // después de ese índice.
+        m.on("dblclick", "dibujo-borde", (e) => {
+          if (herramientaRef.current !== "editar") return;
+          e.preventDefault();
+          const anillo = anilloEditando.current;
+          if (anillo.length < 3) return;
+          const cerrado = [...anillo, anillo[0]].map((p): [number, number] => [p.lng, p.lat]);
+          const cercano = nearestPointOnLine(lineString(cerrado), [e.lngLat.lng, e.lngLat.lat]);
+          const idx = (cercano.properties.index ?? 0) + 1;
+          const nuevo = { lat: e.lngLat.lat, lng: e.lngLat.lng };
+          onVerticeEditadoRef.current?.([...anillo.slice(0, idx), nuevo, ...anillo.slice(idx)]);
+        });
+
+        // Clic derecho sobre un vértice lo borra, si quedan al menos 3.
+        m.on("contextmenu", "vertices-puntos", (e) => {
+          if (herramientaRef.current !== "editar") return;
+          e.preventDefault();
+          const i = Number(propsDe(e.features?.[0]).i);
+          const anillo = anilloEditando.current;
+          if (anillo.length <= 3) return;
+          onVerticeEditadoRef.current?.(anillo.filter((_, j) => j !== i));
         });
 
         // --- Rectángulo y círculo: arrastrar de un punto a otro. -----------
@@ -265,7 +391,7 @@ export function MapCanvas({
           const pts = herramientaRef.current === "rectangulo"
             ? rectanguloAPuntos(origen, actual)
             : circuloAPuntos(origen, metrosEntre(origen, actual));
-          pintarDibujo(pts);
+          pintarDibujoEn(m, pts);
         });
         m.on("mouseup", (e) => {
           if (!origen || !esFormaDeArrastre()) return;
@@ -279,7 +405,7 @@ export function MapCanvas({
           // clasificarlo tiraría de cientos de teselas alrededor del punto
           // sin que el operador haya decidido nada.
           if (metrosEntre(pts[0], pts[Math.floor(pts.length / 2)]) < 5) {
-            pintarDibujo([]);
+            pintarDibujoEn(m, []);
             return;
           }
           onPoligonoListoRef.current(pts);
@@ -349,7 +475,17 @@ export function MapCanvas({
 
   useEffect(() => {
     if (dibujo.length === 0) puntos.current = [];
-  }, [dibujo]);
+    anilloEditando.current = herramienta === "editar" && dibujo.length === 1 ? dibujo[0] : [];
+    const m = mapa.current;
+    if (!m || !m.isStyleLoaded()) return;
+    const src = m.getSource("vertices") as mapboxgl.GeoJSONSource | undefined;
+    src?.setData(verticesGeoJSON(anilloEditando.current));
+    // Entrar en "editar" es la única forma de volver a ver el contorno de un
+    // área ya clasificada: fuera de este modo, nada vuelve a tocar la fuente
+    // "dibujo" una vez que el trazo se cerró.
+    if (herramienta === "editar") pintarDibujoEn(m, anilloEditando.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dibujo, herramienta]);
 
   useEffect(() => {
     const m = mapa.current;
@@ -441,6 +577,10 @@ export function MapCanvas({
     el.style.animation = "jg-destino-pulso 1.7s ease-out 1";
     const marca = new mapboxgl.Marker({ element: el }).setLngLat([s.lng, s.lat]).addTo(m);
     setTimeout(() => marca.remove(), 1800);
+
+    void api.territorioRecientesAnadir(s.nombre, s.lat, s.lng)
+      .then(() => api.territorioRecientesLeer())
+      .then(setRecientes);
   }
 
   // El motivo real, no un mapa en blanco: sin clave no hay teselas que pedir,
@@ -475,28 +615,44 @@ export function MapCanvas({
               value={busqueda}
               onChange={(e) => alEscribirBusqueda(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && sugerencias[0]) irA(sugerencias[0]); }}
+              onFocus={() => setFoco(true)}
+              onBlur={() => setFoco(false)}
               placeholder="Buscar un lugar…"
               className="w-full bg-transparent text-[12px] text-fg outline-none placeholder:text-subtle"
             />
             {buscando && <Icon name="spinner" size={12} className="shrink-0 text-subtle" />}
           </div>
-          {sugerencias.length > 0 && (
-            <div className="lumi-anim mt-1.5 overflow-hidden rounded-lg border border-white/[.13]
-              bg-[rgba(16,19,25,.94)] shadow-lg shadow-black/40 backdrop-blur-xl"
-              style={{ animation: "jg-fade-rise 160ms cubic-bezier(.2,.85,.35,1) both" }}>
-              {sugerencias.map((s, i) => (
-                <button
-                  key={s.nombre}
-                  onClick={() => irA(s)}
-                  className="lumi-anim block w-full truncate px-3 py-2 text-left text-[11.5px] text-fg
-                    transition-colors duration-150 hover:bg-white/[.06]"
-                  style={{ animation: `jg-fade-rise 160ms ${i * 25}ms cubic-bezier(.2,.85,.35,1) both` }}
-                >
-                  {s.nombre}
-                </button>
-              ))}
-            </div>
-          )}
+          {(() => {
+            const mostrarRecientes =
+              foco && busqueda.trim().length === 0 && sugerencias.length === 0 && recientes.length > 0;
+            const items = mostrarRecientes ? recientes : sugerencias;
+            if (items.length === 0) return null;
+            return (
+              <div className="lumi-anim mt-1.5 overflow-hidden rounded-lg border border-white/[.13]
+                bg-[rgba(16,19,25,.94)] shadow-lg shadow-black/40 backdrop-blur-xl"
+                style={{ animation: "jg-fade-rise 160ms cubic-bezier(.2,.85,.35,1) both" }}>
+                {mostrarRecientes && (
+                  <p className="px-3 pt-2 text-[9.5px] uppercase tracking-wide text-subtle">Recientes</p>
+                )}
+                {items.map((s, i) => {
+                  const { principal, contexto } = partirNombre(s.nombre);
+                  return (
+                    <button
+                      key={`${s.nombre}-${i}`}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => irA(s)}
+                      className="lumi-anim block w-full px-3 py-2 text-left transition-colors duration-150
+                        hover:bg-white/[.06]"
+                      style={{ animation: `jg-fade-rise 160ms ${i * 25}ms cubic-bezier(.2,.85,.35,1) both` }}
+                    >
+                      <p className="truncate text-[11.5px] text-fg">{principal}</p>
+                      {contexto && <p className="truncate text-[9.5px] text-subtle">{contexto}</p>}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -509,9 +665,12 @@ export function MapCanvas({
           {HERRAMIENTAS.map((h) => (
             <button
               key={h.id}
-              title={h.titulo}
+              title={h.id === "editar" && dibujo.length > 1
+                ? "Editar solo vale con una pieza — combina o rehaz para dejar una sola"
+                : h.titulo}
+              disabled={h.id === "editar" && dibujo.length !== 1}
               onClick={() => elegirHerramienta(h.id)}
-              className={`grid h-7 w-7 place-items-center rounded-[7px] ${
+              className={`grid h-7 w-7 place-items-center rounded-[7px] disabled:opacity-30 ${
                 herramienta === h.id ? "bg-white/[.09] text-fg" : "text-subtle hover:text-fg"}`}
             >
               <Icon name={h.icon} size={14} />

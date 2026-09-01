@@ -1,14 +1,42 @@
+import { difference } from "@turf/difference";
+import { featureCollection, polygon } from "@turf/helpers";
+import { union } from "@turf/union";
 import { useEffect, useRef, useState } from "react";
 
 import { api, type Clasificacion, type Estimacion, type FichaOrigen, type Punto, type SondeoTesela } from "../lib/api";
 import { Overlay } from "../ui/Overlay";
 import { AvailabilityPanel } from "./AvailabilityPanel";
 import { BlockedDialog } from "./BlockedDialog";
+import { CombineBar } from "./CombineBar";
 import { CoveragePanel } from "./CoveragePanel";
 import { EstimateDialog } from "./EstimateDialog";
 import { MapCanvas } from "./MapCanvas";
 import { MapLegend } from "./MapLegend";
 import { PlanDialog } from "./PlanDialog";
+
+type Instantanea = { dibujo: Punto[][]; clasificacion: Clasificacion | null };
+
+function cerrarAnillo(pts: Punto[]): [number, number][] {
+  const anillo = pts.map((p): [number, number] => [p.lng, p.lat]);
+  anillo.push(anillo[0]);
+  return anillo;
+}
+
+function anilloATurf(pts: Punto[]) {
+  return polygon([cerrarAnillo(pts)]);
+}
+
+/** Solo los anillos EXTERIORES del resultado de turf: el sistema no modela
+ *  agujeros (una tesela es local/catálogo/nueva, nunca "excluida"), así que
+ *  un hueco real que deje sumar/restar se ignora — caso raro (restar algo
+ *  totalmente rodeado por el área existente) y documentado como límite
+ *  conocido, no un fallo silencioso a ciegas. */
+function anillosExteriores(geom: { type: string; coordinates: unknown }): Punto[][] {
+  const anillos = geom.type === "Polygon"
+    ? [(geom.coordinates as number[][][])[0]]
+    : (geom.coordinates as number[][][][]).map((poly) => poly[0]);
+  return anillos.map((anillo) => anillo.slice(0, -1).map(([lng, lat]) => ({ lat, lng })));
+}
 
 /** Dibujar, clasificar y decidir: el plan si hay algo nuevo, el bloqueo si no
  *  queda nada. Confirmar el plan anota primero lo heredado y solo después crea
@@ -22,7 +50,10 @@ export function TerritoryView({
   indiceId?: number;
   onDescargando?: (imagenesEstimadas: number) => void;
 }) {
-  const [dibujo, setDibujo] = useState<Punto[]>([]);
+  const [dibujo, setDibujo] = useState<Punto[][]>([]);
+  const [formaPendiente, setFormaPendiente] = useState<Punto[] | null>(null);
+  const [historial, setHistorial] = useState<Instantanea[]>([]);
+  const [historialFuturo, setHistorialFuturo] = useState<Instantanea[]>([]);
   const [clasificacion, setClasificacion] = useState<Clasificacion | null>(null);
   const [mostrarPlan, setMostrarPlan] = useState(false);
 
@@ -45,13 +76,83 @@ export function TerritoryView({
   // vacía si nunca se pasó antes por Índices o Ajustes.
   useEffect(() => { void api.catalogoRefrescar(); }, []);
 
-  // La clasificación necesita saber contra QUÉ orígenes se pregunta, porque
-  // una tesela heredada puede seguir sin cubrir en alguno de ellos.
-  async function alTerminarDibujo(p: Punto[]) {
-    setDibujo(p);
+  async function fijarAnillos(anillos: Punto[][]) {
+    setHistorial((h) => [...h, { dibujo, clasificacion }].slice(-20));
+    setHistorialFuturo([]);
+    setDibujo(anillos);
     setSondeos([]);
-    setClasificacion(await api.territorioClasificar(p, fichas.map((f) => f.id)));
+    setClasificacion(await api.territorioClasificar(anillos, fichas.map((f) => f.id)));
   }
+
+  // La clasificación necesita saber contra QUÉ orígenes se pregunta, porque
+  // una tesela heredada puede seguir sin cubrir en alguno de ellos. Si ya hay
+  // un área, un trazo nuevo no la sustituye sin más: se pregunta qué hacer.
+  async function alTerminarDibujo(p: Punto[]) {
+    if (clasificacion) {
+      setFormaPendiente(p);
+      return;
+    }
+    await fijarAnillos([p]);
+  }
+
+  async function resolverCombinacion(modo: "sustituir" | "sumar" | "restar") {
+    if (!formaPendiente) return;
+    const nueva = formaPendiente;
+    setFormaPendiente(null);
+    if (modo === "sustituir") {
+      await fijarAnillos([nueva]);
+      return;
+    }
+    const actuales = dibujo.map(anilloATurf);
+    const nuevaTurf = anilloATurf(nueva);
+    if (modo === "sumar") {
+      const resultado = union(featureCollection([...actuales, nuevaTurf]));
+      await fijarAnillos(resultado ? anillosExteriores(resultado.geometry) : [...dibujo, nueva]);
+      return;
+    }
+    // Restar: turf resta contra UN minuendo, no contra una colección suelta
+    // — si el área actual ya son varias piezas, se unen primero.
+    const minuendo = actuales.length > 1 ? union(featureCollection(actuales)) : actuales[0];
+    if (!minuendo) return;
+    const resultado = difference(featureCollection([minuendo, nuevaTurf]));
+    await fijarAnillos(resultado ? anillosExteriores(resultado.geometry) : []);
+  }
+
+  async function alEditarVertice(anillo: Punto[]) {
+    await fijarAnillos([anillo]);
+  }
+
+  function deshacer() {
+    const anterior = historial[historial.length - 1];
+    if (!anterior) return;
+    setHistorial((h) => h.slice(0, -1));
+    setHistorialFuturo((f) => [...f, { dibujo, clasificacion }]);
+    setDibujo(anterior.dibujo);
+    setClasificacion(anterior.clasificacion);
+  }
+
+  function rehacer() {
+    const siguiente = historialFuturo[historialFuturo.length - 1];
+    if (!siguiente) return;
+    setHistorialFuturo((f) => f.slice(0, -1));
+    setHistorial((h) => [...h, { dibujo, clasificacion }]);
+    setDibujo(siguiente.dibujo);
+    setClasificacion(siguiente.clasificacion);
+  }
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      if (document.activeElement instanceof HTMLInputElement) return;
+      if (e.key.toLowerCase() === "z" && !e.shiftKey) { e.preventDefault(); deshacer(); }
+      else if ((e.key.toLowerCase() === "z" && e.shiftKey) || e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        rehacer();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   function cambiarActivo(id: string, on: boolean) {
     const nuevos = new Set(activos);
@@ -95,6 +196,9 @@ export function TerritoryView({
     setSondeoProgreso(null);
     setEstimacion(null);
     setNuevasPorOrigen({});
+    setFormaPendiente(null);
+    setHistorial([]);
+    setHistorialFuturo([]);
   }
 
   // El plan del 7a solo distingue local/catálogo/nuevo en bloque. Sin un
@@ -163,6 +267,7 @@ export function TerritoryView({
           dibujo={dibujo}
           clasificacion={clasificacion}
           onPoligonoListo={(p) => void alTerminarDibujo(p)}
+          onVerticeEditado={(a) => void alEditarVertice(a)}
           activos={activos}
           sondeos={sondeos}
           tokenMapillary={tokenMapillary}
@@ -201,6 +306,13 @@ export function TerritoryView({
       )}
 
       {clasificacion && !mostrarPlan && <MapLegend />}
+
+      {formaPendiente && (
+        <CombineBar
+          onElegir={(m) => void resolverCombinacion(m)}
+          onCancelar={() => setFormaPendiente(null)}
+        />
+      )}
 
       {clasificacion && mostrarPlan && clasificacion.nuevas === 0 && (
         <Overlay>

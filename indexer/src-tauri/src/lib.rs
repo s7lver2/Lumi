@@ -699,12 +699,12 @@ fn indice_imagenes(estado: tauri::State<'_, Estado>, id: i64) -> Result<Vec<stor
 #[tauri::command]
 async fn territorio_clasificar(
     estado: tauri::State<'_, Estado>,
-    poligono: Vec<lumi_index::tiles::Punto>,
+    poligonos: Vec<Vec<lumi_index::tiles::Punto>>,
     fuentes: Vec<String>,
 ) -> Result<territory::Clasificacion, String> {
     let locales = territory::coberturas_locales(&estado.dir.join("paquetes"));
     let mut c =
-        territory::clasificar_area(&poligono, &fuentes, &locales, &[]).map_err(|e| e.to_string())?;
+        territory::clasificar_area(&poligonos, &fuentes, &locales, &[]).map_err(|e| e.to_string())?;
 
     // El descuento se aplica ANTES de devolver, para que el coste en euros que
     // el operador ve ya lleve descontado lo que cubre otro. Ese es el punto
@@ -727,6 +727,44 @@ async fn territorio_clasificar(
     c.nuevas = reparto.nuevas;
     c.reclamadas = reparto.reclamadas;
     Ok(c)
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct LugarReciente {
+    nombre: String,
+    lat: f64,
+    lng: f64,
+}
+
+const TOPE_RECIENTES: usize = 6;
+
+/// Los últimos lugares a los que saltó el operador desde el buscador del
+/// mapa, para no tener que volver a escribirlos cada vez.
+#[tauri::command]
+fn territorio_recientes_leer(estado: tauri::State<'_, Estado>) -> Result<Vec<LugarReciente>, String> {
+    let Some(json) = estado.almacen.leer_ajuste(keys::TERRITORIO_RECIENTES).map_err(|e| e.to_string())? else {
+        return Ok(Vec::new());
+    };
+    Ok(serde_json::from_str(&json).unwrap_or_default())
+}
+
+/// Añade uno nuevo al frente, descarta un duplicado por nombre si ya estaba,
+/// y recorta al tope — el orden "más reciente primero" vive aquí.
+#[tauri::command]
+fn territorio_recientes_anadir(
+    estado: tauri::State<'_, Estado>,
+    nombre: String,
+    lat: f64,
+    lng: f64,
+) -> Result<(), String> {
+    let anterior = estado.almacen.leer_ajuste(keys::TERRITORIO_RECIENTES).map_err(|e| e.to_string())?;
+    let mut lista: Vec<LugarReciente> =
+        anterior.and_then(|j| serde_json::from_str(&j).ok()).unwrap_or_default();
+    lista.retain(|l| l.nombre != nombre);
+    lista.insert(0, LugarReciente { nombre, lat, lng });
+    lista.truncate(TOPE_RECIENTES);
+    let json = serde_json::to_string(&lista).map_err(|e| e.to_string())?;
+    estado.almacen.guardar_ajuste(keys::TERRITORIO_RECIENTES, &json).map_err(|e| e.to_string())
 }
 
 /// Anota como heredadas las teselas que el plan confirmó adjuntar. Se llama al
@@ -1723,6 +1761,8 @@ pub fn run() {
             gasto_mes,
             mapbox_clave_guardar,
             mapbox_clave_leer,
+            territorio_recientes_leer,
+            territorio_recientes_anadir,
             paquete_sellar_arrancar,
             paquete_sellar_progreso,
             paquete_que_viaja,
