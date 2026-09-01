@@ -48,6 +48,12 @@ export interface EstadoActualizacionLumid {
   error: string | null;
   aplicando: boolean;
 }
+export interface PublicacionHistorial {
+  version: string;
+  notas: string;
+  publicado: string;
+  retirada: boolean;
+}
 export interface AvisoInfo {
   id: number;
   /** Documento JSON de Tiptap — opaco para el resto del cliente, solo lo

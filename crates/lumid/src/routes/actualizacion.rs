@@ -6,6 +6,15 @@ use crate::routes::auth::{bearer, require_admin};
 use crate::App;
 use axum::extract::State;
 use axum::{http::HeaderMap, http::StatusCode, Json};
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+pub struct AplicarReq {
+    /// `None` (o cuerpo vacío) = la más nueva disponible, igual que antes;
+    /// `Some(v)` = esa versión concreta, downgrade incluido (#71).
+    #[serde(default)]
+    pub version: Option<String>,
+}
 
 pub async fn get(
     State(app): State<App>,
@@ -13,6 +22,18 @@ pub async fn get(
 ) -> Result<Json<crate::actualizacion::EstadoActualizacion>, StatusCode> {
     require_admin(&app, &bearer(&headers))?;
     Ok(Json(crate::actualizacion::estado_cacheado(&app)))
+}
+
+/// Todas las publicaciones de `lumid`, más recientes primero — a
+/// diferencia de `get` (solo "¿hay algo más nuevo?"), es lo que alimenta el
+/// selector de versión del panel para instalar cualquiera, no solo la
+/// última (#71).
+pub async fn historial(
+    State(app): State<App>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<crate::actualizacion::PublicacionHistorial>>, (StatusCode, String)> {
+    require_admin(&app, &bearer(&headers)).map_err(|s| (s, String::new()))?;
+    crate::actualizacion::historial().await.map(Json).map_err(|e| (StatusCode::BAD_GATEWAY, e))
 }
 
 pub async fn comprobar_ahora(
@@ -29,14 +50,14 @@ pub async fn comprobar_ahora(
 /// reiniciar systemd al final, así que no hay una respuesta HTTP "limpia"
 /// posible al terminar. El panel sigue el progreso sondeando `GET
 /// /v1/admin/actualizacion`.
-pub async fn aplicar(State(app): State<App>, headers: HeaderMap) -> StatusCode {
+pub async fn aplicar(State(app): State<App>, headers: HeaderMap, Json(req): Json<AplicarReq>) -> StatusCode {
     if require_admin(&app, &bearer(&headers)).is_err() {
         return StatusCode::FORBIDDEN;
     }
     crate::actualizacion::set_aplicando(&app, true);
     let app2 = app.clone();
     tokio::spawn(async move {
-        if let Err(e) = crate::actualizacion::aplicar(&app2).await {
+        if let Err(e) = crate::actualizacion::aplicar(&app2, req.version.as_deref()).await {
             tracing::error!("actualización de lumid fallida: {e}");
             let _ = mantenimiento::set_activo(&app2, false);
             // El mensaje de sistema ("Actualizando a…") no debe quedar

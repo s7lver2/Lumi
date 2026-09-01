@@ -241,6 +241,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/actualizacion", get(routes::actualizacion::get))
         .route("/v1/admin/actualizacion/comprobar", post(routes::actualizacion::comprobar_ahora))
         .route("/v1/admin/actualizacion/aplicar", post(routes::actualizacion::aplicar))
+        .route("/v1/admin/actualizacion/historial", get(routes::actualizacion::historial))
         .route("/v1/admin/telemetry/salud", get(routes::doctor::salud))
         .route("/v1/admin/telemetry/historial", get(routes::doctor::historial))
         .route("/v1/admin/doctor/arreglar/trabajador/:dispositivo", post(routes::doctor::arreglar_trabajador))

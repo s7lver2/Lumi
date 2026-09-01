@@ -50,6 +50,35 @@ pub struct PublicacionInfo {
     pub publicado: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublicacionHistorial {
+    pub version: String,
+    pub notas: String,
+    pub publicado: String,
+    pub retirada: bool,
+}
+
+/// Historial completo de publicaciones de `lumid`, más recientes primero —
+/// mismo patrón que `indexer/src-tauri/src/actualizacion.rs::historial`,
+/// pero server-side: es lo que alimenta el selector de versión del panel
+/// (#71), no solo "¿hay algo más nuevo que lo instalado?".
+pub async fn historial() -> Result<Vec<PublicacionHistorial>, String> {
+    let manifiesto = consultar_manifiesto().await?;
+    let mut publicaciones: Vec<PublicacionHistorial> = manifiesto
+        .publicaciones
+        .iter()
+        .filter(|p| p.producto == Producto::Lumid)
+        .map(|p| PublicacionHistorial {
+            version: p.version.clone(),
+            notas: p.notas.clone(),
+            publicado: p.publicado.clone(),
+            retirada: p.retirada,
+        })
+        .collect();
+    publicaciones.sort_by(|a, b| b.publicado.cmp(&a.publicado));
+    Ok(publicaciones)
+}
+
 fn version_instalada() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
@@ -155,14 +184,23 @@ pub enum AplicarError {
 /// esto muere al final (paso 6, `systemctl restart`) — quien la llama
 /// (`routes/actualizacion.rs::aplicar`) la dispara con `tokio::spawn` y no
 /// espera una respuesta HTTP limpia al final, por diseño.
-pub async fn aplicar(app: &App) -> Result<(), AplicarError> {
+///
+/// `version_objetivo`: `None` es el comportamiento de siempre (la más
+/// nueva disponible); `Some(v)` instala esa versión concreta —
+/// downgrade incluido, igual que `version_exacta` ya contempla (#71). Una
+/// publicación marcada como retirada no se ofrece por ninguna de las dos
+/// vías: "retirada" significa "no instalar esto", sea cual sea la
+/// dirección.
+pub async fn aplicar(app: &App, version_objetivo: Option<&str>) -> Result<(), AplicarError> {
     // 1. Descargar y verificar el hash. Nada se ha tocado todavía si esto falla.
     let manifiesto = consultar_manifiesto().await.map_err(AplicarError::Descarga)?;
     let version_instalada = version_instalada();
-    let publicacion = manifiesto
-        .mas_nueva(Producto::Lumid, &version_instalada, "linux-x86_64")
-        .ok_or(AplicarError::SinDisponible)?
-        .clone();
+    let publicacion = match version_objetivo {
+        Some(v) => manifiesto.version_exacta(Producto::Lumid, v, "linux-x86_64"),
+        None => manifiesto.mas_nueva(Producto::Lumid, &version_instalada, "linux-x86_64"),
+    }
+    .ok_or(AplicarError::SinDisponible)?
+    .clone();
     let artefacto = publicacion
         .artefactos
         .iter()

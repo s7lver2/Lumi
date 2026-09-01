@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type EstadoActualizacionLumid } from "../lib/api";
+import { api, type EstadoActualizacionLumid, type PublicacionHistorial } from "../lib/api";
 import { Icon } from "../ui/Icon";
 import { Seccion } from "./AdminPanel";
 
@@ -25,6 +25,28 @@ export function ActualizacionesView({ token, estado, onEstado }: {
     if (estado && !estado.aplicando) setAplicandoLocal(false);
   }, [estado]);
 
+  // Historial de versiones (#71): se pide bajo demanda al abrir el bloque,
+  // no en el sondeo de cada 4s — es una lista que casi nunca cambia y
+  // solo hace falta cuando el admin quiere instalar algo que no sea "la
+  // última".
+  const [verHistorial, setVerHistorial] = useState(false);
+  const [historial, setHistorial] = useState<PublicacionHistorial[] | null>(null);
+  const [cargandoHistorial, setCargandoHistorial] = useState(false);
+  const [errorHistorial, setErrorHistorial] = useState<string | null>(null);
+  // Qué versión concreta se está instalando ahora mismo, para que el botón
+  // de esa fila (y no todas) diga "Instalando…" — `aplicando` (backend)
+  // sigue siendo la fuente de verdad de si hay algo en curso en general.
+  const [versionObjetivo, setVersionObjetivo] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!verHistorial || historial || cargandoHistorial) return;
+    setCargandoHistorial(true);
+    api.get<PublicacionHistorial[]>("/v1/admin/actualizacion/historial", token)
+      .then(setHistorial)
+      .catch((e) => setErrorHistorial(String(e)))
+      .finally(() => setCargandoHistorial(false));
+  }, [verHistorial, historial, cargandoHistorial, token]);
+
   async function comprobarAhora() {
     setComprobando(true);
     try {
@@ -34,9 +56,10 @@ export function ActualizacionesView({ token, estado, onEstado }: {
     }
   }
 
-  async function actualizarServidor() {
+  async function aplicarVersion(version?: string) {
+    setVersionObjetivo(version ?? null);
     setAplicandoLocal(true);
-    await api.post("/v1/admin/actualizacion/aplicar", {}, token);
+    await api.post("/v1/admin/actualizacion/aplicar", version ? { version } : {}, token);
     // No hay nada más que hacer aquí: el propio servidor va a caer y volver
     // (o a quedarse en mantenimiento esperando la cola) — el sondeo que
     // vive en AdminPanel, no esta llamada, es lo que refleja el progreso.
@@ -69,11 +92,11 @@ export function ActualizacionesView({ token, estado, onEstado }: {
 
           <div className="mt-4 flex flex-wrap items-center gap-2.5">
             <button
-              onClick={() => void actualizarServidor()}
+              onClick={() => void aplicarVersion()}
               disabled={!estado.disponible || aplicando || comprobando}
               className="jg-press rounded-lg bg-accent px-3 py-1.5 text-[11.5px] font-medium text-black disabled:opacity-40"
             >
-              {aplicando ? "Actualizando…" : "Actualizar servidor"}
+              {aplicando && versionObjetivo === null ? "Actualizando…" : "Actualizar servidor"}
             </button>
             <button
               onClick={() => void comprobarAhora()}
@@ -82,14 +105,66 @@ export function ActualizacionesView({ token, estado, onEstado }: {
             >
               {comprobando ? "Comprobando…" : "Comprobar ahora"}
             </button>
+            <button
+              onClick={() => setVerHistorial((v) => !v)}
+              className="jg-press ml-auto rounded-lg px-2.5 py-1.5 text-[11px] text-subtle hover:text-fg"
+            >
+              {verHistorial ? "Ocultar historial de versiones" : "Ver historial de versiones"}
+            </button>
           </div>
 
           {aplicando && (
             <p className="mt-3 flex items-center gap-1.5 text-[11px] text-draw-fg">
               <Icon name="refresh" size={12} />
-              Aplicando — si hay trabajo en curso, el servidor espera a que termine antes de reiniciar.
+              {versionObjetivo
+                ? `Instalando ${versionObjetivo}`
+                : "Aplicando"} — si hay trabajo en curso, el servidor espera a que termine antes de reiniciar.
             </p>
           )}
+
+          <div className="grid transition-[grid-template-rows] duration-[420ms] ease-expo"
+            style={{ gridTemplateRows: verHistorial ? "1fr" : "0fr" }}>
+            <div className="overflow-hidden">
+              <div className="mt-4 border-t border-border pt-3">
+                {cargandoHistorial && <p className="text-[11px] text-muted">Cargando historial…</p>}
+                {errorHistorial && <p className="text-[11px] text-subtle">No se pudo cargar: {errorHistorial}</p>}
+                {historial && historial.length === 0 && (
+                  <p className="text-[11px] text-muted">Sin publicaciones en el canal.</p>
+                )}
+                {historial && historial.length > 0 && (
+                  <ul className="flex flex-col divide-y divide-border">
+                    {historial.map((p) => {
+                      const instalada = p.version === estado.version_instalada;
+                      const instalandoEsta = aplicando && versionObjetivo === p.version;
+                      return (
+                        <li key={p.version} className="flex items-center gap-3 py-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-[12px] text-fg">{p.version}</span>
+                              {instalada && <span className="text-[9.5px] uppercase tracking-[.06em] text-subtle">instalada</span>}
+                              {p.retirada && (
+                                <span className="flex items-center gap-1 text-[9.5px] uppercase tracking-[.06em] text-warning-fg">
+                                  <Icon name="alert" size={10} /> retirada
+                                </span>
+                              )}
+                            </div>
+                            {p.notas && <p className="mt-0.5 truncate text-[10.5px] text-muted">{p.notas}</p>}
+                          </div>
+                          <button
+                            onClick={() => void aplicarVersion(p.version)}
+                            disabled={instalada || p.retirada || aplicando || comprobando}
+                            className="jg-press shrink-0 rounded-lg border border-white/15 px-2.5 py-1 text-[10.5px] text-fg disabled:opacity-40"
+                          >
+                            {instalandoEsta ? "Instalando…" : "Instalar esta versión"}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </Seccion>
