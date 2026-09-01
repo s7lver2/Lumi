@@ -16,7 +16,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             comandos::detectar_instalados, comandos::instalar, comandos::ruta_instalacion_por_defecto,
-            comandos::listar_versiones_disponibles
+            comandos::listar_versiones_disponibles, comandos::version_instalador
         ])
         .run(tauri::generate_context!())
         .expect("error al iniciar el instalador");

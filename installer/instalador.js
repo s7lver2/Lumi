@@ -127,7 +127,7 @@ document.querySelectorAll(".product-card[data-producto]").forEach((tarjeta) => {
 // para elegir el producto, lista de versiones de ESE producto a la derecha.
 let todasLasVersiones = null;
 let productoActivoOtros = "cliente";
-const NOMBRE_PRODUCTO = { cliente: "Lumi", indexer: "Lumi Indexer" };
+const NOMBRE_PRODUCTO = { cliente: "Lumi Client", indexer: "Lumi Indexer" };
 
 document.getElementById("btn-otros-toggle").addEventListener("click", async () => {
   document.getElementById("modal-otros").style.display = "flex";
@@ -383,3 +383,6 @@ btnAtras.addEventListener("click", () => {
 mostrar(indice);
 pintarEstadoInstalados();
 resolverRutaPorDefecto();
+invoke("version_instalador").then((v) => {
+  document.getElementById("footer-version").textContent = v;
+});

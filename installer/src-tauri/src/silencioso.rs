@@ -128,7 +128,7 @@ pub fn ejecutar_y_salir() -> ! {
 
         marca::escribir(
             &args.producto,
-            if args.producto == "cliente" { "Lumi" } else { "Lumi Indexer" },
+            crate::comandos::nombre_mostrado(&args.producto),
             &publicacion.version,
             &marca_previa.ruta,
         )

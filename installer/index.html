@@ -22,6 +22,13 @@
       }
       * { box-sizing: border-box; }
       html, body { height: 100%; margin: 0; }
+      /* Barra de scroll a juego con la estética, no la nativa del navegador
+         (WebView2 renderiza la de Edge, gris clara, fuera de lugar aquí). */
+      * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+      *::-webkit-scrollbar { width: 8px; height: 8px; }
+      *::-webkit-scrollbar-track { background: transparent; }
+      *::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+      *::-webkit-scrollbar-thumb:hover { background: var(--subtle); }
       @keyframes jg-fade-rise {
         from { opacity: 0; transform: translateY(4px); }
         to { opacity: 1; transform: translateY(0); }
@@ -136,7 +143,7 @@
       .icono-estado.error [data-parte="error"] { display: block; }
       .pane-body { width: 100%; max-width: 460px; flex: 1; display: flex; flex-direction: column; justify-content: center; }
       .pane-body h2 { font-size: 17px; font-weight: 600; margin: 0 0 10px; }
-      .pane-body p.desc { font-size: 14px; color: var(--muted); line-height: 1.55; margin: 0 0 16px; max-width: 46ch; }
+      .pane-body p.desc { font-size: 14px; color: var(--muted); line-height: 1.55; margin: 0 0 20px; max-width: 46ch; }
       .center { text-align: center; }
       .center .pane-body { display: flex; flex-direction: column; align-items: center; }
       .field-label { font-size: 11px; color: var(--muted); margin-bottom: 7px; display: block; }
@@ -149,7 +156,7 @@
       }
       .path-row button.browse:hover { background: var(--border); border-color: var(--subtle); }
       .lista-opciones { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-      .option-row { display: flex; align-items: center; gap: 11px; padding: 10px 14px; cursor: pointer; }
+      .option-row { display: flex; align-items: center; gap: 12px; padding: 13px 16px; cursor: pointer; }
       .lista-opciones .option-row + .option-row { border-top: 1px solid var(--border); }
       .otros-toggle {
         display: flex; align-items: center; justify-content: space-between; width: 100%;
@@ -239,14 +246,14 @@
         max-height: 0; margin-top: 0; opacity: 0; overflow: hidden;
         transition: max-height .25s cubic-bezier(.16,1,.3,1), opacity .2s cubic-bezier(.16,1,.3,1), margin-top .25s cubic-bezier(.16,1,.3,1);
       }
-      .option-row:hover .sub, .option-row:focus-within .sub { max-height: 34px; margin-top: 3px; opacity: 1; }
+      .option-row:hover .sub, .option-row:focus-within .sub { max-height: 40px; margin-top: 4px; opacity: 1; }
       .option-row.disabled { cursor: default; }
       .option-row.disabled .label { color: var(--subtle); }
       .option-row.disabled .checkbox { opacity: .5; }
       /* El motivo de un deshabilitado no se esconde nunca — es la
          explicacion de por que esa casilla no se puede marcar (mismo
          patron de "capacidad con motivo" que usa el resto del producto). */
-      .option-row.disabled .sub { max-height: 34px; margin-top: 3px; opacity: 1; }
+      .option-row.disabled .sub { max-height: 40px; margin-top: 4px; opacity: 1; }
       .progress-track { width: 100%; height: 3px; background: var(--elevated); border-radius: 2px; overflow: hidden; margin-bottom: 14px; }
       .progress-fill { height: 100%; width: 0%; background: var(--draw-fg); border-radius: 2px; transition: width .3s cubic-bezier(.16,1,.3,1); }
       .progress-status { display: flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 11px; color: var(--subtle); }
@@ -320,7 +327,7 @@
           <div class="product-card" data-producto="cliente">
             <span class="icono-producto"><img src="/icono-cliente.png" alt="" /></span>
             <div class="info">
-              <div class="label">Lumi</div>
+              <div class="label">Lumi Client</div>
               <div class="desc-corta">Cliente de escritorio. Se conecta a tu servidor de inferencia.</div>
               <div class="sub" data-estado="cliente"></div>
             </div>
@@ -413,7 +420,7 @@
     </div>
 
     <div class="footer">
-      <span class="ver">0.1.0</span>
+      <span class="ver" id="footer-version">…</span>
       <div class="actions">
         <button class="btn ghost" id="btn-atras">Atrás</button>
         <button class="btn primary" id="btn-siguiente">Siguiente</button>

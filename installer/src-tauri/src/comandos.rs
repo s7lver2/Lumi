@@ -39,6 +39,13 @@ pub struct InfoProducto {
 /// `%LocalAppData%` donde fuera que se hubiera lanzado el instalador. Este
 /// comando resuelve la ruta real una sola vez, al cargar la pantalla de
 /// Ubicación, para que lo que se vea y lo que se instale sea lo mismo.
+/// El footer mostraba `0.1.0` como string literal, congelado desde la
+/// plantilla — nunca la versión real del instalador.
+#[tauri::command]
+pub fn version_instalador() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 #[tauri::command]
 pub fn ruta_instalacion_por_defecto() -> String {
     let base = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| "C:\\".to_string());
@@ -113,9 +120,9 @@ fn nombre_ejecutable(producto: &str) -> &'static str {
     }
 }
 
-fn nombre_mostrado(producto: &str) -> &'static str {
+pub fn nombre_mostrado(producto: &str) -> &'static str {
     match producto {
-        "cliente" => "Lumi",
+        "cliente" => "Lumi Client",
         "indexer" => "Lumi Indexer",
         _ => unreachable!(),
     }
@@ -263,8 +270,19 @@ fn dirs_escritorio() -> Result<PathBuf, String> {
         .map_err(|_| "no se encontro USERPROFILE".to_string())
 }
 
+/// Compara dos rutas del PATH sin distinguir mayúsculas/minúsculas y sin
+/// que una barra final de más cuente como una ruta distinta — sin esto,
+/// reinstalar (mismo destino, pero `PathBuf` construido de nuevo) o una
+/// entrada escrita a mano con `\` al final podían colarse como un
+/// duplicado real aunque apuntaran exactamente al mismo sitio.
+fn mismo_path(a: &str, b: &str) -> bool {
+    let normaliza = |s: &str| s.trim().trim_end_matches(['\\', '/']).to_ascii_lowercase();
+    normaliza(a) == normaliza(b)
+}
+
 /// Añade `carpeta` al `PATH` del usuario (registro, no la sesión de un
-/// proceso) si no está ya — sin duplicar si se instala más de una vez.
+/// proceso) si no está ya — sin duplicar si se instala más de una vez, se
+/// actualiza, o ya se había agregado a mano.
 fn agregar_a_path(carpeta: &Path) -> Result<(), String> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let env = hkcu
@@ -273,7 +291,7 @@ fn agregar_a_path(carpeta: &Path) -> Result<(), String> {
     let actual: String = env.get_value("Path").unwrap_or_default();
     let nueva = carpeta.to_string_lossy().to_string();
 
-    if actual.split(';').any(|p| p.trim().eq_ignore_ascii_case(nueva.trim())) {
+    if actual.split(';').any(|p| mismo_path(p, &nueva)) {
         return Ok(());
     }
 
