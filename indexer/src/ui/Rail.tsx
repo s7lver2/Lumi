@@ -1,12 +1,12 @@
 import { Icon } from "./Icon";
 
-export type Destino = "indices" | "territorio" | "descarga" | "revision" | "ajustes" | "embebido";
+export type Destino = "proyectos" | "territorio" | "descarga" | "revision" | "ajustes" | "embebido";
 
 /** El carril de 44 px de `client/src/work/Rail.tsx`, mismo vocabulario: iconos
  *  sin etiqueta, translúcido, la pestaña de 2 px marcando el activo.
  *
  *  «Descarga» y «Ajustes» van juntos al fondo: ninguno de los dos es "hacer
- *  algo con el territorio" como sí lo son Índices/Territorio/Revisión — uno
+ *  algo con el territorio" como sí lo son Proyectos/Territorio/Revisión — uno
  *  es vigilancia de una cola de fondo, el otro es configuración.
  *
  *  Las pestañas están SIEMPRE visibles, incluida «Descarga»: antes se ocultaba
@@ -24,7 +24,7 @@ export function Rail({ activo, descargaActiva, embebiendoActivo, onIr }: {
   return (
     <nav className="absolute inset-y-0 left-0 z-30 flex w-11 flex-col items-center gap-[3px]
       border-r border-border bg-[rgba(13,15,17,.9)] py-2 backdrop-blur">
-      <RailBtn icon="layers" title="Índices" on={activo === "indices"} onClick={() => onIr("indices")} />
+      <RailBtn icon="layers" title="Proyectos" on={activo === "proyectos"} onClick={() => onIr("proyectos")} />
       <RailBtn icon="territorio" title="Territorio" on={activo === "territorio"} onClick={() => onIr("territorio")} />
       <RailBtn icon="check" title="Revisión" on={activo === "revision"} onClick={() => onIr("revision")} />
       <div className="flex-1" />

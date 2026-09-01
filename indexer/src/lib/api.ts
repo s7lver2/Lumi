@@ -56,6 +56,10 @@ export interface DetalleIndice {
   nombre: string; slug: string; estado: string;
   imagenes: PorcentajesImagenes; trabajo: [string, number, number][];
   numero_version: number;
+  /** El proyecto (repo de GitHub etiquetado `lumi-index`) al que pertenece —
+   *  `null` en cualquier índice creado antes de la spec de pestaña de
+   *  Proyectos. */
+  proyecto: string | null;
 }
 /** Espejo de `lumi_index::manifest::TrabajoDe`: serde externamente etiquetado,
  *  así que la unidad es una cadena y las que llevan dato son un objeto de una
@@ -217,6 +221,10 @@ export interface DependenciaRota {
 }
 
 export interface Repo { nombre: string; privado: boolean; tiene_etiqueta: boolean }
+export interface Proyecto {
+  repo: string; privado: boolean; indices: number; teselas: number;
+  imagenes: number; ultima_actividad: number | null;
+}
 export interface TrozoPrevisto { zona: string; quadkeys: number; bytes: number }
 export interface Previsualizacion {
   trozos: TrozoPrevisto[];
@@ -278,9 +286,12 @@ export const api = {
   ingestaLegacyArrancar: (indiceId: number, ruta: string, tipo: string, fuente: string, declarada: boolean) =>
     invoke<void>("ingesta_legacy_arrancar", { indiceId, ruta, tipo, fuente, declarada }),
   ingestaLegacyProgreso: () => invoke<ProgresoIngesta>("ingesta_legacy_progreso"),
-  indiceCrear: (nombre: string, niveles: string[]) => invoke<number>("indice_crear", { nombre, niveles }),
+  indiceCrear: (nombre: string, niveles: string[], proyecto: string) =>
+    invoke<number>("indice_crear", { nombre, niveles, proyecto }),
   nivelesLista: () => invoke<Nivel[]>("niveles_lista"),
   indicesLista: () => invoke<ResumenIndice[]>("indices_lista"),
+  indicesListaDeProyecto: (proyecto: string) =>
+    invoke<ResumenIndice[]>("indices_lista_de_proyecto", { proyecto }),
   indiceDetalle: (id: number) => invoke<DetalleIndice>("indice_detalle", { id }),
   indiceLotes: (id: number) => invoke<LoteResumen[]>("indice_lotes", { id }),
   loteCancelar: (id: number) => invoke<boolean>("lote_cancelar", { id }),
@@ -355,6 +366,9 @@ export const api = {
   catalogoMios: () => invoke<RepoRemoto[]>("catalogo_mios"),
   catalogoReclamos: (quadkeys: string[]) => invoke<unknown[]>("catalogo_reclamos", { quadkeys }),
   publicarRepos: () => invoke<Repo[]>("publicar_repos"),
+  proyectosLista: () => invoke<Proyecto[]>("proyectos_lista"),
+  proyectoCrear: (nombre: string, privado: boolean) =>
+    invoke<Proyecto>("proyecto_crear", { nombre, privado }),
   publicarPrevisualizar: (indiceId: number) => invoke<Previsualizacion>("publicar_previsualizar", { indiceId }),
   publicarArrancar: (indiceId: number, repo: string, descargo: boolean) =>
     invoke<void>("publicar_arrancar", { indiceId, repo, descargo }),

@@ -12,7 +12,8 @@ function slugDe(nombre: string): string {
 
 /** El slug de aquí es solo la vista previa: el que de verdad cuenta lo calcula
  *  Rust en `indice_crear`, y si algún día divergen es ese el que manda. */
-export function NewIndexDialog({ onCancelar, onCreado }: {
+export function NewIndexDialog({ proyecto, onCancelar, onCreado }: {
+  proyecto: string;
   onCancelar: () => void;
   onCreado: (id: number) => void;
 }) {
@@ -29,7 +30,7 @@ export function NewIndexDialog({ onCancelar, onCreado }: {
     setCreando(true);
     setError(null);
     try {
-      onCreado(await api.indiceCrear(nombre.trim(), [elegido]));
+      onCreado(await api.indiceCrear(nombre.trim(), [elegido], proyecto));
     } catch (e) {
       setError(String(e));
     } finally {

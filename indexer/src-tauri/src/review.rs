@@ -54,7 +54,7 @@ mod tests {
     fn con_dos_sueltas() -> (tempfile::TempDir, Almacen, i64) {
         let d = tempfile::tempdir().unwrap();
         let a = Almacen::abrir(d.path()).unwrap();
-        let i = a.crear_indice("x", "x").unwrap();
+        let i = a.crear_indice("x", "x", "x/x").unwrap();
         let l = a.crear_lote(i, "red", "commons", Some("suelta"), "commons", None, None, false).unwrap();
         for n in ["a", "b", "c"] {
             a.insertar_imagen_pendiente_de_revision(i, l, n).unwrap();

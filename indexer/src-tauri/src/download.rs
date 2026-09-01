@@ -429,7 +429,7 @@ mod tests {
     #[tokio::test]
     async fn una_tesela_ya_hecha_no_se_vuelve_a_bajar_ni_a_pagar() {
         let (_d, a) = temporal();
-        let i = a.crear_indice("x", "x").unwrap();
+        let i = a.crear_indice("x", "x", "x/x").unwrap();
         let o: Origen = std::sync::Arc::new(
             Falso::nuevo("caro", Tipo::Suelta, Tarifa::PorUnidad { usd_por_mil: 7.00 })
                 .con("AAA", 10)
@@ -469,7 +469,7 @@ mod tests {
     #[tokio::test]
     async fn un_origen_no_apaga_trabajando_de_la_descarga_entera() {
         let (_d, a) = temporal();
-        let i = a.crear_indice("x", "x").unwrap();
+        let i = a.crear_indice("x", "x", "x/x").unwrap();
         let o: Origen = std::sync::Arc::new(Falso::nuevo("f", Tipo::Suelta, Tarifa::Gratis).con("AAA", 1));
         let d = Descarga::nueva(a.clone(), i, 100.0, &[]);
         d.progreso.lock().unwrap().trabajando = true;
@@ -480,7 +480,7 @@ mod tests {
     #[tokio::test]
     async fn correr_procesa_todos_los_origenes_y_solo_entonces_apaga_trabajando() {
         let (_d, a) = temporal();
-        let i = a.crear_indice("x", "x").unwrap();
+        let i = a.crear_indice("x", "x", "x/x").unwrap();
         let o1: Origen = std::sync::Arc::new(Falso::nuevo("uno", Tipo::Suelta, Tarifa::Gratis).con("AAA", 1));
         let o2: Origen = std::sync::Arc::new(Falso::nuevo("dos", Tipo::Suelta, Tarifa::Gratis).con("BBB", 1));
         let d = Descarga::nueva(a.clone(), i, 100.0, &[]);
@@ -496,7 +496,7 @@ mod tests {
     #[tokio::test]
     async fn el_presupuesto_agotado_para_la_descarga_y_lo_bajado_se_conserva() {
         let (_d, a) = temporal();
-        let i = a.crear_indice("x", "x").unwrap();
+        let i = a.crear_indice("x", "x", "x/x").unwrap();
         let o: Origen = std::sync::Arc::new(
             Falso::nuevo("caro", Tipo::Suelta, Tarifa::PorUnidad { usd_por_mil: 7.00 })
                 .con("AAA", 100)
@@ -517,7 +517,7 @@ mod tests {
     #[tokio::test]
     async fn el_gasto_apuntado_es_el_servido_y_no_el_previsto() {
         let (_d, a) = temporal();
-        let i = a.crear_indice("x", "x").unwrap();
+        let i = a.crear_indice("x", "x", "x/x").unwrap();
         let o: Origen = std::sync::Arc::new(
             Falso::nuevo("caro", Tipo::Suelta, Tarifa::PorUnidad { usd_por_mil: 7.00 })
                 .con("AAA", 10),
@@ -538,7 +538,7 @@ mod tests {
     #[tokio::test]
     async fn correr_borra_el_plan_pendiente_al_terminar() {
         let (_d, a) = temporal();
-        let i = a.crear_indice("x", "x").unwrap();
+        let i = a.crear_indice("x", "x", "x/x").unwrap();
         a.guardar_ajuste(CLAVE_PLAN_PENDIENTE, "{\"lo que sea\":true}").unwrap();
         let o: Origen = std::sync::Arc::new(Falso::nuevo("uno", Tipo::Suelta, Tarifa::Gratis).con("AAA", 1));
         let d = Descarga::nueva(a.clone(), i, 100.0, &[]);

@@ -407,6 +407,10 @@ struct DetalleIndice {
     /// Cuántas veces se ha publicado este índice — `1` mientras no se haya
     /// publicado nunca (spec de versionado 2026-09-01).
     numero_version: u32,
+    /// El proyecto (repo de GitHub etiquetado `lumi-index`) al que pertenece
+    /// — spec de pestaña de Proyectos. `None` en cualquier índice creado
+    /// antes de esa spec.
+    proyecto: Option<String>,
 }
 
 #[tauri::command]
@@ -422,6 +426,7 @@ fn indice_detalle(estado: tauri::State<'_, Estado>, id: i64) -> Result<DetalleIn
         .map(|(_, n, s, e)| (n, s, e))
         .unwrap_or_default();
     let numero_version = estado.almacen.genealogia(id).map_err(|e| e.to_string())?;
+    let proyecto = estado.almacen.proyecto_de_indice(id).map_err(|e| e.to_string())?;
     Ok(DetalleIndice {
         nombre,
         slug,
@@ -429,6 +434,7 @@ fn indice_detalle(estado: tauri::State<'_, Estado>, id: i64) -> Result<DetalleIn
         imagenes: lumi_index::manifest::porcentajes(&filas),
         trabajo: lumi_index::manifest::porcentajes_trabajo(&teselas),
         numero_version,
+        proyecto,
     })
 }
 
@@ -563,11 +569,16 @@ fn slug_de(nombre: &str) -> String {
 }
 
 #[tauri::command]
-fn indice_crear(estado: tauri::State<'_, Estado>, nombre: String, niveles: Vec<String>) -> Result<i64, String> {
+fn indice_crear(
+    estado: tauri::State<'_, Estado>,
+    nombre: String,
+    niveles: Vec<String>,
+    proyecto: String,
+) -> Result<i64, String> {
     if niveles.is_empty() {
         return Err("elige al menos un nivel (mini, vision o pro) para saber contra qué modelos embeber".into());
     }
-    let id = estado.almacen.crear_indice(&nombre, &slug_de(&nombre)).map_err(|e| e.to_string())?;
+    let id = estado.almacen.crear_indice(&nombre, &slug_de(&nombre), &proyecto).map_err(|e| e.to_string())?;
     estado.almacen.fijar_niveles_elegidos(id, &niveles).map_err(|e| e.to_string())?;
     Ok(id)
 }
@@ -586,6 +597,25 @@ fn niveles_lista(estado: tauri::State<'_, Estado>) -> Vec<lumi_index::niveles::N
 #[tauri::command]
 fn indices_lista(estado: tauri::State<'_, Estado>) -> Result<Vec<ResumenIndice>, String> {
     let indices = estado.almacen.listar_indices().map_err(|e| e.to_string())?;
+    resumenes_de(&estado, indices)
+}
+
+/// Los índices de un proyecto (repo etiquetado `lumi-index`), mismo shape que
+/// `indices_lista` — es lo que alimenta la lista de índices del panel de
+/// detalle de un proyecto.
+#[tauri::command]
+fn indices_lista_de_proyecto(
+    estado: tauri::State<'_, Estado>,
+    proyecto: String,
+) -> Result<Vec<ResumenIndice>, String> {
+    let indices = estado.almacen.indices_de_proyecto(&proyecto).map_err(|e| e.to_string())?;
+    resumenes_de(&estado, indices)
+}
+
+fn resumenes_de(
+    estado: &tauri::State<'_, Estado>,
+    indices: Vec<(i64, String, String, String)>,
+) -> Result<Vec<ResumenIndice>, String> {
     let publicados = estado.almacen.indices_publicados().map_err(|e| e.to_string())?;
 
     indices
@@ -1256,6 +1286,26 @@ async fn publicar_repos(estado: tauri::State<'_, Estado>) -> Result<Vec<publicar
     publicar::repos(&testigo).await.map_err(|e| e.to_string())
 }
 
+// --- Proyectos ---------------------------------------------------------
+
+#[tauri::command]
+async fn proyectos_lista(estado: tauri::State<'_, Estado>) -> Result<Vec<publicar::Proyecto>, String> {
+    let claves = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
+    let testigo = identidad::leer_testigo(&claves).map_err(|e| e.to_string())?;
+    publicar::proyectos(&estado.almacen, &testigo).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn proyecto_crear(
+    estado: tauri::State<'_, Estado>,
+    nombre: String,
+    privado: bool,
+) -> Result<publicar::Proyecto, String> {
+    let claves = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
+    let testigo = identidad::leer_testigo(&claves).map_err(|e| e.to_string())?;
+    publicar::crear_repo(&testigo, &nombre, privado).await.map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn publicar_previsualizar(
     estado: tauri::State<'_, Estado>,
@@ -1589,6 +1639,9 @@ pub fn run() {
             modelo_pesos_descargar,
             modelo_pesos_progreso,
             indices_lista,
+            indices_lista_de_proyecto,
+            proyectos_lista,
+            proyecto_crear,
             indice_detalle,
             indice_lotes,
             lote_cancelar,

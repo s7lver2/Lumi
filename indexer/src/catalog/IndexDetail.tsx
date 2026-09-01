@@ -120,7 +120,7 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
       <div className="mx-auto flex w-full max-w-[980px] flex-1 flex-col gap-5 overflow-y-auto p-8">
         <div className="flex items-center justify-between">
           <button onClick={onVolver} className="flex w-fit items-center gap-1.5 text-[11px] text-subtle hover:text-fg">
-            <Icon name="back" size={11} /> Índices
+            <Icon name="back" size={11} /> Proyectos
           </button>
           <div className="flex items-center gap-2">
             {!soloLectura && <button
@@ -145,8 +145,9 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
               </button>
             )}
             {sellado && !soloLectura && (
-              <button onClick={() => setPublicando(true)} disabled={!sesion}
-                title={sesion ? undefined : "conecta una cuenta en Ajustes para publicar"}
+              <button onClick={() => setPublicando(true)} disabled={!sesion || !detalle.proyecto}
+                title={!sesion ? "conecta una cuenta en Ajustes para publicar"
+                  : !detalle.proyecto ? "este índice no tiene proyecto asignado" : undefined}
                 className="jg-press rounded-lg border border-border px-3 py-1.5 text-[11px] text-fg disabled:opacity-40">
                 Publicar
               </button>
@@ -171,15 +172,19 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
             <IndexMapDialog indiceId={id} nombreIndice={detalle.nombre} onCerrar={() => setMapaAbierto(false)} />
           </Overlay>
         )}
-        {publicando && (
+        {publicando && detalle.proyecto && (
           <Overlay>
-            <PublishDialog indiceId={id} nombre={detalle.nombre} onHecho={() => setPublicando(false)} />
+            <PublishDialog indiceId={id} nombre={detalle.nombre} proyecto={detalle.proyecto}
+              onHecho={() => setPublicando(false)} />
           </Overlay>
         )}
 
         <div className="flex items-baseline gap-2.5">
           <p className="text-[15px] text-fg">{detalle.nombre}</p>
           <span className="font-mono text-[10.5px] text-subtle">{detalle.slug}</span>
+          {detalle.proyecto && (
+            <span className="font-mono text-[10.5px] text-subtle">· {detalle.proyecto}</span>
+          )}
           <span className="rounded-full border border-border px-2 py-px text-[9px] text-subtle">
             {detalle.estado}
           </span>

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 
 import { IndexDetail } from "./catalog/IndexDetail";
-import { IndexList } from "./catalog/IndexList";
 import { IndexPicker } from "./catalog/IndexPicker";
 import { DownloadView } from "./download/DownloadView";
 import { EmbedQueueView } from "./embed/EmbedQueueView";
 import { api, type PlanPendiente, type Saludo } from "./lib/api";
+import { ProjectsView } from "./projects/ProjectsView";
 import { ReviewGrid } from "./review/ReviewGrid";
 import { DebugPanel } from "./settings/DebugPanel";
 import { IdentityPanel } from "./settings/IdentityPanel";
@@ -28,7 +28,7 @@ import { WindowFrame } from "./ui/WindowFrame";
 export function App() {
   const [saludo, setSaludo] = useState<Saludo | null>(null);
   const [dentro, setDentro] = useState(false);
-  const [destino, setDestino] = useState<Destino>("indices");
+  const [destino, setDestino] = useState<Destino>("proyectos");
   const [indiceAbierto, setIndiceAbierto] = useState<number | null>(null);
   // Aparte de `indiceAbierto`: navegar a "Índices" mientras una descarga
   // corre limpia `indiceAbierto`, pero la descarga sigue viva en el backend y
@@ -134,7 +134,7 @@ export function App() {
     setDescargaIndiceId(null);
     setImagenesEstimadas(null);
     const pendientes = await api.revisionPendientes(indiceId);
-    setDestino(pendientes.length > 0 ? "revision" : "indices");
+    setDestino(pendientes.length > 0 ? "revision" : "proyectos");
   }
 
   return (
@@ -182,9 +182,9 @@ export function App() {
             />
             <div className="absolute inset-y-0 left-11 right-0 flex flex-col">
               <div className="relative min-h-0 flex-1">
-                {destino === "indices" && (
+                {destino === "proyectos" && (
                   indiceAbierto === null
-                    ? <IndexList onAbrir={setIndiceAbierto} />
+                    ? <ProjectsView onAbrir={setIndiceAbierto} />
                     : <IndexDetail key={indiceAbierto} id={indiceAbierto} onVolver={() => setIndiceAbierto(null)}
                         onIrAEmbebido={() => setDestino("embebido")} />
                 )}
@@ -261,7 +261,7 @@ export function App() {
                       />
                 )}
                 {destino === "revision" && indiceAbierto !== null && (
-                  <ReviewGrid indiceId={indiceAbierto} onEmbeber={() => setDestino("indices")} />
+                  <ReviewGrid indiceId={indiceAbierto} onEmbeber={() => setDestino("proyectos")} />
                 )}
                 {destino === "ajustes" && saludo && (
                   <div className="flex h-full flex-col">
@@ -293,7 +293,7 @@ export function App() {
         )}
 
         {dentro && (
-          <PublishToast onAbrir={(id) => { setDestino("indices"); setIndiceAbierto(id); }} />
+          <PublishToast onAbrir={(id) => { setDestino("proyectos"); setIndiceAbierto(id); }} />
         )}
       </div>
     </WindowFrame>

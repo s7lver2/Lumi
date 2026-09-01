@@ -1,19 +1,20 @@
 import { useEffect, useState } from "react";
 
 import { api, type ResumenIndice } from "../lib/api";
-import { Overlay } from "../ui/Overlay";
-import { EmptyIndices } from "./EmptyIndices";
-import { NewIndexDialog } from "./NewIndexDialog";
 
 /** El selector que aparece al entrar en Territorio o Ingesta sin haber
- *  abierto un índice. Deliberadamente NO es la pestaña "Índices" con otro
+ *  abierto un índice. Deliberadamente NO es la pestaña "Proyectos" con otro
  *  nombre: aquí no hay barra de procedencia ni insignias por fila, porque no
  *  se viene a auditar un catálogo — se viene a elegir uno y seguir. Una
  *  tarjeta centrada, no una lista a toda pantalla, para que se note que es
- *  un paso intermedio y no el destino. */
+ *  un paso intermedio y no el destino.
+ *
+ *  Ya no crea índices aquí: un índice nace dentro de un proyecto elegido de
+ *  antemano (spec de pestaña de Proyectos), y este selector no tiene ningún
+ *  proyecto delante — solo elige entre los que ya existen. Sin ninguno
+ *  todavía, manda a Proyectos en vez de ofrecer un atajo sin proyecto. */
 export function IndexPicker({ titulo, onAbrir }: { titulo: string; onAbrir: (id: number) => void }) {
   const [indices, setIndices] = useState<ResumenIndice[] | null>(null);
-  const [creando, setCreando] = useState(false);
 
   useEffect(() => { void api.indicesLista().then(setIndices); }, []);
 
@@ -30,37 +31,25 @@ export function IndexPicker({ titulo, onAbrir }: { titulo: string; onAbrir: (id:
         </p>
 
         {indices.length === 0 ? (
-          <EmptyIndices onCrear={() => setCreando(true)} />
+          <p className="mt-4 text-[11.5px] leading-relaxed text-subtle">
+            Todavía no hay ningún índice. Ve a <b className="font-normal text-fg">Proyectos</b> para
+            crear el primero dentro de un proyecto.
+          </p>
         ) : (
-          <>
-            <div className="mt-4 flex max-h-[280px] flex-col gap-1.5 overflow-y-auto">
-              {indices.map((r) => (
-                <button key={r.id} onClick={() => onAbrir(r.id)}
-                  className="jg-press flex items-center justify-between gap-3 rounded-lg border border-border
-                    px-3 py-2 text-left transition-colors duration-200 hover:border-white/[.16]">
-                  <span className="truncate text-[12px] text-fg">{r.nombre}</span>
-                  <span className="shrink-0 font-mono text-[10px] text-subtle">
-                    {r.imagenes.toLocaleString("es-ES")} imágenes
-                  </span>
-                </button>
-              ))}
-            </div>
-            <button onClick={() => setCreando(true)}
-              className="jg-press mt-3.5 w-full rounded-lg border border-border py-2 text-[11.5px] text-fg">
-              + Nuevo índice
-            </button>
-          </>
+          <div className="mt-4 flex max-h-[280px] flex-col gap-1.5 overflow-y-auto">
+            {indices.map((r) => (
+              <button key={r.id} onClick={() => onAbrir(r.id)}
+                className="jg-press flex items-center justify-between gap-3 rounded-lg border border-border
+                  px-3 py-2 text-left transition-colors duration-200 hover:border-white/[.16]">
+                <span className="truncate text-[12px] text-fg">{r.nombre}</span>
+                <span className="shrink-0 font-mono text-[10px] text-subtle">
+                  {r.imagenes.toLocaleString("es-ES")} imágenes
+                </span>
+              </button>
+            ))}
+          </div>
         )}
       </div>
-
-      {creando && (
-        <Overlay>
-          <NewIndexDialog
-            onCancelar={() => setCreando(false)}
-            onCreado={(id) => { setCreando(false); onAbrir(id); }}
-          />
-        </Overlay>
-      )}
     </div>
   );
 }

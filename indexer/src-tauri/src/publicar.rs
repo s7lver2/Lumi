@@ -38,6 +38,21 @@ pub struct Repo {
     pub tiene_etiqueta: bool,
 }
 
+/// Un «proyecto» de la pestaña de Proyectos: un repo propio que ya lleva la
+/// etiqueta `lumi-index`, con sus estadísticas agregadas sobre los índices
+/// LOCALES que le pertenecen (publicados o no).
+#[derive(Debug, Clone, Serialize)]
+pub struct Proyecto {
+    pub repo: String,
+    pub privado: bool,
+    pub indices: u32,
+    pub teselas: u32,
+    pub imagenes: u32,
+    /// Epoch de la mayor actividad conocida entre sus índices locales —
+    /// `None` si el proyecto no tiene índices locales todavía.
+    pub ultima_actividad: Option<i64>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct TrozoPrevisto {
     /// La zona que nombra el trozo, no un número de orden que no significa
@@ -207,6 +222,72 @@ pub async fn repos(testigo: &str) -> Result<Vec<Repo>> {
             tiene_etiqueta: r.topics.iter().any(|t| t == crate::catalogo::ETIQUETA),
         })
         .collect())
+}
+
+/// Los proyectos: repos propios que YA llevan la etiqueta, con sus
+/// estadísticas agregadas leídas de los índices locales. Un repo propio sin
+/// la etiqueta no es un proyecto de Lumi — no aparece aquí, aunque sí
+/// aparecería en `repos()` (que sigue existiendo para el flujo de "crear
+/// proyecto", que necesita saber si el nombre elegido ya existe).
+pub async fn proyectos(almacen: &Almacen, testigo: &str) -> Result<Vec<Proyecto>> {
+    let todos = repos(testigo).await?;
+    Ok(todos
+        .into_iter()
+        .filter(|r| r.tiene_etiqueta)
+        .map(|r| {
+            let indices = almacen.indices_de_proyecto(&r.nombre).unwrap_or_default();
+            let mut teselas = 0u32;
+            let mut imagenes = 0u32;
+            let mut ultima_actividad: Option<i64> = None;
+            for (id, ..) in &indices {
+                teselas += almacen.teselas_trabajo(*id).map(|t| t.len() as u32).unwrap_or(0);
+                imagenes += almacen.total_imagenes(*id).unwrap_or(0);
+                if let Ok(Some(creado)) = almacen.creado_en_de_indice(*id) {
+                    ultima_actividad = Some(ultima_actividad.map_or(creado, |u| u.max(creado)));
+                }
+            }
+            Proyecto {
+                repo: r.nombre,
+                privado: r.privado,
+                indices: indices.len() as u32,
+                teselas,
+                imagenes,
+                ultima_actividad,
+            }
+        })
+        .collect())
+}
+
+/// Crea un repositorio nuevo en GitHub y lo etiqueta en el acto — a
+/// diferencia de publicar en uno ya existente (que se etiqueta la primera vez
+/// que se sube algo), aquí no hay «primera subida» que dispare el etiquetado
+/// solo, así que se hace explícito.
+pub async fn crear_repo(testigo: &str, nombre: &str, privado: bool) -> Result<Proyecto> {
+    #[derive(serde::Deserialize)]
+    struct R {
+        full_name: String,
+    }
+    let cliente = cliente_http();
+    let r = cliente
+        .post("https://api.github.com/user/repos")
+        .bearer_auth(testigo)
+        .header("user-agent", "lumi-indexer")
+        .json(&serde_json::json!({ "name": nombre, "private": privado }))
+        .send()
+        .await?;
+    if !r.status().is_success() {
+        bail!("no se pudo crear el repositorio: {}", r.status());
+    }
+    let creado: R = r.json().await?;
+    etiquetar_repo(&cliente, testigo, &creado.full_name).await?;
+    Ok(Proyecto {
+        repo: creado.full_name,
+        privado,
+        indices: 0,
+        teselas: 0,
+        imagenes: 0,
+        ultima_actividad: None,
+    })
 }
 
 /// Añade la etiqueta `lumi-index` al repositorio si no la lleva ya. Sin esto

@@ -271,6 +271,10 @@ impl Almacen {
             // preguntar, y un índice nunca podía llegar a servir ni siquiera
             // Mini de verdad si el operador no quería pagar el resto.
             "ALTER TABLE indices ADD COLUMN niveles_elegidos TEXT",
+            // Proyecto (repo de GitHub etiquetado `lumi-index`) al que pertenece este
+            // índice — spec de pestaña de Proyectos. NULL para cualquier índice creado
+            // antes de esto: no hay ninguno en producción, no hace falta migrarlos.
+            "ALTER TABLE indices ADD COLUMN proyecto TEXT",
         ] {
             let _ = c.execute(alter, []);
         }
@@ -320,13 +324,21 @@ impl Almacen {
         Ok(estado.as_deref() != Some("abierto"))
     }
 
-    pub fn crear_indice(&self, nombre: &str, slug: &str) -> Result<i64> {
+    pub fn crear_indice(&self, nombre: &str, slug: &str, proyecto: &str) -> Result<i64> {
         let c = self.0.lock().unwrap();
         c.execute(
-            "INSERT INTO indices (nombre, slug, estado, creado_en) VALUES (?1, ?2, 'abierto', ?3)",
-            params![nombre, slug, Self::ahora()],
+            "INSERT INTO indices (nombre, slug, estado, proyecto, creado_en) VALUES (?1, ?2, 'abierto', ?3, ?4)",
+            params![nombre, slug, proyecto, Self::ahora()],
         )?;
         Ok(c.last_insert_rowid())
+    }
+
+    /// El `creado_en` de un índice — epoch de cuándo nació. Es lo que decide
+    /// «última actividad» de un proyecto sumando sobre todos sus índices;
+    /// `None` si el índice ya no existe.
+    pub fn creado_en_de_indice(&self, id: i64) -> Result<Option<i64>> {
+        let c = self.0.lock().unwrap();
+        Ok(c.query_row("SELECT creado_en FROM indices WHERE id = ?1", params![id], |r| r.get(0)).optional()?)
     }
 
     /// `numero_version` de un índice — cuántas veces se ha publicado. `1` para
@@ -391,6 +403,16 @@ impl Almacen {
     pub fn nombre_de_indice(&self, indice_id: i64) -> Result<Option<String>> {
         let c = self.0.lock().unwrap();
         Ok(c.query_row("SELECT nombre FROM indices WHERE id = ?1", params![indice_id], |r| r.get(0)).ok())
+    }
+
+    /// El proyecto (repo etiquetado `lumi-index`) de un índice — `None` en
+    /// cualquier índice creado antes de la spec de pestaña de Proyectos.
+    pub fn proyecto_de_indice(&self, indice_id: i64) -> Result<Option<String>> {
+        let c = self.0.lock().unwrap();
+        let fila: Option<Option<String>> = c
+            .query_row("SELECT proyecto FROM indices WHERE id = ?1", params![indice_id], |r| r.get(0))
+            .optional()?;
+        Ok(fila.flatten())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -837,6 +859,21 @@ impl Almacen {
         let mut q = c.prepare("SELECT id, nombre, slug, estado FROM indices ORDER BY creado_en DESC")?;
         let filas = q
             .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(filas)
+    }
+
+    /// Los índices de un proyecto (repo con la etiqueta `lumi-index`) —
+    /// mismo shape que `listar_indices`, filtrado por proyecto. Es la base
+    /// de la lista de índices en el panel de detalle de un proyecto, y de
+    /// las estadísticas agregadas (sumadas por quien llame, no aquí).
+    pub fn indices_de_proyecto(&self, proyecto: &str) -> Result<Vec<(i64, String, String, String)>> {
+        let c = self.0.lock().unwrap();
+        let mut q = c.prepare(
+            "SELECT id, nombre, slug, estado FROM indices WHERE proyecto = ?1 ORDER BY creado_en DESC",
+        )?;
+        let filas = q
+            .query_map(params![proyecto], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(filas)
     }
@@ -1549,7 +1586,7 @@ mod tests {
         // Esta es LA prueba del 7b: es lo que impide pagar dos veces por lo
         // mismo cuando una descarga se corta a la mitad.
         let (_d, a) = temporal();
-        let i = a.crear_indice("lugo-norte", "lugo-norte").unwrap();
+        let i = a.crear_indice("lugo-norte", "lugo-norte", "x/x").unwrap();
 
         assert_eq!(a.descarga_estado(i, "google", "AAA").unwrap(), None);
         a.descarga_marcar(i, "google", "AAA", "hecho", 148, 148, None).unwrap();
@@ -1571,7 +1608,7 @@ mod tests {
     #[test]
     fn cancelar_un_lote_pendiente_lo_saca_de_la_cola() {
         let (_d, a) = temporal();
-        let i = a.crear_indice("tokio", "tokio").unwrap();
+        let i = a.crear_indice("tokio", "tokio", "x/x").unwrap();
         let lote = a.crear_lote(i, "red", "mapillary", Some("calle"), "mapillary", None, None, false).unwrap();
         a.insertar_imagen(i, lote, "a.jpg", "sha-a", 43.36, -8.41, "0311", &["lumi-2".into()]).unwrap();
 
@@ -1590,7 +1627,7 @@ mod tests {
     #[test]
     fn progreso_indice_cuenta_el_indice_entero_no_el_lote() {
         let (_d, a) = temporal();
-        let i = a.crear_indice("tokio", "tokio").unwrap();
+        let i = a.crear_indice("tokio", "tokio", "x/x").unwrap();
         let lote = a.crear_lote(i, "red", "mapillary", Some("calle"), "mapillary", None, None, false).unwrap();
         a.insertar_imagen(i, lote, "a.jpg", "sha-a", 43.36, -8.41, "0311", &["lumi-2".into()]).unwrap();
         let b = a.insertar_imagen(i, lote, "b.jpg", "sha-b", 43.36, -8.41, "0311", &["lumi-2".into()]).unwrap();
@@ -1606,7 +1643,7 @@ mod tests {
     #[test]
     fn un_lote_en_curso_no_se_cancela() {
         let (_d, a) = temporal();
-        let i = a.crear_indice("tokio", "tokio").unwrap();
+        let i = a.crear_indice("tokio", "tokio", "x/x").unwrap();
         let lote = a.crear_lote(i, "red", "mapillary", Some("calle"), "mapillary", None, None, false).unwrap();
         a.estado_lote(lote, "en_curso", None).unwrap();
 
@@ -1623,7 +1660,7 @@ mod tests {
     #[test]
     fn liberar_tesela_borra_y_deja_la_descarga_pendiente_otra_vez() {
         let (_d, a) = temporal();
-        let i = a.crear_indice("lugo", "lugo").unwrap();
+        let i = a.crear_indice("lugo", "lugo", "x/x").unwrap();
         let lote = a.crear_lote(i, "red", "mapillary", Some("calle"), "mapillary", None, None, false).unwrap();
         let img = a.insertar_imagen(i, lote, "a.jpg", "sha-a", 43.36, -8.41, "0311", &["lumi-2".into()]).unwrap();
         a.marcar_vector(img, "lumi-2", "hecho").unwrap();
