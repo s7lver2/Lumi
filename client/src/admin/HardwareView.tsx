@@ -68,32 +68,8 @@ export function HardwareView({ token }: { token: string }) {
 
   return (
     <div className="px-6 pb-8 pt-5">
-      <div className="flex items-end justify-between border-b border-border pb-[11px]">
+      <div className="border-b border-border pb-[11px]">
         <h2 className="text-[21px] font-medium tracking-[-.025em]">Hardware</h2>
-        <div className="flex flex-col items-end gap-1.5">
-          <div className="relative flex w-[126px] rounded-lg border border-border bg-surface p-[3px]">
-            <span className="absolute left-[3px] top-[3px] h-[calc(100%-6px)] w-[60px] rounded-md bg-elevated
-              transition-transform duration-[420ms] ease-expo"
-              style={{ transform: avanzado ? "translateX(60px)" : "translateX(0)" }} />
-            {(["Básico", "Avanzado"] as const).map((l, i) => (
-              <button key={l} onClick={() => setAvanzado(i === 1)}
-                className={`relative z-10 flex-1 py-[5px] text-[10px] transition-colors
-                  ${(i === 1) === avanzado ? "text-fg" : "text-subtle"}`}>
-                {l}
-              </button>
-            ))}
-          </div>
-          {/* Sin esto, avanzado no desbloqueaba nada visible (ni curvas ni
-              editor de CPU) en hosts donde el driver ya lo cierra todo — como
-              WSL2 — y cambiar el interruptor se sentía roto en vez de
-              simplemente no tener nada que ofrecer aquí. */}
-          {avanzado && capCurvas?.state === "off"
-            && (!cpu || (cpu.fabricante === "intel" ? capCpuIntel?.state === "off" : capCpuAmd?.state === "off")) && (
-            <p className="max-w-[220px] text-right text-[9.5px] leading-relaxed text-subtle">
-              Nada que editar aquí en este equipo: {capCurvas?.reason}
-            </p>
-          )}
-        </div>
       </div>
 
       <div className="mt-3 space-y-2.5">
@@ -197,6 +173,37 @@ export function HardwareView({ token }: { token: string }) {
           </div>
         )}
         {cpuError && <p className="text-[10.5px] text-danger-fg">{cpuError}</p>}
+      </div>
+
+      {/* Debajo de las tarjetas, no en la cabecera (#82): es el interruptor
+          menos usado de la pantalla, y arriba competía por atención con el
+          título antes de que hubiera nada que editar todavía. */}
+      <div className="mt-5 flex items-center gap-3 border-t border-border pt-4">
+        <div className="relative flex w-[126px] shrink-0 rounded-lg border border-border bg-surface p-[3px]">
+          <span className="absolute left-[3px] top-[3px] h-[calc(100%-6px)] w-[60px] rounded-md bg-elevated
+            transition-transform duration-[420ms] ease-expo"
+            style={{ transform: avanzado ? "translateX(60px)" : "translateX(0)" }} />
+          {(["Básico", "Avanzado"] as const).map((l, i) => (
+            <button key={l} onClick={() => setAvanzado(i === 1)}
+              className={`relative z-10 flex-1 py-[5px] text-[10px] transition-colors
+                ${(i === 1) === avanzado ? "text-fg" : "text-subtle"}`}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <p className="text-[9.5px] leading-relaxed text-subtle">
+          Avanzado desbloquea curvas y límites por dispositivo, click en una tarjeta para editarlos.
+        </p>
+        {/* Sin esto, avanzado no desbloqueaba nada visible (ni curvas ni
+            editor de CPU) en hosts donde el driver ya lo cierra todo — como
+            WSL2 — y cambiar el interruptor se sentía roto en vez de
+            simplemente no tener nada que ofrecer aquí. */}
+        {avanzado && capCurvas?.state === "off"
+          && (!cpu || (cpu.fabricante === "intel" ? capCpuIntel?.state === "off" : capCpuAmd?.state === "off")) && (
+          <p className="ml-auto max-w-[220px] text-right text-[9.5px] leading-relaxed text-subtle">
+            Nada que editar aquí en este equipo: {capCurvas?.reason}
+          </p>
+        )}
       </div>
 
       {editando !== null && (() => {
