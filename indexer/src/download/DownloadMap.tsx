@@ -55,6 +55,21 @@ export function DownloadMap({ teselas }: { teselas: TeselaProgreso[] }) {
     return () => { vivo = false; mapa.current?.remove(); };
   }, []);
 
+  // Mapbox GL no se entera solo de que su contenedor cambió de tamaño — y
+  // este contenedor sí cambia: cambiar de pestaña en `Rail` desmonta y
+  // remonta esta vista mientras el layout de alrededor (la franja de
+  // embebido, el propio panel) todavía se está asentando, así que el mapa
+  // se inicializaba a veces contra un contenedor transitorio y se quedaba
+  // encogido para siempre (#64). Un `ResizeObserver` es más robusto que un
+  // `setTimeout` de una sola vez: reacciona a cualquier cambio real de
+  // tamaño, no solo al primero.
+  useEffect(() => {
+    if (!contenedor.current) return;
+    const ro = new ResizeObserver(() => mapa.current?.resize());
+    ro.observe(contenedor.current);
+    return () => ro.disconnect();
+  }, []);
+
   useEffect(() => {
     const m = mapa.current;
     if (!m || !m.isStyleLoaded() || teselas.length === 0) return;
