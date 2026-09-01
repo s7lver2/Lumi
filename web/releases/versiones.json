@@ -141,7 +141,7 @@
       "producto": "cliente",
       "version": "2.0.3",
       "publicado": "2026-08-31T21:41:54Z",
-      "notas": "popup de version rediseÃƒÆ’Ã‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
+      "notas": "popup de version rediseÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
       "retirada": false,
       "artefactos": [
         {
@@ -156,7 +156,7 @@
       "producto": "indexer",
       "version": "2.0.3",
       "publicado": "2026-08-31T21:41:54Z",
-      "notas": "popup de version rediseÃƒÆ’Ã‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
+      "notas": "popup de version rediseÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
       "retirada": false,
       "artefactos": [
         {
@@ -171,7 +171,7 @@
       "producto": "lumid",
       "version": "2.0.3",
       "publicado": "2026-08-31T21:41:54Z",
-      "notas": "popup de version rediseÃƒÆ’Ã‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
+      "notas": "popup de version rediseÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
       "retirada": false,
       "artefactos": [
         {
@@ -271,7 +271,52 @@
           "sha256": "26bbd12e9c105e5ccd98241c8424c87e310129c9ab0fc3c6a762f23aa1e2aa39"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.6",
+      "publicado": "2026-09-01T12:35:09Z",
+      "notas": "indexer: pestana Proyectos, versionado por publicaciones, descarga+embebido fusionados, portear nivel, modo de consumo al embeber, mapa de territorio (buscador con recientes, deshacer/rehacer, editar vertices, sumar/restar area), icono propio legible en barra de tareas, WSL ya no se queda en error fantasma, seccion Actualizaciones con historial y version anterior, seccion Rendimiento; cliente: regenerar clave de API en vez de volver a mostrarla; instalador ya no se congela al arrancar",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.6/app.exe",
+          "bytes": 15745536,
+          "sha256": "fecb29876c4b01961918e0435633c42a2379e119885b6da338e2b5fdf5ee0163"
+        }
+      ]
+    },
+    {
+      "producto": "indexer",
+      "version": "2.0.6",
+      "publicado": "2026-09-01T12:35:09Z",
+      "notas": "indexer: pestana Proyectos, versionado por publicaciones, descarga+embebido fusionados, portear nivel, modo de consumo al embeber, mapa de territorio (buscador con recientes, deshacer/rehacer, editar vertices, sumar/restar area), icono propio legible en barra de tareas, WSL ya no se queda en error fantasma, seccion Actualizaciones con historial y version anterior, seccion Rendimiento; cliente: regenerar clave de API en vez de volver a mostrarla; instalador ya no se congela al arrancar",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.6/indexer-app.exe",
+          "bytes": 22119936,
+          "sha256": "aefaee1caa46ad8d8026de74c7500f8271c62791f6206b8115f6dcea0134d0a4"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.6",
+      "publicado": "2026-09-01T12:35:09Z",
+      "notas": "indexer: pestana Proyectos, versionado por publicaciones, descarga+embebido fusionados, portear nivel, modo de consumo al embeber, mapa de territorio (buscador con recientes, deshacer/rehacer, editar vertices, sumar/restar area), icono propio legible en barra de tareas, WSL ya no se queda en error fantasma, seccion Actualizaciones con historial y version anterior, seccion Rendimiento; cliente: regenerar clave de API en vez de volver a mostrarla; instalador ya no se congela al arrancar",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.6/lumid",
+          "bytes": 20375920,
+          "sha256": "bee52cc4281c93ae750b01118d448e8e0edc04fad4ef157ce814293868301096"
+        }
+      ]
     }
   ],
-  "firma": "UOj9pOss/ZnfOF11LANrxkJjXuGPJaieNx7OmTshKgeGXEYAATJkYcTqbC5zMZC+5G7ZVTXx9jfD9VhOWqtqCA=="
+  "firma": "nyxgXIIKKe6gKTPAfu2qilgQovByhjGXzY0KFf11AbRM3OzIKeRfIEKSwRmq89yuAfqEovoN8BS7j4QiHsNuAw=="
 }
