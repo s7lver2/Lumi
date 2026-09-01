@@ -126,7 +126,8 @@ function VistaTabla({ q, token, onAbrirUsuario, onCambiado }: {
         <div className="flex flex-col gap-1.5">
           {q.trabajadores.map((w) => (
             <div key={w.dispositivo}
-              className="flex items-center gap-2.5 rounded-lg border border-border px-2.5 py-1.5">
+              style={{ animation: "jg-fade-rise .4s cubic-bezier(.22,1,.36,1) both" }}
+              className="flex items-center gap-2.5 rounded-lg border border-border px-2.5 py-1.5 transition-colors duration-300 ease-expo">
               <Icon name={w.listo ? "check" : "clock"} size={12}
                 className={w.listo ? "text-draw-fg" : "text-subtle"} />
               <span className="font-mono text-[11px] text-fg">{w.dispositivo}</span>
@@ -152,13 +153,19 @@ function FilaPendiente({ p, token, onAbrirUsuario, onCambiado }: {
   const [confirmando, setConfirmando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
   const [fallo, setFallo] = useState<string | null>(null);
+  // Igual que `saliendo` en VistaCinta: al cancelar con éxito, la fila se
+  // desvanece en el sitio en vez de desaparecer de golpe — `onCambiado` (que
+  // recarga la cola y hace que esta fila deje de existir) se retrasa lo
+  // justo para que la transición se vea.
+  const [saliendo, setSaliendo] = useState(false);
 
   async function cancelar() {
     setCancelando(true);
     setFallo(null);
     try {
       await api.del(`/v1/analyses/${p.id}`, token);
-      onCambiado();
+      setSaliendo(true);
+      setTimeout(onCambiado, 300);
     } catch (e) {
       setFallo(String(e));
       setCancelando(false);
@@ -167,7 +174,13 @@ function FilaPendiente({ p, token, onAbrirUsuario, onCambiado }: {
   }
 
   return (
-    <tr className="hover:bg-white/[.015]">
+    <tr style={{
+        animation: saliendo ? undefined : "jg-fade-rise .4s cubic-bezier(.22,1,.36,1) both",
+        opacity: saliendo ? 0 : 1,
+        transform: saliendo ? "scale(.97)" : undefined,
+        transition: "opacity .3s ease, transform .3s cubic-bezier(.22,1,.36,1)",
+      }}
+      className="transition-colors duration-300 ease-expo hover:bg-white/[.015]">
       <td className="border-b border-border px-2.5 py-2">
         <button onClick={() => onAbrirUsuario(p.user_id)}
           className="text-fg underline decoration-border decoration-1 underline-offset-2 hover:decoration-fg">
