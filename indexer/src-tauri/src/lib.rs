@@ -115,12 +115,17 @@ fn ubicacion_por_defecto() -> String {
 /// nada lo avisara.
 #[tauri::command]
 fn ubicacion_migrar(destino: String, estado: tauri::State<'_, Estado>) -> Result<(), String> {
-    let hay_actividad = estado.descarga.lock().unwrap().is_some()
-        || estado.ingesta.lock().unwrap().is_some()
-        || estado.sondeo.lock().unwrap().is_some()
-        || estado.sellado.lock().unwrap().is_some()
-        || estado.publicacion.lock().unwrap().is_some()
-        || estado.pesos.lock().unwrap().is_some()
+    // `descarga`/`ingesta`/`sondeo`/`sellado`/`publicacion`/`pesos` se ponen a
+    // `Some(...)` al arrancar un job y nunca vuelven a `None`, ni con éxito
+    // ni con error — así que comprobar solo `.is_some()` dejaba el guard
+    // bloqueado para siempre tras el primer job. Igual que ya se hace abajo
+    // con `migracion`, hay que mirar el progreso real de cada uno.
+    let hay_actividad = estado.descarga.lock().unwrap().as_ref().is_some_and(|d| d.progreso().trabajando)
+        || estado.ingesta.lock().unwrap().as_ref().is_some_and(|i| i.progreso().trabajando)
+        || estado.sondeo.lock().unwrap().as_ref().is_some_and(|s| !s.progreso().terminado)
+        || estado.sellado.lock().unwrap().as_ref().is_some_and(|s| !s.progreso().terminado)
+        || estado.publicacion.lock().unwrap().as_ref().is_some_and(|p| !p.progreso().terminado)
+        || estado.pesos.lock().unwrap().as_ref().is_some_and(|p| !p.terminado)
         || estado.cola.progreso().iter().any(|p| p.trabajando);
     if hay_actividad {
         return Err("hay trabajo en curso (descarga, sellado, embebido…); espera a que termine antes de mudar la carpeta".into());
