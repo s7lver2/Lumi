@@ -285,6 +285,11 @@ struct ProgresoIndiceEmbed {
     pausada: bool,
     guardado_fallos: u32,
     ultimo_fallo: Option<String>,
+    /// Este modelo (no solo este índice) sigue esperando a que Qdrant
+    /// responda — sin esto, "en espera de su turno" (otro índice va antes) y
+    /// "Qdrant todavía no está arriba" se veían idénticos: una fila quieta
+    /// para siempre, sin ninguna pista de por qué.
+    esperando_qdrant: bool,
 }
 
 /// El progreso de embebido de ESTE índice, por modelo — no el de cualquiera
@@ -316,6 +321,7 @@ fn indice_progreso_embebido(
                 pausada: fila.is_some_and(|p| p.pausada),
                 guardado_fallos: if activo { fila.map(|p| p.guardado_fallos).unwrap_or(0) } else { 0 },
                 ultimo_fallo: if activo { fila.and_then(|p| p.ultimo_fallo.clone()) } else { None },
+                esperando_qdrant: fila.is_some_and(|p| p.esperando_qdrant),
             })
         })
         .collect()

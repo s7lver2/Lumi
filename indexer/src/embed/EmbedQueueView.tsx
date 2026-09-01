@@ -50,6 +50,10 @@ export function EmbedQueueView({ indiceId, onCambiarIndice }: {
   const visibles = filas.filter((p) => p.total > 0);
   const pausada = cola.some((p) => p.pausada);
   const hayTrabajo = cola.some((p) => p.indice_total > 0 || p.trabajando);
+  // Antes de esto, un modelo esperando a Qdrant se veía IDÉNTICO a uno
+  // trabajando de verdad: "0/32" para siempre, sin ninguna pista de que el
+  // problema es Qdrant y no la cola en sí.
+  const esperandoQdrant = cola.some((p) => p.esperando_qdrant);
 
   async function alternar() {
     await api.colaPausar(!pausada);
@@ -86,6 +90,15 @@ export function EmbedQueueView({ indiceId, onCambiarIndice }: {
         )}
       </div>
 
+      {esperandoQdrant && (
+        <div className="rounded-lg border border-warning/40 bg-warning/[.08] px-3.5 py-2.5">
+          <p className="text-[11px] leading-relaxed text-warning-fg">
+            Qdrant no responde todavía — el embebido no puede avanzar sin él.
+            Ve a Ajustes → Servicios locales y comprueba que esté levantado.
+          </p>
+        </div>
+      )}
+
       {visibles.length === 0 && (
         <div className="mt-6 flex flex-col items-center gap-2 text-center text-muted">
           <Icon name="embebido" size={22} />
@@ -105,13 +118,15 @@ export function EmbedQueueView({ indiceId, onCambiarIndice }: {
               <div className="flex items-center gap-2.5">
                 <span className="w-24 shrink-0 truncate font-mono text-[11px] text-fg">{p.modelo_id}</span>
                 <span className="min-w-0 flex-1 truncate text-right text-[10.5px] text-muted">
-                  {p.pausada
-                    ? "en pausa"
-                    : p.activo
-                      ? `lote ${p.lote_hechas}/${p.lote_total}`
-                      : p.hechas >= p.total
-                        ? "completo"
-                        : "en espera de su turno"}
+                  {p.esperando_qdrant
+                    ? "esperando a Qdrant…"
+                    : p.pausada
+                      ? "en pausa"
+                      : p.activo
+                        ? `lote ${p.lote_hechas}/${p.lote_total}`
+                        : p.hechas >= p.total
+                          ? "completo"
+                          : "en espera de su turno"}
                 </span>
               </div>
               <div className="mt-2 h-[3px] overflow-hidden rounded-sm bg-elevated">

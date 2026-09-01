@@ -195,6 +195,7 @@ export interface ProgresoCola {
   reinicios: number;
   guardado_fallos: number;
   ultimo_fallo: string | null;
+  esperando_qdrant: boolean;
 }
 export interface FichaResumen {
   paquete: string; nombre: string; autor: string; url: string;
@@ -253,6 +254,7 @@ export interface ProgresoIndiceEmbed {
   pausada: boolean;
   guardado_fallos: number;
   ultimo_fallo: string | null;
+  esperando_qdrant: boolean;
 }
 
 export const api = {

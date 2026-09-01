@@ -71,6 +71,12 @@ pub struct Progreso {
     /// sigue vivo y contesta) se veía IDÉNTICO a uno que solo tarda: "lote
     /// 0/32" para siempre, sin ninguna pista de por qué.
     pub ultimo_fallo: Option<String>,
+    /// `true` mientras este modelo espera a que Qdrant responda antes de
+    /// arrancar de verdad (`asegurar_coleccion` reintentando cada 5s). Sin
+    /// esto, este caso y "trabajando de verdad pero yendo lento" se veían
+    /// idénticos en la interfaz: una fila en "en espera de su turno" para
+    /// siempre, sin ninguna pista de que el problema es Qdrant, no la cola.
+    pub esperando_qdrant: bool,
 }
 
 pub struct Cola {
@@ -329,8 +335,16 @@ impl Cola {
             // Qdrant arrancara treinta segundos después.
             loop {
                 match qdrant.asegurar_coleccion(&coleccion, dims).await {
-                    Ok(()) => break,
+                    Ok(()) => {
+                        if let Some(p) = self.progreso.lock().unwrap().get_mut(&modelo) {
+                            p.esperando_qdrant = false;
+                        }
+                        break;
+                    }
                     Err(e) => {
+                        if let Some(p) = self.progreso.lock().unwrap().get_mut(&modelo) {
+                            p.esperando_qdrant = true;
+                        }
                         self.log.apuntar(format!(
                             "cola ({modelo}): no se pudo preparar Qdrant, reintentando en 5s: {e}"
                         ));

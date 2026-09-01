@@ -1,8 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { api, type EstadoServicio } from "../lib/api";
 import { Icon } from "../ui/Icon";
 import { LogBox } from "./LogBox";
+
+/// Mismo tope que `ServicesBoot`/`ServicesStep`/`ServicesFailDialog`: 40 ×
+/// 800 ms ≈ medio minuto.
+const TOPE_SONDEOS = 40;
 
 /** El estado de Redis y Qdrant desde dentro de la aplicación, para no tener
  *  que ir a buscarlos a una terminal.
@@ -18,6 +22,8 @@ export function ServicesPanel({ so }: { so: string }) {
   const [error, setError] = useState<string | null>(null);
   const [enCurso, setEnCurso] = useState<null | "levantar" | "parar">(null);
   const [concurrencia, setConcurrencia] = useState<number | null>(null);
+  const vivo = useRef(true);
+  useEffect(() => { vivo.current = true; return () => { vivo.current = false; }; }, []);
 
   const refrescar = () => api.serviciosEstado().then(setServicios);
 
@@ -36,18 +42,35 @@ export function ServicesPanel({ so }: { so: string }) {
     return () => clearInterval(t);
   }, []);
 
-  function accion(cual: "levantar" | "parar") {
+  async function accion(cual: "levantar" | "parar") {
     setEnCurso(cual);
     setError(null);
-    const p = cual === "parar"
-      ? api.serviciosParar()
-      : so === "windows"
-        ? api.serviciosArrancarWsl()
-        : api.serviciosArrancar();
-    p.catch((e) => setError(String(e))).finally(() => {
-      setEnCurso(null);
-      void refrescar();
-    });
+    try {
+      if (cual === "parar") {
+        await api.serviciosParar();
+        return;
+      }
+      await (so === "windows" ? api.serviciosArrancarWsl() : api.serviciosArrancar());
+      // El comando resuelve en cuanto los procesos se LANZAN, no cuando ya
+      // escuchan de verdad — sin sondear aquí, el botón se reactivaba antes
+      // de que Qdrant/Redis estuvieran listos y parecía que hacía falta
+      // pulsarlo otra vez, cuando el primer intento ya iba en camino. Mismo
+      // patrón que `ServicesFailDialog`/`ServicesStep`.
+      for (let n = 0; n < TOPE_SONDEOS; n++) {
+        await new Promise((r) => setTimeout(r, 800));
+        if (!vivo.current) return;
+        const s = await api.serviciosEstado();
+        if (s.length > 0 && s.every((x) => x.vivo)) return;
+      }
+      if (vivo.current) setError("Se lanzaron pero no llegaron a responder a tiempo. El log de abajo tiene el detalle.");
+    } catch (e) {
+      if (vivo.current) setError(String(e));
+    } finally {
+      if (vivo.current) {
+        setEnCurso(null);
+        void refrescar();
+      }
+    }
   }
 
   const alguno = servicios.some((s) => s.vivo);
@@ -114,14 +137,14 @@ export function ServicesPanel({ so }: { so: string }) {
 
         <div className="mt-4 flex gap-2">
           <button
-            onClick={() => accion("levantar")}
+            onClick={() => void accion("levantar")}
             disabled={enCurso !== null || todos}
             className="jg-press rounded-lg border border-border px-3.5 py-2 text-[11.5px] text-fg disabled:opacity-40"
           >
             {enCurso === "levantar" ? "Levantando…" : so === "windows" ? "Levantar en WSL" : "Levantar"}
           </button>
           <button
-            onClick={() => accion("parar")}
+            onClick={() => void accion("parar")}
             disabled={enCurso !== null || !alguno}
             className="jg-press rounded-lg border border-border px-3.5 py-2 text-[11.5px] text-fg disabled:opacity-40"
           >
