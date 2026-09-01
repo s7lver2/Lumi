@@ -21,10 +21,15 @@ export const TITLEBAR_H = 38;
  *
  *  Es además la barra de la ventana: sin decoración del sistema, esta franja
  *  es la zona de arrastre y la que lleva minimizar, maximizar y cerrar. */
-export function TitleBar({ crumbs, onOpenAdmin, onProfile, onSignOut, onProjectAccepted }: {
+export function TitleBar({ crumbs, onOpenAdmin, onProfile, onSettings, onSignOut, onProjectAccepted }: {
   crumbs: Crumb[];
   onOpenAdmin: () => void;
   onProfile?: () => void;
+  /** Ajustes del CLIENTE (apariencia, auto-actualización) — no de la
+   *  cuenta ni del servidor, por eso no exige nada especial para
+   *  mostrarse. Ver `onOpenAdmin`/`onProfile`: mismo patrón, un overlay
+   *  más que `App.tsx` decide cómo montar (#83). */
+  onSettings?: () => void;
   onSignOut: () => void;
   /** Aceptar una invitación aquí no toca el selector de proyectos: son
    *  componentes hermanos y el selector solo carga una vez al montarse. */
@@ -74,7 +79,7 @@ export function TitleBar({ crumbs, onOpenAdmin, onProfile, onSignOut, onProjectA
           {isAdmin && <ServerPill />}
           <NotificationsPopover onProjectAccepted={onProjectAccepted} />
           <UserMenu name={username} userId={userId} isAdmin={isAdmin}
-            onOpenAdmin={onOpenAdmin} onProfile={onProfile} onSignOut={onSignOut} />
+            onOpenAdmin={onOpenAdmin} onProfile={onProfile} onSettings={onSettings} onSignOut={onSignOut} />
           <span className="h-[18px] w-px bg-border" />
         </>
       )}
@@ -221,9 +226,9 @@ function Meter({ pct }: { pct: number }) {
   );
 }
 
-function UserMenu({ name, userId, isAdmin, onOpenAdmin, onProfile, onSignOut }: {
+function UserMenu({ name, userId, isAdmin, onOpenAdmin, onProfile, onSettings, onSignOut }: {
   name: string; userId: number | null; isAdmin: boolean;
-  onOpenAdmin: () => void; onProfile?: () => void; onSignOut: () => void;
+  onOpenAdmin: () => void; onProfile?: () => void; onSettings?: () => void; onSignOut: () => void;
 }) {
   const [open, setOpen, box] = usePopover();
   return (
@@ -245,6 +250,7 @@ function UserMenu({ name, userId, isAdmin, onOpenAdmin, onProfile, onSignOut }: 
             </div>
           </div>
           {onProfile && <Item onClick={() => { setOpen(false); onProfile(); }}>Perfil y sesiones</Item>}
+          {onSettings && <Item onClick={() => { setOpen(false); onSettings(); }}>Ajustes del cliente</Item>}
           {isAdmin && <Item onClick={() => { setOpen(false); onOpenAdmin(); }}>Administración</Item>}
           <Item danger onClick={() => { setOpen(false); onSignOut(); }}>Cerrar sesión</Item>
         </div>

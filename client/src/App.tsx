@@ -12,6 +12,7 @@ import { ProfileView } from "./profile/ProfileView";
 import { StatusOverlay } from "./ui/StatusOverlay";
 import { EntryScreen } from "./entry/EntryScreen";
 import { AdminPanel } from "./admin/AdminPanel";
+import { AjustesView } from "./settings/AjustesView";
 import { ConnectionBanner } from "./ui/ConnectionBanner";
 import { MantenimientoBanner } from "./ui/MantenimientoBanner";
 import { ActualizacionBanner } from "./ui/ActualizacionBanner";
@@ -47,6 +48,11 @@ export default function App() {
   const [projectsTick, setProjectsTick] = useState(0);
   const [actualizacion, setActualizacion] = useState<EstadoActualizacion | null>(null);
   const [actualizacionCerrada, setActualizacionCerrada] = useState(false);
+  // Ajustes del cliente (#83): un overlay por encima del modo actual, no un
+  // modo nuevo en el router de abajo — así no hace falta replicar la
+  // lógica de "volver" de cada modo (picker/project/case/admin), y la
+  // conexión/sesión activa no se toca al abrirlo ni al cerrarlo.
+  const [ajustesAbiertos, setAjustesAbiertos] = useState(false);
   // Una comprobación por arranque, silenciosa si falla (sin red, o el
   // manifiesto no verifica). El botón manual de Perfil sí muestra el error.
   useEffect(() => {
@@ -285,6 +291,7 @@ export default function App() {
           no es una franja permanente de 70 px — vive en su píldora. */}
       <TitleBar crumbs={crumbs} onOpenAdmin={() => { leaveProject(); setMode("admin"); }}
         onProfile={() => { leaveProject(); setMode("profile"); }}
+        onSettings={mode !== "entry" && mode !== "wizard" ? () => setAjustesAbiertos(true) : undefined}
         onSignOut={signOut} onProjectAccepted={() => setProjectsTick((t) => t + 1)} />
       {/* Para toda la app, no solo el panel de administración: quien esté
           bloqueado por el modo mantenimiento tiene que enterarse igual,
@@ -430,6 +437,15 @@ export default function App() {
               onOpenCase={(c) => { useWorkspace.getState().setCase(c); setMode("case"); }} />
           );
         })()
+      )}
+      {/* Overlay sobre lo que hubiera montado arriba, no un modo nuevo del
+          router de este mismo bloque (#83): así abrir/cerrar Ajustes no
+          toca `mode` ni desmonta project/case/admin — al volver, todo
+          sigue exactamente donde estaba. */}
+      {ajustesAbiertos && (
+        <div className="absolute inset-0 z-20 bg-bg">
+          <AjustesView onBack={() => setAjustesAbiertos(false)} />
+        </div>
       )}
       </div>
       {import.meta.env.DEV && <DebugOrb />}
