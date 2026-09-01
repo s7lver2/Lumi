@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type NetworkSettings, type NetworkView as NetworkViewData } from "../lib/api";
+import { useServer } from "../lib/store";
 import { Icon } from "../ui/Icon";
 import { Seccion } from "./AdminPanel";
 
@@ -32,7 +33,15 @@ export function NetworkView({ token }: { token: string }) {
   async function reiniciar() {
     setBusy(true); setError(null);
     try {
+      // El servidor responde 204 de inmediato y solo AHORA (petición
+      // aceptada) empieza su propia cuenta atrás antes de caer de verdad
+      // (ver `routes/network.rs::restart` — 5s de margen para que el aviso
+      // por SSE llegue). No hace falta esperar a que caiga: en cuanto esta
+      // llamada resuelve, el reinicio ya está en marcha, así que se marca
+      // como esperado para que `App.tsx` no lo trate como una conexión
+      // perdida cualquiera (#85).
       await api.networkRestart(token);
+      useServer.getState().setReinicioEsperado(true);
     } catch (e) {
       setError(String(e));
     } finally {

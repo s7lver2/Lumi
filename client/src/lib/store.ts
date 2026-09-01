@@ -29,6 +29,13 @@ interface ServerState {
    *  identidad y otro endpoint, así que otro contador: mezclarlos rompería
    *  el cache-bust del que no cambió. */
   serverAvatarVersion: number;
+  /** Se pone a `true` justo cuando un admin dispara el reinicio del
+   *  servidor desde Redes (NetworkView) y el POST confirma que el backend
+   *  lo aceptó. `App.tsx` lo lee en su sondeo de telemetría: una caída de
+   *  conexión con esta señal activa es un reinicio esperado, no un
+   *  problema — se salta directo al cierre de sesión en vez de recorrer
+   *  todo el ciclo reboot → lost → kick de dos minutos (#85). */
+  reinicioEsperado: boolean;
   setKey: (k: string) => void;
   setHello: (h: Hello | null) => void;
   setToken: (t: string | null) => void;
@@ -38,11 +45,13 @@ interface ServerState {
   setUser: (username: string, isAdmin: boolean, limits?: Limits | null, userId?: number | null) => void;
   bumpAvatarVersion: () => void;
   bumpServerAvatarVersion: () => void;
+  setReinicioEsperado: (v: boolean) => void;
 }
 
 export const useServer = create<ServerState>((set) => ({
   key: "", hello: null, token: null, sample: null, bootstrapToken: "", addr: "",
   username: "", userId: null, isAdmin: false, limits: null, avatarVersion: 0, serverAvatarVersion: 0,
+  reinicioEsperado: false,
   setKey: (key) => set({ key }),
   setHello: (hello) => set({ hello }),
   setToken: (token) => set({ token }),
@@ -52,4 +61,5 @@ export const useServer = create<ServerState>((set) => ({
   setUser: (username, isAdmin, limits = null, userId = null) => set({ username, isAdmin, limits, userId }),
   bumpAvatarVersion: () => set((s) => ({ avatarVersion: s.avatarVersion + 1 })),
   bumpServerAvatarVersion: () => set((s) => ({ serverAvatarVersion: s.serverAvatarVersion + 1 })),
+  setReinicioEsperado: (reinicioEsperado) => set({ reinicioEsperado }),
 }));

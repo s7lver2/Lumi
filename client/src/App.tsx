@@ -191,23 +191,31 @@ export default function App() {
       } catch {
         fails.current += 1;
         if (downSince.current === null) downSince.current = Date.now();
-        setStatus(fails.current > 20 ? "lost" : "reboot");
         // Solo afecta a una sesión de usuario ya dentro (app/admin): durante
         // el wizard del owner, `StatusOverlay` ya cubre esto con reintento
         // manual, y no tiene sentido "desloguear" a quien está instalando.
         const kicked = modeRef.current === "picker" || modeRef.current === "project" ||
           modeRef.current === "case" || modeRef.current === "admin";
-        if (kicked && Date.now() - downSince.current > KICK_AFTER_MS) {
+        // Un reinicio disparado a propósito desde Redes (#85): la primera
+        // falla de sondeo ya confirma que el servidor se fue a reiniciar,
+        // así que no tiene sentido fingir que es un problema de conexión
+        // durante hasta dos minutos — se sale directo, igual que el kick
+        // normal pero sin esperar.
+        const reinicioEsperado = useServer.getState().reinicioEsperado;
+        if (kicked && (reinicioEsperado || Date.now() - downSince.current > KICK_AFTER_MS)) {
           updateSession({ token: undefined });
           useServer.getState().setToken(null);
           useServer.getState().setSample(null);
+          useServer.getState().setReinicioEsperado(false);
           setAuth(null);
           useWorkspace.getState().clear();
           setMode("entry");
           setStatus("ok");
           fails.current = 0;
           downSince.current = null;
+          return;
         }
+        setStatus(fails.current > 20 ? "lost" : "reboot");
       }
     }, 3000);
     return () => clearInterval(t);
