@@ -199,7 +199,7 @@ export function OriginsPanel() {
         {error && <p className="mt-2.5 text-[11px] text-danger-fg">{error}</p>}
 
         <div className="mt-6">
-          <div className="max-w-sm rounded-[10px] border border-border p-[15px_16px]">
+          <div className="rounded-[10px] border border-border p-[15px_16px]">
             <div className="flex items-center">
               <span className="flex-1 text-[8.5px] uppercase tracking-[.13em] text-subtle">
                 Tope mensual
