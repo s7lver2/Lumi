@@ -1,26 +1,33 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import maplibregl, { type StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { lumiUrl } from "../lib/bridge";
+import { Icon } from "../ui/Icon";
 
 /** Miniatura muda de un tema del catálogo: mismo camino que el mapa real
  *  (`work/mapEngine.ts` — estilo reescrito por el daemon, teselas por
  *  `transformRequest`), pero sin controles ni interacción, y pidiendo
  *  explícitamente ESTE tema en vez del que esté activo en el servidor.
  *  Si el proveedor rechaza la petición (tema de Mapbox sin clave guardada)
- *  se queda en blanco — el aviso de qué falta ya lo dice el resto de la
- *  tarjeta. */
+ *  se muestra un icono de fallo en vez de quedarse en blanco para
+ *  siempre (#76) — el aviso de qué falta ya lo dice el resto de la
+ *  tarjeta, esto es solo la señal visual de que ESTA miniatura en
+ *  concreto no cargó. */
 export function MapThemePreview({ themeId }: { themeId: string }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [fallo, setFallo] = useState(false);
 
   useEffect(() => {
     let cancelado = false;
     let mapa: maplibregl.Map | null = null;
+    setFallo(false);
 
     void (async () => {
       try {
         const res = await fetch(lumiUrl(`/v1/map/style?theme=${encodeURIComponent(themeId)}`));
-        if (!res.ok || cancelado || !ref.current) return;
+        if (cancelado) return;
+        if (!res.ok) { setFallo(true); return; }
+        if (!ref.current) return;
         const style = (await res.json()) as StyleSpecification & { sprite?: string };
         if (cancelado || !ref.current) return;
         if (style.sprite?.startsWith("/")) style.sprite = lumiUrl(style.sprite);
@@ -44,14 +51,24 @@ export function MapThemePreview({ themeId }: { themeId: string }) {
         // `on("error")` es la única forma de ver un fallo de tesela/glyph: esos
         // pasan DENTRO del bucle de eventos de MapLibre, no como una excepción
         // que este `try` pudiera atrapar.
-        mapa.on("error", (e) => console.error(`[preview ${themeId}]`, e.error));
+        mapa.on("error", (e) => { console.error(`[preview ${themeId}]`, e.error); setFallo(true); });
       } catch (e) {
         console.error(`[preview ${themeId}] no se pudo montar`, e);
+        if (!cancelado) setFallo(true);
       }
     })();
 
     return () => { cancelado = true; mapa?.remove(); };
   }, [themeId]);
+
+  if (fallo) {
+    return (
+      <div style={{ position: "absolute", inset: 0 }}
+        className="grid place-items-center bg-elevated text-subtle">
+        <Icon name="alert" size={18} />
+      </div>
+    );
+  }
 
   // Estilo en línea, no clase: `maplibre-gl.css` fuerza `.maplibregl-map {
   // position: relative }` sobre este mismo elemento (MapLibre le añade esa
