@@ -483,7 +483,32 @@ pub async fn publicar(
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| nombre_indice.clone());
 
-    let (_, numero_version) = almacen.genealogia(indice_id)?;
+    let numero_version = almacen.genealogia(indice_id)?;
+
+    // Cuáles quadkeys y qué capas (modelo, version) ya se publicaron en el
+    // corte anterior — lo que NO está aquí es lo único que entra en el cuerpo
+    // de esta publicación. Ninguna si esta es la primera vez.
+    let anterior: Option<(u32, lumi_index::ficha::Ficha)> = almacen
+        .ultima_ficha_propia(indice_id)?
+        .and_then(|(v, json)| serde_json::from_str(&json).ok().map(|f| (v, f)));
+    let quadkeys_ya_publicadas: std::collections::HashSet<String> = anterior
+        .as_ref()
+        .map(|(_, f)| f.fuentes_por_quadkey.iter().map(|(qk, _)| qk.clone()).collect())
+        .unwrap_or_default();
+    let capas_ya_publicadas: std::collections::HashSet<(String, String)> = anterior
+        .as_ref()
+        .map(|(_, f)| f.capas.iter().map(|c| (c.modelo.clone(), c.version.clone())).collect())
+        .unwrap_or_default();
+    let etiqueta_anterior: Option<String> =
+        anterior.as_ref().map(|(v, _)| etiqueta_de(&paquete, *v));
+
+    // Los nombres de asset de un corte anterior (`cuerpo-0.lumidx.enc`,
+    // `ficha.json`...) colisionan con los de este — sin limpiar, `ya_subido`
+    // (más abajo) los confundiría con trabajo ya hecho de ESTE corte.
+    if numero_version > 1 {
+        almacen.limpiar_publicaciones_en_curso(indice_id)?;
+    }
+
     let cliente = cliente_http();
     let release = asegurar_release(&cliente, &testigo, &repo, &etiqueta_de(&paquete, numero_version)).await?;
     etiquetar_repo(&cliente, &testigo, &repo).await?;
@@ -525,7 +550,7 @@ pub async fn publicar(
     let mut por_qk: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut fuentes_por_quadkey: Vec<(String, Vec<String>)> = Vec::new();
     for (id, r, qk) in almacen.imagenes_de_indice(indice_id)? {
-        if !viajan.contains(&id) {
+        if !viajan.contains(&id) || quadkeys_ya_publicadas.contains(&qk) {
             continue;
         }
         if let Some(n) = Path::new(&r).file_name() {
@@ -564,6 +589,9 @@ pub async fn publicar(
     // Las capas: un asset por modelo, con los fragmentos de todas las teselas.
     let mut capas: Vec<Capa> = Vec::new();
     for (modelo, version, dims) in modelos_del_paquete(&raiz) {
+        if capas_ya_publicadas.contains(&(modelo.clone(), version.clone())) {
+            continue;
+        }
         let nombre = format!("capa-{modelo}-{version}.enc");
         prog.empezar_asset(&nombre);
         if let Some((sha, bytes)) = ya_subido(&almacen, indice_id, &nombre) {
@@ -609,6 +637,7 @@ pub async fn publicar(
         paquete: paquete.clone(),
         nombre: nombre_indice,
         numero_version,
+        version_anterior: etiqueta_anterior,
         autor,
         alojamiento: "github".into(),
         clave_publica: String::new(),
@@ -635,6 +664,8 @@ pub async fn publicar(
     let url = subir_asset(&cliente, &testigo, &repo, release, "ficha.json", json.clone()).await?;
     almacen.publicacion_marcar_subido(indice_id, "ficha.json", &url)?;
     prog.terminar_asset(json.len() as u64);
+    almacen.guardar_ficha_propia(indice_id, numero_version, &String::from_utf8_lossy(&json), ahora)?;
+    almacen.bumpear_numero_version(indice_id)?;
     Ok(())
 }
 
@@ -752,6 +783,8 @@ pub async fn publicar_capa(
         // Una capa no es una versión de contenido del índice: es un modelo
         // más sobre el mismo cuerpo, así que siempre es "la única" de sí misma.
         numero_version: 1,
+        // Una capa suelta sobre un cuerpo ajeno nunca encadena versión.
+        version_anterior: None,
         autor: autor.clone(),
         alojamiento: "github".into(),
         clave_publica: String::new(),

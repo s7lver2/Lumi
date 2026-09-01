@@ -14,13 +14,9 @@ import { TeselasPanel } from "./TeselasPanel";
 
 /** `soloLectura` esconde todo lo que escribe, exactamente el mismo mecanismo
  *  que ya usa con un índice sellado: mirar el índice de otra persona no
- *  necesita una pantalla paralela que mantener.
- *
- *  `onNuevaVersion` es cómo se navega tras "Crear versión nueva": la fila
- *  nueva ya existe y está abierta, y quedarse mirando el índice sellado del
- *  que salió sería el paso extra que nadie quiere dar. */
-export function IndexDetail({ id, onVolver, onNuevaVersion, onIrAEmbebido, soloLectura = false }: {
-  id: number; onVolver: () => void; onNuevaVersion?: (id: number) => void;
+ *  necesita una pantalla paralela que mantener. */
+export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }: {
+  id: number; onVolver: () => void;
   /** «Añadir capa» encola el modelo entero para las imágenes del índice y
    *  arranca de inmediato si la cola no está en pausa — no hay paso de
    *  confirmación aparte. Sin llevar a quien lo pulsó a ver la cola, ese
@@ -42,7 +38,6 @@ export function IndexDetail({ id, onVolver, onNuevaVersion, onIrAEmbebido, soloL
   // paso de subida en vez de forzar a pulsar «Publicar» otra vez.
   const [publicando, setPublicando] = useState(() => estadoActual()?.indiceId === id);
   const [sesion, setSesion] = useState<Sesion | null>(null);
-  const [creandoVersion, setCreandoVersion] = useState(false);
   const [modelos, setModelos] = useState<Modelo[]>([]);
   const [reembebiendo, setReembebiendo] = useState<string | null>(null);
 
@@ -91,16 +86,6 @@ export function IndexDetail({ id, onVolver, onNuevaVersion, onIrAEmbebido, soloL
       onVolver();
     } finally {
       setBorrando(false);
-    }
-  }
-
-  async function crearVersion() {
-    setCreandoVersion(true);
-    try {
-      const nuevaId = await api.versionCrear(id);
-      onNuevaVersion?.(nuevaId);
-    } finally {
-      setCreandoVersion(false);
     }
   }
 
@@ -157,13 +142,6 @@ export function IndexDetail({ id, onVolver, onNuevaVersion, onIrAEmbebido, soloL
                 className="jg-press rounded-lg border border-border px-3 py-1.5 text-[11px] text-fg disabled:opacity-40"
               >
                 Sellar
-              </button>
-            )}
-            {sellado && !soloLectura && (
-              <button onClick={() => void crearVersion()} disabled={creandoVersion}
-                title="Clona este índice en una fila nueva y abierta, con el mismo contenido — sin duplicar las fotos en disco"
-                className="jg-press rounded-lg border border-border px-3 py-1.5 text-[11px] text-fg disabled:opacity-40">
-                {creandoVersion ? "Creando versión…" : "Crear versión nueva"}
               </button>
             )}
             {sellado && !soloLectura && (
@@ -259,7 +237,7 @@ export function IndexDetail({ id, onVolver, onNuevaVersion, onIrAEmbebido, soloL
                 <button key={m.id}
                   onClick={() => void reembeber(m.id)}
                   disabled={sellado || reembebiendo === m.id}
-                  title={sellado ? "este índice está sellado: sus vectores viven en un paquete cerrado — crea una versión nueva para seguir llenándolo" : undefined}
+                  title={sellado ? "este índice está sellado: un paquete sellado no se sigue llenando" : undefined}
                   className="jg-press rounded-lg border border-border px-3 py-1.5 text-[11px] text-fg disabled:opacity-40">
                   {reembebiendo === m.id ? `Encolando ${m.nombre}…` : `Añadir capa ${m.nombre}`}
                 </button>

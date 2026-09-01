@@ -68,6 +68,14 @@ pub struct Ficha {
     /// cualquier ficha publicada antes de que esto existiera.
     #[serde(default = "version_uno", skip_serializing_if = "es_version_uno")]
     pub numero_version: u32,
+    /// Etiqueta de release (ver `etiqueta_de` en `publicar.rs`) de la
+    /// publicación anterior de este mismo índice, o `None` si esta es la
+    /// primera (`numero_version == 1`). Encadena hacia atrás: cada corte
+    /// publicado solo lleva su diferencia desde el anterior (spec de
+    /// versionado 2026-09-01), así que reconstruir el estado completo de la
+    /// versión N requiere poder llegar hasta la 1 siguiendo este campo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version_anterior: Option<String>,
     /// "github" o "huggingface". La firma no depende de esto, pero saber de
     /// dónde vino sirve para volver a pedirlo.
     pub alojamiento: String,

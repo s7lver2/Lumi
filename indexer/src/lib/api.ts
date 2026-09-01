@@ -56,7 +56,6 @@ export interface DetalleIndice {
   nombre: string; slug: string; estado: string;
   imagenes: PorcentajesImagenes; trabajo: [string, number, number][];
   numero_version: number;
-  viene_de: number | null;
 }
 /** Espejo de `lumi_index::manifest::TrabajoDe`: serde externamente etiquetado,
  *  así que la unidad es una cadena y las que llevan dato son un objeto de una
@@ -287,12 +286,11 @@ export const api = {
   loteCancelar: (id: number) => invoke<boolean>("lote_cancelar", { id }),
   indiceBorrar: (id: number) => invoke<void>("indice_borrar", { id }),
   indiceImagenes: (id: number) => invoke<FichaMapa[]>("indice_imagenes", { id }),
-  versionCrear: (padreId: number) => invoke<number>("version_crear", { padreId }),
   indiceTeselas: (id: number) => invoke<[string, TrabajoDe][]>("indice_teselas", { id }),
   teselaLiberar: (indiceId: number, quadkey: string) =>
     invoke<void>("tesela_liberar", { indiceId, quadkey }),
-  territorioClasificar: (poligono: Punto[], fuentes: string[], indiceId?: number) =>
-    invoke<Clasificacion>("territorio_clasificar", { poligono, fuentes, indiceId: indiceId ?? null }),
+  territorioClasificar: (poligono: Punto[], fuentes: string[]) =>
+    invoke<Clasificacion>("territorio_clasificar", { poligono, fuentes }),
   territorioHeredar: (indiceId: number, heredadas: [string, string, string][]) =>
     invoke<void>("territorio_heredar", { indiceId, heredadas }),
   mapboxClaveGuardar: (clave: string) => invoke<void>("mapbox_clave_guardar", { clave }),

@@ -186,7 +186,6 @@ export function App() {
                   indiceAbierto === null
                     ? <IndexList onAbrir={setIndiceAbierto} />
                     : <IndexDetail key={indiceAbierto} id={indiceAbierto} onVolver={() => setIndiceAbierto(null)}
-                        onNuevaVersion={setIndiceAbierto}
                         onIrAEmbebido={() => setDestino("embebido")} />
                 )}
                 {/* Territorio trabaja SIEMPRE sobre un índice: sin esto, el
