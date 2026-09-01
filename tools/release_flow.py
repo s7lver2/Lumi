@@ -285,7 +285,8 @@ def preguntar_version() -> str:
 
 
 def preguntar_notas() -> str:
-    return input("notas de esta versión: ").strip()
+    print("notas de esta versión (1-2 frases, se muestran recortadas en el instalador):")
+    return input("> ").strip()
 
 
 def confirmar_plan(productos: list[str], version: str, notas: str) -> bool:

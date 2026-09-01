@@ -129,8 +129,18 @@ let todasLasVersiones = null;
 let productoActivoOtros = "cliente";
 const NOMBRE_PRODUCTO = { cliente: "Lumi Client", indexer: "Lumi Indexer" };
 
+// Toggle de clase (no display directo) para que la transición de opacidad
+// del overlay y la animación jg-fade-rise del panel se vean — mismo patrón
+// que .pantalla-carga/.oculto en index.html.
+function abrirModalOtros() {
+  document.getElementById("modal-otros").classList.add("visible");
+}
+function cerrarModalOtros() {
+  document.getElementById("modal-otros").classList.remove("visible");
+}
+
 document.getElementById("btn-otros-toggle").addEventListener("click", async () => {
-  document.getElementById("modal-otros").style.display = "flex";
+  abrirModalOtros();
   if (!todasLasVersiones) {
     const lista = document.getElementById("lista-otros");
     lista.innerHTML = `<div class="version-row"><span class="sub">Cargando…</span></div>`;
@@ -145,11 +155,11 @@ document.getElementById("btn-otros-toggle").addEventListener("click", async () =
 });
 
 document.getElementById("btn-otros-cerrar").addEventListener("click", () => {
-  document.getElementById("modal-otros").style.display = "none";
+  cerrarModalOtros();
 });
 // Clic en el fondo oscurecido (fuera de la tarjeta) también cierra.
 document.getElementById("modal-otros").addEventListener("click", (e) => {
-  if (e.target.id === "modal-otros") e.currentTarget.style.display = "none";
+  if (e.target.id === "modal-otros") cerrarModalOtros();
 });
 
 document.querySelectorAll(".modal-otros-producto[data-producto]").forEach((boton) => {
@@ -177,7 +187,7 @@ function pintarListaOtros() {
     fila.innerHTML = `
       <div class="info">
         <div class="label">${NOMBRE_PRODUCTO[v.producto] ?? v.producto} v${v.version}${v.retirada ? " · retirada" : ""}</div>
-        <div class="sub">${v.notas ? v.notas : ""}</div>
+        <div class="sub" title="${v.notas ? v.notas.replace(/"/g, "&quot;") : ""}">${v.notas ? v.notas : ""}</div>
       </div>
       <span class="fecha">${fecha}</span>
     `;
