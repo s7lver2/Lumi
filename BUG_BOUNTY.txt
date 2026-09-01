@@ -19,12 +19,12 @@
 - [x] en la cinta de mantenimiento, se ve como un cacho de la cinta del lado izquierdo, las lineas no concuerdan, como si estuviese cortado
 - [x] parece que actualiar el servidor no esta funcionando, despues de 10 minutos sigue actualizando y en mantenimiento, sin logs aparentes, sin actividad
 - [x] en perfil y sesiones del cliente, aparece la seccion de actualizaciones por algun motivo, no deber'ia de estar ahi ya que su nuevo sitio es abajo
-- [ ] la foto de perfil que he subido no se ha actualizado en la barra superior, sigue siendo una S de s7lver
+- [x] la foto de perfil que he subido no se ha actualizado en la barra superior, sigue siendo una S de s7lver
 - [x] las api keys deber'ias de ser capaz de verlas de nuevo tras generarlas, pero tendr'ias que poner tu contrase;a para estar seguros
-- [ ] la foto de perfil parece tampoco haberse propagado a la barra lateral del panel de perfil y sesiones
+- [x] la foto de perfil parece tampoco haberse propagado a la barra lateral del panel de perfil y sesiones
 - [x] en la barra lateral del panel de administracion, en la parte superior, no deber'ia de poner mi usuario y que soy propietario, deberia poner el nombre del servidor en el que estoy
 - [x] hay un bug cuando subes una imagen en la seccion de customizacion del panel de administracion en el cual puedes seguir haciendo scroll por la pantalla mientras esta abierto el encuadre de imagen, esto no deber'ia ocurrir
-- [ ] la foto de perfil subida del servidor no se propaga a la barra lateral tampoco
+- [x] la foto de perfil subida del servidor no se propaga a la barra lateral tampoco
 - [x] en la seccion de hardware del panel de administraci'on, cuando lo tienes en wsl, y cambiamos entre modo normal y avanzado no hay ninguna diferencia, algo al menos deberia cambiar
 - [x] quiero agregar al cliente, en la seccion de personalizacion, opciones para ajustar fuentes, tama;os, opciones como que se ajustee el tama;o directamente, y poder personalizar el tama;o de la interfaz a tu gusto
 - [x] en tama;os de ventana raros, la huella y el puerto se ocultan en la parte inferior de la barra lateral

@@ -42,7 +42,6 @@ function PerfilPanel({ token }: { token: string }) {
   // análisis lanzado, y `useServer` solo lo trae al iniciar sesión.
   const [me, setMe] = useState<Me | null>(null);
   const [subiendo, setSubiendo] = useState(false);
-  const [fotoTick, setFotoTick] = useState(0);
   const [recortando, setRecortando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => { api.get<Me>("/v1/auth/me", token).then(setMe).catch(() => setMe(null)); }, [token]);
@@ -63,7 +62,7 @@ function PerfilPanel({ token }: { token: string }) {
     setSubiendo(true); setError(null);
     try {
       await uploadAvatarBytes(await blobToBase64(blob));
-      setFotoTick((t) => t + 1);
+      useServer.getState().bumpAvatarVersion();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -75,7 +74,7 @@ function PerfilPanel({ token }: { token: string }) {
     setError(null);
     try {
       await api.del("/v1/me/avatar", token);
-      setFotoTick((t) => t + 1);
+      useServer.getState().bumpAvatarVersion();
     } catch (e) {
       setError(String(e));
     }
@@ -86,7 +85,7 @@ function PerfilPanel({ token }: { token: string }) {
       <p className="text-[11px] text-muted">Quién eres en este servidor.</p>
 
       <div className="mt-4 flex items-center gap-3.5">
-        <UserTile key={fotoTick} nombre={usuario} conectado={false} size={56} userId={userId ?? undefined} />
+        <UserTile nombre={usuario} conectado={false} size={56} userId={userId ?? undefined} />
         <div className="flex flex-col gap-1.5">
           <button onClick={() => void cambiarFoto()} disabled={subiendo}
             className="jg-press rounded-lg border border-white/15 px-2.5 py-1 text-[10.5px] text-fg disabled:opacity-40">

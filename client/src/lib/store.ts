@@ -16,6 +16,19 @@ interface ServerState {
   /** Los límites efectivos de quien ha entrado. `null` hasta que `/v1/auth/me`
    *  conteste: la interfaz distingue "todavía no lo sé" de "no puede". */
   limits: Limits | null;
+  /** Se incrementa cada vez que la propia foto de perfil cambia (subida o
+   *  borrada). `Avatar`/`UserTile` lo usan para romper la caché del `<img>`
+   *  Y para saber que tienen que volver a intentar cargarla — sin esto, cada
+   *  instancia (TitleBar, ProfileSidebar...) tenía su propio `fallo` local
+   *  que, una vez en `true` tras el primer 404 (sin foto todavía), nunca se
+   *  reseteaba: subir una foto más tarde no la hacía reaparecer en ningún
+   *  sitio salvo el componente que hizo la subida. */
+  avatarVersion: number;
+  /** Igual que `avatarVersion`, para la foto de MARCA del servidor
+   *  (`/v1/server-profile/avatar`, subida desde Customización) — es otra
+   *  identidad y otro endpoint, así que otro contador: mezclarlos rompería
+   *  el cache-bust del que no cambió. */
+  serverAvatarVersion: number;
   setKey: (k: string) => void;
   setHello: (h: Hello | null) => void;
   setToken: (t: string | null) => void;
@@ -23,11 +36,13 @@ interface ServerState {
   setBootstrapToken: (t: string) => void;
   setAddr: (a: string) => void;
   setUser: (username: string, isAdmin: boolean, limits?: Limits | null, userId?: number | null) => void;
+  bumpAvatarVersion: () => void;
+  bumpServerAvatarVersion: () => void;
 }
 
 export const useServer = create<ServerState>((set) => ({
   key: "", hello: null, token: null, sample: null, bootstrapToken: "", addr: "",
-  username: "", userId: null, isAdmin: false, limits: null,
+  username: "", userId: null, isAdmin: false, limits: null, avatarVersion: 0, serverAvatarVersion: 0,
   setKey: (key) => set({ key }),
   setHello: (hello) => set({ hello }),
   setToken: (token) => set({ token }),
@@ -35,4 +50,6 @@ export const useServer = create<ServerState>((set) => ({
   setBootstrapToken: (bootstrapToken) => set({ bootstrapToken }),
   setAddr: (addr) => set({ addr }),
   setUser: (username, isAdmin, limits = null, userId = null) => set({ username, isAdmin, limits, userId }),
+  bumpAvatarVersion: () => set((s) => ({ avatarVersion: s.avatarVersion + 1 })),
+  bumpServerAvatarVersion: () => set((s) => ({ serverAvatarVersion: s.serverAvatarVersion + 1 })),
 }));

@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { lumiUrl } from "../lib/bridge";
+import { useServer } from "../lib/store";
 
 /** Monograma sobre superficie neutra — o la foto de perfil, si se pasa
  *  `userId` y hay una. El punto de conexión va FUERA de la caja y no la
@@ -10,6 +11,11 @@ export function UserTile({ nombre, conectado, size = 38, userId }: {
 }) {
   const ini = nombre.replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase();
   const [fallo, setFallo] = useState(false);
+  // Ver el mismo comentario en Avatar.tsx: sin esto, una instancia que ya
+  // había visto un 404 se quedaba con las iniciales para siempre aunque la
+  // foto llegara más tarde desde otro sitio de la app.
+  const version = useServer((s) => s.avatarVersion);
+  useEffect(() => setFallo(false), [userId, version]);
   const mostrarFoto = userId != null && !fallo;
   return (
     <span className="relative grid shrink-0 place-items-center overflow-hidden rounded-[11px] border border-border
@@ -18,7 +24,7 @@ export function UserTile({ nombre, conectado, size = 38, userId }: {
       style={{ width: size, height: size, fontSize: size < 30 ? 9.5 : 13,
         borderRadius: size < 30 ? 7 : 11 }}>
       {mostrarFoto ? (
-        <img src={lumiUrl(`/v1/users/${userId}/avatar`)} alt="" onError={() => setFallo(true)}
+        <img src={lumiUrl(`/v1/users/${userId}/avatar?v=${version}`)} alt="" onError={() => setFallo(true)}
           className="h-full w-full object-cover" />
       ) : ini}
       <span className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-[2.5px]

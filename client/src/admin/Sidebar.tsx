@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { api } from "../lib/api";
 import { versionCliente } from "../lib/actualizaciones";
+import { lumiUrl } from "../lib/bridge";
 import { loadServers } from "../lib/session";
 import { useServer } from "../lib/store";
 import { Icon, type IconName } from "../ui/Icon";
@@ -63,6 +65,17 @@ export function Sidebar({ actual, onIr, contadores }: {
   const [version, setVersion] = useState("");
   useEffect(() => { void versionCliente().then(setVersion); }, []);
 
+  // La foto de marca del servidor (Customización → ServerProfileRow) no
+  // tenía dónde propagarse fuera de esa misma pantalla — este es el otro
+  // sitio donde vive "el servidor", así que se enseña aquí también.
+  // `serverAvatarVersion` fuerza a repreguntar `has_avatar` cuando se sube
+  // una nueva, y también rompe la caché del `<img>`.
+  const serverAvatarVersion = useServer((s) => s.serverAvatarVersion);
+  const [tieneAvatar, setTieneAvatar] = useState(false);
+  useEffect(() => {
+    void api.serverProfilePublic().then((c) => setTieneAvatar(c.has_avatar)).catch(() => setTieneAvatar(false));
+  }, [serverAvatarVersion]);
+
   // El marcador es UNO y se desliza. Un elemento compartido hace que cambiar
   // de sección se lea como movimiento, no como dos cosas apagándose y
   // encendiéndose. Se mide tras pintar, que es cuando el botón ya tiene sitio.
@@ -74,12 +87,17 @@ export function Sidebar({ actual, onIr, contadores }: {
   return (
     <aside className="flex h-full flex-col border-r border-border bg-surface px-[9px] pb-[11px] pt-[13px]">
       <div className="flex items-center gap-2.5 px-2 pb-3">
-        <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[8px]
+        <span className="grid h-[26px] w-[26px] shrink-0 place-items-center overflow-hidden rounded-[8px]
           border border-border bg-elevated text-muted">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z" />
-          </svg>
+          {tieneAvatar ? (
+            <img src={lumiUrl(`/v1/server-profile/avatar?v=${serverAvatarVersion}`)} alt=""
+              className="h-full w-full object-cover" />
+          ) : (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z" />
+            </svg>
+          )}
         </span>
         <span className="min-w-0 truncate text-[11.5px] leading-tight text-fg">
           {nombreServidor}

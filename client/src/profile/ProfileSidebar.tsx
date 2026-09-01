@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { useServer } from "../lib/store";
+import { Avatar } from "../ui/Avatar";
 import { Icon, type IconName } from "../ui/Icon";
 
 export type ProfileSeccion = "perfil" | "claves" | "sesiones";
@@ -19,6 +20,7 @@ export function ProfileSidebar({ actual, onIr, onBack }: {
   const nav = useRef<HTMLElement>(null);
   const [marca, setMarca] = useState<{ top: number; height: number } | null>(null);
   const usuario = useServer((s) => s.username) ?? "";
+  const userId = useServer((s) => s.userId);
 
   useLayoutEffect(() => {
     const b = nav.current?.querySelector<HTMLElement>(`[data-s="${actual}"]`);
@@ -31,10 +33,7 @@ export function ProfileSidebar({ actual, onIr, onBack }: {
         ← Volver
       </button>
       <div className="flex items-center gap-2.5 px-2 pb-3">
-        <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[8px]
-          border border-border bg-elevated text-muted">
-          <Icon name="user" size={13} />
-        </span>
+        <Avatar name={usuario} size={26} userId={userId ?? undefined} />
         <span className="text-[11.5px] leading-tight text-fg">
           {usuario}
           <small className="block text-[9px] tracking-[.03em] text-subtle">tu cuenta</small>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type ServerProfileSettings } from "../lib/api";
 import { blobToBase64, lumiUrl, pickImagePath, readImageAsDataUrl, uploadServerAvatarBytes, uploadServerBannerBytes } from "../lib/bridge";
+import { useServer } from "../lib/store";
 import { ImageCropModal } from "../ui/ImageCropModal";
 import { AvisoEditor } from "./AvisoEditor";
 
@@ -49,8 +50,15 @@ export function ServerProfileRow({ token }: { token: string }) {
     setBusyImg(tipo); setError(null);
     try {
       const b64 = await blobToBase64(blob);
-      if (tipo === "avatar") await uploadServerAvatarBytes(b64);
-      else await uploadServerBannerBytes(b64);
+      if (tipo === "avatar") {
+        await uploadServerAvatarBytes(b64);
+        // Solo la foto, no el banner: es la que se propaga fuera de esta
+        // pantalla (barra lateral del panel de administración) — el banner
+        // no se enseña en ningún otro sitio todavía.
+        useServer.getState().bumpServerAvatarVersion();
+      } else {
+        await uploadServerBannerBytes(b64);
+      }
       setTick((t) => t + 1);
       void cargar();
     } catch (e) {
