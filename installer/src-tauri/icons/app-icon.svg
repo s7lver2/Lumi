@@ -1,5 +1,17 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
   <rect width="1024" height="1024" rx="224" fill="#0e0f11"/>
+  <!-- La MISMA estrella que el cliente (client/src-tauri/icons/app-icon.svg),
+       para que las tres apps se reconozcan como de la misma familia — la
+       variante del Instalador no cambia la forma base, le añade una flecha
+       de descarga. -->
   <path d="M512 176c30 188 116 274 300 300-184 26-270 112-300 300-30-188-116-274-300-300 184-26 270-112 300-300z"
         fill="#e8e8e6"/>
+  <!-- La flecha va RECORTADA en negativo sobre la propia estrella (color de
+       fondo por encima), mismo patrón que las gafas del Indexer: un trazo
+       fino se pierde a 16px, un hueco sólido no. -->
+  <g fill="#0e0f11">
+    <rect x="472" y="322" width="80" height="230" rx="18"/>
+    <path d="M400 486 L624 486 L512 648 Z"/>
+    <rect x="382" y="676" width="260" height="56" rx="28"/>
+  </g>
 </svg>
