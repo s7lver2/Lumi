@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type AdminUser, type Limits, type UserDetail } from "../lib/api";
+import { ContextMenu, menuAt, type MenuState } from "../ui/ContextMenu";
 import { Icon } from "../ui/Icon";
 import { Seccion } from "./AdminPanel";
 import { LimitsEditor } from "./LimitsEditor";
@@ -17,6 +18,7 @@ export function UsersView({ token, abrirUserId }: { token: string; abrirUserId?:
   const [vista, setVista] = useState<Vista>(
     () => (localStorage.getItem("lumi.usuarios.vista") as Vista) ?? "lista"
   );
+  const [menu, setMenu] = useState<MenuState | null>(null);
 
   useEffect(() => {
     localStorage.setItem("lumi.usuarios.vista", vista);
@@ -58,6 +60,26 @@ export function UsersView({ token, abrirUserId }: { token: string; abrirUserId?:
     } catch (e) {
       setError(String(e));
     }
+  }
+
+  /** Misma llamada que `patch`, pero para la lista (detalle cerrado): no
+   *  toca `setDetail` — hacerlo abriría el panel de detalle del usuario
+   *  clicado con clic derecho, que es justo lo que este menú evita tener
+   *  que hacer (#80). */
+  async function patchLista(id: number, body: unknown) {
+    try {
+      await api.patch<UserDetail>(`/v1/admin/users/${id}`, body, token);
+      load();
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  function menuDe(u: AdminUser) {
+    return [
+      { label: u.blocked ? "Desbloquear" : "Bloquear", onClick: () => void patchLista(u.id, { blocked: !u.blocked }) },
+      { label: "Exigir cambio de contraseña", onClick: () => void patchLista(u.id, { must_change_password: true }) },
+    ];
   }
 
   // Detalle abierto
@@ -212,6 +234,7 @@ export function UsersView({ token, abrirUserId }: { token: string; abrirUserId?:
           <div
             key={u.id}
             onClick={() => open(u.id)}
+            onContextMenu={(e) => menuAt(e, u.username, menuDe(u), setMenu)}
             style={{
               animation: `jg-fade-rise .58s ${Math.min(i, 8) * 45}ms cubic-bezier(.16,1,.3,1) both`,
             }}
@@ -238,6 +261,7 @@ export function UsersView({ token, abrirUserId }: { token: string; abrirUserId?:
           <button
             key={u.id}
             onClick={() => open(u.id)}
+            onContextMenu={(e) => menuAt(e, u.username, menuDe(u), setMenu)}
             style={{
               animation: `jg-fade-rise .58s ${Math.min(i, 8) * 45}ms cubic-bezier(.16,1,.3,1) both`,
             }}
@@ -280,6 +304,7 @@ export function UsersView({ token, abrirUserId }: { token: string; abrirUserId?:
           onGuardado={() => setEditando(null)}
           onCerrar={() => setEditando(null)} />
       )}
+      <ContextMenu state={menu} onClose={() => setMenu(null)} />
     </Seccion>
   );
 }
