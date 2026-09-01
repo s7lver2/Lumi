@@ -210,7 +210,11 @@
         transition: background-color .15s cubic-bezier(.22,1,.36,1);
       }
       .version-row:hover { background: rgba(255,255,255,.035); }
-      .version-row.seleccionada { background: rgba(255,255,255,.055); }
+      .version-row.seleccionada {
+        background: rgba(242,243,245,.10);
+        box-shadow: inset 3px 0 0 var(--accent);
+      }
+      .version-row.seleccionada .label { color: var(--accent); font-weight: 500; }
       .version-row .info { flex: 1; min-width: 0; }
       .version-row .label { font-size: 12.5px; }
       .version-row .sub {
