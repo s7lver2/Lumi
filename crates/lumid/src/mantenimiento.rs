@@ -18,8 +18,18 @@ pub fn activo(app: &App) -> bool {
     app.store.get_meta("mantenimiento").as_deref() == Some("1")
 }
 
+/// El mensaje que ve quien está bloqueado por mantenimiento: el que haya
+/// puesto el admin a mano (`mantenimiento_mensaje`) tiene siempre prioridad
+/// — es una decisión explícita suya — y el de sistema (el que pone el
+/// propio flujo de actualización, ver `set_mensaje_sistema`) solo se
+/// muestra cuando no hay uno de usuario, para no perderlo bajo un
+/// "Actualizando a…" automático.
 pub fn mensaje(app: &App) -> String {
-    app.store.get_meta("mantenimiento_mensaje").unwrap_or_default()
+    let usuario = app.store.get_meta("mantenimiento_mensaje").unwrap_or_default();
+    if !usuario.trim().is_empty() {
+        return usuario;
+    }
+    app.store.get_meta("mantenimiento_mensaje_sistema").unwrap_or_default()
 }
 
 pub fn bloquea_login(app: &App) -> bool {
@@ -39,6 +49,13 @@ pub fn set_activo(app: &App, on: bool) -> anyhow::Result<()> {
 
 pub fn set_mensaje(app: &App, msg: &str) -> anyhow::Result<()> {
     app.store.set_meta("mantenimiento_mensaje", msg)
+}
+
+/// Mensaje "de sistema": lo pone el propio flujo de actualización, nunca el
+/// admin a mano. Vive en su propia clave para no pisar `set_mensaje` — ver
+/// la nota en `mensaje()` sobre la prioridad entre ambos.
+pub fn set_mensaje_sistema(app: &App, msg: &str) -> anyhow::Result<()> {
+    app.store.set_meta("mantenimiento_mensaje_sistema", msg)
 }
 
 pub fn set_bloquea_login(app: &App, on: bool) -> anyhow::Result<()> {

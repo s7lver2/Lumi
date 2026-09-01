@@ -33,12 +33,23 @@ pub async fn aplicar(State(app): State<App>, headers: HeaderMap) -> StatusCode {
     if require_admin(&app, &bearer(&headers)).is_err() {
         return StatusCode::FORBIDDEN;
     }
+    crate::actualizacion::set_aplicando(&app, true);
     let app2 = app.clone();
     tokio::spawn(async move {
         if let Err(e) = crate::actualizacion::aplicar(&app2).await {
             tracing::error!("actualización de lumid fallida: {e}");
             let _ = mantenimiento::set_activo(&app2, false);
+            // El mensaje de sistema ("Actualizando a…") no debe quedar
+            // pegado si la actualización falla o hace timeout (#72) — el
+            // caso de ColaAtascada ya se limpia a sí mismo dentro de
+            // `aplicar`, pero cualquier otro error (descarga, hash,
+            // escritura, backup) solo se ve aquí.
+            let _ = mantenimiento::set_mensaje_sistema(&app2, "");
+            crate::actualizacion::set_aplicando(&app2, false);
         }
+        // Si `aplicar` tiene éxito, el proceso se reinicia (`systemctl
+        // restart`) antes de llegar aquí — el flag `aplicando` no necesita
+        // limpiarse en ese caso porque el propio proceso muere con él.
     });
     StatusCode::ACCEPTED
 }

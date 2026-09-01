@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 const VERSIONES_URL: &str = "https://lumi.s7lver.xyz/api/versiones";
 const META_ESTADO: &str = "actualizacion_estado";
+const META_APLICANDO: &str = "actualizacion_aplicando";
 const BIN_ACTUAL: &str = "/usr/local/bin/lumid";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,6 +22,25 @@ pub struct EstadoActualizacion {
     pub retirada: bool,
     pub comprobado_en: Option<i64>,
     pub error: Option<String>,
+    /// Si hay una aplicación de actualización en curso ahora mismo — se lee
+    /// de una clave separada de `meta`, no de este blob serializado, para
+    /// que sobreviva intacta a cada `comprobar_y_cachear` (que reescribe
+    /// todo lo demás). Es lo que el panel usa para reconciliar su botón
+    /// "Actualizando…" con la realidad del backend en vez de fiarse solo de
+    /// un flag local que nunca se resetea por su cuenta (#69).
+    #[serde(default)]
+    pub aplicando: bool,
+}
+
+fn aplicando_flag(app: &App) -> bool {
+    app.store.get_meta(META_APLICANDO).as_deref() == Some("1")
+}
+
+/// Se llama al empezar/terminar `aplicar()` — ver `routes/actualizacion.rs`,
+/// que es quien controla el ciclo de vida completo (inicio antes de lanzar
+/// la tarea de fondo, fin en el `Err` que ya limpiaba mantenimiento).
+pub fn set_aplicando(app: &App, on: bool) {
+    let _ = app.store.set_meta(META_APLICANDO, if on { "1" } else { "0" });
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,6 +87,7 @@ pub async fn comprobar_y_cachear(app: &App) {
             version_instalada,
             comprobado_en: Some(ahora),
             error: None,
+            aplicando: false,
         },
         Err(e) => EstadoActualizacion {
             version_instalada,
@@ -74,6 +95,7 @@ pub async fn comprobar_y_cachear(app: &App) {
             retirada: false,
             comprobado_en: None,
             error: Some(e),
+            aplicando: false,
         },
     };
     let _ = app.store.set_meta(META_ESTADO, &serde_json::to_string(&estado).unwrap_or_default());
@@ -83,7 +105,8 @@ pub async fn comprobar_y_cachear(app: &App) {
 /// que sirve `GET /v1/admin/actualizacion`; solo el tick de fondo y
 /// "comprobar ahora" llaman a `comprobar_y_cachear`.
 pub fn estado_cacheado(app: &App) -> EstadoActualizacion {
-    app.store
+    let mut estado = app
+        .store
         .get_meta(META_ESTADO)
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_else(|| EstadoActualizacion {
@@ -92,7 +115,14 @@ pub fn estado_cacheado(app: &App) -> EstadoActualizacion {
             retirada: false,
             comprobado_en: None,
             error: Some("todavía no se ha comprobado".into()),
-        })
+            aplicando: false,
+        });
+    // Vive en una clave de `meta` separada del resto del blob (ver
+    // `set_aplicando`), así que siempre se pisa aquí con el valor real en
+    // vez de arrastrar lo que hubiera quedado serializado la última vez que
+    // se cacheó el estado.
+    estado.aplicando = aplicando_flag(app);
+    estado
 }
 
 /// Una vez al día, para siempre, mientras el daemon viva. Mismo patrón que
@@ -161,7 +191,7 @@ pub async fn aplicar(app: &App) -> Result<(), AplicarError> {
 
     // 2. Mantenimiento: rechaza trabajo nuevo, no cancela el que corre.
     let _ = mantenimiento::set_activo(app, true);
-    let _ = mantenimiento::set_mensaje(app, &format!("Actualizando a {}…", publicacion.version));
+    let _ = mantenimiento::set_mensaje_sistema(app, &format!("Actualizando a {}…", publicacion.version));
 
     // 3. Esperar a que la cola en curso vacíe — el trabajo empezado no se
     //    cancela nunca, pero esperar SIN tope de tiempo dejaba el servidor
@@ -185,6 +215,7 @@ pub async fn aplicar(app: &App) -> Result<(), AplicarError> {
             // correcto por sí solo si algún día se llama desde otro sitio.
             tracing::error!("actualización a {}: la cola no vació tras 10 min ({en_curso} en curso) — se cancela", publicacion.version);
             let _ = mantenimiento::set_activo(app, false);
+            let _ = mantenimiento::set_mensaje_sistema(app, "");
             return Err(AplicarError::ColaAtascada { pendientes: en_curso, minutos: 10 });
         }
         tracing::info!("actualización a {}: esperando a que la cola vacíe ({en_curso} en curso, {}s transcurridos)",
