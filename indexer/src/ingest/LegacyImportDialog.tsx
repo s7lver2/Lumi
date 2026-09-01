@@ -6,7 +6,11 @@ import { Icon } from "../ui/Icon";
 
 const TIPOS = ["calle", "cenital", "suelta"] as const;
 
-export function LegacyImportDialog({ indiceId, onHecho }: { indiceId: number; onHecho: () => void }) {
+export function LegacyImportDialog({ indiceId, onHecho, onCancelar }: {
+  indiceId: number;
+  onHecho: () => void;
+  onCancelar: () => void;
+}) {
   const [ruta, setRuta] = useState<string | null>(null);
   const [tipo, setTipo] = useState<(typeof TIPOS)[number]>("calle");
   const [fuente, setFuente] = useState("desconocida");
@@ -52,9 +56,15 @@ export function LegacyImportDialog({ indiceId, onHecho }: { indiceId: number; on
 
   return (
     <div className="w-[552px] rounded-card border border-white/[.13] bg-[rgba(16,19,25,.66)] p-[20px_22px] backdrop-blur-xl">
-      <div className="flex items-center gap-2.5">
-        <span className="text-sm text-fg">✦</span>
-        <span className="text-sm font-medium text-fg">Importar un paquete de la v1</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <span className="text-sm text-fg">✦</span>
+          <span className="text-sm font-medium text-fg">Importar un paquete de la v1</span>
+        </div>
+        <button onClick={onCancelar} disabled={progreso !== null && !progreso.terminado}
+          className="jg-press text-subtle hover:text-fg disabled:opacity-30">
+          <Icon name="x" size={14} />
+        </button>
       </div>
       <button onClick={() => void elegir()}
         className="jg-press mt-3 w-full rounded-lg border border-border px-3 py-2 text-left font-mono text-[10px] text-muted">

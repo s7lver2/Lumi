@@ -2,12 +2,17 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 
 import { api, type Resumen } from "../lib/api";
+import { Icon } from "../ui/Icon";
 
 const TIPOS = ["calle", "cenital", "suelta"] as const;
 
 /** Mismo esqueleto que `LegacyImportDialog`, sin el aviso ámbar: una carpeta
  *  propia SÍ trae su procedencia, porque la declara quien la trae. */
-export function FolderImportDialog({ indiceId, onHecho }: { indiceId: number; onHecho: () => void }) {
+export function FolderImportDialog({ indiceId, onHecho, onCancelar }: {
+  indiceId: number;
+  onHecho: () => void;
+  onCancelar: () => void;
+}) {
   const [ruta, setRuta] = useState<string | null>(null);
   const [tipo, setTipo] = useState<(typeof TIPOS)[number]>("calle");
   const [fuente, setFuente] = useState("carpeta:");
@@ -31,9 +36,14 @@ export function FolderImportDialog({ indiceId, onHecho }: { indiceId: number; on
 
   return (
     <div className="w-[552px] rounded-card border border-white/[.13] bg-[rgba(16,19,25,.66)] p-[20px_22px] backdrop-blur-xl">
-      <div className="flex items-center gap-2.5">
-        <span className="text-sm text-fg">✦</span>
-        <span className="text-sm font-medium text-fg">Importar una carpeta local</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <span className="text-sm text-fg">✦</span>
+          <span className="text-sm font-medium text-fg">Importar una carpeta local</span>
+        </div>
+        <button onClick={onCancelar} className="jg-press text-subtle hover:text-fg">
+          <Icon name="x" size={14} />
+        </button>
       </div>
       <button onClick={() => void elegir()}
         className="jg-press mt-3 w-full rounded-lg border border-border px-3 py-2 text-left font-mono text-[10px] text-muted">

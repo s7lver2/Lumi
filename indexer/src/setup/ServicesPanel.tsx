@@ -4,9 +4,11 @@ import { api, type EstadoServicio } from "../lib/api";
 import { Icon } from "../ui/Icon";
 import { LogBox } from "./LogBox";
 
-/// Mismo tope que `ServicesBoot`/`ServicesStep`/`ServicesFailDialog`: 40 ×
-/// 800 ms ≈ medio minuto.
-const TOPE_SONDEOS = 40;
+/// Mismo tope que `ServicesBoot`/`ServicesStep`/`ServicesFailDialog`.
+// 90 × 800ms ≈ 72s: el arranque en frío de WSL (VM parada) más qdrant
+// cargando su almacén puede superar el medio minuto anterior en máquinas
+// lentas — el margen sube, el sondeo sigue siendo el mismo mecanismo.
+const TOPE_SONDEOS = 90;
 
 /** El estado de Redis y Qdrant desde dentro de la aplicación, para no tener
  *  que ir a buscarlos a una terminal.
@@ -67,6 +69,15 @@ export function ServicesPanel({ so }: { so: string }) {
 
   const alguno = servicios.some((s) => s.vivo);
   const todos = servicios.length > 0 && servicios.every((s) => s.vivo);
+
+  // El sondeo de fondo de arriba puede descubrir, segundos después de que el
+  // sondeo corto de `accion()` se rindiera, que los servicios sí llegaron a
+  // responder — sin esto el aviso de error se quedaba en pantalla para
+  // siempre aunque el problema ya se hubiera resuelto solo, y eso era lo que
+  // hacía parecer que "levantar en WSL" fallaba siempre.
+  useEffect(() => {
+    if (todos && error) setError(null);
+  }, [todos, error]);
 
   return (
     <div className="h-full overflow-y-auto p-8">

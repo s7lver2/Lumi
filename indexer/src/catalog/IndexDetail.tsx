@@ -171,8 +171,8 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
         {importando && (
           <Overlay>
             {importando === "carpeta"
-              ? <FolderImportDialog indiceId={id} onHecho={() => { setImportando(null); refrescar(); }} />
-              : <LegacyImportDialog indiceId={id} onHecho={() => { setImportando(null); refrescar(); }} />}
+              ? <FolderImportDialog indiceId={id} onHecho={() => { setImportando(null); refrescar(); }} onCancelar={() => setImportando(null)} />
+              : <LegacyImportDialog indiceId={id} onHecho={() => { setImportando(null); refrescar(); }} onCancelar={() => setImportando(null)} />}
           </Overlay>
         )}
         {mapaAbierto && (

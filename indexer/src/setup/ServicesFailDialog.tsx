@@ -4,8 +4,11 @@ import { api, type Diagnostico } from "../lib/api";
 import { Icon } from "../ui/Icon";
 import { LogBox } from "./LogBox";
 
-/// Mismo tope que `ServicesBoot`/`ServicesStep`: 40 × 800 ms ≈ medio minuto.
-const TOPE_SONDEOS = 40;
+/// Mismo tope que `ServicesBoot`/`ServicesStep`.
+// 90 × 800ms ≈ 72s: el arranque en frío de WSL (VM parada) más qdrant
+// cargando su almacén puede superar el medio minuto anterior en máquinas
+// lentas — el margen sube, el sondeo sigue siendo el mismo mecanismo.
+const TOPE_SONDEOS = 90;
 
 /** El popup cuando Redis y/o Qdrant no arrancaron solos al abrir la app.
  *  Misma composición que los estados anómalos de Lumi (DESIGN.md):

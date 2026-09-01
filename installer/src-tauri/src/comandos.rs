@@ -53,11 +53,18 @@ pub fn ruta_instalacion_por_defecto() -> String {
 }
 
 #[tauri::command]
-pub fn detectar_instalados() -> Vec<InfoProducto> {
+pub async fn detectar_instalados() -> Vec<InfoProducto> {
     // Un solo intento de red para los dos productos, no uno por tarjeta —
     // y si falla (sin conexión), la pantalla sigue mostrando lo instalado,
     // solo sin la comparación contra la última versión.
-    let manifiesto = lumi_installer::manifiesto::obtener_verificado().ok();
+    //
+    // La petición de red es bloqueante (`reqwest::blocking`) — sacarla del
+    // hilo de comandos de Tauri con `spawn_blocking` es lo que evita que la
+    // ventana se vea "no responde" mientras tarda.
+    let manifiesto = tokio::task::spawn_blocking(lumi_installer::manifiesto::obtener_verificado)
+        .await
+        .ok()
+        .and_then(|r| r.ok());
 
     ["cliente", "indexer"]
         .into_iter()
@@ -93,8 +100,11 @@ pub struct VersionDisponible {
 /// nueva. `lumid` no aparece aquí porque este instalador nunca lo toca (es
 /// Linux-only, se instala con `lumi install`, no con este binario).
 #[tauri::command]
-pub fn listar_versiones_disponibles() -> Result<Vec<VersionDisponible>, String> {
-    let manifiesto = lumi_installer::manifiesto::obtener_verificado().map_err(|e| e.to_string())?;
+pub async fn listar_versiones_disponibles() -> Result<Vec<VersionDisponible>, String> {
+    let manifiesto = tokio::task::spawn_blocking(lumi_installer::manifiesto::obtener_verificado)
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
     let mut lista: Vec<VersionDisponible> = manifiesto
         .publicaciones
         .iter()

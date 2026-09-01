@@ -4,10 +4,13 @@ import { api, type EstadoServicio, type Saludo } from "../lib/api";
 import { Icon } from "../ui/Icon";
 import { LogBox } from "./LogBox";
 
-/// Sondeos antes de darse por vencido: 40 × 800 ms ≈ medio minuto. Qdrant
-/// abre su `/readyz` en un par de segundos y Redis responde al PING antes;
-/// si en treinta no están, no van a estar.
-const TOPE_SONDEOS = 40;
+/// Sondeos antes de darse por vencido. Qdrant abre su `/readyz` en un par de
+/// segundos y Redis responde al PING antes; el tope solo importa para el
+/// arranque en frío de WSL.
+// 90 × 800ms ≈ 72s: el arranque en frío de WSL (VM parada) más qdrant
+// cargando su almacén puede superar el medio minuto anterior en máquinas
+// lentas — el margen sube, el sondeo sigue siendo el mismo mecanismo.
+const TOPE_SONDEOS = 90;
 
 export function ServicesStep({ saludo, onListo }: { saludo: Saludo; onListo: () => void }) {
   const [servicios, setServicios] = useState<EstadoServicio[]>([]);

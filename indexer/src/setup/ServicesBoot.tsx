@@ -3,10 +3,13 @@ import { useEffect, useState } from "react";
 import { api, type Saludo } from "../lib/api";
 import { Icon } from "../ui/Icon";
 
-/** Sondeos antes de darse por vencido: 40 × 800 ms ≈ medio minuto. Qdrant
- *  abre su `/readyz` en un par de segundos y Redis responde al PING antes;
- *  si en treinta no están, no van a estar. Mismo tope que `ServicesStep`. */
-const TOPE_SONDEOS = 40;
+/** Sondeos antes de darse por vencido. Qdrant abre su `/readyz` en un par de
+ *  segundos y Redis responde al PING antes; el tope solo importa para el
+ *  arranque en frío de WSL. Mismo tope que `ServicesStep`. */
+// 90 × 800ms ≈ 72s: el arranque en frío de WSL (VM parada) más qdrant
+// cargando su almacén puede superar el medio minuto anterior en máquinas
+// lentas — el margen sube, el sondeo sigue siendo el mismo mecanismo.
+const TOPE_SONDEOS = 90;
 
 /** El hueco entre que la app ya sabe que el asistente inicial se completó una
  *  vez y que de verdad se puede entrar. Antes se saltaba directo: `lumid` no
