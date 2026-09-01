@@ -4,6 +4,8 @@ mod firmar;
 mod install;
 mod ui;
 
+#[cfg(unix)]
+use anyhow::Context;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -90,6 +92,43 @@ enum ActualizacionAction {
     Firmar { borrador: PathBuf, salida: PathBuf },
 }
 
+/// `/var/lib/lumi`, `/usr/local/bin/lumid` y las unidades de systemd son de
+/// root — sin esto, quien corriera `lumi install`/`uninstall`/`key reissue`/
+/// `admin ...` sin `sudo` se encontraba con errores de permisos a medio
+/// camino (el mismo "database is locked"/"Permission denied" que ya
+/// diagnosticamos), a veces después de haber tocado ya media instalación.
+/// Mejor pedir la elevación antes de empezar que fallar a medias.
+#[cfg(unix)]
+fn asegurar_root() -> anyhow::Result<()> {
+    use std::os::unix::process::CommandExt;
+
+    let soy_root = std::process::Command::new("id")
+        .arg("-u")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "0")
+        .unwrap_or(false);
+    if soy_root {
+        return Ok(());
+    }
+
+    eprintln!("esto necesita privilegios de administrador — pidiendo sudo…");
+    let exe = std::env::current_exe().context("no se pudo resolver la ruta de este binario")?;
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    // `exec` REEMPLAZA este proceso por `sudo`, nunca vuelve si sudo
+    // arranca bien (stdin/stdout/stderr son los mismos, así que sudo puede
+    // pedir la contraseña con normalidad). Si `exec` devuelve, es que ni
+    // siquiera pudo lanzar `sudo` (no instalado, por ejemplo).
+    let err = std::process::Command::new("sudo").arg(&exe).args(&args).exec();
+    anyhow::bail!("no se pudo relanzar con sudo: {err}")
+}
+
+#[cfg(not(unix))]
+fn asegurar_root() -> anyhow::Result<()> {
+    // Nada de esto se instala fuera de Linux — `install::run` ya rechaza
+    // el host antes de tocar nada si no hay systemd.
+    Ok(())
+}
+
 fn main() -> anyhow::Result<()> {
     match Cli::parse().cmd {
         Cmd::Status => {
@@ -108,6 +147,7 @@ fn main() -> anyhow::Result<()> {
             if listar_versiones {
                 return install::listar_versiones();
             }
+            asegurar_root()?;
             let key = install::run(yes, version.as_deref())?;
             println!();
             println!("  ────────────────────────────────────────────────────────");
@@ -119,8 +159,12 @@ fn main() -> anyhow::Result<()> {
             println!("  Perdida: lumi key reissue");
             println!("  ────────────────────────────────────────────────────────");
         }
-        Cmd::Uninstall { yes, pip } => install::uninstall(yes, pip)?,
+        Cmd::Uninstall { yes, pip } => {
+            asegurar_root()?;
+            install::uninstall(yes, pip)?
+        }
         Cmd::Key { action: KeyAction::Reissue } => {
+            asegurar_root()?;
             let key = install::reissue()?;
             println!("\n  {key}\n");
         }
@@ -136,7 +180,9 @@ fn main() -> anyhow::Result<()> {
             println!("  cualquiera conecte verificado y pida acceso.");
             println!("  ────────────────────────────────────────────────────────");
         }
-        Cmd::Admin { action } => match action {
+        Cmd::Admin { action } => {
+            asegurar_root()?;
+            match action {
             AdminAction::ResetPassword { username } => {
                 let temp = admin::reset_password(&username)?;
                 println!("\n  contraseña temporal de {username}: {temp}");
@@ -156,7 +202,8 @@ fn main() -> anyhow::Result<()> {
                 admin::accept(on)?;
                 println!("\n  solicitudes de acceso: {}\n", if on { "abiertas" } else { "cerradas" });
             }
-        },
+            }
+        }
         Cmd::Actualizaciones { action } => match action {
             ActualizacionAction::GenerarClave => firmar::generar_clave()?,
             ActualizacionAction::Firmar { borrador, salida } => firmar::firmar(&borrador, &salida)?,
