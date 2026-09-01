@@ -113,7 +113,9 @@ body { background: #0e0f11; color: #e8e8e6; overflow: hidden; }
    del sistema operativo: las animaciones jg-* se aplican sobre todo por
    `style` inline (mayor especificidad que una clase normal), así que hace
    falta `!important` aquí para poder apagarlas de verdad. */
-:root.jg-reduce-motion *, :root.jg-reduce-motion *::before, :root.jg-reduce-motion *::after {
+:root.jg-reduce-motion *:not([role="switch"]):not([role="switch"] *),
+:root.jg-reduce-motion *::before,
+:root.jg-reduce-motion *::after {
   animation: none !important;
   transition: none !important;
 }
