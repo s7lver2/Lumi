@@ -78,7 +78,7 @@ mod tests {
     fn ficha(paquete: &str, deps: &[&str]) -> Ficha {
         Ficha {
             version: 1, paquete: paquete.into(), nombre: paquete.into(),
-            numero_version: 1,
+            numero_version: 1, version_anterior: None,
             autor: "quien".into(), alojamiento: "github".into(),
             clave_publica: String::new(), publicada_en: String::new(),
             vigente_hasta: String::new(), cifrado: String::new(),

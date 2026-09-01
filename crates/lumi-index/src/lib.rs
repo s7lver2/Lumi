@@ -11,6 +11,7 @@ pub mod agentes;
 pub mod budget;
 pub mod cifrado;
 pub mod coverage;
+pub mod desreclamos;
 pub mod embed;
 pub mod ficha;
 pub mod filter;

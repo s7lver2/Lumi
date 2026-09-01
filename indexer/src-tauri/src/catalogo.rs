@@ -21,8 +21,9 @@ pub(crate) const ETIQUETA: &str = "lumi-index";
 
 /// La web puede QUITAR reclamos, nunca anadirlos. Esa asimetria es lo que
 /// impide que el producto dependa de un servicio: si esto no responde, se usa
-/// la ultima lista conocida y todo lo demas sigue funcionando.
-const URL_DESRECLAMOS: &str = "http://localhost:8788/desreclamos.json";
+/// la ultima lista conocida y todo lo demas sigue funcionando. Mismo dominio
+/// que sirve el manifiesto de versiones (`web/app/api/versiones`).
+const URL_DESRECLAMOS: &str = "https://lumi.s7lver.xyz/api/desreclamos";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Reclamo {
@@ -455,9 +456,18 @@ pub fn capas(almacen: &Almacen) -> Result<Vec<CapaRemota>> {
     Ok(fuera)
 }
 
+/// Firmada por Lumi: una lista sin firma válida —o firmada con cualquier
+/// clave que no sea la compilada en `lumi_index::desreclamos::CLAVE_PUBLICA`—
+/// no quita nada a nadie. Un fallo de red, de formato o de firma se ignora en
+/// silencio: se usa la última lista conocida (o ninguna, la primera vez) y
+/// todo lo demás sigue funcionando — la asimetría de "solo quita, nunca
+/// añade" ya documentada arriba es lo que hace seguro ignorar el error aquí
+/// en vez de propagarlo.
 pub async fn refrescar_desreclamos(almacen: &Almacen) -> Result<()> {
     let Ok(r) = reqwest::get(URL_DESRECLAMOS).await else { return Ok(()) };
-    let lista: Vec<(String, String)> = r.json().await.unwrap_or_default();
-    // Firmada por Lumi: una lista sin firma valida no quita nada a nadie.
-    almacen.desreclamos_fijar(&lista)
+    let Ok(doc) = r.json::<lumi_index::desreclamos::Desreclamos>().await else { return Ok(()) };
+    if doc.comprobar().is_err() {
+        return Ok(());
+    }
+    almacen.desreclamos_fijar(&doc.lista)
 }

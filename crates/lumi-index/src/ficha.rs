@@ -148,6 +148,7 @@ mod tests {
             paquete: "sevilla-norte".into(),
             nombre: "Sevilla norte".into(),
             numero_version: 1,
+            version_anterior: None,
             autor: "nickespro130".into(),
             alojamiento: "github".into(),
             clave_publica: String::new(),
