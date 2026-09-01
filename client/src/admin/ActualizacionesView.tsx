@@ -86,6 +86,13 @@ export function ActualizacionesView({ token, estado, onEstado }: {
             <p className="mt-3 text-[11.5px] text-subtle">No se pudo comprobar: {estado.error}</p>
           )}
 
+          {estado.error_aplicando && !aplicando && (
+            <p className="mt-3 flex items-center gap-1.5 text-[11.5px] text-danger-fg">
+              <Icon name="alert" size={13} />
+              La última actualización falló: {estado.error_aplicando}
+            </p>
+          )}
+
           {estado.disponible && (
             <p className="mt-3 whitespace-pre-wrap text-[12px] text-muted">{estado.disponible.notas}</p>
           )}

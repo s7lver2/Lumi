@@ -47,6 +47,7 @@ export interface EstadoActualizacionLumid {
   comprobado_en: number | null;
   error: string | null;
   aplicando: boolean;
+  error_aplicando: string | null;
 }
 export interface PublicacionHistorial {
   version: string;

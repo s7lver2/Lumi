@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 const VERSIONES_URL: &str = "https://lumi.s7lver.xyz/api/versiones";
 const META_ESTADO: &str = "actualizacion_estado";
 const META_APLICANDO: &str = "actualizacion_aplicando";
+const META_ERROR_APLICAR: &str = "actualizacion_error_aplicar";
 const BIN_ACTUAL: &str = "/usr/local/bin/lumid";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +31,14 @@ pub struct EstadoActualizacion {
     /// un flag local que nunca se resetea por su cuenta (#69).
     #[serde(default)]
     pub aplicando: bool,
+    /// Por qué falló el último intento de APLICAR (no de comprobar — ese es
+    /// `error` de arriba). Antes de que existiera este campo, un fallo de
+    /// `aplicar()` (hash, escritura, backup, cola atascada…) solo quedaba en
+    /// el log del servidor: el botón se reactivaba, mantenimiento se
+    /// apagaba, y el admin veía "sin error" mientras la versión instalada
+    /// nunca cambiaba — sin ninguna pista de por qué.
+    #[serde(default)]
+    pub error_aplicando: Option<String>,
 }
 
 fn aplicando_flag(app: &App) -> bool {
@@ -41,6 +50,17 @@ fn aplicando_flag(app: &App) -> bool {
 /// la tarea de fondo, fin en el `Err` que ya limpiaba mantenimiento).
 pub fn set_aplicando(app: &App, on: bool) {
     let _ = app.store.set_meta(META_APLICANDO, if on { "1" } else { "0" });
+}
+
+/// Vacío = sin error pendiente que mostrar. Se limpia al EMPEZAR cada nuevo
+/// intento (no solo al terminar bien) para que un fallo viejo no se quede
+/// pegado tapando un intento nuevo que sí funcionó.
+pub fn set_error_aplicar(app: &App, msg: &str) {
+    let _ = app.store.set_meta(META_ERROR_APLICAR, msg);
+}
+
+fn error_aplicar(app: &App) -> Option<String> {
+    app.store.get_meta(META_ERROR_APLICAR).filter(|s| !s.trim().is_empty())
 }
 
 /// A ejecutar al arrancar, antes de servir tráfico: ni el camino de éxito
@@ -151,6 +171,7 @@ pub async fn comprobar_y_cachear(app: &App) {
             comprobado_en: Some(ahora),
             error: None,
             aplicando: false,
+            error_aplicando: None,
         },
         Err(e) => EstadoActualizacion {
             version_instalada,
@@ -159,6 +180,7 @@ pub async fn comprobar_y_cachear(app: &App) {
             comprobado_en: None,
             error: Some(e),
             aplicando: false,
+            error_aplicando: None,
         },
     };
     let _ = app.store.set_meta(META_ESTADO, &serde_json::to_string(&estado).unwrap_or_default());
@@ -179,12 +201,22 @@ pub fn estado_cacheado(app: &App) -> EstadoActualizacion {
             comprobado_en: None,
             error: Some("todavía no se ha comprobado".into()),
             aplicando: false,
+            error_aplicando: None,
         });
     // Vive en una clave de `meta` separada del resto del blob (ver
     // `set_aplicando`), así que siempre se pisa aquí con el valor real en
     // vez de arrastrar lo que hubiera quedado serializado la última vez que
     // se cacheó el estado.
     estado.aplicando = aplicando_flag(app);
+    estado.error_aplicando = error_aplicar(app);
+    // También se pisa siempre con la realidad, igual que `aplicando`: el
+    // blob cacheado solo se reescribe una vez al día (`tick`) o al pulsar
+    // "Comprobar ahora" — tras un self-update con éxito, el proceso viejo
+    // muere y el nuevo arranca con una versión distinta, pero ese blob
+    // sigue teniendo la versión de ANTES hasta la próxima comprobación. Sin
+    // esto, un self-update que sí funcionó (el servidor llega a
+    // reiniciarse) parece "no haber hecho nada" en el panel.
+    estado.version_instalada = version_instalada();
     estado
 }
 

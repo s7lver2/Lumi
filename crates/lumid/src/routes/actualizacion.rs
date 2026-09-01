@@ -55,6 +55,10 @@ pub async fn aplicar(State(app): State<App>, headers: HeaderMap, Json(req): Json
         return StatusCode::FORBIDDEN;
     }
     crate::actualizacion::set_aplicando(&app, true);
+    // Un fallo del intento ANTERIOR no debe seguir mostrándose como si
+    // fuera del que acaba de arrancar — se limpia aquí, no solo al fallar,
+    // para que un reintento que sí funciona no arrastre el error viejo.
+    crate::actualizacion::set_error_aplicar(&app, "");
     let app2 = app.clone();
     tokio::spawn(async move {
         if let Err(e) = crate::actualizacion::aplicar(&app2, req.version.as_deref()).await {
@@ -66,6 +70,10 @@ pub async fn aplicar(State(app): State<App>, headers: HeaderMap, Json(req): Json
             // `aplicar`, pero cualquier otro error (descarga, hash,
             // escritura, backup) solo se ve aquí.
             let _ = mantenimiento::set_mensaje_sistema(&app2, "");
+            // Antes este error solo llegaba al log: el botón se reactivaba,
+            // mantenimiento se apagaba, y el admin no tenía ninguna pista de
+            // que la actualización había fallado de verdad.
+            crate::actualizacion::set_error_aplicar(&app2, &e.to_string());
             crate::actualizacion::set_aplicando(&app2, false);
         }
         // Si `aplicar` tiene éxito, el proceso se reinicia (`systemctl
