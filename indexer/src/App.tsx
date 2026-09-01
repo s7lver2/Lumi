@@ -6,9 +6,11 @@ import { DescargaYEmbebidoView } from "./embed/DescargaYEmbebidoView";
 import { api, type PlanPendiente, type Saludo } from "./lib/api";
 import { ProjectsView } from "./projects/ProjectsView";
 import { ReviewGrid } from "./review/ReviewGrid";
+import { ActualizacionesPanel } from "./settings/ActualizacionesPanel";
 import { DebugPanel } from "./settings/DebugPanel";
 import { IdentityPanel } from "./settings/IdentityPanel";
 import { OriginsPanel } from "./settings/OriginsPanel";
+import { RendimientoPanel } from "./settings/RendimientoPanel";
 import { StoragePanel } from "./settings/StoragePanel";
 import { Booting } from "./setup/Booting";
 import { IdentityStep } from "./setup/IdentityStep";
@@ -43,7 +45,7 @@ export function App() {
   // medir "cuánto falta" en imágenes reales — vive junto a `descargaIndiceId`
   // por la misma razón: sobrevive a navegar fuera y volver a la pestaña.
   const [imagenesEstimadas, setImagenesEstimadas] = useState<number | null>(null);
-  const [pestana, setPestana] = useState<"identidad" | "servicios" | "almacenamiento" | "origenes" | "debug">("identidad");
+  const [pestana, setPestana] = useState<"identidad" | "servicios" | "rendimiento" | "almacenamiento" | "origenes" | "actualizaciones" | "debug">("identidad");
   // Lo que quedó a medias si la app se cerró en plena descarga. Se comprueba
   // una vez al entrar: si `correr()` llegó a su final la última vez —bien,
   // parado a mano, o sin saldo— esto ya viene borrado del backend.
@@ -267,7 +269,7 @@ export function App() {
                 {destino === "ajustes" && saludo && (
                   <div className="flex h-full flex-col">
                     <div className="flex shrink-0 gap-1 border-b border-border px-6 pt-4">
-                      {(["identidad", "servicios", "almacenamiento", "origenes", "debug"] as const).map((t) => (
+                      {(["identidad", "servicios", "rendimiento", "almacenamiento", "origenes", "actualizaciones", "debug"] as const).map((t) => (
                         <button
                           key={t}
                           onClick={() => setPestana(t)}
@@ -275,15 +277,18 @@ export function App() {
                             ${pestana === t ? "bg-white/[.07] text-fg" : "text-subtle hover:text-fg"}`}
                         >
                           {t === "identidad" ? "Identidad" : t === "servicios" ? "Servicios locales"
-                            : t === "almacenamiento" ? "Almacenamiento" : t === "origenes" ? "Orígenes de red" : "Debug"}
+                            : t === "rendimiento" ? "Rendimiento" : t === "almacenamiento" ? "Almacenamiento"
+                            : t === "origenes" ? "Orígenes de red" : t === "actualizaciones" ? "Actualizaciones" : "Debug"}
                         </button>
                       ))}
                     </div>
                     <div className="min-h-0 flex-1">
                       {pestana === "identidad" && <IdentityPanel />}
                       {pestana === "servicios" && <ServicesPanel so={saludo.so} />}
+                      {pestana === "rendimiento" && <RendimientoPanel />}
                       {pestana === "almacenamiento" && <StoragePanel />}
                       {pestana === "origenes" && <OriginsPanel />}
+                      {pestana === "actualizaciones" && <ActualizacionesPanel version={saludo.version} />}
                       {pestana === "debug" && <DebugPanel onRepetirSetup={repetirSetup} />}
                     </div>
                   </div>

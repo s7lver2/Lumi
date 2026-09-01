@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
 import { api } from "../lib/api";
-import { comprobarActualizacion, type EstadoActualizacion } from "../lib/actualizaciones";
 
 /** El mismo log que se ve en la terminal de `cargo tauri dev`, pero dentro de
  *  la aplicación: para no tener que pedir que copien a mano de una consola
@@ -12,22 +11,6 @@ export function DebugPanel({ onRepetirSetup }: { onRepetirSetup: () => void }) {
   const [copiado, setCopiado] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fondo = useRef<HTMLDivElement>(null);
-  const [actEstado, setActEstado] = useState<EstadoActualizacion | null>(null);
-  const [actError, setActError] = useState<string | null>(null);
-  const [actComprobando, setActComprobando] = useState(false);
-
-  async function comprobarAhora() {
-    setActComprobando(true);
-    setActError(null);
-    try {
-      setActEstado(await comprobarActualizacion());
-    } catch (e) {
-      setActEstado(null);
-      setActError(String(e));
-    } finally {
-      setActComprobando(false);
-    }
-  }
 
   useEffect(() => {
     let vivo = true;
@@ -74,25 +57,6 @@ export function DebugPanel({ onRepetirSetup }: { onRepetirSetup: () => void }) {
             No se pudo leer el fichero de log: {error}
           </p>
         )}
-
-        <div className="mt-4 flex items-center justify-between rounded-lg border border-border px-3.5 py-2.5">
-          <div>
-            <p className="text-[11.5px] text-fg">Actualizaciones</p>
-            <p className="mt-0.5 text-[10.5px] leading-relaxed text-muted">
-              {actEstado?.tipo === "disponible" && `Versión ${actEstado.version} disponible — ${actEstado.notas}`}
-              {actEstado?.tipo === "retirada" && "Tu versión fue retirada. Actualiza en cuanto puedas."}
-              {!actEstado && !actError && "Sin comprobar en esta sesión."}
-              {actError && `No se pudo comprobar: ${actError}`}
-            </p>
-          </div>
-          <button
-            onClick={() => void comprobarAhora()}
-            disabled={actComprobando}
-            className="jg-press shrink-0 rounded-lg border border-border px-3.5 py-2 text-[11.5px] text-fg disabled:opacity-40"
-          >
-            {actComprobando ? "Comprobando…" : "Comprobar ahora"}
-          </button>
-        </div>
 
         <div className="mt-4 flex items-center justify-between rounded-lg border border-border px-3.5 py-2.5">
           <div>

@@ -153,6 +153,16 @@ fn disparar_actualizacion_silenciosa(app: tauri::AppHandle, version_nueva: Strin
 }
 
 #[tauri::command]
+async fn historial_actualizaciones() -> Result<Vec<actualizacion::PublicacionInfo>, String> {
+    actualizacion::historial().await
+}
+
+#[tauri::command]
+fn disparar_actualizacion_a_version(app: tauri::AppHandle, version_objetivo: String) -> Result<(), String> {
+    actualizacion::disparar_a_version(app, version_objetivo)
+}
+
+#[tauri::command]
 async fn rendimiento_leer() -> Result<perf::Rendimiento, String> {
     tokio::task::spawn_blocking(perf::leer).await.map_err(|e| e.to_string())
 }
@@ -1694,6 +1704,8 @@ pub fn run() {
             comprobar_actualizacion,
             error_actualizacion_pendiente,
             disparar_actualizacion_silenciosa,
+            historial_actualizaciones,
+            disparar_actualizacion_a_version,
             ubicacion_leer,
             ubicacion_por_defecto,
             ubicacion_migrar,

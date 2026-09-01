@@ -30,3 +30,18 @@ export function errorActualizacionPendiente(): Promise<string | null> {
 export function dispararActualizacionSilenciosa(versionNueva: string): Promise<void> {
   return invoke("disparar_actualizacion_silenciosa", { versionNueva });
 }
+
+export interface PublicacionInfo {
+  version: string;
+  publicado: string;
+  notas: string;
+  retirada: boolean;
+}
+
+export function historialActualizaciones(): Promise<PublicacionInfo[]> {
+  return invoke<PublicacionInfo[]>("historial_actualizaciones");
+}
+
+export function dispararActualizacionAVersion(versionObjetivo: string): Promise<void> {
+  return invoke("disparar_actualizacion_a_version", { versionObjetivo });
+}

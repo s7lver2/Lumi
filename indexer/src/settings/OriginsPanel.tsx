@@ -198,8 +198,8 @@ export function OriginsPanel() {
 
         {error && <p className="mt-2.5 text-[11px] text-danger-fg">{error}</p>}
 
-        <div className="mt-6 flex gap-3.5">
-          <div className="flex-1 rounded-[10px] border border-border p-[15px_16px]">
+        <div className="mt-6">
+          <div className="max-w-sm rounded-[10px] border border-border p-[15px_16px]">
             <div className="flex items-center">
               <span className="flex-1 text-[8.5px] uppercase tracking-[.13em] text-subtle">
                 Tope mensual
@@ -207,7 +207,7 @@ export function OriginsPanel() {
               <span className="font-mono text-[11px] text-fg">{eur(tope)}</span>
             </div>
             <div className="mt-[11px] h-1.5 overflow-hidden rounded-[3px] bg-elevated">
-              <i className="block h-full bg-fg"
+              <i className="block h-full bg-fg transition-[width] duration-500 ease-expo"
                 style={{ width: `${tope ? Math.min(100, (gastado / tope) * 100) : 0}%` }} />
             </div>
             <div className="mt-2 flex">
@@ -232,21 +232,6 @@ export function OriginsPanel() {
                 Cambiar el tope
               </button>
             </div>
-          </div>
-
-          <div className="flex-1 rounded-[10px] border border-border p-[15px_16px]">
-            <p className="text-[8.5px] uppercase tracking-[.13em] text-subtle">Dónde va la clave</p>
-            <p className="mt-2.5 text-[10.5px] leading-relaxed text-subtle">
-              «Ningún secreto en una ruta» es una regla sobre <b className="font-normal text-fg">nuestras</b>{" "}
-              URLs y sigue en pie. Mapillary acepta{" "}
-              <span className="font-mono text-fg">Authorization: OAuth</span> y ahí se usa.
-            </p>
-            <p className="mt-2.5 text-[10.5px] leading-relaxed text-subtle">
-              Flickr y Google Static <b className="font-normal text-fg">solo</b> aceptan la clave por
-              parámetro de consulta: no hay cabecera que ofrezcan. No es un descuido nuestro, es lo
-              único que el proveedor admite — y va escrito para que dentro de seis meses nadie lo lea
-              como un olvido. Ninguna clave llega a un log: se redacta antes.
-            </p>
           </div>
         </div>
       </div>
