@@ -64,22 +64,28 @@ export function PolicyRow({ token }: { token: string }) {
         </div>
       </div>
 
-      {cfg.active && (
-        <div className="mt-3.5 border-t border-border pt-3">
-          <label className="mb-1.5 block text-[9.5px] uppercase tracking-[.06em] text-muted">Título</label>
-          <input value={titulo} onChange={(e) => setTitulo(e.target.value)}
-            placeholder="Términos de uso"
-            className="mb-3 w-full rounded-lg border border-border bg-elevated px-2.5 py-2 text-[11.5px] text-fg outline-none focus:border-white/40" />
-          <label className="mb-1.5 block text-[9.5px] uppercase tracking-[.06em] text-muted">Contenido</label>
-          <AvisoEditor contenido={contenido} onChange={setContenido} />
-          <div className="mt-3 flex items-center gap-2">
-            <button onClick={guardar} disabled={busy || !cambiado}
-              className="jg-press rounded-lg bg-accent px-3.5 py-1.5 text-[11px] font-medium text-black disabled:opacity-40">
-              Guardar cambios
-            </button>
+      {/* `grid-template-rows: 0fr → 1fr` — mismo patrón que SecurityView,
+          para que revelar el editor al activar la política anime el alto
+          en vez de aparecer de golpe. */}
+      <div className="grid transition-[grid-template-rows] duration-[420ms] ease-expo"
+        style={{ gridTemplateRows: cfg.active ? "1fr" : "0fr" }}>
+        <div className="overflow-hidden">
+          <div className="mt-3.5 border-t border-border pt-3">
+            <label className="mb-1.5 block text-[9.5px] uppercase tracking-[.06em] text-muted">Título</label>
+            <input value={titulo} onChange={(e) => setTitulo(e.target.value)}
+              placeholder="Términos de uso"
+              className="mb-3 w-full rounded-lg border border-border bg-elevated px-2.5 py-2 text-[11.5px] text-fg outline-none focus:border-white/40" />
+            <label className="mb-1.5 block text-[9.5px] uppercase tracking-[.06em] text-muted">Contenido</label>
+            <AvisoEditor contenido={contenido} onChange={setContenido} />
+            <div className="mt-3 flex items-center gap-2">
+              <button onClick={guardar} disabled={busy || !cambiado}
+                className="jg-press rounded-lg bg-accent px-3.5 py-1.5 text-[11px] font-medium text-black disabled:opacity-40">
+                Guardar cambios
+              </button>
+            </div>
           </div>
         </div>
-      )}
+      </div>
       {error && <p className="mt-2.5 text-[11px] text-danger-fg">{error}</p>}
     </div>
   );
