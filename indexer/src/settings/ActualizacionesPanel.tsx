@@ -51,36 +51,42 @@ export function ActualizacionesPanel({ version }: { version: string }) {
   }
 
   return (
-    <div className="rounded-card border border-border bg-panel p-[13px_16px]">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-[8.5px] uppercase tracking-[.15em] text-subtle">Lumi Indexer</span>
-      </div>
-      {estado?.tipo === "disponible" && (
-        <p className="text-[11px] text-draw-fg">Versión {estado.version} disponible — {estado.notas}</p>
-      )}
-      {estado?.tipo === "retirada" && (
-        <p className="text-[11px] text-warning-fg">Tu versión fue retirada. Actualiza en cuanto puedas.</p>
-      )}
-      {!estado && !error && !comprobando && (
-        <p className="text-[11px] text-muted">
-          {comprobado ? "Ya tienes la última versión." : "Sin comprobar en esta sesión."}
+    <div className="h-full overflow-y-auto p-8">
+      <div className="mx-auto max-w-xl">
+        <p className="text-sm text-fg">Actualizaciones</p>
+        <p className="mt-[5px] text-[11px] leading-relaxed text-muted">
+          Comprobar y aplicar nuevas versiones de Lumi Indexer, o volver a una anterior.
         </p>
-      )}
-      {error && <p className="text-[11px] text-subtle">No se pudo comprobar: {error}</p>}
-      <div className="mt-2.5 flex items-center gap-2">
-        <button onClick={() => void comprobarAhora()} disabled={comprobando}
-          className="jg-press rounded-lg border border-white/15 px-2.5 py-1 text-[10.5px] text-fg disabled:opacity-40">
-          {comprobando ? "Comprobando…" : "Comprobar ahora"}
-        </button>
-        {estado?.tipo === "disponible" && (
-          <button onClick={() => void actualizarAhora(estado.version)} disabled={aplicando}
-            className="jg-press rounded-lg bg-accent px-2.5 py-1 text-[10.5px] font-medium text-black disabled:opacity-40">
-            {aplicando ? "Aplicando…" : "Actualizar ahora"}
-          </button>
-        )}
-      </div>
 
-      <Historial version={version} />
+        <div className="mt-6">
+          {estado?.tipo === "disponible" && (
+            <p className="text-[11px] text-draw-fg">Versión {estado.version} disponible — {estado.notas}</p>
+          )}
+          {estado?.tipo === "retirada" && (
+            <p className="text-[11px] text-warning-fg">Tu versión fue retirada. Actualiza en cuanto puedas.</p>
+          )}
+          {!estado && !error && !comprobando && (
+            <p className="text-[11px] text-muted">
+              {comprobado ? "Ya tienes la última versión." : "Sin comprobar en esta sesión."}
+            </p>
+          )}
+          {error && <p className="text-[11px] text-subtle">No se pudo comprobar: {error}</p>}
+          <div className="mt-2.5 flex items-center gap-2">
+            <button onClick={() => void comprobarAhora()} disabled={comprobando}
+              className="jg-press rounded-lg border border-white/15 px-2.5 py-1 text-[10.5px] text-fg disabled:opacity-40">
+              {comprobando ? "Comprobando…" : "Comprobar ahora"}
+            </button>
+            {estado?.tipo === "disponible" && (
+              <button onClick={() => void actualizarAhora(estado.version)} disabled={aplicando}
+                className="jg-press rounded-lg bg-accent px-2.5 py-1 text-[10.5px] font-medium text-black disabled:opacity-40">
+                {aplicando ? "Aplicando…" : "Actualizar ahora"}
+              </button>
+            )}
+          </div>
+
+          <Historial version={version} />
+        </div>
+      </div>
     </div>
   );
 }
