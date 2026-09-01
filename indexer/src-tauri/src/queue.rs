@@ -225,6 +225,23 @@ async fn arrancar(
     Ok(Trabajador { hijo, entrada, salida: rx })
 }
 
+/// Replica en Rust la comprobación mínima de `workers/lumi_pesos.py::_licencia`
+/// (solo existencia de `LICENCIA.txt` al lado de los pesos, mismo layout que
+/// `pesos::destino_de`) sin necesidad de arrancar Python solo para esto.
+/// `None` si la licencia está — no hace falta cargar los pesos enteros para
+/// saberlo, ni descargarlos: el fichero se guarda aparte, antes de que el
+/// resto de los pesos exista.
+fn licencia_faltante(dir: &std::path::Path, modelo: &str) -> Option<String> {
+    let ruta = dir.join("pesos").join(modelo).join("LICENCIA.txt");
+    if ruta.exists() {
+        return None;
+    }
+    Some(format!(
+        "faltan los términos de licencia en {}; descárgalos del repositorio del modelo y guárdalos ahí antes de usar estos pesos",
+        ruta.display()
+    ))
+}
+
 /// Clave bajo la que vive en `ajustes`. En claro (no `_sellado`): no es un
 /// secreto, es una preferencia de rendimiento.
 const CLAVE_CONCURRENCIA: &str = "concurrencia_gpu";
@@ -429,6 +446,25 @@ impl Cola {
                     continue;
                 };
 
+                // Pre-vuelo: si falta la licencia de este modelo, negarse
+                // ANTES de arrancar el trabajador, no a mitad de lote (#90).
+                // Replica la comprobación mínima de `lumi_pesos._licencia`
+                // (solo existencia de `LICENCIA.txt`) sin necesidad de
+                // invocar Python para esto. Un modelo sin licencia no es un
+                // problema transitorio — reintentar no lo arregla solo, así
+                // que se pausa LA COLA (un solo interruptor, igual que el
+                // botón "Pausar embebido") y se espera acción del operador,
+                // en vez de girar cada 60s gastando reintentos para siempre.
+                let dir = ubicacion::leer_ubicacion();
+                if let Some(motivo) = licencia_faltante(&dir, &modelo) {
+                    self.log.apuntar(format!("cola ({modelo}): {motivo} — se pausa la cola"));
+                    if let Some(p) = self.progreso.lock().unwrap().get_mut(&modelo) {
+                        p.ultimo_fallo = Some(motivo);
+                    }
+                    self.pausar(true);
+                    continue;
+                }
+
                 // La ranura es del modelo, no de la cola entera: hasta
                 // `concurrencia` modelos distintos pueden tener la suya y
                 // avanzar en paralelo de verdad, sin esperarse unos a otros.
@@ -473,6 +509,26 @@ impl Cola {
                     // velocidad gastando CPU, no GPU, y "0/32 para siempre"
                     // era indistinguible de estar cargando algo de verdad.
                     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    // Caso defensivo: el pre-vuelo de arriba ya cubre el caso
+                    // normal, pero alguien puede borrar `LICENCIA.txt` MIENTRAS
+                    // la cola corre. Un fallo de licencia no es transitorio —
+                    // reintentar cada 60s no lo arregla solo — así que aquí
+                    // también se pausa la cola en vez de solo enfriar el índice.
+                    let es_licencia = self
+                        .progreso
+                        .lock()
+                        .unwrap()
+                        .get(&modelo)
+                        .and_then(|p| p.ultimo_fallo.as_deref())
+                        .is_some_and(|m| m.contains("licencia"));
+                    if es_licencia {
+                        self.log.apuntar(format!(
+                            "cola ({modelo}): el índice {indice_id} falla por licencia faltante, se pausa la cola"
+                        ));
+                        self.pausar(true);
+                        reintentos.remove(&indice_id);
+                        continue;
+                    }
                     let n = reintentos.entry(indice_id).or_insert(0);
                     *n += 1;
                     if *n > REINTENTOS_MAX {
