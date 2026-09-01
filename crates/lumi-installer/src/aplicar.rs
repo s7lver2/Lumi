@@ -30,7 +30,17 @@ pub fn aplicar_producto(
         .ok_or(InstaladorError::SinArtefactoParaPlataforma)?;
 
     on_fase(Fase::Descargando);
-    let bytes = reqwest::blocking::get(&artefacto.url)
+    // Sin timeout, `reqwest::blocking::get` puede colgarse indefinidamente
+    // si la conexión se cae a mitad de descarga — 120s es más generoso que
+    // el timeout de 5s del manifiesto (aquí se descarga el instalador
+    // completo, no solo JSON), pero sigue acotando el bloqueo.
+    let cliente = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .map_err(|e| InstaladorError::Red(e.to_string()))?;
+    let bytes = cliente
+        .get(&artefacto.url)
+        .send()
         .map_err(|e| InstaladorError::Red(e.to_string()))?
         .bytes()
         .map_err(|e| InstaladorError::Red(e.to_string()))?;

@@ -154,9 +154,15 @@ fn producto_enum(producto: &str) -> Producto {
     }
 }
 
+// Igual que `detectar_instalados`/`listar_versiones_disponibles`: este
+// comando hace trabajo bloqueante largo (fetch del manifiesto, esperar a
+// que el proceso viejo cierre, y sobre todo descargar el artefacto real
+// completo vía `reqwest::blocking`) — sin `spawn_blocking`, ese trabajo
+// corre directo en el hilo de IPC de Tauri y la ventana se queda "no
+// responde" durante todo ese tramo, no solo al arrancar.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
-pub fn instalar(
+pub async fn instalar(
     app: AppHandle,
     productos: Vec<String>,
     raiz: String,
@@ -169,6 +175,27 @@ pub fn instalar(
     // resuelve como hasta ahora (`mas_nueva`). El lado TS siempre manda
     // este campo (objeto vacío si no aplica) — el parámetro de un comando
     // de Tauri no admite `#[serde(default)]`.
+    versiones_exactas: HashMap<String, String>,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        instalar_bloqueante(
+            app, productos, raiz, acceso_directo, agregar_path, atajos_terminal,
+            iniciar_con_sistema, versiones_exactas,
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[allow(clippy::too_many_arguments)]
+fn instalar_bloqueante(
+    app: AppHandle,
+    productos: Vec<String>,
+    raiz: String,
+    acceso_directo: bool,
+    agregar_path: bool,
+    atajos_terminal: bool,
+    iniciar_con_sistema: bool,
     versiones_exactas: HashMap<String, String>,
 ) -> Result<(), String> {
     let manifiesto = lumi_installer::manifiesto::obtener_verificado().map_err(|e| e.to_string())?;
