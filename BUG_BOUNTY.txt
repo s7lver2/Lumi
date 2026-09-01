@@ -29,3 +29,21 @@
 - [x] quiero agregar al cliente, en la seccion de personalizacion, opciones para ajustar fuentes, tama;os, opciones como que se ajustee el tama;o directamente, y poder personalizar el tama;o de la interfaz a tu gusto
 - [x] en tama;os de ventana raros, la huella y el puerto se ocultan en la parte inferior de la barra lateral
 - [x] en la parte inferior de la barra lateral, en vez de que se muestre la huella, quiero que se muestre la version actual
+- [x] el icono de lumi indexer se ve mal en la barra de tareas, tambien al hacer alt + tab
+- [x] el incono del indexer sigue siendo el mismo, la estrellita solo, pero deberia de ser la version especial pensada para el indexer
+- [x] sigue siendo necesario darle click a "levantar en wsl", y siempre reporta un erorr de que los servicios no levantaron
+- [x] cuando creas un indice, te indica que selecciones que modelos quieres que haga embed, pero esto luego tambien deberia ser modificable si es necesario
+- [x] si seleccionas impotar desde legacy, falta alguna manera de cerrarlo en caso de que el usuario se arrepienta
+- [x] el menu de importacion legacy y el de carpeta parecen ser muy similares? tal vez se podrian unificar, incluso presenta el mismo problema que 36
+- falta por agregar alguna manera de gestionar tu como usuario tus propias teselas que tienes, agregando la capacidad de eliminar tus indices, o de liberar las teselas (borrar índice ya existe; liberar teselas remotas no es viable desde el cliente por diseño — desreclamos.json solo lo escribe la web)
+- [x] en la seccion de dibujar territorio, aparece un indice que no aparece en la pestaña de indices
+- [x] mejorar experiencia al usar el mapa, cosas como que una vez dibujes el cuadrado se cambie automaticamente a la herramienta de movimiento para que asi el usuario se pueda mover libremente
+- [x] que en la pestaña de indexación, el mapa de disponibilidad, el panel laterral con la info a indexar, etc aparezca solo si hay una forma dibujada para indexar, si no ocultar
+- [x] quiero que las teselas reclamadas desde el primer momento se puedan ver, sin necesidad de tener que seleccionarlas manuamnete par comprobarlo, y que al hacer hover sobre estas mismas aparezca la persona que las posee
+- [x] falta panel lateral con mas informacionsobre la busqueda que has hecho en el caso de que hagas una busqueda
+- [x] en los ajustes quiero una nueva seccion llamada rendimiento, para poder ajustar los modos de rendimiento como tu quieras, entre otras cosas
+- [x] en los ajustes, en la seccion de origenes de red, quiero que cuando cambies el limite mensual, si hay algo ya gastado, se acomode la barra reprensentando la nueva cifra maxima con una animacion suave
+- [x] en la misma seccion que 46, quita el bloque de texto de donde va la clave (se quitó "Dónde va la clave" — confirmar que era ese bloque)
+- [x] las actualizaciones tienen que estar en su propia sección, y quiero que tambien como en el cliente, puedas si quieres seleccionar una version anterior
+- [x] el instalador parece quedarse congelado en "no responde", por uno o dos segundos
+- [x] cuando ya hay un area seleccionada, en lugar de ese popup, desde antes de que la selecciones tienes que indicarlo en una especie de slider al lado de la barra con 3 modos
