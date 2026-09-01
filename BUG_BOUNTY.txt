@@ -17,7 +17,7 @@
 - [x] tanto en linux como en windows, asegurate de que en lugar de tirar errores por no usar sudo, probar a solicitarlo, ya sea sudo u administrador en widnows
 - [x] en la cinta de mantenimiento, se ve como que la cinta no es infinita, si no que se resetea la animacion cada poco
 - [x] en la cinta de mantenimiento, se ve como un cacho de la cinta del lado izquierdo, las lineas no concuerdan, como si estuviese cortado
-- [ ] parece que actualiar el servidor no esta funcionando, despues de 10 minutos sigue actualizando y en mantenimiento, sin logs aparentes, sin actividad
+- [x] parece que actualiar el servidor no esta funcionando, despues de 10 minutos sigue actualizando y en mantenimiento, sin logs aparentes, sin actividad
 - [x] en perfil y sesiones del cliente, aparece la seccion de actualizaciones por algun motivo, no deber'ia de estar ahi ya que su nuevo sitio es abajo
 - [ ] la foto de perfil que he subido no se ha actualizado en la barra superior, sigue siendo una S de s7lver
 - [x] las api keys deber'ias de ser capaz de verlas de nuevo tras generarlas, pero tendr'ias que poner tu contrase;a para estar seguros

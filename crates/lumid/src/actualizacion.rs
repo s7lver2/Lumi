@@ -116,6 +116,8 @@ pub enum AplicarError {
     Escritura(String),
     #[error("no se pudo hacer la copia de seguridad de la base: {0}")]
     Backup(String),
+    #[error("la cola no vació a tiempo ({pendientes} análisis seguían en curso tras {minutos} min) — actualización cancelada, mantenimiento desactivado")]
+    ColaAtascada { pendientes: u32, minutos: u64 },
 }
 
 /// La secuencia completa. Deliberadamente en orden: nada destructivo pasa
@@ -161,9 +163,32 @@ pub async fn aplicar(app: &App) -> Result<(), AplicarError> {
     let _ = mantenimiento::set_activo(app, true);
     let _ = mantenimiento::set_mensaje(app, &format!("Actualizando a {}…", publicacion.version));
 
-    // 3. Esperar a que la cola en curso vacíe. Sin tope de tiempo: el
-    //    trabajo empezado no se cancela nunca.
-    while app.queue.foto().en_curso > 0 {
+    // 3. Esperar a que la cola en curso vacíe — el trabajo empezado no se
+    //    cancela nunca, pero esperar SIN tope de tiempo dejaba el servidor
+    //    en mantenimiento para siempre si una fila se quedaba atascada en
+    //    `en_curso` (un worker colgado que nunca la mueve a un estado
+    //    terminal): sin límite, sin log, sin ninguna señal de que la
+    //    actualización seguía viva. Diez minutos es más que de sobra para
+    //    cualquier análisis real; pasado ese tope se desactiva mantenimiento
+    //    y se aborta en vez de quedarse esperando para siempre.
+    const TOPE_ESPERA_COLA: std::time::Duration = std::time::Duration::from_secs(600);
+    let empezado_a_esperar = std::time::Instant::now();
+    loop {
+        let en_curso = app.queue.foto().en_curso;
+        if en_curso == 0 {
+            break;
+        }
+        if empezado_a_esperar.elapsed() >= TOPE_ESPERA_COLA {
+            // El mantenimiento se apaga aquí explícitamente y no solo en el
+            // `Err` genérico de `routes/actualizacion.rs::aplicar` — ese
+            // camino existe, pero duplicarlo aquí deja este módulo
+            // correcto por sí solo si algún día se llama desde otro sitio.
+            tracing::error!("actualización a {}: la cola no vació tras 10 min ({en_curso} en curso) — se cancela", publicacion.version);
+            let _ = mantenimiento::set_activo(app, false);
+            return Err(AplicarError::ColaAtascada { pendientes: en_curso, minutos: 10 });
+        }
+        tracing::info!("actualización a {}: esperando a que la cola vacíe ({en_curso} en curso, {}s transcurridos)",
+            publicacion.version, empezado_a_esperar.elapsed().as_secs());
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     }
 
