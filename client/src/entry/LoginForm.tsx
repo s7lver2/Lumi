@@ -20,7 +20,13 @@ export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMu
   // el mismo bloqueo.
   const [forzarVersion, setForzarVersion] = useState(false);
 
-  async function submit() {
+  // `forzar`, no solo el estado `forzarVersion`: cuando `forzarEntrada` (más
+  // abajo) dispara el login de inmediato tras aceptar el desajuste de
+  // versión, `setForzarVersion(true)` todavía no se ha aplicado en el
+  // siguiente render — `submit` seguiría leyendo el `forzarVersion` viejo
+  // (`false`) de este cierre y chocaría otra vez con el mismo bloqueo.
+  // Pasarlo explícito evita depender del timing de React.
+  async function submit(forzar = forzarVersion) {
     if (!server || !username || !password) return;
     setBusy(true); setError(null);
     try {
@@ -28,7 +34,7 @@ export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMu
       // no se muestra (exige `hello`) y el sondeo de conexión ni arranca
       // (depende de `hello !== null`) — quien entra por aquí en vez de por
       // el asistente del owner se queda sin heartbeat para siempre.
-      const h = await api.reconnect(server.addr, server.fingerprint, forzarVersion);
+      const h = await api.reconnect(server.addr, server.fingerprint, forzar);
       useServer.getState().setHello(h);
       // En segundo plano — un avatar desactualizado no debe retrasar el
       // login, y un fallo aquí (servidor sin avatar, sin red un instante)
@@ -81,6 +87,15 @@ export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMu
     useServer.getState().setHello(h);
     setForzarVersion(true);
     setError(null);
+    // Antes esto solo cerraba el popup y dejaba el error en null: el
+    // usuario tenía que pulsar "Entrar" una segunda vez para que el login
+    // realmente se intentara — el primer "continuar" no hacía nada
+    // visible, y si las credenciales eran incorrectas el fallo se sentía
+    // "silencioso" porque nada indicaba que hiciera falta ese segundo
+    // clic. Se dispara el intento real de inmediato, pasando `true`
+    // explícito (ver comentario en `submit`) en vez de esperar a que
+    // `forzarVersion` se actualice en el próximo render.
+    await submit(true);
   }
 
   return (
@@ -118,7 +133,11 @@ export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMu
             ¿Sin cuenta? · Solicitar acceso
           </button>
         ) : <span />}
-        <button onClick={submit} disabled={busy || !server}
+        {/* No `onClick={submit}`: `submit` ahora acepta un `forzar` opcional
+            (ver más arriba), y React pasaría el propio evento de clic como
+            ese argumento — forzando el bypass de versión en cada intento
+            normal de login. */}
+        <button onClick={() => void submit()} disabled={busy || !server}
           className="shrink-0 rounded-lg bg-accent px-5 py-2 text-xs font-medium text-black transition-transform duration-300 ease-expo active:translate-y-px disabled:opacity-40">
           {busy ? "Entrando" : "Entrar"}
         </button>

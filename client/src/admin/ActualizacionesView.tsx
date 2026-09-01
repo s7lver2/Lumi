@@ -11,14 +11,25 @@ const INTERVALO_MS = 4000;
 
 export function ActualizacionesView({ token }: { token: string }) {
   const [estado, setEstado] = useState<EstadoActualizacionLumid | null>(null);
-  const [aplicando, setAplicando] = useState(false);
+  // Flag optimista: se pone a `true` en el clic, solo para deshabilitar los
+  // botones al instante sin esperar al próximo sondeo. La fuente de verdad
+  // es siempre `estado.aplicando` (backend) — en cuanto el sondeo confirma
+  // que el backend ya no está aplicando nada (terminó, falló o hizo
+  // timeout), este flag se reconcilia con esa realidad, así nunca se queda
+  // pegado en "Actualizando…" (#69).
+  const [aplicandoLocal, setAplicandoLocal] = useState(false);
   const [comprobando, setComprobando] = useState(false);
+  const aplicando = aplicandoLocal || Boolean(estado?.aplicando);
 
   useEffect(() => {
     let vivo = true;
     const tick = () =>
       api.get<EstadoActualizacionLumid>("/v1/admin/actualizacion", token)
-        .then((e) => { if (vivo) setEstado(e); })
+        .then((e) => {
+          if (!vivo) return;
+          setEstado(e);
+          if (!e.aplicando) setAplicandoLocal(false);
+        })
         .catch(() => { /* la próxima vez que responda, se actualiza — no hay nada que mostrar por un fallo de sondeo suelto */ });
     tick();
     const t = setInterval(tick, INTERVALO_MS);
@@ -35,7 +46,7 @@ export function ActualizacionesView({ token }: { token: string }) {
   }
 
   async function actualizarServidor() {
-    setAplicando(true);
+    setAplicandoLocal(true);
     await api.post("/v1/admin/actualizacion/aplicar", {}, token);
     // No hay nada más que hacer aquí: el propio servidor va a caer y volver
     // (o a quedarse en mantenimiento esperando la cola) — el sondeo de
