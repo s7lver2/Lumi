@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { FolderImportDialog } from "../ingest/FolderImportDialog";
 import { LegacyImportDialog } from "../ingest/LegacyImportDialog";
-import { api, type DetalleIndice, type LoteResumen, type Modelo, type ProgresoIndiceEmbed, type Sesion } from "../lib/api";
+import { api, type DetalleIndice, type LoteResumen, type ProgresoIndiceEmbed, type Sesion } from "../lib/api";
 import { PublishDialog } from "../publish/PublishDialog";
 import { estadoActual } from "../publish/publishTracker";
 import { SealDialog } from "../seal/SealDialog";
@@ -18,10 +18,10 @@ import { TeselasPanel } from "./TeselasPanel";
  *  necesita una pantalla paralela que mantener. */
 export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }: {
   id: number; onVolver: () => void;
-  /** «Añadir capa» encola el modelo entero para las imágenes del índice y
-   *  arranca de inmediato si la cola no está en pausa — no hay paso de
-   *  confirmación aparte. Sin llevar a quien lo pulsó a ver la cola, ese
-   *  trabajo de GPU quedaba invisible: parecía que no había pasado nada. */
+  /** Portear a otro nivel encola los modelos que faltan y arranca de
+   *  inmediato si la cola no está en pausa — no hay paso de confirmación
+   *  aparte. Sin llevar a quien lo pulsó a ver la cola, ese trabajo de GPU
+   *  quedaba invisible: parecía que no había pasado nada. */
   onIrAEmbebido?: () => void;
   soloLectura?: boolean;
 }) {
@@ -39,12 +39,9 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
   // paso de subida en vez de forzar a pulsar «Publicar» otra vez.
   const [publicando, setPublicando] = useState(() => estadoActual()?.indiceId === id);
   const [sesion, setSesion] = useState<Sesion | null>(null);
-  const [modelos, setModelos] = useState<Modelo[]>([]);
-  const [reembebiendo, setReembebiendo] = useState<string | null>(null);
   const [porteando, setPorteando] = useState(false);
 
   useEffect(() => { void api.identidadLeer().then(setSesion); }, []);
-  useEffect(() => { void api.modelosLista().then(setModelos); }, []);
 
   const refrescar = () => {
     void api.indiceDetalle(id).then(setDetalle);
@@ -91,16 +88,6 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
     }
   }
 
-  async function reembeber(modeloId: string) {
-    setReembebiendo(modeloId);
-    try {
-      await api.indiceReembeber(id, modeloId);
-      onIrAEmbebido?.();
-    } finally {
-      setReembebiendo(null);
-    }
-  }
-
   function alPortear() {
     setPorteando(false);
     refrescar();
@@ -110,13 +97,6 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
   if (!detalle) return null;
   const vacio = detalle.imagenes.imagenes_total === 0;
   const sellado = detalle.estado === "sellado";
-  // Un modelo sin ninguna fila de `vectores` para este índice —`total === 0`
-  // en su progreso, con el índice no vacío— es una capa que nunca se generó.
-  // Añadirla es un pase de GPU sobre las fotos que ya están en disco, no una
-  // campaña de descarga.
-  const faltantes = vacio
-    ? []
-    : modelos.filter((m) => (embed.find((e) => e.modelo_id === m.id)?.total ?? 0) === 0);
   const motivoSellarDeshabilitado = vacio
     ? "el índice todavía no tiene imágenes"
     : !embebidoCompleto
@@ -249,25 +229,6 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
               className="jg-press rounded-lg border border-border px-3 py-1.5 text-[11px] text-fg disabled:opacity-40">
               Abrir en mapa
             </button>
-          </div>
-        )}
-
-        {!vacio && faltantes.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            <p className="text-[10px] leading-relaxed text-subtle">
-              recorre las fotos que ya están en disco; no descarga nada ni gasta presupuesto
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              {faltantes.map((m) => (
-                <button key={m.id}
-                  onClick={() => void reembeber(m.id)}
-                  disabled={sellado || reembebiendo === m.id}
-                  title={sellado ? "este índice está sellado: un paquete sellado no se sigue llenando" : undefined}
-                  className="jg-press rounded-lg border border-border px-3 py-1.5 text-[11px] text-fg disabled:opacity-40">
-                  {reembebiendo === m.id ? `Encolando ${m.nombre}…` : `Añadir capa ${m.nombre}`}
-                </button>
-              ))}
-            </div>
           </div>
         )}
 
