@@ -19,3 +19,7 @@ thiserror = { workspace = true }
 [dev-dependencies]
 tempfile = "3"
 rand = { workspace = true }
+# Solo para el ejemplo `firmar_desreclamos` (fusionar-pendientes): una
+# petición GET pública y sincrona no justifica arrastrar tokio+reqwest a este
+# crate solo por una herramienta offline de un operador.
+ureq = { version = "2", features = ["json"] }
