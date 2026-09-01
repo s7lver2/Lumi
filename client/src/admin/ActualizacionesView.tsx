@@ -3,14 +3,15 @@ import { api, type EstadoActualizacionLumid } from "../lib/api";
 import { Icon } from "../ui/Icon";
 import { Seccion } from "./AdminPanel";
 
-/** Sondeo cada 4s mientras la pestaña está abierta — sin canal en vivo
- *  dedicado (ver el techo anotado en el plan). Suficiente para ver avanzar
- *  "esperando cola" → "reiniciando" sin que el owner tenga que refrescar a
- *  mano. */
-const INTERVALO_MS = 4000;
-
-export function ActualizacionesView({ token }: { token: string }) {
-  const [estado, setEstado] = useState<EstadoActualizacionLumid | null>(null);
+/** El sondeo (cada 4s, sin canal en vivo dedicado — ver el techo anotado en
+ *  el plan) vive ahora en `AdminPanel`, no aquí: así `AdminEventToast`
+ *  también puede leer el mismo estado para avisar del progreso aunque el
+ *  admin esté en otra pestaña (#70), sin sondear el endpoint dos veces. */
+export function ActualizacionesView({ token, estado, onEstado }: {
+  token: string;
+  estado: EstadoActualizacionLumid | null;
+  onEstado: (e: EstadoActualizacionLumid) => void;
+}) {
   // Flag optimista: se pone a `true` en el clic, solo para deshabilitar los
   // botones al instante sin esperar al próximo sondeo. La fuente de verdad
   // es siempre `estado.aplicando` (backend) — en cuanto el sondeo confirma
@@ -20,26 +21,14 @@ export function ActualizacionesView({ token }: { token: string }) {
   const [aplicandoLocal, setAplicandoLocal] = useState(false);
   const [comprobando, setComprobando] = useState(false);
   const aplicando = aplicandoLocal || Boolean(estado?.aplicando);
-
   useEffect(() => {
-    let vivo = true;
-    const tick = () =>
-      api.get<EstadoActualizacionLumid>("/v1/admin/actualizacion", token)
-        .then((e) => {
-          if (!vivo) return;
-          setEstado(e);
-          if (!e.aplicando) setAplicandoLocal(false);
-        })
-        .catch(() => { /* la próxima vez que responda, se actualiza — no hay nada que mostrar por un fallo de sondeo suelto */ });
-    tick();
-    const t = setInterval(tick, INTERVALO_MS);
-    return () => { vivo = false; clearInterval(t); };
-  }, [token]);
+    if (estado && !estado.aplicando) setAplicandoLocal(false);
+  }, [estado]);
 
   async function comprobarAhora() {
     setComprobando(true);
     try {
-      setEstado(await api.post<EstadoActualizacionLumid>("/v1/admin/actualizacion/comprobar", {}, token));
+      onEstado(await api.post<EstadoActualizacionLumid>("/v1/admin/actualizacion/comprobar", {}, token));
     } finally {
       setComprobando(false);
     }
@@ -49,8 +38,8 @@ export function ActualizacionesView({ token }: { token: string }) {
     setAplicandoLocal(true);
     await api.post("/v1/admin/actualizacion/aplicar", {}, token);
     // No hay nada más que hacer aquí: el propio servidor va a caer y volver
-    // (o a quedarse en mantenimiento esperando la cola) — el sondeo de
-    // arriba, no esta llamada, es lo que refleja el progreso.
+    // (o a quedarse en mantenimiento esperando la cola) — el sondeo que
+    // vive en AdminPanel, no esta llamada, es lo que refleja el progreso.
   }
 
   return (

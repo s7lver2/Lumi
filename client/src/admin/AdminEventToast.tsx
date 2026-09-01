@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { type EventoAdmin } from "../lib/api";
+import { type EstadoActualizacionLumid, type EventoAdmin } from "../lib/api";
 import { startAdminEvents } from "../lib/bridge";
+import { Icon } from "../ui/Icon";
 import type { Seccion } from "./Sidebar";
 
 /** Mismo patrón que IndexToast: se monta una vez en AdminPanel para que
@@ -10,8 +11,19 @@ import type { Seccion } from "./Sidebar";
  *  cosas que hoy llegan por `/v1/admin/events` (crédito y acceso): son el
  *  mismo canal y el mismo hueco en pantalla, así que es un solo componente
  *  que decide qué texto pintar según qué variante llegó, no dos toasts
- *  compitiendo por la misma esquina. */
-export function AdminEventToast({ token, onIr }: { token: string; onIr: (s: Seccion) => void }) {
+ *  compitiendo por la misma esquina.
+ *
+ *  El progreso de actualización (#70) no llega por ese canal de eventos —
+ *  es estado sondeado, no un evento puntual — así que se recibe aparte
+ *  (`actualizacion`, elevado a `AdminPanel` para no duplicar el sondeo) y
+ *  se pinta con el mismo hueco/estilo de toast cuando no hay ningún evento
+ *  de verdad que mostrar y el admin no está ya viendo la pestaña. */
+export function AdminEventToast({ token, onIr, actualizacion, enActualizaciones }: {
+  token: string;
+  onIr: (s: Seccion) => void;
+  actualizacion: EstadoActualizacionLumid | null;
+  enActualizaciones: boolean;
+}) {
   const [ev, setEv] = useState<EventoAdmin | null>(null);
   const [cerrado, setCerrado] = useState(false);
 
@@ -31,7 +43,26 @@ export function AdminEventToast({ token, onIr }: { token: string; onIr: (s: Secc
   // El filtro en el listener ya descarta "ColaCambio" antes de `setEv`, pero
   // el tipo `EventoAdmin` sigue incluyendo ese string plano — se estrecha
   // aquí para que lo de abajo pueda usar `in` sobre las variantes objeto.
-  if (!ev || cerrado || typeof ev === "string") return null;
+  if (!ev || cerrado || typeof ev === "string") {
+    if (actualizacion?.aplicando && !enActualizaciones) {
+      return (
+        <div className="jg-press pointer-events-auto flex items-start gap-2.5 rounded-[11px] border border-white/[.14]
+            bg-[rgba(20,22,26,.97)] p-[11px_12px] text-left shadow-lg shadow-black/40 backdrop-blur-xl"
+          style={{ animation: "jg-fade-rise .5s cubic-bezier(.16,1,.3,1) both" }}>
+          <button onClick={() => onIr("actualizaciones")} className="min-w-0 flex-1 text-left">
+            <div className="flex items-center gap-1.5 text-[11.5px] text-fg">
+              <Icon name="refresh" size={12} />
+              Actualizando el servidor…
+            </div>
+            <div className="mt-0.5 truncate text-[9.5px] text-subtle">
+              Si hay trabajo en curso, espera a que termine antes de reiniciar
+            </div>
+          </button>
+        </div>
+      );
+    }
+    return null;
+  }
 
   const titulo = "SolicitudCredito" in ev
     ? `${ev.SolicitudCredito.username} pidió más cupo ${ev.SolicitudCredito.tipo}`

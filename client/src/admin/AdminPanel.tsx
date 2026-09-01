@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type SecuritySettings } from "../lib/api";
+import { api, type EstadoActualizacionLumid, type SecuritySettings } from "../lib/api";
 import { useServer } from "../lib/store";
 import { Hueco } from "./Hueco";
 import { NotificacionesView } from "./NotificacionesView";
@@ -34,6 +34,22 @@ export function AdminPanel({ token }: { token: string }) {
   // de aviso de mantenimiento, en cambio, ya no depende de este estado — la
   // pinta `App.tsx` para toda la aplicación a partir de la telemetría.)
   const [seguridad, setSeguridad] = useState<SecuritySettings | null>(null);
+  // Vive aquí (no dentro de ActualizacionesView) por la misma razón que
+  // `seguridad`: AdminEventToast necesita verlo para poder avisar del
+  // progreso de una actualización aunque el admin esté en otra pestaña
+  // (#70) — sondear dos veces el mismo endpoint sería duplicar trabajo sin
+  // motivo.
+  const [actualizacionEstado, setActualizacionEstado] = useState<EstadoActualizacionLumid | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    const tick = () =>
+      api.get<EstadoActualizacionLumid>("/v1/admin/actualizacion", token)
+        .then((e) => { if (vivo) setActualizacionEstado(e); })
+        .catch(() => { /* la próxima vez que responda, se actualiza */ });
+    tick();
+    const t = setInterval(tick, 4000);
+    return () => { vivo = false; clearInterval(t); };
+  }, [token]);
 
   // Los contadores de la barra lateral salen del mismo Resumen que pinta la
   // primera pantalla: una sola petición alimenta las dos cosas.
@@ -78,7 +94,9 @@ export function AdminPanel({ token }: { token: string }) {
           : seccion === "notificaciones" ? <NotificacionesView token={token} />
           : seccion === "hardware" ? <HardwareView token={token} />
           : seccion === "doctor" ? <DoctorView token={token} onIr={setSeccion} />
-          : seccion === "actualizaciones" ? <ActualizacionesView token={token} />
+          : seccion === "actualizaciones" ? (
+              <ActualizacionesView token={token} estado={actualizacionEstado} onEstado={setActualizacionEstado} />
+            )
                     : <Seccion titulo="Índices instalados" grupo="Servidor"
               accion={
                 <button disabled title="Abrirá el catálogo remoto; todavía no hace nada"
@@ -99,7 +117,8 @@ export function AdminPanel({ token }: { token: string }) {
       <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col gap-2.5" style={{ width: 308 }}>
         <ModelToasts token={token} onIr={setSeccion} licenciasPendientes={licenciasPendientes} />
         <IndexToast token={token} onIr={setSeccion} />
-        <AdminEventToast token={token} onIr={setSeccion} />
+        <AdminEventToast token={token} onIr={setSeccion}
+          actualizacion={actualizacionEstado} enActualizaciones={seccion === "actualizaciones"} />
       </div>
     </div>
   );
