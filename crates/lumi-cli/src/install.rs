@@ -222,7 +222,13 @@ pub fn run(auto: bool, version: Option<&str>) -> Result<PairKey> {
     }
     fs::write("/etc/systemd/system/lumid.service", UNIT)?;
     run_ok("systemctl", &["daemon-reload"])?;
-    run_ok("systemctl", &["enable", "--now", "lumid.service"])?;
+    run_ok("systemctl", &["enable", "lumid.service"])?;
+    // `enable --now` es idempotente respecto a "arrancar": si el servicio ya
+    // estaba activo (reinstalar para fijar otra versión, el caso que
+    // importa aquí), "arrancarlo" no hace nada — el proceso viejo se queda
+    // en memoria con el binario viejo cargado, aunque el archivo en disco
+    // ya sea el nuevo. `restart` sí lo relanza siempre, esté activo o no.
+    run_ok("systemctl", &["restart", "lumid.service"])?;
     pb.finish_and_clear();
     ui::ok(&format!("lumid.service activo · escuchando en 0.0.0.0:{}", lumi_proto::PORT));
 
