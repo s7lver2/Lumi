@@ -74,6 +74,12 @@ function EmbedView({ indiceId, onCambiarIndice }: { indiceId: number; onCambiarI
   const pausada = cola.some((p) => p.pausada);
   const hayTrabajo = cola.some((p) => p.indice_total > 0 || p.trabajando);
   const esperandoQdrant = cola.some((p) => p.esperando_qdrant);
+  // No se puede cambiar de índice mientras hay embebido en curso para ESTE
+  // índice — cambiar a mitad dejaría la pantalla mirando el progreso de un
+  // índice que ya no es el que dice la barra de arriba (#65). Mismo patrón de
+  // "capability matrix" del proyecto: deshabilitado con el motivo visible, no
+  // escondido sin explicación.
+  const embebiendo = visibles.some((p) => p.hechas < p.total);
 
   async function alternar() {
     await api.colaPausar(!pausada);
@@ -97,7 +103,9 @@ function EmbedView({ indiceId, onCambiarIndice }: { indiceId: number; onCambiarI
         <div className="flex items-center gap-3">
           <div className="flex-1">
             <p className="text-sm text-fg">Embebido</p>
-            <button onClick={onCambiarIndice} className="jg-press text-[10.5px] text-subtle hover:text-fg">
+            <button onClick={onCambiarIndice} disabled={embebiendo}
+              title={embebiendo ? "no disponible mientras se está embebiendo" : undefined}
+              className="jg-press text-[10.5px] text-subtle hover:text-fg disabled:opacity-40 disabled:hover:text-subtle">
               «{nombreIndice}» · cambiar índice
             </button>
           </div>
