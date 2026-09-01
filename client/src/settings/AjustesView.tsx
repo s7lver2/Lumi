@@ -45,11 +45,17 @@ function AparienciaPanel() {
         </span>
         <button role="switch" aria-checked={activo}
           onClick={() => { const v = !activo; setActivo(v); setReducirMovimiento(v); }}
-          className={`relative h-5 w-9 shrink-0 rounded-full border transition-colors duration-300 ease-expo ${activo ? "border-accent bg-accent" : "border-white/15 bg-white/10"}`}>
+          className={`relative h-5 w-10 shrink-0 rounded-full border transition-colors duration-300 ease-expo ${activo ? "border-accent bg-accent" : "border-white/15 bg-white/10"}`}>
           {/* El pomo era negro sobre un riel oscuro translúcido en el estado
               apagado — sin contraste, invisible. `bg-fg` (casi blanco) se ve
               en los dos estados; sobre el riel encendido (bg-accent, casi
-              blanco también) se distingue por el aro oscuro. */}
+              blanco también) se distingue por el aro oscuro.
+              Riel ensanchado a w-10 (antes w-9): el margen en el extremo
+              encendido (18+14=32 contra 34px del riel viejo) no dejaba nada
+              de holgura real, así que cualquier desajuste de subpíxel al
+              escalar la interfaz sacaba la bolita fuera del riel. Con w-10
+              (40px) y la misma traslación de 18px queda un margen genuino de
+              varios píxeles en ambos extremos. */}
           <span className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-fg ring-1 ring-black/20 transition-transform duration-300 ease-expo ${activo ? "translate-x-[18px]" : "translate-x-0.5"}`} />
         </button>
       </label>

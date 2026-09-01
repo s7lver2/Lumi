@@ -34,10 +34,21 @@ body { background: #0e0f11; color: #e8e8e6; overflow: hidden; }
    así que flex, absolutos y gaps quedan siempre consistentes entre sí. Se
    reduce el tamaño lógico de #root en la misma proporción para que, tras el
    scale, ocupe otra vez el 100% del viewport. */
-:root { --ui-scale: 1; }
-@media (min-width: 1100px) { :root { --ui-scale: 1.2; } }
-@media (min-width: 1500px) { :root { --ui-scale: 1.4; } }
-@media (min-width: 2000px) { :root { --ui-scale: 1.65; } }
+/* `--ui-scale-base` depende del ancho de ventana (breakpoints, automático);
+   `--ui-scale-user` es el multiplicador de "Tamaño de la interfaz" (85%-140%,
+   elegido a mano en Ajustes — ver lib/apariencia.ts). Antes `--ui-scale-user`
+   se aplicaba por separado vía `document.documentElement.style.zoom`, lo que
+   apilaba dos mecanismos de escala distintos (`zoom` + este `transform:
+   scale`) sobre el mismo árbol: en porcentajes no estándar (85%, 140%) el
+   redondeo de cada uno no coincidía, y el margen de 2px del toggle de
+   "reducir movimiento" (ya sin holgura) se volvía overflow visible. Con un
+   solo `transform: scale(--ui-scale)` combinando ambos factores, el árbol se
+   calcula una vez a su tamaño lógico y se estira entero — sin ese desajuste
+   de subpíxel. */
+:root { --ui-scale-base: 1; --ui-scale-user: 1; --ui-scale: calc(var(--ui-scale-base) * var(--ui-scale-user)); }
+@media (min-width: 1100px) { :root { --ui-scale-base: 1.2; } }
+@media (min-width: 1500px) { :root { --ui-scale-base: 1.4; } }
+@media (min-width: 2000px) { :root { --ui-scale-base: 1.65; } }
 #root {
   width: calc(100% / var(--ui-scale));
   height: calc(100% / var(--ui-scale));
