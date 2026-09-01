@@ -1,87 +1,77 @@
-import { xyDeQuadkey } from "../lib/quadkey";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
+import { useEffect, useRef } from "react";
 
-const LADO = 8;
-const HUECO = 2;
-
-interface Grupo {
-  ocupadas: Set<string>;
-  ancho: number;
-  alto: number;
-}
-
-/** Agrupa los quadkeys en islas contiguas (8-vecinos) y normaliza cada una a
- *  su propia esquina: son las "manchas" que vienen de índices o zonas
- *  distintas, y agruparlas por separado es lo que evita que dos publicaciones
- *  a miles de km entre sí aplasten el dibujo de la que sea más pequeña. */
-function agrupar(quadkeys: string[]): Grupo[] {
-  const puntos = quadkeys.map(xyDeQuadkey);
-  const claves = new Set(puntos.map((p) => `${p.x},${p.y}`));
-  const visto = new Set<string>();
-  const grupos: Grupo[] = [];
-
-  for (const p0 of puntos) {
-    const k0 = `${p0.x},${p0.y}`;
-    if (visto.has(k0)) continue;
-    visto.add(k0);
-    const pila = [p0];
-    const isla: { x: number; y: number }[] = [];
-    while (pila.length > 0) {
-      const c = pila.pop()!;
-      isla.push(c);
-      for (const dx of [-1, 0, 1]) {
-        for (const dy of [-1, 0, 1]) {
-          if (dx === 0 && dy === 0) continue;
-          const nk = `${c.x + dx},${c.y + dy}`;
-          if (claves.has(nk) && !visto.has(nk)) {
-            visto.add(nk);
-            pila.push({ x: c.x + dx, y: c.y + dy });
-          }
-        }
-      }
-    }
-    const xs = isla.map((t) => t.x);
-    const ys = isla.map((t) => t.y);
-    const minX = Math.min(...xs);
-    const minY = Math.min(...ys);
-    grupos.push({
-      ocupadas: new Set(isla.map((t) => `${t.x - minX},${t.y - minY}`)),
-      ancho: Math.max(...xs) - minX + 1,
-      alto: Math.max(...ys) - minY + 1,
-    });
-  }
-  return grupos.sort((a, b) => b.ancho * b.alto - a.ancho * a.alto);
-}
+import { api } from "../lib/api";
+import { teselaAPoligono } from "../lib/quadkey";
 
 /** Dónde está el terreno que cubre una cuenta, a partir de sus quadkeys
- *  reales -- no es una ilustración, cada cuadro es una tesela z14 de verdad.
- *  Cada mancha se dibuja a su propia escala de cuadrícula: esto no pretende
- *  ser un mapa geográfico, solo la forma de la cobertura. */
+ *  reales: un mapa Mapbox GL de verdad, mismo patrón que `DownloadMap`, en
+ *  vez de la rejilla CSS sintética de antes — encuadra automáticamente sobre
+ *  la extensión real de la cobertura para que la forma geográfica se vea. */
 export function CoverageMap({ quadkeys }: { quadkeys: string[] }) {
-  if (quadkeys.length === 0) return null;
-  const grupos = agrupar(quadkeys);
+  const contenedor = useRef<HTMLDivElement>(null);
+  const mapa = useRef<mapboxgl.Map | null>(null);
+  const listo = useRef(false);
 
-  return (
-    <div className="flex min-h-[110px] flex-wrap items-center gap-6 rounded-lg border border-border p-4"
-      style={{ background: "radial-gradient(120% 90% at 50% 30%, #1a1d21 0%, #131518 55%, #0d0f11 100%)" }}>
-      {grupos.map((g, i) => (
-        <div key={i}
-          style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${g.ancho}, ${LADO}px)`,
-            gridTemplateRows: `repeat(${g.alto}, ${LADO}px)`,
-            gap: HUECO,
-          }}>
-          {Array.from({ length: g.ancho * g.alto }).map((_, idx) => {
-            const x = idx % g.ancho;
-            const y = Math.floor(idx / g.ancho);
-            const hay = g.ocupadas.has(`${x},${y}`);
-            return (
-              <i key={idx} className="block rounded-[2px]"
-                style={{ width: LADO, height: LADO, background: hay ? "rgba(133,183,235,.45)" : "transparent" }} />
-            );
-          })}
-        </div>
-      ))}
-    </div>
-  );
+  useEffect(() => {
+    let vivo = true;
+    void api.mapboxClave().then((clave) => {
+      if (!vivo || !clave || !contenedor.current) return;
+      mapboxgl.accessToken = clave;
+      const m = new mapboxgl.Map({
+        container: contenedor.current,
+        style: "mapbox://styles/mapbox/dark-v11",
+        center: [0, 20],
+        zoom: 1,
+        interactive: true,
+      });
+      m.on("load", () => {
+        m.addSource("cobertura", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        m.addLayer({
+          id: "cobertura-relleno",
+          type: "fill",
+          source: "cobertura",
+          paint: { "fill-color": "rgba(133,183,235,1)", "fill-opacity": 0.45 },
+        });
+        m.addLayer({
+          id: "cobertura-borde",
+          type: "line",
+          source: "cobertura",
+          paint: { "line-color": "rgba(133,183,235,1)", "line-width": 1, "line-opacity": 0.8 },
+        });
+        listo.current = true;
+        pintar(m);
+      });
+      mapa.current = m;
+    });
+    return () => { vivo = false; listo.current = false; mapa.current?.remove(); mapa.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function pintar(m: mapboxgl.Map) {
+    const src = m.getSource("cobertura") as mapboxgl.GeoJSONSource | undefined;
+    if (!src || quadkeys.length === 0) return;
+    src.setData({
+      type: "FeatureCollection",
+      features: quadkeys.map((qk) => teselaAPoligono(qk)),
+    });
+    const caja = new mapboxgl.LngLatBounds();
+    for (const qk of quadkeys) {
+      for (const anillo of teselaAPoligono(qk).geometry.coordinates) {
+        for (const [lng, lat] of anillo) caja.extend([lng, lat]);
+      }
+    }
+    m.fitBounds(caja, { padding: 30, duration: 0, maxZoom: 15 });
+  }
+
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !listo.current) return;
+    pintar(m);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quadkeys]);
+
+  if (quadkeys.length === 0) return null;
+  return <div ref={contenedor} className="h-[220px] w-full overflow-hidden rounded-lg border border-border" />;
 }
