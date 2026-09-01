@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { api, type Perfil, type PerfilGithub } from "../lib/api";
 import { CoverageMap } from "./CoverageMap";
-import { SourceBar } from "./SourceBar";
+import { opacidadSegmento, SegmentBar } from "./SourceBar";
 
 function fecha(epochSeg: string): string {
   const n = Number(epochSeg);
@@ -30,6 +30,7 @@ export function ProfileDialog({ cuenta, onCerrar }: { cuenta: string; onCerrar: 
   const primera = perfil && perfil.publicaciones.length > 0
     ? fecha(perfil.publicaciones.map((p) => p.publicada_en).sort()[0])
     : "—";
+  const totalTeselasPublicadas = perfil ? perfil.publicaciones.reduce((s, p) => s + p.teselas, 0) : 0;
 
   return (
     <div className="w-[600px] rounded-card border border-white/[.13] bg-[rgba(16,19,25,.72)] p-[22px_24px] backdrop-blur-xl">
@@ -70,23 +71,27 @@ export function ProfileDialog({ cuenta, onCerrar }: { cuenta: string; onCerrar: 
           </div>
 
           <p className="mt-4 text-[8px] uppercase tracking-[.11em] text-subtle">publicaciones recientes</p>
-          <div className="mt-2.5 flex flex-col gap-3">
-            {perfil!.publicaciones.map((p) => (
-              <div key={p.paquete}>
-                <div className="flex items-center gap-2">
-                  <a href={p.url} target="_blank" rel="noreferrer" className="flex-1 truncate text-[11.5px] text-fg hover:underline">
-                    {p.nombre}
-                  </a>
-                  <span className="font-mono text-[9.5px] text-subtle">
-                    {p.teselas} teselas{p.numero_version > 1 ? ` · v${p.numero_version}` : ""}
-                    {p.viva ? "" : " · no disponible"}
-                  </span>
-                </div>
-                <div className="mt-1.5">
-                  <SourceBar fuentes={p.por_fuente} unidad="teselas" />
-                </div>
-              </div>
-            ))}
+          <div className="mt-2.5">
+            <SegmentBar pesos={perfil!.publicaciones.map((p) => p.teselas)} />
+            <div className="mt-[9px] flex flex-col gap-2">
+              {perfil!.publicaciones.map((p, i) => {
+                const pct = totalTeselasPublicadas > 0 ? (p.teselas / totalTeselasPublicadas) * 100 : 0;
+                return (
+                  <div key={p.paquete} className="flex items-center gap-2 text-[10.5px] text-muted">
+                    <s className="block h-[7px] w-[7px] shrink-0 rounded-sm no-underline"
+                      style={{ background: opacidadSegmento(i) }} />
+                    <a href={p.url} target="_blank" rel="noreferrer"
+                      className="flex-1 truncate text-fg hover:underline">
+                      {p.nombre}
+                    </a>
+                    <span className="shrink-0 font-mono text-[9.5px] text-subtle">
+                      {pct.toFixed(0)}% · {p.teselas} teselas{p.numero_version > 1 ? ` · v${p.numero_version}` : ""}
+                      {p.viva ? "" : " · no disponible"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </>
       ) : (

@@ -1,6 +1,32 @@
 import type { PctFuente } from "../lib/api";
 import { color, nombre } from "../lib/origenes";
 
+/** Opacidad decreciente por posición — para una serie sin categoría semántica
+ *  (fuente de una imagen concreta, publicación concreta…) que aun así
+ *  necesita distinguirse visualmente en una barra apilada. El color como
+ *  categoría es solo de `origenes.ts` (ver su comentario); aquí no se inventa
+ *  una paleta nueva, solo se gradúa el mismo tono. */
+export function opacidadSegmento(indice: number): string {
+  return `rgba(255,255,255,${Math.max(0.82 - indice * 0.14, 0.18)})`;
+}
+
+/** Barra apilada única cuyos segmentos son pesos arbitrarios (no fuentes) —
+ *  usada por el perfil para las publicaciones recientes: una sola barra
+ *  proporcional en vez de una fila con su propia `SourceBar` por
+ *  publicación. Sin leyenda propia: quien la usa ya sabe qué es cada
+ *  segmento y dibuja su propia leyenda con `opacidadSegmento` a juego. */
+export function SegmentBar({ pesos }: { pesos: number[] }) {
+  const total = pesos.reduce((s, v) => s + v, 0);
+  if (pesos.length === 0 || total <= 0) return null;
+  return (
+    <div className="flex h-[5px] overflow-hidden rounded-[3px] bg-elevated">
+      {pesos.map((v, i) => (
+        <i key={i} style={{ width: `${(v / total) * 100}%`, background: opacidadSegmento(i) }} />
+      ))}
+    </div>
+  );
+}
+
 /** La paleta de `origenes.ts` es el único sitio de la aplicación donde el
  *  color codifica una categoría (ver su comentario) — esta barra es la
  *  segunda vez que se apoya en ella, no una paleta nueva. `desconocida` no
