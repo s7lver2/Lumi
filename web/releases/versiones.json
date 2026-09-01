@@ -141,7 +141,7 @@
       "producto": "cliente",
       "version": "2.0.3",
       "publicado": "2026-08-31T21:41:54Z",
-      "notas": "popup de version rediseÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
+      "notas": "popup de version rediseÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
       "retirada": false,
       "artefactos": [
         {
@@ -156,7 +156,7 @@
       "producto": "indexer",
       "version": "2.0.3",
       "publicado": "2026-08-31T21:41:54Z",
-      "notas": "popup de version rediseÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
+      "notas": "popup de version rediseÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
       "retirada": false,
       "artefactos": [
         {
@@ -171,7 +171,7 @@
       "producto": "lumid",
       "version": "2.0.3",
       "publicado": "2026-08-31T21:41:54Z",
-      "notas": "popup de version rediseÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
+      "notas": "popup de version rediseÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
       "retirada": false,
       "artefactos": [
         {
@@ -361,7 +361,67 @@
           "sha256": "c016b723db954e0a5ff0fdda174eb5f6868c8f0f2be8bc22eb4d612cc48ae6af"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.8",
+      "publicado": "2026-09-01T17:54:01Z",
+      "notas": "Instalador con icono propio, seleccion de version clara y auto-actualizacion; galeria de imagenes del indexer ya no se atasca al hacer scroll; migracion de carpeta ya no se queda bloqueada por un sellado fallido; y el toggle de reducir movimiento por fin anima correctamente al activarse.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.8/app.exe",
+          "bytes": 15748608,
+          "sha256": "cd01fd2f8ea1434b1b682a45b1c7151360e7c5f603eb45941cb178dd0a60a4e1"
+        }
+      ]
+    },
+    {
+      "producto": "indexer",
+      "version": "2.0.8",
+      "publicado": "2026-09-01T17:54:01Z",
+      "notas": "Instalador con icono propio, seleccion de version clara y auto-actualizacion; galeria de imagenes del indexer ya no se atasca al hacer scroll; migracion de carpeta ya no se queda bloqueada por un sellado fallido; y el toggle de reducir movimiento por fin anima correctamente al activarse.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.8/indexer-app.exe",
+          "bytes": 22200320,
+          "sha256": "f7d3f002654e92fd87d4006b17ae1e7bbbee6ab08a58688ec1cd0c345126e73e"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.8",
+      "publicado": "2026-09-01T17:54:01Z",
+      "notas": "Instalador con icono propio, seleccion de version clara y auto-actualizacion; galeria de imagenes del indexer ya no se atasca al hacer scroll; migracion de carpeta ya no se queda bloqueada por un sellado fallido; y el toggle de reducir movimiento por fin anima correctamente al activarse.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.8/lumid",
+          "bytes": 20411296,
+          "sha256": "bdbccfe1a4b17407abcd8ec399155383b614445c5c6ed3086b95d82dcafe9615"
+        }
+      ]
+    },
+    {
+      "producto": "instalador",
+      "version": "2.0.8",
+      "publicado": "2026-09-01T17:54:01Z",
+      "notas": "Instalador con icono propio, seleccion de version clara y auto-actualizacion; galeria de imagenes del indexer ya no se atasca al hacer scroll; migracion de carpeta ya no se queda bloqueada por un sellado fallido; y el toggle de reducir movimiento por fin anima correctamente al activarse.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.8/installer.exe",
+          "bytes": 12874240,
+          "sha256": "6c3872f838d2a405c4ab6eb9b5939d4a5e3eabf15263d08442aff9214e02530d"
+        }
+      ]
     }
   ],
-  "firma": "KcPTb7AoEOPL43EFI6FQagHCy/BdYxF2y62hio0CizCK8o7J9ME+CN8pkkW+piD7EQMHZZgBp/0bNJ+PMQEMCg=="
+  "firma": "rtDsrgg0zdap/drwRhYQIwrBLAIimDM0ZqqaQ53eKoz/xeKsYUmEpdp9llM1qSqlzKSY8ix0ndjBWx6G7BfoDA=="
 }

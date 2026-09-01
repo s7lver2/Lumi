@@ -32,6 +32,11 @@ REPO_GITHUB = "s7lver2/Lumi"
 WSL_RUTA_LUMI = "~/Lumi"
 PRODUCTOS = ("cliente", "indexer", "lumid", "installer")
 
+# `lumi_proto::actualizacion::Producto` serializa `Instalador` como
+# "instalador" (rename_all = "lowercase"); el resto de variantes ya
+# coinciden por casualidad con sus claves aquí, esta es la única que no.
+PRODUCTO_MANIFIESTO = {"cliente": "cliente", "indexer": "indexer", "lumid": "lumid", "installer": "instalador"}
+
 PLATAFORMA = {
     "cliente": "windows-x86_64", "indexer": "windows-x86_64", "lumid": "linux-x86_64",
     "installer": "windows-x86_64",
@@ -82,10 +87,14 @@ def leer_ultimas_publicadas(root: Path) -> dict[str, dict | None]:
     ruta = root / "web" / "releases" / "versiones.json"
     manifiesto = json.loads(ruta.read_text())
     ultimas: dict[str, dict | None] = {p: None for p in PRODUCTOS}
+    invertido = {v: k for k, v in PRODUCTO_MANIFIESTO.items()}
     for p in manifiesto.get("publicaciones", []):
-        actual = ultimas.get(p["producto"])
+        clave = invertido.get(p["producto"])
+        if clave is None:
+            continue
+        actual = ultimas.get(clave)
         if actual is None or p["publicado"] > actual["publicado"]:
-            ultimas[p["producto"]] = p
+            ultimas[clave] = p
     return ultimas
 
 
@@ -251,7 +260,7 @@ def armar_borrador(
     ahora = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     for p in productos:
         publicaciones.append({
-            "producto": p,
+            "producto": PRODUCTO_MANIFIESTO[p],
             "version": version,
             "publicado": ahora,
             "notas": notas,
