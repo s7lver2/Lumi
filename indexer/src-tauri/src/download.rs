@@ -259,13 +259,22 @@ impl Descarga {
                 Ok(caps) => {
                     let gastado = self.tope.gastado_eur() - antes;
                     let unidades: u32 = caps.iter().map(|c| c.unidades).sum();
-                    let n = caps.len() as u32;
+                    // El quadkey se recalcula de las coordenadas REALES de la
+                    // foto: Overpass devuelve vías enteras (`calles.rs`), así
+                    // que sin este descarte una captura de la tesela vecina
+                    // se colaba en el índice aunque el usuario nunca la
+                    // seleccionara. `puntos_de_tesela` ya recorta los puntos
+                    // de sondeo a esta tesela, pero Google/KartaView pueden
+                    // devolver la foto más cercana a un punto del borde y esa
+                    // foto real seguir cayendo al otro lado — última defensa
+                    // aquí: solo entra al índice lo que de verdad cae en la
+                    // tesela que se pidió, ni una más.
+                    let mut n = 0u32;
                     for c in &caps {
-                        // El quadkey se recalcula de las coordenadas REALES de
-                        // la foto: Overpass devuelve vías enteras, así que una
-                        // captura puede caer en la tesela de al lado y tiene
-                        // que contarse allí.
                         let qk_real = quadkey(c.lat, c.lng);
+                        if qk_real != qk {
+                            continue;
+                        }
                         let _ = self.almacen.insertar_imagen_de_red(
                             self.indice_id,
                             lote_id,
@@ -273,6 +282,7 @@ impl Descarga {
                             &qk_real,
                             &self.modelos,
                         );
+                        n += 1;
                     }
                     // SOLO SE APUNTA LO SERVIDO.
                     let _ = spend::apuntar(&self.almacen, o.id(), unidades, gastado);

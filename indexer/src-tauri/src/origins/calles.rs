@@ -59,8 +59,9 @@ struct Respuesta {
 /// Las vías transitables de una tesela, como polilíneas.
 ///
 /// Overpass devuelve la geometría ENTERA de una vía aunque solo cruce la
-/// tesela. No se recorta aquí: el muestreo colapsa duplicados y el planificador
-/// sabe a qué tesela pertenece cada foto por su quadkey real.
+/// tesela. No se recorta aquí —el muestreo colapsa duplicados primero—, pero
+/// sí en `puntos_de_tesela`, justo después de muestrear: cada punto fuera de
+/// esta tesela se descarta ahí antes de que llegue a ningún origen.
 pub async fn calles_de_tesela(ctx: &Ctx, tesela: &str) -> Result<Vec<Vec<Punto>>> {
     let b = bbox_de_tesela(tesela);
     let consulta = format!(
@@ -85,7 +86,15 @@ pub async fn calles_de_tesela(ctx: &Ctx, tesela: &str) -> Result<Vec<Vec<Punto>>
 
 pub async fn puntos_de_tesela(ctx: &Ctx, tesela: &str) -> Result<Vec<Punto>> {
     let lineas = calles_de_tesela(ctx, tesela).await?;
-    Ok(lumi_index::streets::muestrear(&lineas, PASO_M))
+    let puntos = lumi_index::streets::muestrear(&lineas, PASO_M);
+    // Overpass devuelve la vía entera aunque solo cruce la tesela (comentario
+    // de `calles_de_tesela`) — sin recortar aquí, muestrear una calle que se
+    // extiende kilómetros hacia la tesela vecina generaba cientos de puntos
+    // fuera de lo que el usuario pidió indexar, y Google/KartaView acababan
+    // devolviendo fotos de esa tesela vecina nunca seleccionada. Se descarta
+    // todo punto cuya tesela real (mismo cálculo que usa `download.rs` para
+    // reatribuir capturas) no sea exactamente esta.
+    Ok(puntos.into_iter().filter(|p| lumi_index::tiles::quadkey(p.lat, p.lng) == tesela).collect())
 }
 
 /// Una muestra repartida por toda la tesela, no los primeros N: esos estarían
