@@ -33,6 +33,7 @@ use crate::qdrant::{coleccion_de, Cliente};
 use crate::runtime::python_del_venv;
 use crate::services::Log;
 use crate::store::Almacen;
+use crate::ubicacion;
 
 /// Imágenes por lote enviado al trabajador. 32 es lo que cabía holgadamente en
 /// una GPU de 8 GB con lumi-2 en las pruebas de la v1.
@@ -80,7 +81,6 @@ pub struct Progreso {
 }
 
 pub struct Cola {
-    dir: PathBuf,
     almacen: Arc<Almacen>,
     log: Arc<Log>,
     /// Una entrada por modelo con un bucle arrancado. `arrancar_bucle` la crea
@@ -237,7 +237,7 @@ const CONCURRENCIA_MAX: usize = 2;
 const CLAVE_PRIORIDAD_BAJA: &str = "prioridad_baja_embebido";
 
 impl Cola {
-    pub fn nueva(dir: PathBuf, almacen: Arc<Almacen>, log: Arc<Log>) -> Arc<Self> {
+    pub fn nueva(almacen: Arc<Almacen>, log: Arc<Log>) -> Arc<Self> {
         let concurrencia = almacen
             .leer_ajuste(CLAVE_CONCURRENCIA)
             .ok()
@@ -252,7 +252,6 @@ impl Cola {
             .map(|v| v == "true")
             .unwrap_or(false);
         Arc::new(Self {
-            dir,
             almacen,
             log,
             progreso: Mutex::new(HashMap::new()),
@@ -317,7 +316,15 @@ impl Cola {
             // otra tarea aún lo está usando, el Arc sigue vivo hasta que esa
             // tarea termine su lote y lo suelte -- no se corta a mitad.
         }
-        let t = arrancar(&self.dir, self.log.clone(), "cuda:0", dims, self.prioridad_baja()).await?;
+        // Se lee del puntero de disco en cada arranque de trabajador, no de un
+        // campo capturado por valor al construir la cola: la cola vive toda
+        // la sesión y su bucle sigue corriendo durante una migración de
+        // carpeta (#91), así que un `dir` fijo la dejaba escribiendo contra
+        // la carpeta vieja para siempre mientras el resto de la app (el
+        // `Almacen` compartido, que sí se re-abre en caliente) ya servía
+        // desde la nueva — de ahí el "0 de N" sistemático al sellar.
+        let dir = ubicacion::leer_ubicacion();
+        let t = arrancar(&dir, self.log.clone(), "cuda:0", dims, self.prioridad_baja()).await?;
         let r = Arc::new(tokio::sync::Mutex::new(t));
         pool.ranuras.insert(modelo.to_string(), r.clone());
         pool.tocar(modelo);

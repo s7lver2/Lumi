@@ -1051,7 +1051,14 @@ async fn paquete_sellar_arrancar(
 ) -> Result<(), String> {
     exige_abierto(&estado, indice_id)?;
     let almacen = estado.almacen.clone();
-    let modelos = estado.modelos.clone();
+    // Solo los modelos elegidos para ESTE índice, no todos los registrados
+    // (mismo patrón que `ingesta_legacy_arrancar`): con más de un modelo
+    // activo en la app pero uno solo elegido al crear el índice, contar
+    // contra `estado.modelos` entero reportaba "0/N" también para el modelo
+    // que el índice nunca pidió embeber.
+    let ids = modelos_para(&estado, indice_id);
+    let modelos: Vec<models::Modelo> =
+        estado.modelos.iter().filter(|m| ids.contains(&m.id)).cloned().collect();
     let s = Arc::new(package::Sellado::nuevo(0));
     *estado.sellado.lock().unwrap() = Some(s.clone());
     tauri::async_runtime::spawn(async move {
@@ -1666,7 +1673,7 @@ pub fn run() {
     let niveles = niveles::cargar_registro(
         &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../registros/niveles"),
     );
-    let cola = queue::Cola::nueva(dir.clone(), almacen.clone(), servicios.log.clone());
+    let cola = queue::Cola::nueva(almacen.clone(), servicios.log.clone());
     // Un bucle por modelo registrado, no solo el primero: con lumi-2 y
     // lumi-preview activos a la vez, quedarse en `modelos.first()` significaba
     // que el segundo modelo nunca tenía quien le bajara los vectores — sus
