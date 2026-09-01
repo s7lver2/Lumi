@@ -79,8 +79,12 @@ export function ApiKeysView({ token, onIr }: { token: string; onIr: (s: SeccionI
           <>
             <input type="password" value={mapaValor} onChange={(e) => setMapaValor(e.target.value)}
               placeholder={mapa.has_key ? "clave guardada · escribe para sustituirla" : "clave de Mapbox"}
-              className="ml-auto min-w-[180px] rounded-lg border border-border bg-elevated px-2.5 py-1 font-mono text-[10.5px] text-fg outline-none focus:border-white/40" />
-            <button onClick={() => void guardarMapa()} className="rounded-lg border border-white/15 px-2.5 py-1 text-[10.5px] text-fg">Guardar</button>
+              className="ml-auto min-w-[180px] flex-1 rounded-lg border border-border bg-elevated px-2.5 py-1 font-mono text-[10.5px] text-fg outline-none focus:border-white/40" />
+            <button onClick={() => void guardarMapa()}
+              className={`shrink-0 overflow-hidden whitespace-nowrap rounded-lg border border-white/15 py-1 text-[10.5px] text-fg transition-[max-width,opacity,padding] duration-[420ms] ease-expo ${
+                mapaValor.trim() ? "max-w-[100px] px-2.5 opacity-100" : "pointer-events-none max-w-0 px-0 opacity-0"}`}>
+              Guardar
+            </button>
           </>
         ) : (
           <span className="ml-auto flex items-center gap-2 text-[10.5px] text-subtle">
@@ -96,8 +100,12 @@ export function ApiKeysView({ token, onIr }: { token: string; onIr: (s: SeccionI
         </span>
         <input type="password" value={pesosValor} onChange={(e) => setPesosValor(e.target.value)}
           placeholder={pesos?.has_token ? "token guardado · escribe para sustituirlo" : "token del proveedor"}
-          className="ml-auto min-w-[180px] rounded-lg border border-border bg-elevated px-2.5 py-1 font-mono text-[10.5px] text-fg outline-none focus:border-white/40" />
-        <button onClick={() => void guardarPesos()} className="rounded-lg border border-white/15 px-2.5 py-1 text-[10.5px] text-fg">Guardar</button>
+          className="ml-auto min-w-[180px] flex-1 rounded-lg border border-border bg-elevated px-2.5 py-1 font-mono text-[10.5px] text-fg outline-none focus:border-white/40" />
+        <button onClick={() => void guardarPesos()}
+          className={`shrink-0 overflow-hidden whitespace-nowrap rounded-lg border border-white/15 py-1 text-[10.5px] text-fg transition-[max-width,opacity,padding] duration-[420ms] ease-expo ${
+            pesosValor.trim() ? "max-w-[100px] px-2.5 opacity-100" : "pointer-events-none max-w-0 px-0 opacity-0"}`}>
+          Guardar
+        </button>
       </div>
 
       <h3 className="mb-1.5 mt-6 text-[12.5px] font-medium">Listas globales de IP</h3>
