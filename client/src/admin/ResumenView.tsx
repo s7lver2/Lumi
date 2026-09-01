@@ -115,9 +115,9 @@ export function ResumenView({ token, onIr }: { token: string; onIr: (s: Seccion)
     <div className="px-6 pb-8 pt-5">
       <span className="mb-1.5 block text-[8.5px] uppercase tracking-[.15em] text-subtle">Servidor</span>
 
-      <PrimerosPasos chequeos={chequeos} onIr={onIr} />
-
       <ResumenHeader token={token} arrancadoEn={r.arrancado_en} perfil={perfil} />
+
+      <PrimerosPasos chequeos={chequeos} onIr={onIr} />
 
       <div className="mt-[19px] grid grid-cols-4 gap-3">
         <Ficha i={0} k="Pendiente de ti" valor={<Cifra n={r.solicitudes_pendientes} />}
