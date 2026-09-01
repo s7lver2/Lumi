@@ -55,6 +55,22 @@ function verticesGeoJSON(anillo: Punto[]) {
   };
 }
 
+/** Un resultado del buscador de lugares, con lo necesario para el panel de
+ *  información (tipo, jerarquía geográfica) además de para volar hasta él. */
+interface LugarBuscado {
+  nombre: string;
+  lng: number;
+  lat: number;
+  tipo: string[];
+  contexto: { id: string; text: string }[];
+}
+
+const NOMBRE_TIPO: Record<string, string> = {
+  country: "país", region: "región/provincia", postcode: "código postal",
+  district: "distrito", place: "ciudad/pueblo", locality: "localidad",
+  neighborhood: "barrio", address: "dirección", poi: "punto de interés",
+};
+
 /** Divide el `place_name` de Mapbox en el nombre principal y el contexto que
  *  desambigua (país/región) — hoy se pintan en dos líneas separadas en vez de
  *  truncar el contexto en una sola. */
@@ -118,6 +134,8 @@ export function MapCanvas({
   clasificacion,
   onPoligonoListo,
   onVerticeEditado,
+  combineMode,
+  onCombineModeChange,
   activos,
   sondeos,
   tokenMapillary,
@@ -126,6 +144,8 @@ export function MapCanvas({
   clasificacion: Clasificacion | null;
   onPoligonoListo: (p: Punto[]) => void;
   onVerticeEditado?: (anillo: Punto[]) => void;
+  combineMode: "sustituir" | "sumar" | "restar";
+  onCombineModeChange: (m: "sustituir" | "sumar" | "restar") => void;
   activos?: Set<string>;
   sondeos?: SondeoTesela[];
   tokenMapillary?: string | null;
@@ -159,11 +179,15 @@ export function MapCanvas({
   // el mismo producto de Mapbox, no una cuenta aparte.
   const claveMapaRef = useRef<string | null>(null);
   const [busqueda, setBusqueda] = useState("");
-  const [sugerencias, setSugerencias] = useState<{ nombre: string; lng: number; lat: number }[]>([]);
+  const [sugerencias, setSugerencias] = useState<LugarBuscado[]>([]);
+  const [lugarSeleccionado, setLugarSeleccionado] = useState<LugarBuscado | null>(null);
   const [buscando, setBuscando] = useState(false);
   const sondeoBusqueda = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [recientes, setRecientes] = useState<LugarReciente[]>([]);
   const [foco, setFoco] = useState(false);
+  // El popup de solo lectura que sigue al ratón sobre una tesela reclamada —
+  // aparte del popup de clic (con botón "Reportar"), que se queda fijo.
+  const popupHover = useRef<mapboxgl.Popup | null>(null);
 
   useEffect(() => { void api.territorioRecientesLeer().then(setRecientes); }, []);
 
@@ -255,11 +279,26 @@ export function MapCanvas({
         // hacer clic.
         m.on("mouseenter", "teselas-relleno", (e) => {
           const props = propsDe(e.features?.[0]);
-          if (herramientaRef.current === "mano" && props.estado === "reclamada") {
-            m.getCanvas().style.cursor = "pointer";
-          }
+          if (herramientaRef.current !== "mano" || props.estado !== "reclamada") return;
+          m.getCanvas().style.cursor = "pointer";
+          const autor = String(props.autor ?? "");
+          const paquete = String(props.paquete ?? "");
+          popupHover.current = new mapboxgl.Popup({
+            closeButton: false, closeOnClick: false, className: "lumi-popup-hover",
+          })
+            .setLngLat(e.lngLat)
+            .setHTML(`<div class="font-mono text-[10px] leading-relaxed"><b>${autor}</b><br/>${paquete}</div>`)
+            .addTo(m);
         });
-        m.on("mouseleave", "teselas-relleno", () => { m.getCanvas().style.cursor = ""; });
+        m.on("mousemove", "teselas-relleno", (e) => {
+          if (herramientaRef.current !== "mano") return;
+          popupHover.current?.setLngLat(e.lngLat);
+        });
+        m.on("mouseleave", "teselas-relleno", () => {
+          m.getCanvas().style.cursor = "";
+          popupHover.current?.remove();
+          popupHover.current = null;
+        });
 
         // Al pulsar una tesela reclamada: quién la cubre y sus fuentes. NINGÚN
         // botón de instalar — lo reclamado viaja como dependencia de tu ficha,
@@ -298,6 +337,7 @@ export function MapCanvas({
             const aqui = m.project(e.lngLat);
             if (Math.hypot(inicio.x - aqui.x, inicio.y - aqui.y) < 12) {
               onPoligonoListoRef.current(puntos.current);
+              setHerramienta("mano");
               return;
             }
           }
@@ -307,7 +347,10 @@ export function MapCanvas({
         m.on("dblclick", (e) => {
           if (herramientaRef.current !== "poligono") return;
           e.preventDefault();
-          if (puntos.current.length >= 3) onPoligonoListoRef.current(puntos.current);
+          if (puntos.current.length >= 3) {
+            onPoligonoListoRef.current(puntos.current);
+            setHerramienta("mano");
+          }
         });
 
         // Backspace quita solo la última esquina en vez de obligar a borrar
@@ -409,6 +452,7 @@ export function MapCanvas({
             return;
           }
           onPoligonoListoRef.current(pts);
+          setHerramienta("mano");
         });
       });
       mapa.current = m;
@@ -542,9 +586,17 @@ export function MapCanvas({
         const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json` +
           `?access_token=${claveMapaRef.current}&limit=5&language=es`;
         const r = await fetch(url);
-        const j: { features?: { place_name: string; center: [number, number] }[] } = await r.json();
+        const j: {
+          features?: {
+            place_name: string; center: [number, number];
+            place_type?: string[]; context?: { id: string; text: string }[];
+          }[];
+        } = await r.json();
         setSugerencias(
-          (j.features ?? []).map((f) => ({ nombre: f.place_name, lng: f.center[0], lat: f.center[1] })),
+          (j.features ?? []).map((f) => ({
+            nombre: f.place_name, lng: f.center[0], lat: f.center[1],
+            tipo: f.place_type ?? [], contexto: f.context ?? [],
+          })),
         );
       } catch {
         setSugerencias([]);
@@ -554,9 +606,10 @@ export function MapCanvas({
     }, 350);
   }
 
-  function irA(s: { nombre: string; lng: number; lat: number }) {
+  function irA(s: LugarBuscado) {
     setBusqueda(s.nombre);
     setSugerencias([]);
+    setLugarSeleccionado(s);
     const m = mapa.current;
     if (!m) return;
 
@@ -625,7 +678,12 @@ export function MapCanvas({
           {(() => {
             const mostrarRecientes =
               foco && busqueda.trim().length === 0 && sugerencias.length === 0 && recientes.length > 0;
-            const items = mostrarRecientes ? recientes : sugerencias;
+            // Un reciente no trae tipo/contexto (la API solo guarda
+            // nombre/lat/lng) — se completa vacío para que `irA` reciba
+            // siempre un `LugarBuscado` completo, sin mezclar los dos tipos.
+            const items: LugarBuscado[] = mostrarRecientes
+              ? recientes.map((r) => ({ ...r, tipo: [], contexto: [] }))
+              : sugerencias;
             if (items.length === 0) return null;
             return (
               <div className="lumi-anim mt-1.5 overflow-hidden rounded-lg border border-white/[.13]
@@ -653,6 +711,32 @@ export function MapCanvas({
               </div>
             );
           })()}
+        </div>
+      )}
+
+      {lugarSeleccionado && (
+        <div className="lumi-anim absolute left-3 top-[76px] z-20 w-[300px] rounded-lg border border-white/[.13]
+          bg-[rgba(16,19,25,.82)] p-3 shadow-lg shadow-black/40 backdrop-blur-xl"
+          style={{ animation: "jg-fade-rise 200ms cubic-bezier(.2,.85,.35,1) both" }}>
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[12px] leading-snug text-fg">{partirNombre(lugarSeleccionado.nombre).principal}</p>
+            <button onClick={() => setLugarSeleccionado(null)} className="jg-press shrink-0 text-subtle hover:text-fg">
+              <Icon name="x" size={12} />
+            </button>
+          </div>
+          {lugarSeleccionado.tipo.length > 0 && (
+            <p className="mt-1 text-[10px] uppercase tracking-wide text-subtle">
+              {lugarSeleccionado.tipo.map((t) => NOMBRE_TIPO[t] ?? t).join(", ")}
+            </p>
+          )}
+          {lugarSeleccionado.contexto.length > 0 && (
+            <p className="mt-1.5 text-[10.5px] leading-relaxed text-muted">
+              {lugarSeleccionado.contexto.map((c) => c.text).join(" · ")}
+            </p>
+          )}
+          <p className="mt-1.5 font-mono text-[9.5px] text-subtle">
+            {lugarSeleccionado.lat.toFixed(5)}, {lugarSeleccionado.lng.toFixed(5)}
+          </p>
         </div>
       )}
 
@@ -684,6 +768,22 @@ export function MapCanvas({
           >
             <Icon name="trash" size={14} />
           </button>
+          <span className="mx-0.5 w-px bg-white/10" />
+          {([
+            { m: "sustituir" as const, etiqueta: "Sustituir" },
+            { m: "sumar" as const, etiqueta: "Sumar" },
+            { m: "restar" as const, etiqueta: "Restar" },
+          ]).map(({ m, etiqueta }) => (
+            <button
+              key={m}
+              title={`Al dibujar una forma nueva sobre un área ya clasificada: ${etiqueta.toLowerCase()}`}
+              onClick={() => onCombineModeChange(m)}
+              className={`rounded-[7px] px-2 text-[10px] ${
+                combineMode === m ? "bg-white/[.09] text-fg" : "text-subtle hover:text-fg"}`}
+            >
+              {etiqueta}
+            </button>
+          ))}
         </div>
       )}
     </div>

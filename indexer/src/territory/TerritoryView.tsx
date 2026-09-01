@@ -7,7 +7,6 @@ import { api, type Clasificacion, type Estimacion, type FichaOrigen, type Punto,
 import { Overlay } from "../ui/Overlay";
 import { AvailabilityPanel } from "./AvailabilityPanel";
 import { BlockedDialog } from "./BlockedDialog";
-import { CombineBar } from "./CombineBar";
 import { CoveragePanel } from "./CoveragePanel";
 import { EstimateDialog } from "./EstimateDialog";
 import { MapCanvas } from "./MapCanvas";
@@ -51,7 +50,7 @@ export function TerritoryView({
   onDescargando?: (imagenesEstimadas: number) => void;
 }) {
   const [dibujo, setDibujo] = useState<Punto[][]>([]);
-  const [formaPendiente, setFormaPendiente] = useState<Punto[] | null>(null);
+  const [combineMode, setCombineMode] = useState<"sustituir" | "sumar" | "restar">("sustituir");
   const [historial, setHistorial] = useState<Instantanea[]>([]);
   const [historialFuturo, setHistorialFuturo] = useState<Instantanea[]>([]);
   const [clasificacion, setClasificacion] = useState<Clasificacion | null>(null);
@@ -88,17 +87,14 @@ export function TerritoryView({
   // una tesela heredada puede seguir sin cubrir en alguno de ellos. Si ya hay
   // un área, un trazo nuevo no la sustituye sin más: se pregunta qué hacer.
   async function alTerminarDibujo(p: Punto[]) {
-    if (clasificacion) {
-      setFormaPendiente(p);
+    if (!clasificacion) {
+      await fijarAnillos([p]);
       return;
     }
-    await fijarAnillos([p]);
+    await resolverCombinacion(combineMode, p);
   }
 
-  async function resolverCombinacion(modo: "sustituir" | "sumar" | "restar") {
-    if (!formaPendiente) return;
-    const nueva = formaPendiente;
-    setFormaPendiente(null);
+  async function resolverCombinacion(modo: "sustituir" | "sumar" | "restar", nueva: Punto[]) {
     if (modo === "sustituir") {
       await fijarAnillos([nueva]);
       return;
@@ -196,7 +192,6 @@ export function TerritoryView({
     setSondeoProgreso(null);
     setEstimacion(null);
     setNuevasPorOrigen({});
-    setFormaPendiente(null);
     setHistorial([]);
     setHistorialFuturo([]);
   }
@@ -268,6 +263,8 @@ export function TerritoryView({
           clasificacion={clasificacion}
           onPoligonoListo={(p) => void alTerminarDibujo(p)}
           onVerticeEditado={(a) => void alEditarVertice(a)}
+          combineMode={combineMode}
+          onCombineModeChange={setCombineMode}
           activos={activos}
           sondeos={sondeos}
           tokenMapillary={tokenMapillary}
@@ -306,13 +303,6 @@ export function TerritoryView({
       )}
 
       {clasificacion && !mostrarPlan && <MapLegend />}
-
-      {formaPendiente && (
-        <CombineBar
-          onElegir={(m) => void resolverCombinacion(m)}
-          onCancelar={() => setFormaPendiente(null)}
-        />
-      )}
 
       {clasificacion && mostrarPlan && clasificacion.nuevas === 0 && (
         <Overlay>

@@ -29,6 +29,10 @@ export function App() {
   const [dentro, setDentro] = useState(false);
   const [destino, setDestino] = useState<Destino>("proyectos");
   const [indiceAbierto, setIndiceAbierto] = useState<number | null>(null);
+  // El nombre real del índice abierto en Territorio, para que el diálogo de
+  // plan no invente uno — se pone al elegir en `IndexPicker` y se limpia
+  // junto con `indiceAbierto` en todos los puntos donde ese se limpia.
+  const [nombreIndiceAbierto, setNombreIndiceAbierto] = useState<string>("");
   // Aparte de `indiceAbierto`: navegar a "Índices" mientras una descarga
   // corre limpia `indiceAbierto`, pero la descarga sigue viva en el backend y
   // "para qué índice era" no puede depender de una pestaña que ya se dejó.
@@ -177,14 +181,14 @@ export function App() {
               activo={destino}
               descargaActiva={descargaIndiceId !== null || pendiente !== null}
               embebiendoActivo={embebiendoActivo}
-              onIr={(d) => { setDestino(d); if (d !== "descarga" && d !== "revision") setIndiceAbierto(null); }}
+              onIr={(d) => { setDestino(d); if (d !== "descarga" && d !== "revision") { setIndiceAbierto(null); setNombreIndiceAbierto(""); } }}
             />
             <div className="absolute inset-y-0 left-11 right-0 flex flex-col">
               <div className="relative min-h-0 flex-1">
                 {destino === "proyectos" && (
                   indiceAbierto === null
                     ? <ProjectsView onAbrir={setIndiceAbierto} />
-                    : <IndexDetail key={indiceAbierto} id={indiceAbierto} onVolver={() => setIndiceAbierto(null)}
+                    : <IndexDetail key={indiceAbierto} id={indiceAbierto} onVolver={() => { setIndiceAbierto(null); setNombreIndiceAbierto(""); }}
                         onIrAEmbebido={() => setDestino("descarga")} />
                 )}
                 {/* Territorio trabaja SIEMPRE sobre un índice: sin esto, el
@@ -194,14 +198,16 @@ export function App() {
                     existe. `IndexPicker`, no `IndexList`: es un paso
                     intermedio para elegir y seguir, no el catálogo. */}
                 {destino === "territorio" && indiceAbierto === null && (
-                  <IndexPicker titulo="Dibujar territorio" onAbrir={setIndiceAbierto} />
+                  <IndexPicker titulo="Dibujar territorio"
+                    onAbrir={(id, nombre) => { setIndiceAbierto(id); setNombreIndiceAbierto(nombre); }} />
                 )}
                 {destino === "revision" && indiceAbierto === null && (
-                  <IndexPicker titulo="Revisar imágenes" onAbrir={setIndiceAbierto} />
+                  <IndexPicker titulo="Revisar imágenes"
+                    onAbrir={(id) => setIndiceAbierto(id)} />
                 )}
                 {destino === "territorio" && indiceAbierto !== null && (
                   <TerritoryView
-                    nombre="nuevo-indice"
+                    nombre={nombreIndiceAbierto}
                     indiceId={indiceAbierto}
                     onDescargando={(estimadas) => {
                       setDescargaIndiceId(indiceAbierto);
@@ -252,7 +258,7 @@ export function App() {
                         descargando={descargaIndiceId !== null}
                         imagenesEstimadas={imagenesEstimadas}
                         onTerminadoDescarga={() => void alTerminarDescarga()}
-                        onCambiarIndice={() => { setIndiceAbierto(null); setDestino("proyectos"); }}
+                        onCambiarIndice={() => { setIndiceAbierto(null); setNombreIndiceAbierto(""); setDestino("proyectos"); }}
                       />
                 )}
                 {destino === "revision" && indiceAbierto !== null && (

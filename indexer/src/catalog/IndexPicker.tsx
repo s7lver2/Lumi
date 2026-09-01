@@ -13,7 +13,7 @@ import { api, type ResumenIndice } from "../lib/api";
  *  antemano (spec de pestaña de Proyectos), y este selector no tiene ningún
  *  proyecto delante — solo elige entre los que ya existen. Sin ninguno
  *  todavía, manda a Proyectos en vez de ofrecer un atajo sin proyecto. */
-export function IndexPicker({ titulo, onAbrir }: { titulo: string; onAbrir: (id: number) => void }) {
+export function IndexPicker({ titulo, onAbrir }: { titulo: string; onAbrir: (id: number, nombre: string) => void }) {
   const [indices, setIndices] = useState<ResumenIndice[] | null>(null);
 
   useEffect(() => { void api.indicesLista().then(setIndices); }, []);
@@ -38,7 +38,7 @@ export function IndexPicker({ titulo, onAbrir }: { titulo: string; onAbrir: (id:
         ) : (
           <div className="mt-4 flex max-h-[280px] flex-col gap-1.5 overflow-y-auto">
             {indices.map((r) => (
-              <button key={r.id} onClick={() => onAbrir(r.id)}
+              <button key={r.id} onClick={() => onAbrir(r.id, r.nombre)}
                 className="jg-press flex items-center justify-between gap-3 rounded-lg border border-border
                   px-3 py-2 text-left transition-colors duration-200 hover:border-white/[.16]">
                 <span className="truncate text-[12px] text-fg">{r.nombre}</span>
