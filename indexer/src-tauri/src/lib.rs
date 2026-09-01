@@ -1234,8 +1234,11 @@ async fn identidad_sondear(estado: tauri::State<'_, Estado>) -> Result<Respuesta
     let claves = keys::Claves { almacen: &estado.almacen, maestra: &estado.maestra };
     // Entrar por primera vez es también el momento de tener clave de firma:
     // sin ella la sesión no sirve para publicar, que es lo único para lo que
-    // la sesión existe.
-    if identidad::leer_clave(&claves).is_err() {
+    // la sesión existe. Solo se crea si de verdad no hay ninguna fila
+    // guardada — comprobar con `leer_clave` (que también falla si la de ya
+    // hay no se pudo descifrar) regeneraba palabras de repuesto nuevas cada
+    // vez, perdiendo las de antes en silencio.
+    if !identidad::hay_clave_local(&claves).map_err(|e| e.to_string())? {
         identidad::crear_clave(&claves).map_err(|e| e.to_string())?;
     }
     sesion.huella = identidad::huella_actual(&claves).unwrap_or_default();

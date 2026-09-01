@@ -129,6 +129,21 @@ pub fn huella_actual(claves: &Claves<'_>) -> Option<String> {
     Some(huella(&ed25519_dalek::SigningKey::from_bytes(&secreta).verifying_key().to_bytes()))
 }
 
+/// Solo mira si hay una fila guardada, sin intentar descifrarla — a
+/// diferencia de `leer_clave`, no confunde "no hay clave" con "hay clave
+/// pero no se pudo abrir". Quien decide si toca `crear_clave` (una clave
+/// nueva de verdad, con palabras nuevas) necesita esa distinción: un fallo
+/// de descifrado transitorio no es motivo para regenerar y perder la de
+/// antes en el acto (bug bounty #8 — entrar por GitHub con la clave ya
+/// creada la regeneraba si `leer_clave` fallaba por cualquier razón, no solo
+/// por ausencia).
+pub fn hay_clave_local(claves: &Claves<'_>) -> Result<bool> {
+    Ok(claves
+        .almacen
+        .leer_ajuste_sellado(&crate::keys::ajuste_de(AJUSTE_SECRETA))?
+        .is_some())
+}
+
 pub fn leer_clave(claves: &Claves<'_>) -> Result<[u8; 32]> {
     let b64 = claves
         .leer(AJUSTE_SECRETA)?
