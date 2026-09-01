@@ -44,7 +44,7 @@ pub fn esta_instalado(dir: &Path) -> bool {
 
 async fn correr(log: &Arc<Log>, etiqueta: &'static str, exe: &Path, args: &[&str]) -> Result<()> {
     log.apuntar(format!("{etiqueta}: {} {}", exe.display(), args.join(" ")));
-    let mut hijo = crate::proceso::cmd_async(exe)
+    let mut hijo = crate::proceso::cmd_async(exe, false)
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

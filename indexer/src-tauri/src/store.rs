@@ -387,8 +387,9 @@ impl Almacen {
         Ok(crudo.unwrap_or_default().split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect())
     }
 
-    /// Se fija una sola vez, al crear el índice: no tiene sentido cambiar de
-    /// niveles a mitad con imágenes ya embebidas bajo la elección anterior.
+    /// Se llama al crear el índice, y también al portearlo a otro nivel
+    /// (`indice_portear_nivel`) — subir de nivel solo añade modelos, nunca
+    /// invalida vectores ya embebidos bajo la elección anterior.
     pub fn fijar_niveles_elegidos(&self, indice_id: i64, niveles: &[String]) -> Result<()> {
         let c = self.0.lock().unwrap();
         c.execute(

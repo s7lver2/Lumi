@@ -9,6 +9,7 @@ import { SealDialog } from "../seal/SealDialog";
 import { Icon } from "../ui/Icon";
 import { Overlay } from "../ui/Overlay";
 import { IndexMapDialog } from "./IndexMapDialog";
+import { PortearNivelDialog } from "./PortearNivelDialog";
 import { ProvenanceTable } from "./ProvenanceTable";
 import { TeselasPanel } from "./TeselasPanel";
 
@@ -40,6 +41,7 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
   const [sesion, setSesion] = useState<Sesion | null>(null);
   const [modelos, setModelos] = useState<Modelo[]>([]);
   const [reembebiendo, setReembebiendo] = useState<string | null>(null);
+  const [porteando, setPorteando] = useState(false);
 
   useEffect(() => { void api.identidadLeer().then(setSesion); }, []);
   useEffect(() => { void api.modelosLista().then(setModelos); }, []);
@@ -97,6 +99,12 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
     } finally {
       setReembebiendo(null);
     }
+  }
+
+  function alPortear() {
+    setPorteando(false);
+    refrescar();
+    onIrAEmbebido?.();
   }
 
   if (!detalle) return null;
@@ -213,7 +221,19 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
               </span>
             )
           )}
+          {!soloLectura && (
+            <button onClick={() => setPorteando(true)}
+              className="jg-press ml-1 text-[10.5px] text-subtle hover:text-fg">
+              Portear a otro nivel
+            </button>
+          )}
         </div>
+
+        {porteando && (
+          <Overlay>
+            <PortearNivelDialog indiceId={id} onCancelar={() => setPorteando(false)} onPorteado={alPortear} />
+          </Overlay>
+        )}
 
         {!sellado && !soloLectura && (
           <div className="flex items-center gap-2">

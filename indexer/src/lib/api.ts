@@ -290,6 +290,10 @@ export const api = {
   ingestaLegacyProgreso: () => invoke<ProgresoIngesta>("ingesta_legacy_progreso"),
   indiceCrear: (nombre: string, niveles: string[], proyecto: string) =>
     invoke<number>("indice_crear", { nombre, niveles, proyecto }),
+  /** Cambia el nivel objetivo de un índice ya creado — sellado o no. Devuelve
+   *  los modelos nuevos que se encolaron para embeber. */
+  indicePortearNivel: (indiceId: number, niveles: string[]) =>
+    invoke<string[]>("indice_portear_nivel", { indiceId, niveles }),
   nivelesLista: () => invoke<Nivel[]>("niveles_lista"),
   indicesLista: () => invoke<ResumenIndice[]>("indices_lista"),
   indicesListaDeProyecto: (proyecto: string) =>
@@ -336,6 +340,8 @@ export const api = {
   colaPausar: (pausada: boolean) => invoke<void>("cola_pausar", { pausada }),
   colaConcurrenciaLeer: () => invoke<number>("cola_concurrencia_leer"),
   colaConcurrenciaFijar: (n: number) => invoke<void>("cola_concurrencia_fijar", { n }),
+  colaConsumoLeer: () => invoke<boolean>("cola_consumo_leer"),
+  colaConsumoFijar: (bajo: boolean) => invoke<void>("cola_consumo_fijar", { bajo }),
   indiceProgresoEmbebido: (id: number) => invoke<ProgresoIndiceEmbed[]>("indice_progreso_embebido", { id }),
 
   claveGuardar: (proveedor: string, clave: string) =>

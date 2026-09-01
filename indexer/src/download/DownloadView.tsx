@@ -21,6 +21,7 @@ export function DownloadView({ indiceId, imagenesEstimadas, onTerminado }: {
 }) {
   const [p, setP] = useState<ProgresoDescarga | null>(null);
   const [eta, setEta] = useState<string | null>(null);
+  const [totalImagenes, setTotalImagenes] = useState<number | null>(null);
   const [deteniendo, setDeteniendo] = useState(false);
   const desde = useRef<number | null>(null);
 
@@ -37,16 +38,23 @@ export function DownloadView({ indiceId, imagenesEstimadas, onTerminado }: {
           const transcurrido = (Date.now() - desde.current) / 1000;
           // Por teselas el ritmo se queda mudo mientras una sola tarda
           // minutos (el caso real de Tokio): `teselas_hechas` no sube y el
-          // ETA nunca aparece. Con la estimación del sondeo como techo, se
-          // mide en IMÁGENES — que sí suben aunque la tesela en curso no
-          // haya terminado — y el ETA avanza de verdad.
-          if (imagenesEstimadas && imagenesEstimadas > 0) {
+          // ETA nunca aparece. Se mide SIEMPRE en IMÁGENES — que sí suben
+          // aunque la tesela en curso no haya terminado — contra el mejor
+          // total conocido: la estimación inicial si llegó, o si no, una que
+          // se recalcula sobre la marcha con la media de imágenes por tesela
+          // ya vista, proyectada sobre las que quedan.
+          const total = imagenesEstimadas && imagenesEstimadas > 0
+            ? imagenesEstimadas
+            : x.teselas_hechas > 0
+              ? Math.round((x.imagenes / x.teselas_hechas) * x.teselas_total)
+              : null;
+          setTotalImagenes(total);
+          if (total) {
             const ritmo = x.imagenes / Math.max(1, transcurrido);
-            const restantes = Math.max(0, imagenesEstimadas - x.imagenes);
+            const restantes = Math.max(0, total - x.imagenes);
             setEta(ritmo > 0 ? formatoEta(restantes / ritmo) : null);
           } else {
-            const ritmo = x.teselas_hechas / Math.max(1, transcurrido);
-            setEta(ritmo > 0 ? formatoEta((x.teselas_total - x.teselas_hechas) / ritmo) : null);
+            setEta(null);
           }
         } else if (arranco) { clearInterval(t); onTerminado(); }
       });
@@ -62,11 +70,12 @@ export function DownloadView({ indiceId, imagenesEstimadas, onTerminado }: {
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-[20px_22px]">
         <div className="flex items-center">
           <span className="flex-1 text-[13px] text-fg">Bajando imágenes de red</span>
-          {eta && (imagenesEstimadas ? p.imagenes < imagenesEstimadas : p.teselas_hechas < p.teselas_total) && (
+          {eta && (totalImagenes ? p.imagenes < totalImagenes : p.teselas_hechas < p.teselas_total) && (
             <span className="mr-2.5 font-mono text-[10.5px] text-subtle">{eta} restantes</span>
           )}
           <span className="font-mono text-[11px] text-muted">
             {p.teselas_hechas} de {p.teselas_total} teselas
+            {totalImagenes != null && <> · {p.imagenes} de {totalImagenes} imágenes</>}
           </span>
         </div>
         <div className="mt-2.5 h-1.5 overflow-hidden rounded-[3px] bg-elevated">

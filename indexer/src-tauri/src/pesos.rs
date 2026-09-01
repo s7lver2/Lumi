@@ -84,7 +84,7 @@ async fn correr(dir: &std::path::Path, en_curso: &EnCurso, modelo: &Modelo) -> R
     // por ejemplo) mide decenas de KB, y Windows corta la línea de comandos
     // completa en unos 32K caracteres — pasado ese tope el proceso ni
     // siquiera llega a arrancar.
-    let mut hijo = crate::proceso::cmd_async(&py)
+    let mut hijo = crate::proceso::cmd_async(&py, false)
         .arg("-u")
         .arg(&script)
         .stdin(Stdio::piped())

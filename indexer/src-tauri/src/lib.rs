@@ -344,6 +344,21 @@ fn cola_concurrencia_fijar(estado: tauri::State<'_, Estado>, n: usize) {
     estado.cola.fijar_concurrencia(n);
 }
 
+/// El modo de consumo al embeber ahora mismo: `true` es "bajo".
+#[tauri::command]
+fn cola_consumo_leer(estado: tauri::State<'_, Estado>) -> bool {
+    estado.cola.prioridad_baja()
+}
+
+/// Cambia el modo en caliente. Un solo control cubre las dos cosas: bajo
+/// consumo sin la concurrencia a 1 no cumple el objetivo (dejar la máquina
+/// libre) — separar los dos ajustes deja combinaciones sin sentido.
+#[tauri::command]
+fn cola_consumo_fijar(estado: tauri::State<'_, Estado>, bajo: bool) {
+    estado.cola.fijar_prioridad_baja(bajo);
+    estado.cola.fijar_concurrencia(if bajo { 1 } else { 2 });
+}
+
 /// Qué modelos se embeben para este índice: la unión de recuperación de los
 /// niveles que se eligieron al crearlo, acotada a lo que de verdad hay
 /// registrado — un nivel puede pedir un modelo que el operador todavía no
@@ -595,6 +610,34 @@ fn indice_crear(
 #[tauri::command]
 fn niveles_lista(estado: tauri::State<'_, Estado>) -> Vec<lumi_index::niveles::Nivel> {
     estado.niveles.clone()
+}
+
+/// Cambia el nivel objetivo de un índice ya creado — sellado o no, subir de
+/// nivel solo añade modelos que faltan, nunca invalida lo ya embebido. Diffea
+/// los modelos que exige el nivel nuevo contra los que ya exigía y encola
+/// solo lo que falta con `reembeber::encolar` (por modelo, ya existe). Baja
+/// nivel no borra vectores ya calculados, solo dejan de exigirse a partir de
+/// ahora. Devuelve los modelos nuevos encolados, para que la interfaz pueda
+/// anunciar "se añadió X" en vez de un booleano mudo.
+#[tauri::command]
+fn indice_portear_nivel(
+    estado: tauri::State<'_, Estado>,
+    indice_id: i64,
+    niveles: Vec<String>,
+) -> Result<Vec<String>, String> {
+    if niveles.is_empty() {
+        return Err("elige al menos un nivel".into());
+    }
+    let modelos_antes: std::collections::HashSet<String> =
+        modelos_para(&estado, indice_id).into_iter().collect();
+    estado.almacen.fijar_niveles_elegidos(indice_id, &niveles).map_err(|e| e.to_string())?;
+    let modelos_despues: std::collections::HashSet<String> =
+        modelos_para(&estado, indice_id).into_iter().collect();
+    let nuevos: Vec<String> = modelos_despues.difference(&modelos_antes).cloned().collect();
+    for m in &nuevos {
+        crate::reembeber::encolar(&estado.almacen, indice_id, m).map_err(|e| e.to_string())?;
+    }
+    Ok(nuevos)
 }
 
 /// Por índice, el mismo cálculo que `indice_detalle` pero solo de imágenes:
@@ -1635,12 +1678,15 @@ pub fn run() {
             cola_pausar,
             cola_concurrencia_leer,
             cola_concurrencia_fijar,
+            cola_consumo_leer,
+            cola_consumo_fijar,
             indice_progreso_embebido,
             ingesta_carpeta,
             indice_reembeber,
             ingesta_legacy_arrancar,
             ingesta_legacy_progreso,
             indice_crear,
+            indice_portear_nivel,
             niveles_lista,
             modelo_pesos_descargar,
             modelo_pesos_progreso,

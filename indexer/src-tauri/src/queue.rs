@@ -99,6 +99,14 @@ pub struct Cola {
     /// un reinicio; se lee una vez al construir la cola y se puede cambiar en
     /// caliente desde Ajustes con `fijar_concurrencia`.
     concurrencia: std::sync::atomic::AtomicUsize,
+    /// El modo de consumo "bajo" de Ajustes: baja la prioridad de proceso
+    /// (Windows) del trabajador de embebido que se lance a partir de ahora —
+    /// no retroactivo sobre uno ya en marcha, `creation_flags` solo aplica al
+    /// arrancar. Va de la mano de bajar `concurrencia` a 1 (`cola_consumo_fijar`
+    /// fija los dos juntos): prioridad baja con concurrencia 2 no cumple el
+    /// objetivo de dejar el ordenador libre. Mismo patrón que `concurrencia`:
+    /// se guarda en `ajustes` para sobrevivir a un reinicio.
+    prioridad_baja: std::sync::atomic::AtomicBool,
     /// El conjunto de trabajadores con pesos cargados AHORA MISMO, como mucho
     /// `concurrencia` a la vez. Cada entrada es su propio `Mutex`: dos modelos
     /// con ranura propia corren su lote EN PARALELO de verdad, sin esperarse
@@ -148,7 +156,13 @@ struct Trabajador {
 /// Qdrant con la dimensión REAL del modelo (8448, 12288...). Sin este env var
 /// las dos partes del contrato nunca coincidían, y cada lote fallaba al subir
 /// para siempre — no una avería puntual, una imposibilidad estructural.
-async fn arrancar(dir: &std::path::Path, log: Arc<Log>, dispositivo: &str, dims: u32) -> Result<Trabajador> {
+async fn arrancar(
+    dir: &std::path::Path,
+    log: Arc<Log>,
+    dispositivo: &str,
+    dims: u32,
+    prioridad_baja: bool,
+) -> Result<Trabajador> {
     let py = python_del_venv(dir);
     let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../workers/lumi_embed.py");
     if !script.exists() {
@@ -164,7 +178,7 @@ async fn arrancar(dir: &std::path::Path, log: Arc<Log>, dispositivo: &str, dims:
     // lanzó el proceso.
     let registro = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../modelos");
     let pesos = dir.join("pesos");
-    let mut hijo = crate::proceso::cmd_async(&py)
+    let mut hijo = crate::proceso::cmd_async(&py, prioridad_baja)
         .arg("-u")
         .arg(&script)
         .env("LUMI_DEVICE", dispositivo)
@@ -218,6 +232,9 @@ const CLAVE_CONCURRENCIA: &str = "concurrencia_gpu";
 /// cargados a la vez deja de ser "acelerar" y vuelve a ser "desbordar la
 /// VRAM" — el mismo problema que este mecanismo entero existe para evitar.
 const CONCURRENCIA_MAX: usize = 2;
+/// Clave bajo la que vive el modo de consumo en `ajustes`. Mismo patrón que
+/// `CLAVE_CONCURRENCIA`.
+const CLAVE_PRIORIDAD_BAJA: &str = "prioridad_baja_embebido";
 
 impl Cola {
     pub fn nueva(dir: PathBuf, almacen: Arc<Almacen>, log: Arc<Log>) -> Arc<Self> {
@@ -228,6 +245,12 @@ impl Cola {
             .and_then(|v| v.parse::<usize>().ok())
             .map(|n| n.clamp(1, CONCURRENCIA_MAX))
             .unwrap_or(1);
+        let prioridad_baja = almacen
+            .leer_ajuste(CLAVE_PRIORIDAD_BAJA)
+            .ok()
+            .flatten()
+            .map(|v| v == "true")
+            .unwrap_or(false);
         Arc::new(Self {
             dir,
             almacen,
@@ -238,6 +261,7 @@ impl Cola {
             // porque la app se abrió. `cola_pausar(false)` es el arranque.
             pausada: Arc::new(Mutex::new(true)),
             concurrencia: std::sync::atomic::AtomicUsize::new(concurrencia),
+            prioridad_baja: std::sync::atomic::AtomicBool::new(prioridad_baja),
             trabajadores: tokio::sync::Mutex::new(Ranuras::default()),
         })
     }
@@ -256,6 +280,20 @@ impl Cola {
         let n = n.clamp(1, CONCURRENCIA_MAX);
         self.concurrencia.store(n, std::sync::atomic::Ordering::Relaxed);
         let _ = self.almacen.guardar_ajuste(CLAVE_CONCURRENCIA, &n.to_string());
+    }
+
+    /// El modo de consumo ahora mismo: `true` es "bajo". Para pintar el
+    /// selector de Ajustes con el valor real.
+    pub fn prioridad_baja(&self) -> bool {
+        self.prioridad_baja.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Cambia el modo en caliente. El trabajador YA arrancado no cambia de
+    /// prioridad retroactivamente — se aplica al siguiente que arranque, no
+    /// hace falta matar uno en marcha para esta primera pasada.
+    pub fn fijar_prioridad_baja(&self, bajo: bool) {
+        self.prioridad_baja.store(bajo, std::sync::atomic::Ordering::Relaxed);
+        let _ = self.almacen.guardar_ajuste(CLAVE_PRIORIDAD_BAJA, if bajo { "true" } else { "false" });
     }
 
     /// Consigue la ranura de `modelo`: la existente si ya la tiene, o una
@@ -279,7 +317,7 @@ impl Cola {
             // otra tarea aún lo está usando, el Arc sigue vivo hasta que esa
             // tarea termine su lote y lo suelte -- no se corta a mitad.
         }
-        let t = arrancar(&self.dir, self.log.clone(), "cuda:0", dims).await?;
+        let t = arrancar(&self.dir, self.log.clone(), "cuda:0", dims, self.prioridad_baja()).await?;
         let r = Arc::new(tokio::sync::Mutex::new(t));
         pool.ranuras.insert(modelo.to_string(), r.clone());
         pool.tocar(modelo);

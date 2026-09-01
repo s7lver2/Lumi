@@ -32,10 +32,23 @@ pub fn cmd(programa: impl AsRef<OsStr>) -> std::process::Command {
 }
 
 /// Para lo que vive dentro del runtime: servicios, el trabajador de embebido.
-pub fn cmd_async(programa: impl AsRef<OsStr>) -> tokio::process::Command {
+///
+/// `prioridad_baja` añade `BELOW_NORMAL_PRIORITY_CLASS` (Windows) al vuelo de
+/// arranque — es el modo de consumo "bajo" de Ajustes. En Unix queda como
+/// no-op por ahora: el uso principal de este producto es Windows con los
+/// servicios en WSL, no el Indexer en sí corriendo en Linux — `nice`/
+/// `setpriority` quedan para cuando haga falta de verdad.
+/// // ponytail: sin equivalente Unix todavía, ver comentario arriba.
+pub fn cmd_async(programa: impl AsRef<OsStr>, prioridad_baja: bool) -> tokio::process::Command {
     #[allow(unused_mut)]
     let mut c = tokio::process::Command::new(programa);
     #[cfg(windows)]
-    c.creation_flags(SIN_CONSOLA);
+    {
+        const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x0000_4000;
+        let flags = if prioridad_baja { SIN_CONSOLA | BELOW_NORMAL_PRIORITY_CLASS } else { SIN_CONSOLA };
+        c.creation_flags(flags);
+    }
+    #[cfg(not(windows))]
+    let _ = prioridad_baja;
     c
 }

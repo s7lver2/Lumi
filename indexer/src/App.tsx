@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 
 import { IndexDetail } from "./catalog/IndexDetail";
 import { IndexPicker } from "./catalog/IndexPicker";
-import { DownloadView } from "./download/DownloadView";
-import { EmbedQueueView } from "./embed/EmbedQueueView";
+import { DescargaYEmbebidoView } from "./embed/DescargaYEmbebidoView";
 import { api, type PlanPendiente, type Saludo } from "./lib/api";
 import { ProjectsView } from "./projects/ProjectsView";
 import { ReviewGrid } from "./review/ReviewGrid";
@@ -186,7 +185,7 @@ export function App() {
                   indiceAbierto === null
                     ? <ProjectsView onAbrir={setIndiceAbierto} />
                     : <IndexDetail key={indiceAbierto} id={indiceAbierto} onVolver={() => setIndiceAbierto(null)}
-                        onIrAEmbebido={() => setDestino("embebido")} />
+                        onIrAEmbebido={() => setDestino("descarga")} />
                 )}
                 {/* Territorio trabaja SIEMPRE sobre un índice: sin esto, el
                     carril deja llegar a la pantalla sin haber elegido uno, y
@@ -211,14 +210,8 @@ export function App() {
                     }}
                   />
                 )}
-                {destino === "embebido" && indiceAbierto === null && (
-                  <IndexPicker titulo="Ver embebido" onAbrir={setIndiceAbierto} />
-                )}
-                {destino === "embebido" && indiceAbierto !== null && (
-                  <EmbedQueueView indiceId={indiceAbierto} onCambiarIndice={() => setIndiceAbierto(null)} />
-                )}
                 {destino === "descarga" && (
-                  descargaIndiceId === null
+                  (descargaIndiceId ?? indiceAbierto) === null
                     ? (
                       <div className="grid h-full place-items-center p-8">
                         {pendiente ? (
@@ -247,17 +240,19 @@ export function App() {
                           </div>
                         ) : (
                           <p className="max-w-[280px] text-center text-[12px] leading-relaxed text-muted">
-                            Aquí se ve el progreso mientras se está indexando. Primero tienes que
-                            empezar una descarga desde <b className="font-normal text-fg">Territorio</b>.
-                            El progreso del embebido de fondo se ve en <b className="font-normal text-fg">Embebido</b>.
+                            Aquí se ve el progreso mientras se está descargando y embebiendo. Empieza
+                            una descarga desde <b className="font-normal text-fg">Territorio</b>, o abre
+                            un índice con trabajo pendiente desde <b className="font-normal text-fg">Proyectos</b>.
                           </p>
                         )}
                       </div>
                     )
-                    : <DownloadView
-                        indiceId={descargaIndiceId}
+                    : <DescargaYEmbebidoView
+                        indiceId={(descargaIndiceId ?? indiceAbierto)!}
+                        descargando={descargaIndiceId !== null}
                         imagenesEstimadas={imagenesEstimadas}
-                        onTerminado={() => void alTerminarDescarga()}
+                        onTerminadoDescarga={() => void alTerminarDescarga()}
+                        onCambiarIndice={() => { setIndiceAbierto(null); setDestino("proyectos"); }}
                       />
                 )}
                 {destino === "revision" && indiceAbierto !== null && (

@@ -21,17 +21,17 @@ export function ServicesPanel({ so }: { so: string }) {
   const [servicios, setServicios] = useState<EstadoServicio[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [enCurso, setEnCurso] = useState<null | "levantar" | "parar">(null);
-  const [concurrencia, setConcurrencia] = useState<number | null>(null);
+  const [consumoBajo, setConsumoBajo] = useState<boolean | null>(null);
   const vivo = useRef(true);
   useEffect(() => { vivo.current = true; return () => { vivo.current = false; }; }, []);
 
   const refrescar = () => api.serviciosEstado().then(setServicios);
 
-  useEffect(() => { void api.colaConcurrenciaLeer().then(setConcurrencia); }, []);
+  useEffect(() => { void api.colaConsumoLeer().then(setConsumoBajo); }, []);
 
-  async function cambiarConcurrencia(n: number) {
-    setConcurrencia(n);
-    await api.colaConcurrenciaFijar(n);
+  async function cambiarConsumo(bajo: boolean) {
+    setConsumoBajo(bajo);
+    await api.colaConsumoFijar(bajo);
   }
 
   // Aquí sí se sondea de continuo, pero despacio y solo mientras el panel está
@@ -153,22 +153,26 @@ export function ServicesPanel({ so }: { so: string }) {
         </div>
 
         <div className="mt-7 border-t border-border pt-5">
-          <p className="text-sm text-fg">Concurrencia de embebido</p>
+          <p className="text-sm text-fg">Consumo al embeber</p>
           <p className="mt-[5px] text-[11px] leading-relaxed text-muted">
-            Cuántos modelos pueden tener pesos cargados en la GPU a la vez. Con una sola GPU,
-            más de uno reparte la memoria en vez de sumarla — súbelo solo si te sobra VRAM.
+            Alto reparte más VRAM y usa prioridad normal de proceso — más rápido, pero nota el
+            ordenador ocupado. Bajo usa un solo modelo a la vez con prioridad baja — más lento,
+            pero puedes seguir trabajando con normalidad mientras corre.
           </p>
           <div className="mt-3 flex gap-2">
-            {[1, 2].map((n) => (
+            {[
+              { bajo: false, etiqueta: "Alto" },
+              { bajo: true, etiqueta: "Bajo" },
+            ].map(({ bajo, etiqueta }) => (
               <button
-                key={n}
-                onClick={() => void cambiarConcurrencia(n)}
-                disabled={concurrencia === null}
+                key={etiqueta}
+                onClick={() => void cambiarConsumo(bajo)}
+                disabled={consumoBajo === null}
                 className={`jg-press rounded-lg border px-3.5 py-2 text-[11.5px] disabled:opacity-40 ${
-                  concurrencia === n ? "border-white/30 bg-white/[.08] text-fg" : "border-border text-fg"
+                  consumoBajo === bajo ? "border-white/30 bg-white/[.08] text-fg" : "border-border text-fg"
                 }`}
               >
-                {n === 1 ? "1 · uno por uno" : "2 · como mucho"}
+                {etiqueta}
               </button>
             ))}
           </div>

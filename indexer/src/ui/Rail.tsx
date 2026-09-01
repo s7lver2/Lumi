@@ -1,6 +1,6 @@
 import { Icon } from "./Icon";
 
-export type Destino = "proyectos" | "territorio" | "descarga" | "revision" | "ajustes" | "embebido";
+export type Destino = "proyectos" | "territorio" | "descarga" | "revision" | "ajustes";
 
 /** El carril de 44 px de `client/src/work/Rail.tsx`, mismo vocabulario: iconos
  *  sin etiqueta, translúcido, la pestaña de 2 px marcando el activo.
@@ -15,9 +15,12 @@ export type Destino = "proyectos" | "territorio" | "descarga" | "revision" | "aj
  *  trabajo activo, la pantalla lo explica en vez de mostrarse vacía — es la
  *  pantalla, no el carril, la que decide si hay algo que enseñar.
  *
- *  El punto naranja en «Descarga» mientras `descargaActiva` es distinto de
- *  estar en esa pestaña: es lo que dice, desde cualquier otro sitio, que algo
- *  sigue corriendo detrás y que ahí hay un "Detener" al alcance. */
+ *  Descarga y embebido eran dos destinos separados; ahora es uno solo
+ *  (`DescargaYEmbebidoView`, spec 2026-09-01): terminar de descargar lleva
+ *  directo a ver el embebido en el mismo scroll, sin cambiar de pestaña. El
+ *  punto naranja se enciende con cualquiera de los dos (`descargaActiva` o
+ *  `embebiendoActivo`) — es lo que dice, desde cualquier otro sitio, que algo
+ *  sigue corriendo detrás. */
 export function Rail({ activo, descargaActiva, embebiendoActivo, onIr }: {
   activo: Destino; descargaActiva?: boolean; embebiendoActivo?: boolean; onIr: (d: Destino) => void;
 }) {
@@ -28,15 +31,8 @@ export function Rail({ activo, descargaActiva, embebiendoActivo, onIr }: {
       <RailBtn icon="territorio" title="Territorio" on={activo === "territorio"} onClick={() => onIr("territorio")} />
       <RailBtn icon="check" title="Revisión" on={activo === "revision"} onClick={() => onIr("revision")} />
       <div className="flex-1" />
-      {/* Justo encima de «Descarga»: la cola de embebido vivía dentro del
-          detalle de cada índice, y esa pantalla depende de cuál esté
-          abierto — cualquier cambio ahí (borrar el índice, cerrar el
-          diálogo, sellar) se la llevaba por delante. Un destino propio en
-          el carril, como Descarga, no depende de nada de eso. */}
-      <RailBtn icon="embebido" title="Embebido" on={activo === "embebido"} activo={embebiendoActivo}
-        onClick={() => onIr("embebido")} />
-      <RailBtn icon="ingesta" title="Descarga" on={activo === "descarga"} activo={descargaActiva}
-        onClick={() => onIr("descarga")} />
+      <RailBtn icon="ingesta" title="Descarga y embebido" on={activo === "descarga"}
+        activo={descargaActiva || embebiendoActivo} onClick={() => onIr("descarga")} />
       <RailBtn icon="ajustes" title="Ajustes" on={activo === "ajustes"} onClick={() => onIr("ajustes")} />
     </nav>
   );
