@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Seccion } from "../admin/AdminPanel";
-import { leerReducirMovimiento, setReducirMovimiento } from "../lib/apariencia";
+import {
+  ESCALAS_INTERFAZ, leerEscalaInterfaz, leerReducirMovimiento, setEscalaInterfaz, setReducirMovimiento,
+} from "../lib/apariencia";
 import { AjustesSidebar, type AjustesSeccion } from "./AjustesSidebar";
 import { ActualizacionesSeccion } from "./ActualizacionesSeccion";
 
@@ -32,6 +34,7 @@ export function AjustesView({ onBack }: { onBack: () => void }) {
 
 function AparienciaPanel() {
   const [activo, setActivo] = useState(leerReducirMovimiento());
+  const [escala, setEscala] = useState(leerEscalaInterfaz());
 
   return (
     <Seccion titulo="Apariencia" grupo="Ajustes">
@@ -50,6 +53,23 @@ function AparienciaPanel() {
           <span className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-fg ring-1 ring-black/20 transition-transform duration-300 ease-expo ${activo ? "translate-x-[18px]" : "translate-x-0.5"}`} />
         </button>
       </label>
+
+      <div className="mt-3 rounded-card border border-border bg-panel p-[13px_16px]">
+        <span className="text-[11.5px] text-fg">
+          Tamaño de la interfaz
+          <small className="mt-0.5 block text-[10px] text-subtle">Escala toda la ventana, texto incluido.</small>
+        </span>
+        <div className="mt-3 flex items-center gap-1.5">
+          {ESCALAS_INTERFAZ.map((pct) => (
+            <button key={pct} onClick={() => { setEscala(pct); setEscalaInterfaz(pct); }}
+              className={`rounded-lg border px-2.5 py-1 text-[10.5px] transition-colors duration-300 ease-expo ${
+                escala === pct ? "border-accent bg-accent text-black" : "border-border text-muted hover:text-fg"
+              }`}>
+              {pct}%
+            </button>
+          ))}
+        </div>
+      </div>
     </Seccion>
   );
 }
