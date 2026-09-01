@@ -73,7 +73,10 @@ export function DownloadView({ indiceId, imagenesEstimadas, onTerminado }: {
           {eta && (totalImagenes ? p.imagenes < totalImagenes : p.teselas_hechas < p.teselas_total) && (
             <span className="mr-2.5 font-mono text-[10.5px] text-subtle">{eta} restantes</span>
           )}
-          <span className="font-mono text-[11px] text-muted">
+          <span className="font-mono text-[11px] text-muted"
+            title={`1 tesela procesada por N orígenes activos cuenta N veces — desglose:\n${
+              p.por_origen.map((l) => `${nombre(l.fuente)}: ${l.hechas} de ${l.total}`).join(" · ")
+            }`}>
             {p.teselas_hechas} de {p.teselas_total} teselas
             {totalImagenes != null && <> · {p.imagenes} de {totalImagenes} imágenes</>}
           </span>
