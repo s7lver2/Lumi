@@ -141,7 +141,7 @@
       "producto": "cliente",
       "version": "2.0.3",
       "publicado": "2026-08-31T21:41:54Z",
-      "notas": "popup de version rediseÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
+      "notas": "popup de version rediseÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
       "retirada": false,
       "artefactos": [
         {
@@ -156,7 +156,7 @@
       "producto": "indexer",
       "version": "2.0.3",
       "publicado": "2026-08-31T21:41:54Z",
-      "notas": "popup de version rediseÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
+      "notas": "popup de version rediseÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
       "retirada": false,
       "artefactos": [
         {
@@ -171,7 +171,7 @@
       "producto": "lumid",
       "version": "2.0.3",
       "publicado": "2026-08-31T21:41:54Z",
-      "notas": "popup de version rediseÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
+      "notas": "popup de version rediseÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±ado, historial de versiones, version en la barra de titulo, instalador relanza tras un fallo silencioso",
       "retirada": false,
       "artefactos": [
         {
@@ -316,7 +316,52 @@
           "sha256": "bee52cc4281c93ae750b01118d448e8e0edc04fad4ef157ce814293868301096"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.7",
+      "publicado": "2026-09-01T16:28:41Z",
+      "notas": "Instalador sin congelarse ni iconos genericos, panel de administracion mas pulido y con mas control sobre actualizaciones, indexer con mapa de cobertura real y cola de embebido mas fiable, y nueva solicitud de liberacion de teselas propias.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.7/app.exe",
+          "bytes": 15749632,
+          "sha256": "2072651130280d748a20f5fff6c409373362e07794bf92589aad83b49770be06"
+        }
+      ]
+    },
+    {
+      "producto": "indexer",
+      "version": "2.0.7",
+      "publicado": "2026-09-01T16:28:41Z",
+      "notas": "Instalador sin congelarse ni iconos genericos, panel de administracion mas pulido y con mas control sobre actualizaciones, indexer con mapa de cobertura real y cola de embebido mas fiable, y nueva solicitud de liberacion de teselas propias.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.7/indexer-app.exe",
+          "bytes": 22191104,
+          "sha256": "16a9c7e97e2e50591cdb8c839aa262a4f4510b532cf1643a8993fbf7645f89d2"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.7",
+      "publicado": "2026-09-01T16:28:41Z",
+      "notas": "Instalador sin congelarse ni iconos genericos, panel de administracion mas pulido y con mas control sobre actualizaciones, indexer con mapa de cobertura real y cola de embebido mas fiable, y nueva solicitud de liberacion de teselas propias.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.7/lumid",
+          "bytes": 20411336,
+          "sha256": "c016b723db954e0a5ff0fdda174eb5f6868c8f0f2be8bc22eb4d612cc48ae6af"
+        }
+      ]
     }
   ],
-  "firma": "nyxgXIIKKe6gKTPAfu2qilgQovByhjGXzY0KFf11AbRM3OzIKeRfIEKSwRmq89yuAfqEovoN8BS7j4QiHsNuAw=="
+  "firma": "KcPTb7AoEOPL43EFI6FQagHCy/BdYxF2y62hio0CizCK8o7J9ME+CN8pkkW+piD7EQMHZZgBp/0bNJ+PMQEMCg=="
 }
