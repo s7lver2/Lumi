@@ -340,8 +340,33 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// En WSL2, `/usr/lib/wsl/lib` (donde vive `libnvidia-ml`, lo que
+/// `Nvml::init()` necesita para no fallar) se monta de forma asíncrona
+/// respecto al arranque de WSL/systemd: si `lumid` arranca antes de que ese
+/// montaje esté listo, `Nvml::init()` falla aunque la GPU exista y vaya a
+/// estar disponible un instante después. Sin reintento, esa carrera dejaba
+/// el daemon sin GPU para toda la sesión — la detección solo se hace una
+/// vez, al arrancar, y se cachea en `App.gpus`. Cinco intentos con 500ms de
+/// espera (2.5s en el peor caso) cubren ese margen típico sin retrasar de
+/// forma notable un arranque normal donde NVML ya está listo a la primera.
 fn gpus() -> Vec<GpuInfo> {
-    let Ok(nvml) = nvml_wrapper::Nvml::init() else { return vec![] };
+    let mut ultimo_intento = None;
+    for intento in 0..5 {
+        if intento > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+        match nvml_wrapper::Nvml::init() {
+            Ok(nvml) => {
+                ultimo_intento = Some(nvml);
+                break;
+            }
+            Err(e) => tracing::warn!("Nvml::init() falló (intento {}/5): {e}", intento + 1),
+        }
+    }
+    let Some(nvml) = ultimo_intento else {
+        tracing::warn!("no se detectó GPU tras 5 intentos; lumid sigue sin GPU hasta el próximo reinicio");
+        return vec![];
+    };
     (0..nvml.device_count().unwrap_or(0))
         .filter_map(|i| {
             let d = nvml.device_by_index(i).ok()?;
