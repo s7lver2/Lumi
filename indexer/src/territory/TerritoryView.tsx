@@ -67,6 +67,9 @@ export function TerritoryView({
   const [nuevasPorOrigen, setNuevasPorOrigen] = useState<Record<string, string[]>>({});
   const [confirmandoPlan, setConfirmandoPlan] = useState(false);
   const [confirmandoDescarga, setConfirmandoDescarga] = useState(false);
+  // Si hay un lugar buscado seleccionado en el mapa, su panel de info ocupa
+  // el mismo sitio que el de disponibilidad — mutuamente excluyentes (#61).
+  const [hayLugarBuscado, setHayLugarBuscado] = useState(false);
 
   useEffect(() => { void api.origenesLista().then(setFichas); }, []);
   useEffect(() => { void api.claveLeer("mapillary").then(setTokenMapillary); }, []);
@@ -268,6 +271,7 @@ export function TerritoryView({
           activos={activos}
           sondeos={sondeos}
           tokenMapillary={tokenMapillary}
+          onLugarBuscadoChange={setHayLugarBuscado}
         />
       </div>
 
@@ -286,7 +290,7 @@ export function TerritoryView({
         </div>
       )}
 
-      {clasificacion && !mostrarPlan && (
+      {clasificacion && !mostrarPlan && !hayLugarBuscado && (
         <AvailabilityPanel
           fichas={fichas}
           activos={activos}

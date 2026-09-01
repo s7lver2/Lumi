@@ -139,6 +139,7 @@ export function MapCanvas({
   activos,
   sondeos,
   tokenMapillary,
+  onLugarBuscadoChange,
 }: {
   dibujo: Punto[][];
   clasificacion: Clasificacion | null;
@@ -149,6 +150,10 @@ export function MapCanvas({
   activos?: Set<string>;
   sondeos?: SondeoTesela[];
   tokenMapillary?: string | null;
+  /** Avisa al padre de si hay un lugar buscado seleccionado ahora mismo —
+   *  su panel de info y el de disponibilidad de `TerritoryView` comparten
+   *  posición y no pueden estar los dos a la vez (#61). */
+  onLugarBuscadoChange?: (hay: boolean) => void;
 }) {
   const contenedor = useRef<HTMLDivElement>(null);
   const mapa = useRef<mapboxgl.Map | null>(null);
@@ -193,6 +198,15 @@ export function MapCanvas({
 
   useEffect(() => { herramientaRef.current = herramienta; }, [herramienta]);
   useEffect(() => { onPoligonoListoRef.current = onPoligonoListo; }, [onPoligonoListo]);
+
+  useEffect(() => { onLugarBuscadoChange?.(lugarSeleccionado !== null); }, [lugarSeleccionado, onLugarBuscadoChange]);
+
+  // Dibujar/seleccionar una forma de territorio limpia el lugar buscado: el
+  // panel de disponibilidad que aparece con la forma y el panel de info de
+  // búsqueda comparten sitio, así que no tiene sentido dejar los dos abiertos.
+  useEffect(() => {
+    if (dibujo.length > 0) setLugarSeleccionado(null);
+  }, [dibujo]);
 
   useEffect(() => {
     let vivo = true;
