@@ -157,20 +157,32 @@ def _construir_wsl_lumid(root: Path) -> Path:
     return destino
 
 
+def _forzar_reembebido_icono(root: Path, proyecto: str) -> None:
+    """`tauri-build` solo re-empaqueta `icon.ico` cuando `build.rs` se
+    re-ejecuta. Un build incremental (sin `cargo clean`) puede seguir
+    empaquetando un .exe con el icono viejo aunque icon.ico ya se haya
+    corregido en disco — tocar build.rs fuerza a Cargo a re-ejecutarlo sin
+    pagar el costo de recompilar todo el árbol de dependencias."""
+    (root / proyecto / "src-tauri" / "build.rs").touch()
+
+
 def construir(root: Path, productos: list[str]) -> dict[str, Path]:
     section("Construyendo")
     npm = shutil.which("npm") or "npm"
     artefactos: dict[str, Path] = {}
 
     if "cliente" in productos:
+        _forzar_reembebido_icono(root, "client")
         run([npm, "run", "tauri", "build"], cwd=str(root / "client"), label="cliente")
         artefactos["cliente"] = root / RUTA_BINARIO["cliente"]
     if "indexer" in productos:
+        _forzar_reembebido_icono(root, "indexer")
         run([npm, "run", "tauri", "build"], cwd=str(root / "indexer"), label="indexer")
         artefactos["indexer"] = root / RUTA_BINARIO["indexer"]
     if "lumid" in productos:
         artefactos["lumid"] = _construir_wsl_lumid(root)
 
+    _forzar_reembebido_icono(root, "installer")
     run([npm, "run", "tauri", "build"], cwd=str(root / "installer"), label="installer")
     artefactos["installer"] = root / RUTA_BINARIO["installer"]
 
