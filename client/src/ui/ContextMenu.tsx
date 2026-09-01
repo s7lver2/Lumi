@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export interface MenuItem {
   label: string;
@@ -54,7 +55,13 @@ export function ContextMenu({ state, onClose }:
 
   if (!state) return null;
 
-  return (
+  // Portal a `document.body`: montado donde se le llama, este `fixed` se
+  // posicionaba relativo al ancestro con `backdrop-blur`/`filter` más
+  // cercano (el propio panel translúcido de la pantalla de entrada, por
+  // ejemplo) en vez del viewport — eso es lo que abría el menú en la
+  // esquina en vez de donde se hizo clic. Fuera del árbol, `fixed` vuelve
+  // a ser relativo al viewport de verdad.
+  return createPortal(
     <div ref={box} onContextMenu={(e) => e.preventDefault()}
       style={{
         left: pos?.left ?? state.x, top: pos?.top ?? state.y,
@@ -82,7 +89,8 @@ export function ContextMenu({ state, onClose }:
           </button>
         ),
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
 

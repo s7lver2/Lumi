@@ -6,6 +6,13 @@ import { aplicarReducirMovimiento, leerReducirMovimiento } from './lib/aparienci
 
 aplicarReducirMovimiento(leerReducirMovimiento())
 
+// WebView2 (el motor de Tauri en Windows) muestra su propio menú de Edge
+// ("Ver código fuente", "Inspeccionar"...) en cualquier click derecho salvo
+// que se le diga lo contrario — cada `ContextMenu` propio ya hace su
+// `preventDefault`, pero cualquier zona sin uno de esos (texto suelto,
+// imágenes, el fondo) seguía mostrando el nativo.
+window.addEventListener("contextmenu", (e) => e.preventDefault())
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
