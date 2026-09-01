@@ -9,7 +9,13 @@ const FUENTES = [
   { label: "Serif", value: "Georgia, 'Times New Roman', serif" },
   { label: "Mono", value: "ui-monospace, SFMono-Regular, Menlo, monospace" },
 ];
-const COLORES = ["#e8e8e6", "#85b7eb", "#efb968", "#e88f8f"];
+// `#85b7eb` (el azul de `draw-fg`, "dibujo en mapa, en curso" según
+// DESIGN.md) no pintaba nada aquí — es un color con un significado propio
+// prestado sin motivo, y además el único saturado/frío entre cuatro tonos
+// neutros/cálidos. Se sustituye por `#9a9a95` (token `muted` ya existente
+// en la paleta) para tener un cuarto tono realmente neutro en vez de
+// inventar un hex nuevo (#81).
+const COLORES = ["#e8e8e6", "#9a9a95", "#efb968", "#e88f8f"];
 const EMOJIS = ["🔔", "⚠️", "🔧", "📦", "☁️", "🚀", "🎉", "✅", "📅", "💬", "🛡️", "⭐"];
 
 const DOC_VACIO = { type: "doc", content: [{ type: "paragraph" }] };
