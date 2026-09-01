@@ -8,6 +8,8 @@
  *  de la tabla de DESIGN.md: border/subtle para las líneas, draw/draw-fg para
  *  el pulso — nada nuevo. */
 
+import { leerReducirMovimiento } from "../lib/apariencia";
+
 const LAYERS = [
   { path: "M0,40 Q80,-10 160,40 T320,40 T480,40 T640,40 T800,40", color: "#26282c", width: 1.3, opacity: .4, duration: "40s", reverse: false },
   { path: "M0,80 Q80,35 160,80 T320,80 T480,80 T640,80 T800,80", color: "#6a6c70", width: 1.1, opacity: .22, duration: "18s", reverse: true },
@@ -25,22 +27,32 @@ function duplicated(path: string) {
 }
 
 export function WavesBackground() {
+  // Las capas onduladas se mueven con `translateX` en un `<svg>` sin la
+  // clase `.lumi-anim` — la regla de animaciones reducidas (index.css) las
+  // apaga con `animation: none !important` igual que a todo lo demás, pero
+  // eso las CONGELA a mitad de un bucle de 200% de ancho en vez de dejar
+  // algo plano: la capa se queda desplazada en un punto arbitrario del
+  // recorrido, no en su posición de reposo. Con la preferencia activa, ni
+  // siquiera se montan: el fondo es solo el degradado radial de abajo.
+  const reducido = leerReducirMovimiento();
   return (
     <div className="fixed inset-0 -z-10 overflow-hidden bg-[#08090a]">
       <div className="absolute inset-0"
         style={{ background: "radial-gradient(ellipse at 50% 40%, transparent 40%, #050607 100%)" }} />
-      {LAYERS.map((l, i) => (
+      {!reducido && LAYERS.map((l, i) => (
         <svg key={i} viewBox="0 0 800 240" preserveAspectRatio="none"
           className="absolute left-0 top-0 h-full w-[200%]"
           style={{ animation: `lumi-planet-spin ${l.duration} linear infinite`, animationDirection: l.reverse ? "reverse" : "normal" }}>
           <path d={duplicated(l.path)} fill="none" stroke={l.color} strokeWidth={l.width} opacity={l.opacity} />
         </svg>
       ))}
-      <svg viewBox="0 0 800 240" preserveAspectRatio="none" className="absolute left-0 top-0 h-full w-[200%]"
-        style={{ animation: "lumi-planet-spin 22s linear infinite" }}>
-        <path d={duplicated(PULSE.path)} fill="none" stroke={PULSE.color} strokeWidth={1}
-          style={{ animation: "jg-core-pulse 3.4s ease-in-out infinite" }} />
-      </svg>
+      {!reducido && (
+        <svg viewBox="0 0 800 240" preserveAspectRatio="none" className="absolute left-0 top-0 h-full w-[200%]"
+          style={{ animation: "lumi-planet-spin 22s linear infinite" }}>
+          <path d={duplicated(PULSE.path)} fill="none" stroke={PULSE.color} strokeWidth={1}
+            style={{ animation: "jg-core-pulse 3.4s ease-in-out infinite" }} />
+        </svg>
+      )}
     </div>
   );
 }

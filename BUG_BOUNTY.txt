@@ -1,7 +1,7 @@
 - [x] logo Lumi client y lumi studio tiene que cambiarse a la estrella en la parte superior, junto a los controles de ventana
 - [x] en el cliente, seccion apariencia, el toggle esta roto visualmente
 - [x] cambiar el punto flotando en la esquina para acceder a los ajustes por algo diferente, como una mini esquinita del color de la barra superior que solo contenga el icono de los ajustes
-- [ ] cuando activas la opcionde animaciones reducidas, el fondo de login se congela por completo, deber'ia de ser remplazado por uno plano
+- [x] cuando activas la opcionde animaciones reducidas, el fondo de login se congela por completo, deber'ia de ser remplazado por uno plano
 - [x] al hacer click izquierdo en el cliente, en uno de los servidores registrados, el menu contextual de opciones que deberia de aparecer en el lugar en el que clickaste aparece en la esquina inferior
 - [x] no se parecen estar creando correctamente las carpertas de los servidores registrados
 - [x] el icono de todas las apps es el por defecto de tauri, y quiero que sea el de lumi, pero con una variaci'on para el indexer, que sea la estrella pero con unas gafas o algo asi
@@ -15,3 +15,10 @@
 - [x] Lumi en el instalador no es, se llama Lumi client
 - [x] asegurate de que no permites al usuario agregar la misma carpeta de lumi al path por mucho que reinstale la app, que compruebe si esa ruta ya existe en el path, no importa que sea actualizado mediante actualizacion o manualmente por usuario
 - [x] tanto en linux como en windows, asegurate de que en lugar de tirar errores por no usar sudo, probar a solicitarlo, ya sea sudo u administrador en widnows
+- [ ] en la cinta de mantenimiento, se ve como que la cinta no es infinita, si no que se resetea la animacion cada poco
+- [ ] en la cinta de mantenimiento, se ve como un cacho de la cinta del lado izquierdo, las lineas no concuerdan, como si estuviese cortado
+- [ ] parece que actualiar el servidor no esta funcionando, despues de 10 minutos sigue actualizando y en mantenimiento, sin logs aparentes, sin actividad
+- [ ] en perfil y sesiones del cliente, aparece la seccion de actualizaciones por algun motivo, no deber'ia de estar ahi ya que su nuevo sitio es abajo
+- [ ] la foto de perfil que he subido no se ha actualizado en la barra superior, sigue siendo una S de s7lver
+- [ ] las api keys deber'ias de ser capaz de verlas de nuevo tras generarlas, pero tendr'ias que poner tu contrase;a para estar seguros
+- [ ] la foto de perfil parece tampoco haberse propagado a la barra lateral del panel de perfil y sesiones
