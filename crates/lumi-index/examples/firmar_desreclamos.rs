@@ -82,6 +82,31 @@ fn generar_clave() {
     println!("];");
 }
 
+/// Reintenta la escritura hasta 5 veces con una pequeña espera entre
+/// intentos: en Windows, un antivirus escaneando o OneDrive sincronizando
+/// el fichero de salida devuelve `os error 1920` (bloqueo transitorio) en
+/// vez de un fallo real, y no merece morir con panic a la primera.
+fn escribir_con_reintentos(ruta: &std::path::Path, contenido: &str) {
+    let mut ultimo_error = None;
+    for intento in 1..=5 {
+        match std::fs::write(ruta, contenido) {
+            Ok(()) => return,
+            Err(e) => {
+                ultimo_error = Some(e);
+                if intento < 5 {
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                }
+            }
+        }
+    }
+    panic!(
+        "no se pudo escribir {} tras varios intentos — ¿está abierto en otro programa o \
+         sincronizándose? cierra ese programa y reintenta ({})",
+        ruta.display(),
+        ultimo_error.unwrap()
+    );
+}
+
 fn cargar_clave() -> SigningKey {
     let ruta = ruta_clave();
     let bytes = std::fs::read(&ruta).unwrap_or_else(|_| {
@@ -128,8 +153,7 @@ fn fusionar_pendientes(borrador: &std::path::Path) {
         añadidos += 1;
     }
 
-    std::fs::write(borrador, serde_json::to_string_pretty(&d).unwrap())
-        .unwrap_or_else(|e| panic!("no se pudo escribir {}: {e}", borrador.display()));
+    escribir_con_reintentos(borrador, &serde_json::to_string_pretty(&d).unwrap());
     println!(
         "fusionadas {añadidos} solicitudes pendientes en {} ({saltados} ya estaban)",
         borrador.display()
@@ -151,8 +175,7 @@ fn firmar(borrador: &std::path::Path, salida: &std::path::Path) {
         .unwrap_or_else(|e| panic!("{} no es un borrador válido: {e}", borrador.display()));
     d.firmar(&cargar_clave());
     let salida_texto = serde_json::to_string_pretty(&d).unwrap();
-    std::fs::write(salida, salida_texto)
-        .unwrap_or_else(|e| panic!("no se pudo escribir {}: {e}", salida.display()));
+    escribir_con_reintentos(salida, &salida_texto);
     println!("firmado: {} ({} entradas)", salida.display(), d.lista.len());
 }
 
