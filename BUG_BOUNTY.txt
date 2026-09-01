@@ -35,7 +35,7 @@
 - [x] cuando creas un indice, te indica que selecciones que modelos quieres que haga embed, pero esto luego tambien deberia ser modificable si es necesario
 - [x] si seleccionas impotar desde legacy, falta alguna manera de cerrarlo en caso de que el usuario se arrepienta
 - [x] el menu de importacion legacy y el de carpeta parecen ser muy similares? tal vez se podrian unificar, incluso presenta el mismo problema que 36
-- falta por agregar alguna manera de gestionar tu como usuario tus propias teselas que tienes, agregando la capacidad de eliminar tus indices, o de liberar las teselas (borrar índice ya existe; liberar teselas remotas no es viable desde el cliente por diseño — desreclamos.json solo lo escribe la web)
+- [x] falta por agregar alguna manera de gestionar tu como usuario tus propias teselas que tienes, agregando la capacidad de eliminar tus indices, o de liberar las teselas (la firma sigue siendo manual y offline por diseño — ahora el indexer envía una solicitud verificada por GitHub que se guarda en una cola pendiente, y `firmar_desreclamos -- fusionar-pendientes` la incorpora antes de firmar. PENDIENTE MANUAL TUYO: configurar la variable de entorno GITHUB_LIBERACIONES_TOKEN en el dashboard de Vercel del proyecto web, con un PAT que tenga permiso de escritura sobre s7lver2/Lumi — sin eso el endpoint devuelve error 500)
 - [x] en la seccion de dibujar territorio, aparece un indice que no aparece en la pestaña de indices
 - [x] mejorar experiencia al usar el mapa, cosas como que una vez dibujes el cuadrado se cambie automaticamente a la herramienta de movimiento para que asi el usuario se pueda mover libremente
 - [x] que en la pestaña de indexación, el mapa de disponibilidad, el panel laterral con la info a indexar, etc aparezca solo si hay una forma dibujada para indexar, si no ocultar
@@ -47,3 +47,45 @@
 - [x] las actualizaciones tienen que estar en su propia sección, y quiero que tambien como en el cliente, puedas si quieres seleccionar una version anterior
 - [x] el instalador parece quedarse congelado en "no responde", por uno o dos segundos
 - [x] cuando ya hay un area seleccionada, en lugar de ese popup, desde antes de que la selecciones tienes que indicarlo en una especie de slider al lado de la barra con 3 modos
+- [x] en el instalador de la ultima version, en vezde mostrase los iconos de las aplicaciones se muestra el por defecto de tauri
+- [x] al nuevo modal de seleccion de version personalizada del instalador le faltan algunas animaciones, y en algunas actualizaciones hay demasiado texto
+- [x] durante el proceso de instalacion, el instalador se queda congelado en un estado de "no responde"
+- [x] los iconos del escritorio no tienen el icono correcto, tienen el default de tauri (causa: build incremental no re-embebia icon.ico; ahora se fuerza rebuild en el release)
+- [x] el panel de actualizaciones no concuerda con el estilo visual de la aplicacion, y tambien no tiene margenes en los lados, quedando completamente pegado a los bordes
+- [x] se copió todo, pero no se pudo borrar el origen (C:\Users\NICKE\.lumi-indexer): El proceso no tiene acceso al archivo porque está siendo utilizado por otro proceso. (os error 32). Los datos ya están también en el destino; borra el origen a mano cuando quieras.
+- [x] tras hacer la migracion, parece que la carpeta actual no ha cambiado
+- [x] expande el panel de tope mensual para que rellene el gran hueco que dejo el otro panel
+- [x] podrias parar la base de datos automaticamente si se cierra la app? tanto redis como qdrant (ya estaba implementado, verificado)
+- [x] en los perfiles, quiero que la seccion de cobertura contenga una representacion real del mundo
+- [x] en los perfiles, quiero cambiar visualmente el como se ven las publicaciones recientes, que sean por ejemplo una sola barra partida en porciones equivalentes a los porcentajes
+- [x] el panel de disponibilidad se pone por encima del de resultados de busqueda y el que muestra info de lo que has buscado, cuando deber'ian de esconderse completamente
+- [x] en la parte inferior de la pantalla ha aparecido una seccion de embedido, pero todavia no se han descargado todas las imagenes, solo las de un proveedor
+- [x] la pantalla de embedido deber'ia de ser una completa, como la de descarga, pero que se pase a esta misma una vez que termine la descarga de imagenes
+- [x] en el proceso de embedido, al cambiar entre pesta;as el tama;o del mapa se ha hecho super bajo
+- [x] en el embedido no deberias de ser capaz de "cambiar el indice"
+- [x] solo seleccione una tesela, pero marca que esta trabajando en 2 (era comportamiento intencional del backend mal comunicado; ahora hay tooltip con el desglose por origen a peticion tuya)
+- [x] cuando abres el proyecto y luego dentro de este mismo un indice, hay que eliminar todos los toggle de "a;adir capa"
+- [x] cuando actualizas el backend desde el panel de administracion de lumi, puedes buscar la version mas reciente y actualizar al mismo tiempo, esto podria provocar problemas
+- [x] en el panel de administracion, cuando te vas a otra pesta;a mientras esta en fase de aplicando, se cancela la actualizacion
+- [x] en el panel de administracion, cuando hay una actualizacion deberia haber un toast mostrando el progreso si no estas en la parte de actualizaciones
+- [x] en el panel de administracion, falta por agregar la capacidad de poder descargar cualquier version del backend de lumi
+- [x] parece ser que se queda atascado el proceso de actualizacion en esto: Aplicando — si hay trabajo en curso, el servidor espera a que termine antes de reiniciar. tengo otro dato mas, y esta relacionado con el bug 75 poero tal vez te pueda ayudar, el mensaje de mantenimiento que muestra al reproducir el bug 75 es el de actualizando a 2.0.6
+- [x] en el panel de administracion, la pesta;a cola, faltan algunas animaciones
+- [x] en el panel de administracion, pesta;a api keys, el bot'on de guardar solo deber'ia de aparecer en el momento en el que escribes el token del proveedor, pero hasta que no escribass nada no deberia estar ahi, la idea es que aparezca con una animacion, y que cuando este no este que el input rellene ese espacio sobrante
+- [x] en el panel de administracion, cuando haces una actualizacion, se queda guardado el mensaje en los ajustes del modo mantenimiento, sobrescribiendo el otro que tuvieras, cosa que no quiero que ocurra, el del usuario siempre tiene prioridad. Para reproducir este error solo active el modo mantenimiento manualmente y mostro el mensaje de actualizacion
+- [x] en el panel de administracion, en la seccion de customizacion, si no tienes agregada la api key de mapbox, obviamente los estilos de este mismo no van a cargar, asi que en vez de dejar sus casillas del seletor de estilos sin nada, pon algun icono como imagen para indicar que fallaron al cargar, porque si no da la ilusion de que siguen cargando
+- [x] en el panel de administracion, en la seccion de customizacion, quiero que el perfil del servidor sea algo que tengas que activar, como las politicas de aceptacion
+- [x] en el panel de administracion, en la seccion de customizacion, al habilitar el toggle de politicas de aceptaci'on, no tenemos las animaciones y efectos que tenemos en la pesta;a de seguridad, asegurate de propagarlos por todo el panel de administracion
+- [x] ene l panel de administracion, en la seccion de usuarios, cuando haces click a un usuario quisiera que tuviera algun tipo de peque;a transicion para hacer que el pasar de la lista de usuarios a uno concreto no se sienta tan tosco
+- [x] en el panel de administracion, en la seccion de usuarios, quiero que si haces click izquierdo en un usuario tengas un menu contextual de opciones con acciones como bloquear o exigir cambio de contrase;a (se implementó con click derecho, por consistencia con el resto de menús contextuales del cliente — confirmar si te vale)
+- [x] en el panel de administracion, seccion notificaciones, al darle click a nueva notificacion salta un popup, pero los colores de este mismo tienen un tono azulado que no refleja la estetica del cliente
+- [x] en el panel de administracion, seccion hardware, el text que agregamos antes para diferenciar entre el modo basico y avanzado deberia de estar abajo, no arriba, y deberia ser algo mucho mas simple, incluso puedes usar algun tipo de skeleton o mostrar los menus de edicion de las curvas, pero bloqueados (reposicionado y simplificado; se omitió el skeleton/curvas bloqueadas por desproporcionado)
+- [x] en el cliente, quisera ser capaz de acceder a los ajustes del cliente sin necesidad de salirme del servidor, con algun tipo de menu debajo de "perfil y sesiones"
+- [x] en el panel de administracion, en el resumen, la lsita de cosas que hacer para comenzar no deber'ia de estar arriba del todo, si no un poco mas abajo, para que el titulo siempre este arriba
+- [x] en el panel de administracion, en el panel de redes, al darle a reiniciar ahora, se queda colgado, y comienza el reinicio, pero no te saca de la sesion, deberia de hacerlo ya que eres tu el que esta reiniciando el servidor, no que tu conexion este siendo mala
+- [x] en los ajustes del cliente, el toggle de reducir movimiento sigue roto visualmente, haciendo que el modo off parezca on, y en el modo on ya directamente la bolita se salga
+- [x] en el cliente, el aviso de version incompatible sigue sobreponiendose sobre el otro, y como tal esta roto, ya que el texto esta fuera de la caja, no centrado, y sus colores no contrastan con el resto del cliente
+- [x] en el cliente, si intentas loguearte y la version del servidor es incorrecta, y aun asi continuas, si el login es incorrecto, no muestra el error y falla silenciosamente
+- [x] el servidor en wsl parece no poder usar la grafica? es confuso, a veces la reconoce, a veces no (reintentos al arrancar; si el problema persiste tras reiniciar WSL entero, repórtalo de nuevo)
+- [x] en el indexer, en el proceso de embedding, cuando tira un error como este, no se pudo cargar el modelo cosplace: faltan los terminos de licencia en C:\Users\NICKE\.lumi-indexer\pesos\cosplace\LICENCIA.txt; descargalos del repositorio del modelo y guardalos ahi antes de usar estos pesos. te da la opcion de descargarlos, pero deberia de comprobar primero antes que nada si los tienes, antes incluso de comenzar el embedding, y el problema esta en que cuando este error ocurre, no pausa el embedding
+- [x] en el indexer, en el momento de sellar ocurre este error: las filas no cuadran con los vectores — anyloc: 0 de 1224; cliquemining: 0 de 1224; eigenplaces: 0 de 1224; lumi-2: 0 de 1224; lumi-preview: 0 de 1224; mixvpr: 0 de 1224; salad: 0 de 1224 (causa: regresión de la propia migración de carpeta arreglada en esta tanda — la cola de embebido seguía apuntando al directorio viejo)
