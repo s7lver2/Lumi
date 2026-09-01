@@ -84,7 +84,16 @@ fn version_instalada() -> String {
 }
 
 async fn consultar_manifiesto() -> Result<Manifiesto, String> {
-    let manifiesto: Manifiesto = reqwest::Client::new()
+    // Sin timeout, una conexión colgada deja esta llamada esperando para
+    // siempre — y como `aplicar()` la hace ANTES de la espera acotada de la
+    // cola (paso 3, 10 min), ese tope nunca llega a aplicarse: la
+    // actualización se queda en "Aplicando" sin límite ni log, exactamente
+    // el mismo síntoma que #48/#52 en otros binarios de este proyecto.
+    let cliente = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let manifiesto: Manifiesto = cliente
         .get(VERSIONES_URL)
         .send()
         .await
@@ -208,7 +217,13 @@ pub async fn aplicar(app: &App, version_objetivo: Option<&str>) -> Result<(), Ap
         .ok_or(AplicarError::SinDisponible)?
         .clone();
 
-    let bytes = reqwest::Client::new()
+    // 120s, no 10s: aquí se descarga el binario completo de lumid, no solo
+    // el manifiesto JSON — mismo criterio que el resto de este proyecto.
+    let cliente_descarga = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .map_err(|e| AplicarError::Descarga(e.to_string()))?;
+    let bytes = cliente_descarga
         .get(&artefacto.url)
         .send()
         .await
