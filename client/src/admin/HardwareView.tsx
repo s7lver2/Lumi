@@ -70,17 +70,29 @@ export function HardwareView({ token }: { token: string }) {
     <div className="px-6 pb-8 pt-5">
       <div className="flex items-end justify-between border-b border-border pb-[11px]">
         <h2 className="text-[21px] font-medium tracking-[-.025em]">Hardware</h2>
-        <div className="relative flex w-[126px] rounded-lg border border-border bg-surface p-[3px]">
-          <span className="absolute left-[3px] top-[3px] h-[calc(100%-6px)] w-[60px] rounded-md bg-elevated
-            transition-transform duration-[420ms] ease-expo"
-            style={{ transform: avanzado ? "translateX(60px)" : "translateX(0)" }} />
-          {(["Básico", "Avanzado"] as const).map((l, i) => (
-            <button key={l} onClick={() => setAvanzado(i === 1)}
-              className={`relative z-10 flex-1 py-[5px] text-[10px] transition-colors
-                ${(i === 1) === avanzado ? "text-fg" : "text-subtle"}`}>
-              {l}
-            </button>
-          ))}
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="relative flex w-[126px] rounded-lg border border-border bg-surface p-[3px]">
+            <span className="absolute left-[3px] top-[3px] h-[calc(100%-6px)] w-[60px] rounded-md bg-elevated
+              transition-transform duration-[420ms] ease-expo"
+              style={{ transform: avanzado ? "translateX(60px)" : "translateX(0)" }} />
+            {(["Básico", "Avanzado"] as const).map((l, i) => (
+              <button key={l} onClick={() => setAvanzado(i === 1)}
+                className={`relative z-10 flex-1 py-[5px] text-[10px] transition-colors
+                  ${(i === 1) === avanzado ? "text-fg" : "text-subtle"}`}>
+                {l}
+              </button>
+            ))}
+          </div>
+          {/* Sin esto, avanzado no desbloqueaba nada visible (ni curvas ni
+              editor de CPU) en hosts donde el driver ya lo cierra todo — como
+              WSL2 — y cambiar el interruptor se sentía roto en vez de
+              simplemente no tener nada que ofrecer aquí. */}
+          {avanzado && capCurvas?.state === "off"
+            && (!cpu || (cpu.fabricante === "intel" ? capCpuIntel?.state === "off" : capCpuAmd?.state === "off")) && (
+            <p className="max-w-[220px] text-right text-[9.5px] leading-relaxed text-subtle">
+              Nada que editar aquí en este equipo: {capCurvas?.reason}
+            </p>
+          )}
         </div>
       </div>
 

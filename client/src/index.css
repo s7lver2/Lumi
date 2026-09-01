@@ -53,7 +53,15 @@ body { background: #0e0f11; color: #e8e8e6; overflow: hidden; }
 @keyframes jg-fade-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @keyframes jg-lock-breathe { 0%, 100% { opacity: .7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.06); } }
 @keyframes jg-alert-pulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
-@keyframes jg-maint-stripes { from { background-position: 0 0; } to { background-position: -40px 0; } }
+/* El periodo de la banda (10px + 10px = 20px) se mide a lo largo del eje del
+   gradiente a 135deg, no del eje horizontal — `background-position` solo se
+   mueve en horizontal, así que un desplazamiento Δx solo avanza el patrón
+   Δx·cos(45°) a lo largo de ese eje. Para que el bucle cierre sin salto, esa
+   proyección tiene que ser un múltiplo exacto de 20px: Δx = n·20·√2. Con
+   -40px (no múltiplo) el patrón no volvía a su fase inicial cada vuelta y se
+   veía un salto — más visible en el borde izquierdo, donde arranca la
+   cinta — en vez de un bucle continuo. */
+@keyframes jg-maint-stripes { from { background-position: 0 0; } to { background-position: -56.5685px 0; } }
 @keyframes jg-scan { 0%, 70%, 100% { opacity: .22; } 25% { opacity: 1; } }
 @keyframes lumi-tumble-fall {
   0%   { transform: rotate(224deg) translateY(-260px) rotate(-224deg); opacity: 1; }

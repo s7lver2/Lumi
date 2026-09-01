@@ -9,7 +9,6 @@ import { ImageCropModal } from "../ui/ImageCropModal";
 import { UsageBar } from "../ui/UsageBar";
 import { UserTile } from "../ui/UserTile";
 import { ProfileSidebar, type ProfileSeccion } from "./ProfileSidebar";
-import { ActualizacionesSeccion } from "../settings/ActualizacionesSeccion";
 
 const AVATAR_SIDE = 256;
 
@@ -105,10 +104,6 @@ function PerfilPanel({ token }: { token: string }) {
         <Fila etiqueta="Usuario" valor={usuario} />
         <Fila etiqueta="Rol" valor={esAdmin ? "Administrador" : "Investigador"} />
         <Fila etiqueta="Servidor" valor={addr} mono />
-      </div>
-
-      <div className="mt-4">
-        <ActualizacionesSeccion />
       </div>
 
       {!esAdmin && me?.uso && (

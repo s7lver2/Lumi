@@ -1,4 +1,6 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { versionCliente } from "../lib/actualizaciones";
+import { loadServers } from "../lib/session";
 import { useServer } from "../lib/store";
 import { Icon, type IconName } from "../ui/Icon";
 
@@ -51,7 +53,15 @@ export function Sidebar({ actual, onIr, contadores }: {
 }) {
   const nav = useRef<HTMLElement>(null);
   const [marca, setMarca] = useState<{ top: number; height: number } | null>(null);
-  const usuario = useServer((s) => s.username) ?? "";
+  const addr = useServer((s) => s.addr);
+  // El nombre que se le dio al añadir el servidor (o la dirección, si no se
+  // le puso ninguno) — no quién está sentado delante ahora mismo. Esta
+  // cabecera identifica EL SERVIDOR en el que estás, no a ti: con varios
+  // servidores guardados, "tu usuario · propietario" es la misma cabecera en
+  // todos y no dice a cuál has entrado.
+  const nombreServidor = loadServers().find((s) => s.addr === addr)?.label || addr || "";
+  const [version, setVersion] = useState("");
+  useEffect(() => { void versionCliente().then(setVersion); }, []);
 
   // El marcador es UNO y se desliza. Un elemento compartido hace que cambiar
   // de sección se lea como movimiento, no como dos cosas apagándose y
@@ -62,7 +72,7 @@ export function Sidebar({ actual, onIr, contadores }: {
   }, [actual]);
 
   return (
-    <aside className="flex flex-col border-r border-border bg-surface px-[9px] pb-[11px] pt-[13px]">
+    <aside className="flex h-full flex-col border-r border-border bg-surface px-[9px] pb-[11px] pt-[13px]">
       <div className="flex items-center gap-2.5 px-2 pb-3">
         <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[8px]
           border border-border bg-elevated text-muted">
@@ -71,13 +81,18 @@ export function Sidebar({ actual, onIr, contadores }: {
             <path d="M12 2l9 4.5-9 4.5-9-4.5L12 2z" />
           </svg>
         </span>
-        <span className="text-[11.5px] leading-tight text-fg">
-          {usuario}
-          <small className="block text-[9px] tracking-[.03em] text-subtle">propietario</small>
+        <span className="min-w-0 truncate text-[11.5px] leading-tight text-fg">
+          {nombreServidor}
+          <small className="block text-[9px] tracking-[.03em] text-subtle">este servidor</small>
         </span>
       </div>
 
-      <nav ref={nav} className="relative flex flex-col gap-px">
+      {/* `min-h-0` es lo que le falta a un flex item para poder encogerse por
+          debajo de su contenido — sin él, con muchas secciones y una ventana
+          baja, este `<nav>` empuja el pie (huella/versión, `mt-auto` más
+          abajo) fuera del `overflow-hidden` del grid padre (`AdminPanel.tsx`)
+          en vez de scrollear internamente, y el pie queda cortado. */}
+      <nav ref={nav} className="relative flex min-h-0 flex-1 flex-col gap-px overflow-y-auto">
         {marca && (
           <span aria-hidden className="absolute -left-[9px] w-0.5 rounded-r-sm bg-fg
             transition-[top,height] duration-[520ms] ease-expo"
@@ -114,8 +129,8 @@ export function Sidebar({ actual, onIr, contadores }: {
         ))}
       </nav>
 
-      <div className="mt-auto border-t border-border px-2 pt-2.5">
-        <Pie k="huella" v={(useServer.getState().hello?.fingerprint ?? "").slice(0, 12)} />
+      <div className="mt-auto shrink-0 border-t border-border px-2 pt-2.5">
+        <Pie k="versión" v={version} />
         <Pie k="puerto" v="7717" />
       </div>
     </aside>

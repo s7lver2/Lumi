@@ -26,6 +26,15 @@ export function ImageCropModal({ imageDataUrl, aspect, shape, outputW, outputH, 
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const drag = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
 
+  // Sin esto, arrastrar/hacer zoom aquí encima también scrollea el panel de
+  // detrás — el backdrop no intercepta rueda/touch, y nada más en la app
+  // bloquea el scroll del body mientras un modal está montado.
+  useEffect(() => {
+    const previo = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previo; };
+  }, []);
+
   // Cubre el marco entero al zoom mínimo (1x): sin esto, una imagen más
   // apaisada o más vertical que el marco dejaría un borde vacío en vez de
   // recortar.
