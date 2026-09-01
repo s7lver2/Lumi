@@ -1,4 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useEffect, useRef, useState } from "react";
@@ -205,48 +206,86 @@ function PuntosLegend({ fichas }: { fichas: FichaMapa[] }) {
   );
 }
 
-/// Cuántas miniaturas se montan de una vez. Un índice legacy trae miles de
-/// imágenes, y `<img>` × 3000 a la vez es justo lo que tumbaba la ventana:
-/// cada una decodifica su fichero completo en memoria aunque esté fuera de
-/// pantalla, y `loading="lazy"` por sí solo no evita MONTAR el nodo, solo
-/// retrasa la carga de su `src`. Con miles de nodos de golpe el navegador
-/// decodificaba todo a la vez de todas formas.
-const POR_PAGINA = 240;
+/// Un índice legacy trae miles de imágenes, y `<img>` × 3000 a la vez es
+/// justo lo que tumbaba el scroll: cada una decodifica su fichero completo
+/// en memoria aunque esté fuera de pantalla, y `loading="lazy"` por sí solo
+/// no evita MONTAR el nodo, solo retrasa la carga de su `src`. En vez de
+/// paginar (que solo evitaba el choque inicial — cada "Cargar más" se
+/// quedaba montado para siempre) se virtualiza la rejilla: solo existen en
+/// el DOM las filas dentro del viewport (+ margen de overscan), sea cual
+/// sea el tamaño del índice.
+const COLUMNAS = 6;
+const HUECO = 10; // gap-2.5 = 0.625rem = 10px
 
 function Galeria({ fichas }: { fichas: FichaMapa[] }) {
   const [abierta, setAbierta] = useState<number | null>(null);
-  const [mostradas, setMostradas] = useState(POR_PAGINA);
-  const visibles = fichas.slice(0, mostradas);
+  const contenedorRef = useRef<HTMLDivElement>(null);
+  const [anchoColumna, setAnchoColumna] = useState(0);
+
+  useEffect(() => {
+    const el = contenedorRef.current;
+    if (!el) return;
+    const medir = () => {
+      const ancho = el.clientWidth - 32; // p-4 a cada lado = 32px
+      setAnchoColumna((ancho - HUECO * (COLUMNAS - 1)) / COLUMNAS);
+    };
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const filas = Math.ceil(fichas.length / COLUMNAS);
+  const altoFila = anchoColumna > 0 ? anchoColumna * 0.75 : 0; // aspect-[4/3]
+
+  const virtualizador = useVirtualizer({
+    count: filas,
+    getScrollElement: () => contenedorRef.current,
+    estimateSize: () => altoFila + HUECO,
+    overscan: 4,
+  });
 
   return (
-    <div className="h-full overflow-y-auto p-4">
-      <div className="grid grid-cols-6 gap-2.5">
-        {visibles.map((f, i) => (
-          <button
-            key={f.id}
-            onClick={() => setAbierta(i)}
-            className="relative aspect-[4/3] overflow-hidden rounded-md border border-border transition-colors
-              hover:border-white/[.24]"
-          >
-            <img src={convertFileSrc(f.ruta)} alt="" loading="lazy" className="h-full w-full object-cover" />
-            <span className="absolute bottom-1 left-1 rounded-[3px] bg-black/50 px-1 py-px font-mono text-[8px] text-white/75">
-              {nombre(f.fuente)}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {mostradas < fichas.length && (
-        <button
-          onClick={() => setMostradas((n) => n + POR_PAGINA)}
-          className="jg-press mx-auto mt-4 block rounded-lg border border-border px-4 py-2 text-[11.5px] text-fg"
-        >
-          Cargar {Math.min(POR_PAGINA, fichas.length - mostradas)} más ({mostradas} de {fichas.length})
-        </button>
+    <div ref={contenedorRef} className="h-full overflow-y-auto p-4">
+      {anchoColumna > 0 && (
+        <div style={{ position: "relative", height: virtualizador.getTotalSize(), width: "100%" }}>
+          {virtualizador.getVirtualItems().map((fila) => {
+            const inicio = fila.index * COLUMNAS;
+            return (
+              <div
+                key={fila.key}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  transform: `translateY(${fila.start}px)`,
+                  display: "grid",
+                  gridTemplateColumns: `repeat(${COLUMNAS}, 1fr)`,
+                  gap: HUECO,
+                }}
+              >
+                {fichas.slice(inicio, inicio + COLUMNAS).map((f, j) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setAbierta(inicio + j)}
+                    className="relative aspect-[4/3] overflow-hidden rounded-md border border-border transition-colors
+                      hover:border-white/[.24]"
+                  >
+                    <img src={convertFileSrc(f.ruta)} alt="" loading="lazy" className="h-full w-full object-cover" />
+                    <span className="absolute bottom-1 left-1 rounded-[3px] bg-black/50 px-1 py-px font-mono text-[8px] text-white/75">
+                      {nombre(f.fuente)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {abierta !== null && (
-        <Lightbox fichas={visibles} indice={abierta} onCerrar={() => setAbierta(null)} onNavegar={setAbierta} />
+        <Lightbox fichas={fichas} indice={abierta} onCerrar={() => setAbierta(null)} onNavegar={setAbierta} />
       )}
     </div>
   );
