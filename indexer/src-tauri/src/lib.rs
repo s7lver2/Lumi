@@ -1103,7 +1103,8 @@ async fn sellar(
     package::comprobar(&informe).map_err(|e| e.to_string())?;
 
     let raiz = std::path::PathBuf::from(destino);
-    std::fs::create_dir_all(&raiz).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&raiz)
+        .map_err(|e| format!("no se pudo crear la carpeta de destino {}: {e}", raiz.display()))?;
     let imagenes = almacen.imagenes_de_indice(indice_id).map_err(|e| e.to_string())?;
 
     // Lo que no redistribuye no sale del paquete: ni la imagen ni su vector.
@@ -1140,14 +1141,16 @@ async fn sellar(
             let ids: Vec<i64> = filas.iter().map(|(id, _)| *id).collect();
             let vectores = qdrant.leer(&coleccion, &ids).await.map_err(|e| e.to_string())?;
             let dir = raiz.join("fragmentos").join(qk);
-            package::escribir_fragmento(&dir, &m.id, &m.version, &vectores).map_err(|e| e.to_string())?;
+            package::escribir_fragmento(&dir, &m.id, &m.version, &vectores)
+                .map_err(|e| format!("no se pudo escribir el fragmento {}: {e}", dir.display()))?;
             prog.avanzar();
         }
     }
 
     prog.etapa("imágenes");
     let imgs_dir = raiz.join("imagenes");
-    std::fs::create_dir_all(&imgs_dir).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&imgs_dir)
+        .map_err(|e| format!("no se pudo crear {}: {e}", imgs_dir.display()))?;
     for (id, ruta, _) in &imagenes {
         if !viajan.contains(id) {
             continue;
@@ -1175,11 +1178,12 @@ async fn sellar(
         trabajo: lumi_index::manifest::porcentajes_trabajo(&teselas_trab),
         atribuciones: Vec::new(),
     };
+    let manifiesto_path = raiz.join("manifiesto.json");
     std::fs::write(
-        raiz.join("manifiesto.json"),
+        &manifiesto_path,
         serde_json::to_vec_pretty(&manifiesto).map_err(|e| e.to_string())?,
     )
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| format!("no se pudo escribir {}: {e}", manifiesto_path.display()))?;
 
     // Una entrada por quadkey que de verdad viaja. `por_qk` ya está filtrado
     // por `viajan`, así que aquí no hay que volver a decidir nada: solo contar
@@ -1209,14 +1213,15 @@ async fn sellar(
         },
         teselas,
     };
+    let cobertura_path = raiz.join("cobertura.json");
     std::fs::write(
-        raiz.join("cobertura.json"),
+        &cobertura_path,
         serde_json::to_vec_pretty(&cobertura).map_err(|e| e.to_string())?,
     )
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| format!("no se pudo escribir {}: {e}", cobertura_path.display()))?;
 
     prog.etapa("firmando");
-    package::firmar(&raiz).map_err(|e| e.to_string())?;
+    package::firmar(&raiz).map_err(|e| format!("no se pudo firmar el paquete en {}: {e}", raiz.display()))?;
     almacen.sellar_indice(indice_id, destino).map_err(|e| e.to_string())?;
 
     Ok(informe)
