@@ -132,7 +132,9 @@ export function StoragePanel() {
 
       {progreso?.terminado && (
         <p className="mt-3 rounded-lg border border-border bg-white/[.03] px-3.5 py-3 text-[11.5px] text-fg">
-          Migración completa. Cierra y vuelve a abrir la aplicación para que use la nueva carpeta.
+          Migración completa — "Carpeta actual" ya refleja la nueva ubicación. Cierra y vuelve a
+          abrir la aplicación para que el resto (imágenes, paquetes, pesos de modelo) también lea
+          desde ahí.
         </p>
       )}
 

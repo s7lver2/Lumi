@@ -41,6 +41,17 @@ use crypto::Maestra;
 use store::Almacen;
 
 pub struct Estado {
+    /// La carpeta de datos con la que arrancó la app. Tras una migración
+    /// (#55/#56) el puntero en disco (`ubicacion::leer_ubicacion()`) ya
+    /// apunta al destino y `Estado.almacen` ya sirve desde ahí (ver
+    /// `Almacen::reabrir_en`), pero este campo se queda con la ruta vieja
+    /// hasta reiniciar — moverlo a un `Mutex` para poder actualizarlo en
+    /// caliente arrastraría el cambio a cada subsistema que construye rutas
+    /// de archivo con él (pesos, runtime, imágenes, paquetes…), que sí
+    /// necesitan reinicio real para dejar de escribir en la carpeta vieja.
+    /// `ubicacion_leer` y `saludo` no dependen de este campo: leen el
+    /// puntero de disco directamente, así que la UI ("Carpeta actual") se
+    /// actualiza sin reiniciar aunque el resto de subsistemas sí lo pida.
     pub dir: PathBuf,
     pub almacen: Arc<Almacen>,
     pub maestra: Maestra,
@@ -86,9 +97,12 @@ fn directorio() -> PathBuf {
     ubicacion::leer_ubicacion()
 }
 
+/// Lee siempre del puntero de disco (no de `estado.dir`, fijado una sola vez
+/// al arrancar) — así "Carpeta actual" refleja una migración recién hecha
+/// sin necesidad de reiniciar la app (#56).
 #[tauri::command]
-fn ubicacion_leer(estado: tauri::State<'_, Estado>) -> String {
-    estado.dir.display().to_string()
+fn ubicacion_leer(_estado: tauri::State<'_, Estado>) -> String {
+    ubicacion::leer_ubicacion().display().to_string()
 }
 
 #[tauri::command]
@@ -118,7 +132,7 @@ fn ubicacion_migrar(destino: String, estado: tauri::State<'_, Estado>) -> Result
     if destino == estado.dir {
         return Err("es la misma carpeta en la que ya está todo".into());
     }
-    let migracion = ubicacion::Migracion::arrancar(estado.dir.clone(), destino);
+    let migracion = ubicacion::Migracion::arrancar(estado.dir.clone(), destino, estado.almacen.clone());
     *estado.migracion.lock().unwrap() = Some(migracion);
     Ok(())
 }

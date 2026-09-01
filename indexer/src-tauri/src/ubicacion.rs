@@ -16,6 +16,8 @@ use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 
+use crate::store::Almacen;
+
 fn base_home() -> PathBuf {
     let base = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
@@ -69,29 +71,62 @@ impl Migracion {
         self.progreso.lock().unwrap().clone()
     }
 
-    pub fn arrancar(origen: PathBuf, destino: PathBuf) -> Arc<Self> {
+    /// `almacen` es el `Almacen` compartido de toda la app (mismo `Arc` que
+    /// `Estado.almacen`): hace falta para soltar el handle SQLite del origen
+    /// antes de borrarlo (#55) y para dejarlo sirviendo ya desde el destino
+    /// sin reiniciar (#56 — ver `Almacen::reabrir_en`).
+    pub fn arrancar(origen: PathBuf, destino: PathBuf, almacen: Arc<Almacen>) -> Arc<Self> {
         let m = Arc::new(Self {
             progreso: Mutex::new(ProgresoMigracion { trabajando: true, ..Default::default() }),
         });
         let m2 = m.clone();
         std::thread::spawn(move || {
             m2.progreso.lock().unwrap().bytes_total = tamano_total(&origen).unwrap_or(0);
+            // Fusiona el WAL antes de copiar a mano: si no, la copia de
+            // indexer.db/-wal/-shm podría capturar una escritura a medias.
+            almacen.checkpoint();
             match copiar_arbol(&origen, &destino, &m2) {
-                Ok(()) => match std::fs::remove_dir_all(&origen) {
-                    Ok(()) => match guardar_ubicacion(&destino) {
-                        Ok(()) => {
-                            let mut p = m2.progreso.lock().unwrap();
-                            p.trabajando = false;
-                            p.terminado = true;
+                Ok(()) => match almacen.reabrir_en(&destino) {
+                    Ok(()) => match std::fs::remove_dir_all(&origen) {
+                        Ok(()) => match guardar_ubicacion(&destino) {
+                            Ok(()) => {
+                                let mut p = m2.progreso.lock().unwrap();
+                                p.trabajando = false;
+                                p.terminado = true;
+                            }
+                            Err(e) => fallar(&m2, format!(
+                                "se copió y se borró el origen, pero no se pudo guardar la nueva ubicación: {e}"
+                            )),
+                        },
+                        // El origen sigue ahí pero ya no tiene ningún handle nuestro
+                        // encima (el Almacen ya sirve desde el destino) — no vale la
+                        // pena bloquear al usuario por esto, los datos ya están a salvo
+                        // en el destino y el puntero ya apunta ahí.
+                        Err(e) => {
+                            eprintln!(
+                                "migración: no se pudo borrar el origen ({}): {e} — se deja como \
+                                 residuo, los datos ya viven en el destino",
+                                origen.display()
+                            );
+                            match guardar_ubicacion(&destino) {
+                                Ok(()) => {
+                                    let mut p = m2.progreso.lock().unwrap();
+                                    p.trabajando = false;
+                                    p.terminado = true;
+                                    p.error = Some(format!(
+                                        "todo migrado y en uso desde el destino; no se pudo borrar el \
+                                         origen ({}) — bórralo a mano cuando quieras",
+                                        origen.display()
+                                    ));
+                                }
+                                Err(e) => fallar(&m2, format!(
+                                    "se copió todo pero no se pudo guardar la nueva ubicación: {e}"
+                                )),
+                            }
                         }
-                        Err(e) => fallar(&m2, format!(
-                            "se copió y se borró el origen, pero no se pudo guardar la nueva ubicación: {e}"
-                        )),
                     },
                     Err(e) => fallar(&m2, format!(
-                        "se copió todo, pero no se pudo borrar el origen ({}): {e}. Los datos ya están \
-                         también en el destino; borra el origen a mano cuando quieras.",
-                        origen.display()
+                        "se copió todo, pero no se pudo reabrir el almacén en el destino: {e}"
                     )),
                 },
                 Err(e) => fallar(&m2, e.to_string()),

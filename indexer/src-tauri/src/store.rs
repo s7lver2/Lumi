@@ -226,6 +226,32 @@ pub struct Almacen(Mutex<Connection>);
 
 impl Almacen {
     pub fn abrir(dir: &Path) -> Result<Self> {
+        Ok(Self(Mutex::new(Self::conectar(dir)?)))
+    }
+
+    /// Cierra la conexión actual y abre una nueva contra `nuevo_dir` — mismo
+    /// `Almacen` (mismo `Arc`, mismo `Mutex`), así que todos los que ya lo
+    /// tienen prestado empiezan a servir desde el destino sin reiniciar la
+    /// app. Usado por la migración de carpeta de datos (#55): soltar el
+    /// `Connection` viejo aquí es lo que libera el handle de Windows sobre
+    /// `indexer.db` para que el origen se pueda borrar después.
+    pub fn reabrir_en(&self, nuevo_dir: &Path) -> Result<()> {
+        let nueva = Self::conectar(nuevo_dir)?;
+        let mut guard = self.0.lock().unwrap();
+        *guard = nueva;
+        Ok(())
+    }
+
+    /// Fusiona el WAL al archivo principal y deja `-wal`/`-shm` vacíos —
+    /// se llama antes de copiar los archivos a mano (migración) para que la
+    /// copia sea un snapshot consistente en vez de una foto a mitad de
+    /// escritura.
+    pub fn checkpoint(&self) {
+        let guard = self.0.lock().unwrap();
+        let _ = guard.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+    }
+
+    fn conectar(dir: &Path) -> Result<Connection> {
         std::fs::create_dir_all(dir)?;
         let c = Connection::open(dir.join("indexer.db"))?;
         // WAL: lectores concurrentes junto a un escritor. El volumen de
@@ -300,7 +326,7 @@ impl Almacen {
                 "INSERT INTO lotes SELECT * FROM lotes_viejos; DROP TABLE lotes_viejos;",
             )?;
         }
-        Ok(Self(Mutex::new(c)))
+        Ok(c)
     }
 
     fn ahora() -> i64 {
