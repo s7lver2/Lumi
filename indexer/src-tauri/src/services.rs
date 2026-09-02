@@ -269,7 +269,18 @@ impl Servicios {
     /// oficiales del proyecto, a `~/.lumi-indexer/bin` y no a `/usr/local/bin`:
     /// nada de esto necesita tocar el sistema del usuario fuera de su `$HOME`.
     async fn instalar_en_wsl(&self, redis_vivo: bool, qdrant_vivo: bool) -> Result<()> {
-        if !redis_vivo && !Self::hay_en_wsl("redis-server").await {
+        let falta_redis = !redis_vivo && !Self::hay_en_wsl("redis-server").await;
+        let falta_qdrant = !qdrant_vivo && !Self::hay_en_wsl("$HOME/.lumi-indexer/bin/qdrant").await;
+
+        // Las dos instalaciones no comparten nada (`apt-get` toca el sistema
+        // de paquetes de la distro, la descarga de Qdrant solo `$HOME/.lumi-
+        // indexer/bin`), así que van como dos `wsl.exe` concurrentes en vez
+        // de uno tras otro: la combinada tarda lo que tarda la más lenta de
+        // las dos, no la suma.
+        let redis = async {
+            if !falta_redis {
+                return Ok(());
+            }
             self.log.apuntar("redis: no está en WSL, instalándolo".into());
             // `-u root` en vez de `sudo`: WSL entra como root sin contraseña, y
             // `sudo` en un proceso sin terminal se queda esperando una que no
@@ -285,10 +296,13 @@ impl Servicios {
                  DEBIAN_FRONTEND=noninteractive apt-get install -y redis-server curl ca-certificates && \
                  (systemctl disable --now redis-server 2>/dev/null || true)",
             ]);
-            self.correr_hasta_el_final("instalar redis", cmd).await?;
-        }
+            self.correr_hasta_el_final("instalar redis", cmd).await
+        };
 
-        if !qdrant_vivo && !Self::hay_en_wsl("$HOME/.lumi-indexer/bin/qdrant").await {
+        let qdrant = async {
+            if !falta_qdrant {
+                return Ok(());
+            }
             self.log.apuntar("qdrant: no está en WSL, bajando su binario oficial".into());
             // ponytail: se resuelve la última publicación en vez de fijar una
             // versión. El techo es que una publicación rota de Qdrant rompe la
@@ -307,8 +321,12 @@ impl Servicios {
                    | tar -xz -C \"$HOME/.lumi-indexer/bin\"; \
                  chmod +x \"$HOME/.lumi-indexer/bin/qdrant\"",
             ]);
-            self.correr_hasta_el_final("instalar qdrant", cmd).await?;
-        }
+            self.correr_hasta_el_final("instalar qdrant", cmd).await
+        };
+
+        let (r, q) = tokio::join!(redis, qdrant);
+        r?;
+        q?;
         Ok(())
     }
 
