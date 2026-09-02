@@ -575,6 +575,45 @@ fn ficheros_del_trozo(raiz: &Path, trozo: &Trozo, por_qk: &BTreeMap<String, Vec<
 
 /// Todo el trabajo de una publicación, de principio a fin.
 #[allow(clippy::too_many_arguments)]
+/// `true` si hay algo que publicar: la primera vez siempre lo hay, y en las
+/// siguientes solo si hay quadkeys o capas (modelo, versión) que la última
+/// ficha propia no traía. Réplica ligera, sin tocar red ni disco de subida,
+/// de la misma comparación que `publicar()` ya hace para decidir qué entra
+/// en el cuerpo de la publicación — así el botón "Publicar" puede
+/// deshabilitarse cuando no haría nada, en vez de dejar reetiquetar y
+/// resubir un corte idéntico al anterior.
+pub fn hay_novedades_desde_ultima_publicacion(almacen: &Almacen, indice_id: i64) -> Result<bool> {
+    let anterior: Option<lumi_index::ficha::Ficha> = almacen
+        .ultima_ficha_propia(indice_id)?
+        .and_then(|(_, json)| serde_json::from_str(&json).ok());
+    let Some(anterior) = anterior else { return Ok(true) };
+
+    let quadkeys_ya_publicadas: std::collections::HashSet<String> =
+        anterior.fuentes_por_quadkey.iter().map(|(qk, _)| qk.clone()).collect();
+    let capas_ya_publicadas: std::collections::HashSet<(String, String)> =
+        anterior.capas.iter().map(|c| (c.modelo.clone(), c.version.clone())).collect();
+
+    let publicables = almacen.filas_publicables(indice_id)?;
+    let viajan: std::collections::HashSet<i64> = publicables
+        .iter()
+        .filter(|f| crate::package::redistribucion_de(&f.fuente).viaja(f.licencia.as_deref()))
+        .map(|f| f.id)
+        .collect();
+    let hay_quadkey_nueva = almacen
+        .imagenes_de_indice(indice_id)?
+        .into_iter()
+        .any(|(id, _, qk)| viajan.contains(&id) && !quadkeys_ya_publicadas.contains(&qk));
+    if hay_quadkey_nueva {
+        return Ok(true);
+    }
+
+    let Some(ruta) = almacen.ruta_de_indice(indice_id)? else { return Ok(false) };
+    let hay_capa_nueva = modelos_del_paquete(Path::new(&ruta))
+        .into_iter()
+        .any(|(modelo, version, _)| !capas_ya_publicadas.contains(&(modelo, version)));
+    Ok(hay_capa_nueva)
+}
+
 pub async fn publicar(
     almacen: Arc<Almacen>,
     prog: Arc<Publicacion>,

@@ -62,7 +62,7 @@ export function ProfileDialog({ cuenta, onCerrar }: { cuenta: string; onCerrar: 
   const totalTeselasPublicadas = perfil ? perfil.publicaciones.reduce((s, p) => s + p.teselas, 0) : 0;
 
   return (
-    <div className="w-[600px] rounded-card border border-white/[.13] bg-[rgba(16,19,25,.72)] p-[22px_24px] backdrop-blur-xl">
+    <div className="w-[min(600px,92vw)] max-h-[88vh] overflow-y-auto rounded-card border border-white/[.13] bg-[rgba(16,19,25,.72)] p-[22px_24px] backdrop-blur-xl">
       <div className="flex items-center gap-3.5">
         {github
           ? <img src={github.avatar_url} alt="" className="h-[52px] w-[52px] shrink-0 rounded-full border border-white/[.10]" />

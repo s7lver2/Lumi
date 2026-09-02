@@ -505,6 +505,14 @@ fn indice_detalle(estado: tauri::State<'_, Estado>, id: i64) -> Result<DetalleIn
     })
 }
 
+/// `false` = ya se publicó todo lo que hay; el botón "Publicar" se
+/// deshabilita con este motivo en vez de dejar reetiquetar y resubir un
+/// corte idéntico al anterior.
+#[tauri::command]
+fn publicacion_hay_novedades(estado: tauri::State<'_, Estado>, id: i64) -> Result<bool, String> {
+    publicar::hay_novedades_desde_ultima_publicacion(&estado.almacen, id).map_err(|e| e.to_string())
+}
+
 /// Las teselas de un índice, con quién hizo el trabajo de cada una — mismo
 /// dato que alimenta la tabla de "Procedencia del trabajo", pero sin agregar:
 /// es lo que necesita el botón "Liberar" por tesela.
@@ -1812,6 +1820,7 @@ pub fn run() {
             proyectos_lista,
             proyecto_crear,
             indice_detalle,
+            publicacion_hay_novedades,
             indice_lotes,
             lote_cancelar,
             indice_borrar,

@@ -40,12 +40,17 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
   const [publicando, setPublicando] = useState(() => estadoActual()?.indiceId === id);
   const [sesion, setSesion] = useState<Sesion | null>(null);
   const [porteando, setPorteando] = useState(false);
+  // `true` por defecto: hasta que responda el backend, no queremos que el
+  // botón parpadee deshabilitado — solo se apaga cuando de verdad se
+  // confirma que no hay nada nuevo desde la última publicación (#104).
+  const [hayNovedades, setHayNovedades] = useState(true);
 
   useEffect(() => { void api.identidadLeer().then(setSesion); }, []);
 
   const refrescar = () => {
     void api.indiceDetalle(id).then(setDetalle);
     void api.indiceLotes(id).then(setLotes);
+    void api.publicacionHayNovedades(id).then(setHayNovedades);
   };
 
   useEffect(() => {
@@ -133,9 +138,10 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
               </button>
             )}
             {sellado && !soloLectura && (
-              <button onClick={() => setPublicando(true)} disabled={!sesion || !detalle.proyecto}
+              <button onClick={() => setPublicando(true)} disabled={!sesion || !detalle.proyecto || !hayNovedades}
                 title={!sesion ? "conecta una cuenta en Ajustes para publicar"
-                  : !detalle.proyecto ? "este índice no tiene proyecto asignado" : undefined}
+                  : !detalle.proyecto ? "este índice no tiene proyecto asignado"
+                  : !hayNovedades ? "no hay contenido nuevo desde la última publicación" : undefined}
                 className="jg-press rounded-lg border border-border px-3 py-1.5 text-[11px] text-fg disabled:opacity-40">
                 Publicar
               </button>
@@ -163,7 +169,7 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
         {publicando && detalle.proyecto && (
           <Overlay>
             <PublishDialog indiceId={id} nombre={detalle.nombre} proyecto={detalle.proyecto}
-              onHecho={() => setPublicando(false)} />
+              onHecho={() => { setPublicando(false); refrescar(); }} />
           </Overlay>
         )}
 
