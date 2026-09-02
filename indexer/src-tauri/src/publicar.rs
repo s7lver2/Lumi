@@ -109,6 +109,16 @@ impl Publicacion {
         self.0.lock().unwrap().detalle = Some(format!("{hechos}/{total} ficheros"));
     }
 
+    /// Mismo campo `detalle` que `avance_empaquetado`, reutilizado para la
+    /// fase de subida — antes esa fase no tocaba `detalle` en absoluto, así
+    /// que un cuerpo grande (hasta 1.8 GB) dejaba la pantalla clavada en
+    /// "subiendo X" durante minutos, indistinguible de estar colgada.
+    pub fn avance_subida(&self, enviados: u64, total: u64) {
+        let mb_enviados = enviados / 1_000_000;
+        let mb_total = total / 1_000_000;
+        self.0.lock().unwrap().detalle = Some(format!("{mb_enviados} MB / {mb_total} MB"));
+    }
+
     pub fn terminar_asset(&self, bytes: u64) {
         let mut g = self.0.lock().unwrap();
         g.hechos += 1;
@@ -393,19 +403,41 @@ async fn subir_asset(
     release: i64,
     nombre: &str,
     cuerpo: Vec<u8>,
+    prog: &Arc<Publicacion>,
 ) -> Result<String> {
     let url = format!(
         "https://uploads.github.com/repos/{repo}/releases/{release}/assets?name={}",
         urlencoding::encode(nombre)
     );
+    let total = cuerpo.len() as u64;
     let mut espera = 2u64;
     for intento in 1..=3 {
+        // Trozos de 2 MB en vez de un único `body(cuerpo.clone())`: hyper no
+        // pide el siguiente trozo del stream hasta que el anterior ya salió
+        // por el socket, así que esto refleja avance real, no solo
+        // "empezó"/"terminó" — antes la pantalla se quedaba clavada en
+        // "subiendo" durante todo el tiempo que tardara este `.await`.
+        prog.avance_subida(0, total);
+        let enviados = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let trozos: Vec<bytes::Bytes> =
+            cuerpo.chunks(2 * 1024 * 1024).map(|c| bytes::Bytes::copy_from_slice(c)).collect();
+        let flujo = {
+            let enviados = enviados.clone();
+            let prog = prog.clone();
+            futures_util::stream::iter(trozos.into_iter().map(move |trozo| {
+                let n = enviados.fetch_add(trozo.len() as u64, std::sync::atomic::Ordering::Relaxed)
+                    + trozo.len() as u64;
+                prog.avance_subida(n, total);
+                Ok::<_, std::io::Error>(trozo)
+            }))
+        };
         let r = cliente
             .post(&url)
             .bearer_auth(testigo)
             .header("user-agent", "lumi-indexer")
             .header("content-type", "application/octet-stream")
-            .body(cuerpo.clone())
+            .header("content-length", total)
+            .body(reqwest::Body::wrap_stream(flujo))
             .send()
             .await;
         match r {
@@ -661,7 +693,7 @@ pub async fn publicar(
         let bytes = sellado.len() as u64;
         almacen.publicacion_apuntar(indice_id, &nombre, &sha, bytes)?;
         prog.anotar(format!("subiendo {nombre}"));
-        let url = subir_asset(&cliente, &testigo, &repo, release, &nombre, sellado).await?;
+        let url = subir_asset(&cliente, &testigo, &repo, release, &nombre, sellado, &prog).await?;
         almacen.publicacion_marcar_subido(indice_id, &nombre, &url)?;
         prog.terminar_asset(bytes);
         cuerpos.push(Asset { nombre, sha256: sha, bytes, quadkeys: t.quadkeys.clone() });
@@ -697,7 +729,7 @@ pub async fn publicar(
         let bytes = sellado.len() as u64;
         almacen.publicacion_apuntar(indice_id, &nombre, &sha, bytes)?;
         prog.anotar(format!("subiendo {nombre}"));
-        let url = subir_asset(&cliente, &testigo, &repo, release, &nombre, sellado).await?;
+        let url = subir_asset(&cliente, &testigo, &repo, release, &nombre, sellado, &prog).await?;
         almacen.publicacion_marcar_subido(indice_id, &nombre, &url)?;
         prog.terminar_asset(bytes);
         capas.push(Capa {
@@ -742,7 +774,7 @@ pub async fn publicar(
     prog.empezar_asset("ficha.json");
     almacen.publicacion_apuntar(indice_id, "ficha.json", &sha256_hex(&json), json.len() as u64)?;
     borrar_asset_si_existe(&cliente, &testigo, &repo, release, "ficha.json").await?;
-    let url = subir_asset(&cliente, &testigo, &repo, release, "ficha.json", json.clone()).await?;
+    let url = subir_asset(&cliente, &testigo, &repo, release, "ficha.json", json.clone(), &prog).await?;
     almacen.publicacion_marcar_subido(indice_id, "ficha.json", &url)?;
     prog.terminar_asset(json.len() as u64);
     almacen.guardar_ficha_propia(indice_id, numero_version, &String::from_utf8_lossy(&json), ahora)?;
@@ -852,7 +884,7 @@ pub async fn publicar_capa(
     let bytes = sellado.len() as u64;
     almacen.publicacion_apuntar(indice_id, &nombre, &sha, bytes)?;
     prog.anotar(format!("subiendo {nombre}"));
-    subir_asset(&cliente, &testigo, &repo, release, &nombre, sellado).await?;
+    subir_asset(&cliente, &testigo, &repo, release, &nombre, sellado, &prog).await?;
     almacen.publicacion_marcar_subido(indice_id, &nombre, "")?;
     prog.terminar_asset(bytes);
 
@@ -897,7 +929,7 @@ pub async fn publicar_capa(
     let json = serde_json::to_vec_pretty(&ficha)?;
     prog.empezar_asset("ficha.json");
     borrar_asset_si_existe(&cliente, &testigo, &repo, release, "ficha.json").await?;
-    subir_asset(&cliente, &testigo, &repo, release, "ficha.json", json.clone()).await?;
+    subir_asset(&cliente, &testigo, &repo, release, "ficha.json", json.clone(), &prog).await?;
     prog.terminar_asset(json.len() as u64);
     Ok(())
 }
