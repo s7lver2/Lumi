@@ -2,14 +2,19 @@ import { useEffect, useState } from "react";
 
 import { api, type Saludo } from "../lib/api";
 import { Icon } from "../ui/Icon";
+import { LogBox } from "./LogBox";
 
 /** Sondeos antes de darse por vencido. Qdrant abre su `/readyz` en un par de
  *  segundos y Redis responde al PING antes; el tope solo importa para el
  *  arranque en frío de WSL. Mismo tope que `ServicesStep`. */
-// 90 × 800ms ≈ 72s: el arranque en frío de WSL (VM parada) más qdrant
-// cargando su almacén puede superar el medio minuto anterior en máquinas
-// lentas — el margen sube, el sondeo sigue siendo el mismo mecanismo.
-const TOPE_SONDEOS = 90;
+// 375 × 800ms ≈ 5min: un arranque en frío de WSL (VM parada tras ~8 min de
+// inactividad o tras reiniciar Windows) suma `apt-get update` + instalar
+// Redis + bajar el binario de Qdrant, y eso de sobra supera los 72s
+// anteriores la primera vez. No se distingue "primera vez" de "ya instalado"
+// aquí (más simple, ponytail): un arranque ya instalado sigue resolviendo en
+// segundos, así que el margen generoso no cuesta nada salvo en el caso de
+// fallo real, que ahora tarda más en avisar.
+const TOPE_SONDEOS = 375;
 
 /** El hueco entre que la app ya sabe que el asistente inicial se completó una
  *  vez y que de verdad se puede entrar. Antes se saltaba directo: `lumid` no
@@ -85,6 +90,15 @@ export function ServicesBoot({ saludo, onListo, onFallo }: {
           La primera vez instala Redis y el binario de Qdrant dentro de la distribución: puede
           tardar unos minutos. Los arranques siguientes son instantáneos.
         </p>
+      )}
+      {enWindows && (
+        // Mismo `servicios_log` que ya alimenta `ServicesFailDialog`: en vez
+        // de un spinner mudo durante hasta 5 minutos, se ve en qué fase real
+        // va (instalando redis / bajando qdrant / arrancando) — la señal de
+        // que sigue avanzando y no está colgado.
+        <div className="w-full">
+          <LogBox />
+        </div>
       )}
     </div>
   );
