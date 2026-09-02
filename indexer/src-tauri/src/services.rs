@@ -42,6 +42,15 @@ pub struct Log(Mutex<Vec<String>>);
 
 impl Log {
     pub fn apuntar(&self, linea: String) {
+        // También al log de fichero (`indexer.log`, vía `tauri-plugin-log`),
+        // no solo al buffer en memoria: sin esto, el arranque de Redis/Qdrant
+        // era invisible para el panel de Debug general (`debug_log_leer`),
+        // que lee ESE fichero y no este buffer — la única vía para
+        // diagnosticar una lentitud real era reproducirla con el asistente
+        // de arranque abierto delante. Las líneas ya llegan prefijadas con
+        // el nombre del servicio/paso (p.ej. "redis: …", "instalar qdrant: …").
+        log::info!("[servicios] {linea}");
+
         let mut v = self.0.lock().unwrap();
         // ponytail: tope de 2000 líneas en memoria, sin fichero. El techo es
         // que un arranque patológico pierde el principio; la salida, escribirlo
