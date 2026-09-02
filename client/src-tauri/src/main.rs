@@ -267,6 +267,23 @@ fn version_cliente() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+/// Si el cliente está registrado para arrancar con el sistema, ahora mismo.
+#[tauri::command]
+fn autoarranque_leer(app: tauri::AppHandle) -> bool {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch().is_enabled().unwrap_or(false)
+}
+
+/// Registra o quita el arranque con el sistema. `enable`/`disable` tocan el
+/// registro de Windows (o el equivalente del SO); no hay estado propio que
+/// persistir aquí, el propio SO es la fuente de verdad.
+#[tauri::command]
+fn autoarranque_fijar(app: tauri::AppHandle, activo: bool) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let m = app.autolaunch();
+    if activo { m.enable() } else { m.disable() }.map_err(|e| e.to_string())
+}
+
 /// `true` solo cuando `installer.exe --silencioso` acaba de relanzar esta
 /// app tras un downgrade/versión exacta (ver `silencioso.rs`) — la marca
 /// vive en el entorno de este único proceso, nunca se guarda. Sin esto, el
@@ -724,6 +741,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .manage(Shared::default())
         // Bytes del daemon al webview sin que el webview vea el certificado.
         // En Windows el webview lo pide como http://lumi.localhost/<ruta>; en
@@ -793,7 +811,7 @@ fn main() {
             upload_images, read_image_as_data_url, upload_avatar_bytes, upload_server_avatar_bytes,
             upload_server_banner_bytes, comprobar_actualizacion, error_actualizacion_pendiente, disparar_actualizacion_silenciosa,
             disparar_actualizacion_a_version, version_cliente, historial_actualizaciones,
-            sin_autoactualizar_este_arranque
+            sin_autoactualizar_este_arranque, autoarranque_leer, autoarranque_fijar
         ])
         .run(tauri::generate_context!())
         .expect("error al arrancar Tauri");

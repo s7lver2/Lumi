@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Seccion } from "../admin/AdminPanel";
+import { api } from "../lib/api";
 import {
   ESCALAS_INTERFAZ, leerEscalaInterfaz, leerReducirMovimiento, setEscalaInterfaz, setReducirMovimiento,
 } from "../lib/apariencia";
@@ -10,14 +11,16 @@ import { ActualizacionesSeccion } from "./ActualizacionesSeccion";
  *  `profile/ProfileView.tsx` y no exige sesión. Mismo esqueleto de grid que
  *  ProfileView/AdminPanel. */
 export function AjustesView({ onBack }: { onBack: () => void }) {
-  const [seccion, setSeccion] = useState<AjustesSeccion>("actualizaciones");
+  const [seccion, setSeccion] = useState<AjustesSeccion>("general");
 
   return (
     <div className="grid h-full w-full grid-cols-[206px_1fr] overflow-hidden bg-bg">
       <AjustesSidebar actual={seccion} onIr={setSeccion} onBack={onBack} />
       <div key={seccion} className="overflow-y-auto"
         style={{ animation: "jg-fade-rise .5s cubic-bezier(.16,1,.3,1) both" }}>
-        {seccion === "actualizaciones" ? (
+        {seccion === "general" ? (
+          <GeneralPanel />
+        ) : seccion === "actualizaciones" ? (
           <Seccion titulo="Actualizaciones" grupo="Ajustes">
             <p className="text-[11px] text-muted">Comprueba si hay una versión nueva de Lumi.</p>
             <div className="mt-4">
@@ -29,6 +32,33 @@ export function AjustesView({ onBack }: { onBack: () => void }) {
         )}
       </div>
     </div>
+  );
+}
+
+function GeneralPanel() {
+  const [activo, setActivo] = useState<boolean | null>(null);
+
+  useEffect(() => { void api.autoarranqueLeer().then(setActivo); }, []);
+
+  async function cambiar(v: boolean) {
+    setActivo(v);
+    await api.autoarranqueFijar(v);
+  }
+
+  return (
+    <Seccion titulo="General" grupo="Ajustes">
+      <label className="flex items-center justify-between gap-3 rounded-card border border-border bg-panel p-[13px_16px]">
+        <span className="text-[11.5px] text-fg">
+          Iniciar con el sistema
+          <small className="mt-0.5 block text-[10px] text-subtle">Abre Lumi automáticamente al encender el equipo.</small>
+        </span>
+        <button role="switch" aria-checked={activo ?? false} disabled={activo === null}
+          onClick={() => void cambiar(!activo)}
+          className={`relative h-5 w-10 shrink-0 rounded-full border transition-colors duration-300 ease-expo disabled:opacity-40 ${activo ? "border-accent bg-accent" : "border-white/15 bg-white/10"}`}>
+          <span className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-fg ring-1 ring-black/20 transition-transform duration-300 ease-expo ${activo ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+        </button>
+      </label>
+    </Seccion>
   );
 }
 

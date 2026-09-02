@@ -373,6 +373,23 @@ fn cola_concurrencia_fijar(estado: tauri::State<'_, Estado>, n: usize) {
     estado.cola.fijar_concurrencia(n);
 }
 
+/// Si el Indexer está registrado para arrancar con el sistema, ahora mismo.
+#[tauri::command]
+fn autoarranque_leer(app: tauri::AppHandle) -> bool {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch().is_enabled().unwrap_or(false)
+}
+
+/// Registra o quita el arranque con el sistema. `enable`/`disable` tocan el
+/// registro de Windows (o el equivalente del SO); no hay estado propio que
+/// persistir aquí, el propio SO es la fuente de verdad.
+#[tauri::command]
+fn autoarranque_fijar(app: tauri::AppHandle, activo: bool) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let m = app.autolaunch();
+    if activo { m.enable() } else { m.disable() }.map_err(|e| e.to_string())
+}
+
 /// El modo de consumo al embeber ahora mismo: `true` es "bajo".
 #[tauri::command]
 fn cola_consumo_leer(estado: tauri::State<'_, Estado>) -> bool {
@@ -1729,6 +1746,7 @@ pub fn run() {
         )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .manage(Estado {
             dir,
             almacen,
@@ -1777,6 +1795,8 @@ pub fn run() {
             cola_concurrencia_fijar,
             cola_consumo_leer,
             cola_consumo_fijar,
+            autoarranque_leer,
+            autoarranque_fijar,
             indice_progreso_embebido,
             ingesta_carpeta,
             indice_reembeber,

@@ -515,4 +515,8 @@ export const api = {
   serverProfilePatch: (patch: Partial<Pick<ServerProfileSettings, "active" | "title" | "description">>, token: string) =>
     api.patch<ServerProfileSettings>("/v1/admin/server-profile", patch, token),
   actividadGet: (token: string) => api.get<ActividadItem[]>("/v1/admin/actividad", token),
+  /** Ajuste local del sistema operativo, no del servidor: no pasa por
+   *  `request`/el daemon, es un comando Tauri propio del cliente. */
+  autoarranqueLeer: () => invoke<boolean>("autoarranque_leer"),
+  autoarranqueFijar: (activo: boolean) => invoke<void>("autoarranque_fijar", { activo }),
 };

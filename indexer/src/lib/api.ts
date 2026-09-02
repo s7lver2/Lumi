@@ -347,6 +347,8 @@ export const api = {
   colaConcurrenciaFijar: (n: number) => invoke<void>("cola_concurrencia_fijar", { n }),
   colaConsumoLeer: () => invoke<boolean>("cola_consumo_leer"),
   colaConsumoFijar: (bajo: boolean) => invoke<void>("cola_consumo_fijar", { bajo }),
+  autoarranqueLeer: () => invoke<boolean>("autoarranque_leer"),
+  autoarranqueFijar: (activo: boolean) => invoke<void>("autoarranque_fijar", { activo }),
   indiceProgresoEmbebido: (id: number) => invoke<ProgresoIndiceEmbed[]>("indice_progreso_embebido", { id }),
 
   claveGuardar: (proveedor: string, clave: string) =>
