@@ -312,6 +312,21 @@ impl Cola {
         let _ = self.almacen.guardar_ajuste(CLAVE_PRIORIDAD_BAJA, if bajo { "true" } else { "false" });
     }
 
+    /// Mata explícitamente cada trabajador de embebido con ranura activa, en
+    /// vez de confiar en `kill_on_drop`. Al cerrar la app, Tauri v2 suele
+    /// llamar a `std::process::exit` justo después de `RunEvent::Exit` — los
+    /// destructores de Rust (y con ellos, `kill_on_drop`) pueden no llegar a
+    /// correr nunca, dejando `lumi_embed.py` huérfano. Se llama desde ese
+    /// gancho de salida (`lib.rs`), nunca en caliente durante uso normal.
+    pub async fn matar_trabajadores(&self) {
+        let mut ranuras = self.trabajadores.lock().await;
+        for (_, trabajador) in ranuras.ranuras.drain() {
+            let mut t = trabajador.lock().await;
+            let _ = t.hijo.start_kill();
+        }
+        ranuras.orden.clear();
+    }
+
     /// Consigue la ranura de `modelo`: la existente si ya la tiene, o una
     /// nueva desalojando la menos usada si hace falta sitio. El `Mutex` que
     /// envuelve cada `Trabajador` es SUYO, no el del conjunto: dos modelos con

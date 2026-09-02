@@ -1877,8 +1877,13 @@ pub fn run() {
         // huérfanos ocupando sus puertos hasta el siguiente reinicio.
         .run(|app, evento| {
             if matches!(evento, tauri::RunEvent::Exit) {
-                let servicios = app.state::<Estado>().servicios.clone();
+                let estado = app.state::<Estado>();
+                let servicios = estado.servicios.clone();
+                let cola = estado.cola.clone();
                 tauri::async_runtime::block_on(async move {
+                    // Los trabajadores de embebido en curso primero: no
+                    // dependen solo de `kill_on_drop` (ver `matar_trabajadores`).
+                    cola.matar_trabajadores().await;
                     let _ = servicios.parar().await;
                 });
             }
