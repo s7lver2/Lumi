@@ -29,15 +29,67 @@ pub async fn traer_y_abrir(
     sha256_esperado: &str,
     clave: &[u8; 32],
     destino: &Path,
+    progreso: &crate::indices::EnCurso,
 ) -> Result<()> {
-    let sellado = http.get(url).send().await?.error_for_status()?.bytes().await?;
+    use futures::StreamExt;
+    use tokio::io::AsyncWriteExt;
 
-    let visto = format!("{:x}", Sha256::digest(&sellado));
+    // El asset se escribe a disco EN STREAMING, no se junta entero en RAM
+    // con `.bytes()`: un cuerpo puede pesar hasta 1.8 GB (tope real de la
+    // publicación, ver spec de `.lumidx`), y ese `.bytes()` original vivía
+    // en memoria a la vez que, un par de líneas más abajo, el texto claro
+    // ya descifrado — dos gigabytes largos, simultáneos, sin ninguna
+    // necesidad, en una máquina que puede no sobrarle ese margen. Fue justo
+    // eso lo que dejó el sistema colgado y tumbó el daemon a mitad de una
+    // descarga real. El buffer aquí es del tamaño de un trozo de red, no
+    // del tamaño del asset.
+    std::fs::create_dir_all(destino)?;
+    let temporal = destino.join(format!(".{sha256_esperado}.parcial"));
+
+    let respuesta = http.get(url).send().await?.error_for_status()?;
+    if let Some(p) = progreso.lock().unwrap().as_mut() {
+        p.asset_bytes_total = respuesta.content_length().unwrap_or(0);
+    }
+
+    let mut hasher = Sha256::new();
+    let mut recibidos: u64 = 0;
+    {
+        let mut fichero = tokio::fs::File::create(&temporal).await?;
+        let mut flujo = respuesta.bytes_stream();
+        while let Some(trozo) = flujo.next().await {
+            let trozo = trozo.map_err(|e| {
+                let _ = std::fs::remove_file(&temporal);
+                anyhow!("se cortó la descarga: {e}")
+            })?;
+            hasher.update(&trozo);
+            if let Err(e) = fichero.write_all(&trozo).await {
+                let _ = std::fs::remove_file(&temporal);
+                return Err(e.into());
+            }
+            recibidos += trozo.len() as u64;
+            if let Some(p) = progreso.lock().unwrap().as_mut() {
+                p.asset_bytes_hechos = recibidos;
+            }
+        }
+    }
+
+    let visto = format!("{:x}", hasher.finalize());
     if visto != sha256_esperado {
+        let _ = std::fs::remove_file(&temporal);
         return Err(anyhow!("el asset no coincide con su sha256: dice {sha256_esperado}, es {visto}"));
     }
 
+    // El descifrado (AES-256-GCM, un solo golpe) sigue exigiendo el asset
+    // sellado entero en memoria — la biblioteca no ofrece una variante en
+    // streaming y cambiarlo tocaría el formato de cifrado que ya comparten
+    // el Indexer (que firma) y este mismo lector, así que queda fuera de
+    // este arreglo. `sellado` se libera en cuanto `descifrar` devuelve
+    // `claro`, así que el pico de aquí en adelante es de un solo asset, no
+    // de dos a la vez como antes.
+    let sellado = tokio::fs::read(&temporal).await?;
+    let _ = tokio::fs::remove_file(&temporal).await;
     let claro = lumi_index::cifrado::descifrar(&sellado, clave)?;
+    drop(sellado);
     let destino = destino.to_path_buf();
 
     // Descomprimir gigabytes es CPU pura: en el hilo async bloquearía el

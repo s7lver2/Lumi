@@ -17,6 +17,15 @@ pub struct Progreso {
     pub asset: String,
     pub hechos: usize,
     pub total: usize,
+    /// Bytes ya bajados del asset EN CURSO (no acumulado entre assets: se
+    /// reinicia a 0 cuando empieza el siguiente). `hechos`/`total` solo se
+    /// mueve al terminar un asset entero — para un paquete con un único
+    /// cuerpo grande (el caso más fácil de confundir con "se ha colgado"),
+    /// eso deja el progreso clavado en 0% durante toda la descarga. Estos
+    /// dos campos son lo que permite que la barra se mueva de verdad
+    /// mientras ese asset se descarga.
+    pub asset_bytes_hechos: u64,
+    pub asset_bytes_total: u64,
     pub registro: Vec<String>,
     pub terminado: bool,
     pub error: Option<String>,
@@ -233,8 +242,10 @@ async fn instalar_uno(app: &crate::App, http: &reqwest::Client, ficha: &Ficha, f
         anotar(app, format!("bajando {}", a.nombre));
         if let Some(p) = app.indices_en_curso.lock().unwrap().as_mut() {
             p.asset = a.nombre.clone();
+            p.asset_bytes_hechos = 0;
+            p.asset_bytes_total = 0;
         }
-        paquete::traer_y_abrir(http, &url_de(ficha_url, &a.nombre), &a.sha256, &clave, &raiz).await?;
+        paquete::traer_y_abrir(http, &url_de(ficha_url, &a.nombre), &a.sha256, &clave, &raiz, &app.indices_en_curso).await?;
         marcar_hecho(app, &ficha.paquete, &a.nombre)?;
         avanzar(app, 1);
     }

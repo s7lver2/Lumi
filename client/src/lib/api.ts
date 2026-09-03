@@ -361,6 +361,11 @@ export interface IndiceInstalado {
 }
 export interface ProgresoInstalacion {
   paquete: string; asset: string; hechos: number; total: number;
+  /** Bytes del asset EN CURSO, no acumulado entre assets — se reinicia a 0
+   *  al empezar el siguiente. Para un paquete con un único asset grande,
+   *  `hechos`/`total` no se mueve hasta que termina entero; estos dos
+   *  campos son lo único que avanza mientras tanto. */
+  asset_bytes_hechos: number; asset_bytes_total: number;
   registro: string[]; terminado: boolean; error: string | null; rotas: string[];
 }
 /** Lo que `/v1/auth/me` contesta. Los límites vienen aquí para que la interfaz

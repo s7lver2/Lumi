@@ -5,6 +5,13 @@ import { api, type ProgresoInstalacion } from "../lib/api";
 import { startIndicesEvents } from "../lib/bridge";
 import { InstallDialog } from "../work/InstallDialog";
 
+const KB = 1024;
+function tamano(bytes: number): string {
+  if (bytes < KB * KB) return `${(bytes / KB).toFixed(0)} KB`;
+  if (bytes < KB * KB * KB) return `${(bytes / KB / KB).toFixed(1)} MB`;
+  return `${(bytes / KB / KB / KB).toFixed(2)} GB`;
+}
+
 /** Pega la URL de una ficha, resuelve su grafo con `InstallDialog` y, al
  *  confirmar, lanza la instalación y sigue su progreso por SSE — el mismo
  *  puente que el cliente ya usa para `/v1/queue/events`.
@@ -31,7 +38,11 @@ export function InstallFlow({ token, onCerrar, onInstalado }: {
       setError(String(e));
       return;
     }
-    setProgreso({ paquete: "", asset: "", hechos: 0, total: 1, registro: [], terminado: false, error: null, rotas: [] });
+    setProgreso({
+      paquete: "", asset: "", hechos: 0, total: 1,
+      asset_bytes_hechos: 0, asset_bytes_total: 0,
+      registro: [], terminado: false, error: null, rotas: [],
+    });
     await startIndicesEvents(token);
     const un = await listen<ProgresoInstalacion>("indices-progress", (e) => {
       setProgreso(e.payload);
@@ -43,7 +54,16 @@ export function InstallFlow({ token, onCerrar, onInstalado }: {
   }
 
   if (progreso) {
-    const pct = progreso.total > 0 ? Math.round((progreso.hechos / progreso.total) * 100) : 0;
+    // Fracción del asset EN CURSO, no solo "hechos/total" — para un
+    // paquete de un único asset grande, hechos/total se queda en 0 hasta
+    // que termina entero; sumar la fracción de bytes del asset actual es
+    // lo que hace que la barra avance de verdad mientras se descarga.
+    const fraccionAssetActual =
+      progreso.asset_bytes_total > 0 ? progreso.asset_bytes_hechos / progreso.asset_bytes_total : 0;
+    const pct =
+      progreso.total > 0
+        ? Math.round(((progreso.hechos + fraccionAssetActual) / progreso.total) * 100)
+        : 0;
     return (
       <div className="w-[480px] rounded-2xl border border-white/[.13] bg-[rgba(16,19,25,.66)] p-[20px_22px] backdrop-blur-xl">
         <p className="text-sm text-white">
@@ -51,6 +71,9 @@ export function InstallFlow({ token, onCerrar, onInstalado }: {
         </p>
         <p className="mt-1 font-mono text-[10.5px] text-white/50">
           {progreso.paquete}{progreso.asset ? ` · ${progreso.asset}` : ""}
+          {progreso.asset_bytes_total > 0
+            ? ` · ${tamano(progreso.asset_bytes_hechos)} / ${tamano(progreso.asset_bytes_total)}`
+            : ""}
         </p>
         <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/10">
           <div className="h-full bg-[#378add] transition-[width]" style={{ width: `${pct}%` }} />

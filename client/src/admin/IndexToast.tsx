@@ -26,7 +26,16 @@ export function IndexToast({ token, onIr }: { token: string; onIr: (s: Seccion) 
 
   if (!progreso || cerrado) return null;
 
-  const pct = progreso.total > 0 ? Math.round((progreso.hechos / progreso.total) * 100) : 0;
+  // Fracción del asset EN CURSO, no solo "hechos/total" — para un paquete
+  // de un único asset grande, hechos/total se queda en 0 hasta que termina
+  // entero; sumar la fracción de bytes del asset actual es lo que hace que
+  // la barra avance de verdad mientras se descarga.
+  const fraccionAssetActual =
+    progreso.asset_bytes_total > 0 ? progreso.asset_bytes_hechos / progreso.asset_bytes_total : 0;
+  const pct =
+    progreso.total > 0
+      ? Math.round(((progreso.hechos + fraccionAssetActual) / progreso.total) * 100)
+      : 0;
   const fallo = progreso.terminado && !!progreso.error;
 
   return (
