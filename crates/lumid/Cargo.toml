@@ -39,3 +39,10 @@ http = "1"
 rustls-pemfile = "2"
 rustls-pki-types = "1"
 bytes = "1"
+console-subscriber = { version = "0.4", optional = true }
+
+[features]
+# Aparte por defecto: exige compilar con `--cfg tokio_unstable` (API de
+# instrumentación de tareas de tokio, todavia no estable) y abre un puerto
+# gRPC nuevo — nada de esto pinta en un build de produccion normal.
+console = ["dep:console-subscriber", "tokio/tracing"]

@@ -109,10 +109,16 @@ async fn main() -> anyhow::Result<()> {
     let filtro_inicial = logging::construir_filtro(&store);
     let (filtro_capa, log_filter) =
         tracing_subscriber::reload::Layer::new(tracing_subscriber::EnvFilter::new(&filtro_inicial));
-    tracing_subscriber::registry()
+    let registro = tracing_subscriber::registry()
         .with(filtro_capa)
-        .with(tracing_subscriber::fmt::layer().with_ansi(false))
-        .init();
+        .with(tracing_subscriber::fmt::layer().with_ansi(false));
+    // Solo en builds `--features console`: abre el puerto gRPC de
+    // tokio-console (127.0.0.1:6669) para ver en vivo qué tarea está
+    // parada y en qué, en vez de adivinarlo a base de strace tras el
+    // hecho. Nunca en un build normal — exige `--cfg tokio_unstable`.
+    #[cfg(feature = "console")]
+    let registro = registro.with(console_subscriber::spawn());
+    registro.init();
     tracing::info!("nivel de log inicial: {filtro_inicial}");
 
     let (tls_cfg, fingerprint) = tls::load(&dir).await?;
