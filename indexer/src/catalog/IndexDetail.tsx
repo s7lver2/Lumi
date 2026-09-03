@@ -44,6 +44,17 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
   // botón parpadee deshabilitado — solo se apaga cuando de verdad se
   // confirma que no hay nada nuevo desde la última publicación (#104).
   const [hayNovedades, setHayNovedades] = useState(true);
+  // Escape a esa misma comprobación (#104): compara CONTENIDO (quadkeys,
+  // modelos), no el formato en que se empaqueta. Un arreglo del empaquetado
+  // — la razón real por la que esto existe hoy: los paquetes publicados
+  // antes de 2026-09 no llevaban las filas de imagen y no instalaban nunca —
+  // dejaría el botón deshabilitado para siempre con el mismo índice, porque
+  // el contenido no cambió aunque los bytes que hay que resubir sí. Se pisa
+  // a mano en vez de "arreglar" la comparación de contenido: distinguir
+  // "mismo contenido, otro formato" exigiría llevar la cuenta de qué versión
+  // del empaquetado firmó cada publicación, y hoy nada lo necesita más que
+  // este caso excepcional.
+  const [forzarPublicar, setForzarPublicar] = useState(false);
 
   useEffect(() => { void api.identidadLeer().then(setSesion); }, []);
 
@@ -138,13 +149,23 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
               </button>
             )}
             {sellado && !soloLectura && (
-              <button onClick={() => setPublicando(true)} disabled={!sesion || !detalle.proyecto || !hayNovedades}
-                title={!sesion ? "conecta una cuenta en Ajustes para publicar"
-                  : !detalle.proyecto ? "este índice no tiene proyecto asignado"
-                  : !hayNovedades ? "no hay contenido nuevo desde la última publicación" : undefined}
-                className="jg-press rounded-lg border border-border px-3 py-1.5 text-[11px] text-fg disabled:opacity-40">
-                Publicar
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPublicando(true)}
+                  disabled={!sesion || !detalle.proyecto || (!hayNovedades && !forzarPublicar)}
+                  title={!sesion ? "conecta una cuenta en Ajustes para publicar"
+                    : !detalle.proyecto ? "este índice no tiene proyecto asignado"
+                    : !hayNovedades && !forzarPublicar ? "no hay contenido nuevo desde la última publicación" : undefined}
+                  className="jg-press rounded-lg border border-border px-3 py-1.5 text-[11px] text-fg disabled:opacity-40">
+                  Publicar
+                </button>
+                {sesion && detalle.proyecto && !hayNovedades && !forzarPublicar && (
+                  <button onClick={() => setForzarPublicar(true)}
+                    className="jg-press text-[10.5px] text-subtle underline decoration-dotted hover:text-fg">
+                    sin contenido nuevo — publicar igual
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>
