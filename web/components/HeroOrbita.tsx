@@ -152,9 +152,12 @@ export function HeroOrbita() {
 
     function pintar(t: number) {
       ctx!.clearRect(0, 0, W, H);
-      const cx = W * 0.66, cy = H * 0.46;
-      const scale = Math.min(W, H) * 0.62;
-      const camZ = 3.1;
+      // El planeta se ancla cerca del borde inferior y mucho más grande —
+      // cámara casi rozando la superficie en vez de la esfera completa
+      // flotando pequeña en el centro.
+      const cx = W * 0.6, cy = H * 1.04;
+      const scale = Math.min(W, H) * 0.98;
+      const camZ = 2.55;
       const rotY = t * 0.07;
       const tiltX = 0.3 + Math.sin(t * 0.12) * 0.04;
 

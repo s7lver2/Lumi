@@ -4,9 +4,10 @@ import { usarEscenaViva } from "./usarEscenaViva";
 
 /** El sobrevuelo de la interfaz: una maqueta de la UI de Lumi asoma tumbada
  *  en el horizonte, sobrevuela el terreno a velocidad constante, se levanta
- *  hasta quedar de plano y legible, y luego —fase nueva— recorre de
- *  izquierda a derecha cuatro pantallas distintas de la interfaz mientras
- *  el texto de cada una ocupa el hueco de scroll que le corresponde.
+ *  hasta quedar de plano y legible, y luego —fase nueva— salta entre cuatro
+ *  pantallas distintas de la interfaz alternando de lado (derecha,
+ *  izquierda, derecha…) en vez de barrer siempre en la misma dirección,
+ *  mientras el texto de cada una ocupa el hueco de scroll que le corresponde.
  *  Reemplaza a la "ventana viva" del concepto — spec §7. Los parámetros
  *  están medidos con una maqueta interactiva, no estimados: no se tocan
  *  sin recalcular.
@@ -28,8 +29,9 @@ import { usarEscenaViva } from "./usarEscenaViva";
 const TUMBE = 75;
 const DESDE = 980; // suficientemente lejos: en scroll=0 la ventana queda fuera de campo
 const HASTA = -355; // centra la ventana por geometría: 92 + Y·cos75° ≈ 0
-const FIN_VUELO = 0.4;
-const FIN_LEVANTAMIENTO = 0.52;
+const FIN_VUELO = 0.46; // hasta aquí el viaje termina de llegar a HASTA
+const INICIO_ALZA = 0.28; // el alzamiento empieza a mezclarse ANTES de que el viaje acabe — las dos cosas a la vez, no una detrás de otra
+const FIN_LEVANTAMIENTO = 0.58;
 const RECORRIDO_PX = 8600; // fase A+B como antes, más el recorrido de la fase C (showcase)
 
 function easeOutCubic(x: number) {
@@ -47,24 +49,26 @@ type Pintura = {
 };
 
 function pintar(p: number): Pintura {
-  if (p < FIN_VUELO) {
-    const v = p / FIN_VUELO; // velocidad constante: es un vuelo, no una frenada
-    const y = DESDE + (HASTA - DESDE) * v;
-    return {
-      y, alza: 0, rot: 0, opSombra: Math.min(1, v * 3), opSuelo: 1, deriva: Math.sin(v * Math.PI) * 26,
-      fase: "vuelo", indiceFloat: 0, offsetX: 0,
-    };
-  }
   if (p < FIN_LEVANTAMIENTO) {
-    const s = easeOutCubic((p - FIN_VUELO) / (FIN_LEVANTAMIENTO - FIN_VUELO));
+    // El viaje (y) y el alzamiento (alza/rot) ya no son dos tramos
+    // secuenciales con un corte seco en FIN_VUELO: el alzamiento arranca en
+    // INICIO_ALZA, todavía dentro del tramo de vuelo, así que en el hueco
+    // [INICIO_ALZA, FIN_VUELO] las dos cosas ocurren a la vez y se funden.
+    const vLineal = Math.min(1, p / FIN_VUELO);
+    const vCurva = easeInOutCubic(vLineal); // curva de velocidad, no un vuelo a ritmo constante
+    const y = DESDE + (HASTA - DESDE) * vCurva;
+
+    const vAlza = Math.max(0, Math.min(1, (p - INICIO_ALZA) / (FIN_LEVANTAMIENTO - INICIO_ALZA)));
+    const s = easeOutCubic(vAlza);
+
     return {
-      y: HASTA,
+      y,
       alza: 26 * s, // simbólico — ver trampa 4
       rot: -TUMBE * s, // contrarrota el tumbe → de frente
-      opSombra: 1 - s,
+      opSombra: Math.min(1, vCurva * 3) * (1 - s),
       opSuelo: 1 - s * 0.85,
-      deriva: 0,
-      fase: "levantamiento", indiceFloat: 0, offsetX: 0,
+      deriva: Math.sin(vCurva * Math.PI) * 26,
+      fase: p < FIN_VUELO ? "vuelo" : "levantamiento", indiceFloat: 0, offsetX: 0,
     };
   }
   // Fase C: la pieza ya está plana (s=1 fijo) y ahora se desplaza en X,
@@ -76,8 +80,15 @@ function pintar(p: number): Pintura {
   const tramo = Math.min(N - 2, Math.floor(indiceFloat));
   const frac = indiceFloat - tramo;
   const fracSuave = easeInOutCubic(frac);
-  const ANCHO_TRAMO = 210; // px de recorrido por parada
-  const offsetX = -(tramo * ANCHO_TRAMO + fracSuave * ANCHO_TRAMO) + ((N - 1) * ANCHO_TRAMO) / 2;
+  const ANCHO_TRAMO = 230; // px de salto por parada
+  // Salto alterno: cada pantalla nueva entra desde el lado contrario a la
+  // anterior (derecha, izquierda, derecha…) en vez de un barrido monótono
+  // en una sola dirección — se siente como hojear pestañas, no como una
+  // cinta transportadora.
+  const posiciones = [0];
+  for (let i = 1; i < N; i++) posiciones.push(posiciones[i - 1] + (i % 2 === 1 ? -1 : 1) * ANCHO_TRAMO);
+  const centro = posiciones.reduce((a, b) => a + b, 0) / N;
+  const offsetX = posiciones[tramo] + (posiciones[tramo + 1] - posiciones[tramo]) * fracSuave - centro;
   return {
     y: HASTA, alza: 26, rot: -TUMBE, opSombra: 0, opSuelo: 0.15, deriva: 0,
     fase: "showcase", indiceFloat, offsetX,
@@ -267,7 +278,7 @@ export function Sobrevuelo() {
               >
                 {/* .sombra — se queda tumbada, no entra en .giro */}
                 <div
-                  className="absolute left-1/2 top-1/2 h-[80px] w-[820px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-black blur-2xl"
+                  className="absolute left-1/2 top-1/2 h-[90px] w-[980px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-black blur-2xl"
                   style={{ opacity: opSombra * 0.55 }}
                 />
                 {/* .giro — contrarrota el tumbe */}
@@ -275,10 +286,10 @@ export function Sobrevuelo() {
                   {/* Fase C: la ventana ya plana se desplaza en X — un
                       translateX plano, sin rotación, así que no reabre
                       ninguna de las cuatro trampas. */}
-                  <div style={{ transform: `translateX(${offsetX}px)` }}>
-                    <div className="relative w-[860px] max-w-[86vw] overflow-hidden rounded-card border border-border bg-panel shadow-2xl">
+                  <div style={{ transform: `translateX(${offsetX}px) scale(${1 + (alza / 26) * 0.24})` }}>
+                    <div className="relative w-[1040px] max-w-[92vw] overflow-hidden rounded-card border border-border bg-panel shadow-2xl">
                       <BarraVentana />
-                      <div className="relative h-[460px]">
+                      <div className="relative h-[520px]">
                         {PANTALLAS.map((pn, i) => (
                           <div
                             key={pn.n}
