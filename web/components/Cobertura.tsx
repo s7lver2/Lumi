@@ -1,4 +1,5 @@
 import { cobertura } from "../lib/catalogo";
+import { RevelaSeccion } from "./RevelaSeccion";
 
 /** Mapa de cobertura, alimentado por el catálogo real publicado en GitHub
  *  (lib/catalogo.ts) — no un canvas con balizas decorativas. Si GitHub no
@@ -44,51 +45,53 @@ export async function Cobertura() {
 
   return (
     <section id="cobertura" className="mx-auto max-w-[1180px] px-7 py-28">
-      <span className="font-mono text-[11px] uppercase tracking-wide text-subtle">indexado</span>
-      <h2 className="mt-2 text-[clamp(24px,3.4vw,36px)] font-semibold tracking-tight">
-        Cuánto mundo ya reconoce Lumi
-      </h2>
-      <p className="mt-3 max-w-[70ch] leading-relaxed text-muted">
-        Cada baliza marca una región con actividad de indexado sobre el terreno real, leída
-        del catálogo publicado — el resto del mapa, sin marcar, es lo que aún falta por recorrer.
-      </p>
-
-      <div className="mt-10 overflow-hidden rounded-card border border-border bg-panel">
-        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Mapa de cobertura">
-          <rect width={W} height={H} fill="#101216" />
-          {Array.from({ length: 12 }).map((_, i) => (
-            <line key={`m${i}`} x1={(i / 12) * W} y1={0} x2={(i / 12) * W} y2={H} stroke="rgba(232,232,230,.06)" />
-          ))}
-          {Array.from({ length: 6 }).map((_, i) => (
-            <line key={`p${i}`} x1={0} y1={(i / 6) * H} x2={W} y2={(i / 6) * H} stroke="rgba(232,232,230,.06)" />
-          ))}
-          {resumen?.quadkeys.map((qk) => {
-            const t = quadkeyATile(qk);
-            const { lon, lat } = tileACentro(t.x, t.y, t.z);
-            const { x, y } = proyectar(lon, lat, W, H);
-            return <circle key={qk} cx={x} cy={y} r={2.4} fill="#f2f3f5" opacity={0.85} />;
-          })}
-        </svg>
-      </div>
-
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-2 font-mono text-[11px] text-subtle">
-          <span className="h-1.5 w-1.5 rounded-full bg-accent" /> baliza = zona con actividad de indexado
-        </div>
-        {resumen && (
-          <div className="flex gap-5 font-mono text-[11px] text-subtle">
-            <span><span className="text-fg">{resumen.quadkeys.length}</span> zonas</span>
-            <span><span className="text-fg">{resumen.paquetes}</span> paquetes</span>
-            <span><span className="text-fg">{resumen.autores}</span> autores</span>
-          </div>
-        )}
-      </div>
-
-      {resumen === null && (
-        <p className="mt-4 font-mono text-[11px] text-warning-fg">
-          catálogo no disponible — no se pudo consultar GitHub
+      <RevelaSeccion>
+        <span className="font-mono text-[11px] uppercase tracking-wide text-subtle">indexado</span>
+        <h2 className="mt-2 text-[clamp(24px,3.4vw,36px)] font-semibold tracking-tight">
+          Cuánto mundo ya reconoce Lumi
+        </h2>
+        <p className="mt-3 max-w-[70ch] leading-relaxed text-muted">
+          Cada baliza marca una región con actividad de indexado sobre el terreno real, leída
+          del catálogo publicado — el resto del mapa, sin marcar, es lo que aún falta por recorrer.
         </p>
-      )}
+
+        <div className="jg-micro mt-10 overflow-hidden rounded-card border border-border bg-panel hover:border-subtle">
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Mapa de cobertura">
+            <rect width={W} height={H} fill="#101216" />
+            {Array.from({ length: 12 }).map((_, i) => (
+              <line key={`m${i}`} x1={(i / 12) * W} y1={0} x2={(i / 12) * W} y2={H} stroke="rgba(232,232,230,.06)" />
+            ))}
+            {Array.from({ length: 6 }).map((_, i) => (
+              <line key={`p${i}`} x1={0} y1={(i / 6) * H} x2={W} y2={(i / 6) * H} stroke="rgba(232,232,230,.06)" />
+            ))}
+            {resumen?.quadkeys.map((qk) => {
+              const t = quadkeyATile(qk);
+              const { lon, lat } = tileACentro(t.x, t.y, t.z);
+              const { x, y } = proyectar(lon, lat, W, H);
+              return <circle key={qk} cx={x} cy={y} r={2.4} fill="#f2f3f5" opacity={0.85} />;
+            })}
+          </svg>
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2 font-mono text-[11px] text-subtle">
+            <span className="h-1.5 w-1.5 rounded-full bg-accent" /> baliza = zona con actividad de indexado
+          </div>
+          {resumen && (
+            <div className="flex gap-5 font-mono text-[11px] text-subtle">
+              <span><span className="text-fg">{resumen.quadkeys.length}</span> zonas</span>
+              <span><span className="text-fg">{resumen.paquetes}</span> paquetes</span>
+              <span><span className="text-fg">{resumen.autores}</span> autores</span>
+            </div>
+          )}
+        </div>
+
+        {resumen === null && (
+          <p className="mt-4 font-mono text-[11px] text-warning-fg">
+            catálogo no disponible — no se pudo consultar GitHub
+          </p>
+        )}
+      </RevelaSeccion>
     </section>
   );
 }

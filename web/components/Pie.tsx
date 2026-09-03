@@ -22,17 +22,17 @@ export function Pie() {
           <div>
             <div className="font-mono text-[11px] uppercase tracking-wide text-subtle">modelos</div>
             <div className="mt-3 flex flex-col gap-2 text-muted">
-              <a className="hover:text-fg" href="/meetmini">Lumi Mini</a>
-              <a className="hover:text-fg" href="/meetpro">Lumi Pro</a>
-              <a className="hover:text-fg" href="/meetvision">Lumi Vision</a>
+              <a className="jg-micro hover:text-fg" href="/meetmini">Lumi Mini</a>
+              <a className="jg-micro hover:text-fg" href="/meetpro">Lumi Pro</a>
+              <a className="jg-micro hover:text-fg" href="/meetvision">Lumi Vision</a>
             </div>
           </div>
           <div>
             <div className="font-mono text-[11px] uppercase tracking-wide text-subtle">proyecto</div>
             <div className="mt-3 flex flex-col gap-2 text-muted">
-              <a className="hover:text-fg" href="/index">Indexado</a>
-              <a className="hover:text-fg" href="/aboutme">Sobre mí</a>
-              <a className="hover:text-fg" href="https://github.com/s7lver2/Lumi/releases/latest">Descargar cliente</a>
+              <a className="jg-micro hover:text-fg" href="/index">Indexado</a>
+              <a className="jg-micro hover:text-fg" href="/aboutme">Sobre mí</a>
+              <a className="jg-micro hover:text-fg" href="https://github.com/s7lver2/Lumi/releases/latest">Descargar cliente</a>
             </div>
           </div>
         </div>
