@@ -23,7 +23,7 @@ export default function Home() {
               <span
                 className="jg-hero-in block font-mono text-[11px] uppercase tracking-[.14em] text-subtle"
               >
-                Closed Beta · Lumi Team
+                geolocalización forense · autoalojada
               </span>
               <h1
                 className="jg-hero-in mt-4 text-[clamp(40px,7vw,74px)] font-semibold leading-[0.98] tracking-tight"
