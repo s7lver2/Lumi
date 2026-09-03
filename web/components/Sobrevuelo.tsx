@@ -3,12 +3,17 @@ import { useEffect, useRef, useState } from "react";
 import { usarEscenaViva } from "./usarEscenaViva";
 
 /** El sobrevuelo de la interfaz: una maqueta de la UI de Lumi asoma tumbada
- *  en el horizonte, sobrevuela el terreno a velocidad constante y se
- *  levanta hasta quedar de plano y legible. Reemplaza a la "ventana viva"
- *  del concepto — spec §7. Los parámetros están medidos con una maqueta
- *  interactiva, no estimados: no se tocan sin recalcular.
+ *  en el horizonte, sobrevuela el terreno a velocidad constante, se levanta
+ *  hasta quedar de plano y legible, y luego —fase nueva— recorre de
+ *  izquierda a derecha cuatro pantallas distintas de la interfaz mientras
+ *  el texto de cada una ocupa el hueco de scroll que le corresponde.
+ *  Reemplaza a la "ventana viva" del concepto — spec §7. Los parámetros
+ *  están medidos con una maqueta interactiva, no estimados: no se tocan
+ *  sin recalcular.
  *
- *  Cuatro trampas geométricas (spec §7 / plan Task 5):
+ *  Cuatro trampas geométricas (spec §7 / plan Task 5) — siguen aplicando
+ *  tal cual a la fase nueva, que solo añade una traslación X sobre la
+ *  pieza ya plana, nunca una rotación:
  *  1. El suelo lleva la máscara del horizonte; la ventana cuelga del
  *     carril, un plano hermano SIN máscara — si colgara del suelo, la
  *     máscara se la comería antes de que llegara a verse.
@@ -21,35 +26,89 @@ import { usarEscenaViva } from "./usarEscenaViva";
  */
 
 const TUMBE = 75;
-const DESDE = 420;
+const DESDE = 980; // suficientemente lejos: en scroll=0 la ventana queda fuera de campo
 const HASTA = -355; // centra la ventana por geometría: 92 + Y·cos75° ≈ 0
-const FIN_VIAJE = 0.66;
-const RECORRIDO_PX = 5200;
+const FIN_VUELO = 0.4;
+const FIN_LEVANTAMIENTO = 0.52;
+const RECORRIDO_PX = 8600; // fase A+B como antes, más el recorrido de la fase C (showcase)
 
-type Pintura = { y: number; alza: number; rot: number; opSombra: number; opSuelo: number; deriva: number };
+function easeOutCubic(x: number) {
+  return 1 - Math.pow(1 - x, 3);
+}
+function easeInOutCubic(x: number) {
+  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+}
+
+type Pintura = {
+  y: number; alza: number; rot: number; opSombra: number; opSuelo: number; deriva: number;
+  fase: "vuelo" | "levantamiento" | "showcase";
+  indiceFloat: number; // posición continua dentro de PANTALLAS durante la fase C
+  offsetX: number; // desplazamiento horizontal de la pieza ya plana, fase C
+};
 
 function pintar(p: number): Pintura {
-  if (p < FIN_VIAJE) {
-    const v = p / FIN_VIAJE; // velocidad constante: es un vuelo, no una frenada
+  if (p < FIN_VUELO) {
+    const v = p / FIN_VUELO; // velocidad constante: es un vuelo, no una frenada
     const y = DESDE + (HASTA - DESDE) * v;
-    return { y, alza: 0, rot: 0, opSombra: Math.min(1, v * 3), opSuelo: 1, deriva: Math.sin(v * Math.PI) * 26 };
+    return {
+      y, alza: 0, rot: 0, opSombra: Math.min(1, v * 3), opSuelo: 1, deriva: Math.sin(v * Math.PI) * 26,
+      fase: "vuelo", indiceFloat: 0, offsetX: 0,
+    };
   }
-  const s = 1 - Math.pow(1 - (p - FIN_VIAJE) / (1 - FIN_VIAJE), 3); // ease-out
+  if (p < FIN_LEVANTAMIENTO) {
+    const s = easeOutCubic((p - FIN_VUELO) / (FIN_LEVANTAMIENTO - FIN_VUELO));
+    return {
+      y: HASTA,
+      alza: 26 * s, // simbólico — ver trampa 4
+      rot: -TUMBE * s, // contrarrota el tumbe → de frente
+      opSombra: 1 - s,
+      opSuelo: 1 - s * 0.85,
+      deriva: 0,
+      fase: "levantamiento", indiceFloat: 0, offsetX: 0,
+    };
+  }
+  // Fase C: la pieza ya está plana (s=1 fijo) y ahora se desplaza en X,
+  // parada a parada, con una curva de aceleración/frenado por tramo — no
+  // un mapeo 1:1 del scroll a la posición horizontal.
+  const u = Math.max(0, Math.min(1, (p - FIN_LEVANTAMIENTO) / (1 - FIN_LEVANTAMIENTO)));
+  const N = PANTALLAS.length;
+  const indiceFloat = u * (N - 1);
+  const tramo = Math.min(N - 2, Math.floor(indiceFloat));
+  const frac = indiceFloat - tramo;
+  const fracSuave = easeInOutCubic(frac);
+  const ANCHO_TRAMO = 210; // px de recorrido por parada
+  const offsetX = -(tramo * ANCHO_TRAMO + fracSuave * ANCHO_TRAMO) + ((N - 1) * ANCHO_TRAMO) / 2;
   return {
-    y: HASTA,
-    alza: 26 * s, // simbólico — ver trampa 4
-    rot: -TUMBE * s, // contrarrota el tumbe → de frente
-    opSombra: 1 - s,
-    opSuelo: 1 - s * 0.85,
-    deriva: 0,
+    y: HASTA, alza: 26, rot: -TUMBE, opSombra: 0, opSuelo: 0.15, deriva: 0,
+    fase: "showcase", indiceFloat, offsetX,
   };
 }
 
-const PASOS = [
-  { n: "01", t: "Tus proyectos, siempre a mano", d: "Cada investigación es un espacio propio: imágenes, casos y análisis anteriores, exactamente donde los dejaste." },
-  { n: "02", t: "El análisis avanza a la vista", d: "Cada miniatura muestra en qué punto está su verificación — en cola, en curso o resuelta." },
-  { n: "03", t: "El mapa, no un cuadro de texto", d: "El resultado se ancla sobre el terreno, con el radio de confianza real del verificador que lo resolvió." },
-  { n: "04", t: "Control total del servidor", d: "Modelos, GPUs y usuarios, gestionados desde el mismo cliente — nunca desde un panel de terceros." },
+// Las cuatro pantallas del showcase — mismo guion que antes vivía solo en
+// el texto de esquina, ahora también gobierna qué se ve dentro de la
+// ventana. Para sustituir un mockup ilustrado por una captura real: añade
+// src: "/ruta.png" aquí y PantallaContenido la usa en vez del mockup.
+const PANTALLAS = [
+  {
+    n: "01", t: "Tus proyectos, siempre a mano",
+    d: "Cada investigación es un espacio propio: imágenes, casos y análisis anteriores, exactamente donde los dejaste.",
+    src: undefined as string | undefined,
+  },
+  {
+    n: "02", t: "El análisis avanza a la vista",
+    d: "Cada miniatura muestra en qué punto está su verificación — en cola, en curso o resuelta.",
+    src: undefined as string | undefined,
+  },
+  {
+    n: "03", t: "El mapa, no un cuadro de texto",
+    d: "El resultado se ancla sobre el terreno, con el radio de confianza real del verificador que lo resolvió.",
+    src: undefined as string | undefined,
+  },
+  {
+    n: "04", t: "Control total del servidor",
+    d: "Modelos, GPUs y usuarios, gestionados desde el mismo cliente — nunca desde un panel de terceros.",
+    src: undefined as string | undefined,
+  },
 ];
 
 export function Sobrevuelo() {
@@ -57,7 +116,6 @@ export function Sobrevuelo() {
   const { viva, reducido } = usarEscenaViva(seccionRef as React.RefObject<HTMLElement>);
   const [movil, setMovil] = useState(false);
   const [pintura, setPintura] = useState<Pintura>(() => pintar(0));
-  const [paso, setPaso] = useState(0);
 
   const objetivoRef = useRef(0);
   const suaveRef = useRef(0);
@@ -92,7 +150,6 @@ export function Sobrevuelo() {
       const total = rect.height - window.innerHeight;
       const recorrido = total > 0 ? Math.max(0, Math.min(1, -rect.top / total)) : 0;
       objetivoRef.current = recorrido;
-      setPaso(Math.min(PASOS.length - 1, Math.floor(recorrido * PASOS.length)));
       arrancar();
     }
     medir();
@@ -136,7 +193,11 @@ export function Sobrevuelo() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viva, movil]);
 
-  const { y, alza, rot, opSombra, opSuelo, deriva } = movil ? pintar(1) : pintura;
+  const { y, alza, rot, opSombra, opSuelo, deriva, fase, indiceFloat, offsetX } = movil ? pintar(1) : pintura;
+
+  const idxCercano = Math.round(indiceFloat);
+  const opacidadTexto = fase === "showcase" ? 1 - Math.min(1, Math.abs(indiceFloat - idxCercano) * 2.4) : 0;
+  const pantallaTexto = PANTALLAS[Math.max(0, Math.min(PANTALLAS.length - 1, idxCercano))];
 
   return (
     <section
@@ -163,10 +224,13 @@ export function Sobrevuelo() {
         )}
 
         {!movil && (
-          <div className="pointer-events-none absolute left-7 top-1/2 z-10 max-w-[300px] -translate-y-1/2">
-            <div className="font-mono text-[11px] text-subtle">{PASOS[paso].n}</div>
-            <h3 className="mt-1 text-[19px] font-semibold">{PASOS[paso].t}</h3>
-            <p className="mt-2 leading-relaxed text-muted">{PASOS[paso].d}</p>
+          <div
+            className="pointer-events-none absolute left-7 top-1/2 z-10 max-w-[300px] -translate-y-1/2"
+            style={{ opacity: opacidadTexto, transition: "opacity .12s linear" }}
+          >
+            <div className="font-mono text-[11px] text-subtle">{pantallaTexto.n}</div>
+            <h3 className="mt-1 text-[19px] font-semibold">{pantallaTexto.t}</h3>
+            <p className="mt-2 leading-relaxed text-muted">{pantallaTexto.d}</p>
           </div>
         )}
 
@@ -176,15 +240,15 @@ export function Sobrevuelo() {
         >
           {/* .camara — solo translateX. Nunca rotateZ (trampa 2). */}
           <div className="preserva-3d absolute inset-0" style={{ transform: `translateX(${deriva}px)` }}>
-            {/* .suelo — lleva la máscara del horizonte (trampa 1) */}
+            {/* .suelo — lleva la máscara del horizonte (trampa 1). Sin
+                cuadrícula: solo un plano tenue que se desvanece hacia el
+                horizonte con la misma máscara radial de antes. */}
             <div
               className="absolute inset-0"
               style={{
                 transform: "translateY(92px) rotateX(75deg)",
                 transformOrigin: "50% 50%",
-                backgroundImage:
-                  "repeating-linear-gradient(0deg, rgba(232,232,230,.05) 0 1px, transparent 1px 64px)," +
-                  "repeating-linear-gradient(90deg, rgba(232,232,230,.05) 0 1px, transparent 1px 64px)",
+                background: "rgba(232,232,230,.035)",
                 maskImage: "radial-gradient(60% 50% at 50% 50%, black 0%, black 55%, transparent 85%)",
                 WebkitMaskImage: "radial-gradient(60% 50% at 50% 50%, black 0%, black 55%, transparent 85%)",
                 opacity: opSuelo,
@@ -208,7 +272,28 @@ export function Sobrevuelo() {
                 />
                 {/* .giro — contrarrota el tumbe */}
                 <div className="preserva-3d" style={{ transform: `rotateX(${rot}deg)`, transformOrigin: "50% 50%" }}>
-                  <VentanaMaqueta />
+                  {/* Fase C: la ventana ya plana se desplaza en X — un
+                      translateX plano, sin rotación, así que no reabre
+                      ninguna de las cuatro trampas. */}
+                  <div style={{ transform: `translateX(${offsetX}px)` }}>
+                    <div className="relative w-[860px] max-w-[86vw] overflow-hidden rounded-card border border-border bg-panel shadow-2xl">
+                      <BarraVentana />
+                      <div className="relative h-[460px]">
+                        {PANTALLAS.map((pn, i) => (
+                          <div
+                            key={pn.n}
+                            className="absolute inset-0"
+                            style={{
+                              opacity: 1 - Math.min(1, Math.abs(indiceFloat - i) * 1.15),
+                              pointerEvents: i === idxCercano ? "auto" : "none",
+                            }}
+                          >
+                            <PantallaContenido indice={i} src={pn.src} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -226,55 +311,142 @@ const MINIATURAS: { estado: "resuelta" | "curso" | "cola" }[] = [
   { estado: "resuelta" }, { estado: "cola" }, { estado: "curso" }, { estado: "cola" },
 ];
 
-function VentanaMaqueta() {
+/** Barra de título común a las cuatro pantallas — el mismo chasis de
+ *  ventana que ya existía, ahora compartido en vez de ir pegado a un solo
+ *  mockup. */
+function BarraVentana() {
   return (
-    <div className="w-[860px] max-w-[86vw] overflow-hidden rounded-card border border-border bg-panel shadow-2xl">
-      <div className="flex items-center gap-2.5 border-b border-border bg-elevated px-3.5 py-2">
-        <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#e88f8f" }} />
-        <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#efb968" }} />
-        <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#85b7eb" }} />
-        <span className="ml-2 flex items-center gap-1.5 font-mono text-[11px] text-subtle">
-          <span className="text-accent">✦</span> costa norte / lote 04
-        </span>
+    <div className="flex items-center gap-2.5 border-b border-border bg-elevated px-3.5 py-2">
+      <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#e88f8f" }} />
+      <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#efb968" }} />
+      <span className="h-2.5 w-2.5 rounded-full" style={{ background: "#85b7eb" }} />
+      <span className="ml-2 flex items-center gap-1.5 font-mono text-[11px] text-subtle">
+        <span className="text-accent">✦</span> costa norte / lote 04
+      </span>
+    </div>
+  );
+}
+
+/** Contenido de cada una de las cuatro pantallas del showcase. Cuando
+ *  `src` existe (una captura real ya sustituida), se muestra la imagen en
+ *  vez del mockup ilustrado — cambio de una línea en el array PANTALLAS,
+ *  no de estructura. */
+function PantallaContenido({ indice, src }: { indice: number; src?: string }) {
+  if (src) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt="" className="h-full w-full object-cover" />;
+  }
+  switch (indice) {
+    case 0:
+      return <PantallaProyectos />;
+    case 1:
+      return <PantallaCola />;
+    case 2:
+      return <PantallaMapa />;
+    default:
+      return <PantallaControl />;
+  }
+}
+
+/** 01 — tus proyectos, siempre a mano: el sidebar de proyectos junto al
+ *  mapa de trabajo, el estado "de base" de la interfaz. */
+function PantallaProyectos() {
+  return (
+    <div className="flex h-full">
+      <div className="w-[190px] shrink-0 border-r border-border bg-surface p-3">
+        <div className="font-mono text-[10px] uppercase tracking-wide text-subtle">proyectos</div>
+        <div className="mt-2 flex flex-col gap-1 text-[12.5px]">
+          <div className="rounded-[6px] bg-elevated px-2 py-1.5 text-fg">costa norte</div>
+          <div className="rounded-[6px] px-2 py-1.5 text-muted">frontera este</div>
+          <div className="rounded-[6px] px-2 py-1.5 text-muted">puerto viejo</div>
+        </div>
       </div>
-      <div className="flex h-[460px]">
-        <div className="w-[190px] shrink-0 border-r border-border bg-surface p-3">
-          <div className="font-mono text-[10px] uppercase tracking-wide text-subtle">proyectos</div>
-          <div className="mt-2 flex flex-col gap-1 text-[12.5px]">
-            <div className="rounded-[6px] bg-elevated px-2 py-1.5 text-fg">costa norte</div>
-            <div className="rounded-[6px] px-2 py-1.5 text-muted">frontera este</div>
-            <div className="rounded-[6px] px-2 py-1.5 text-muted">puerto viejo</div>
-          </div>
+      <div className="flex flex-1 flex-col">
+        <div className="relative flex-1 border-b border-border bg-[#101216]">
+          <div className="absolute left-[38%] top-[46%] h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border border-draw" style={{ boxShadow: "0 0 0 6px rgba(55,138,221,.12)" }} />
+          <div className="absolute left-[38%] top-[46%] h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-draw-fg" />
         </div>
-        <div className="flex flex-1 flex-col">
-          <div className="relative flex-1 border-b border-border bg-[#101216]">
-            <div className="absolute inset-0 opacity-40" style={{
-              backgroundImage: "linear-gradient(rgba(232,232,230,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(232,232,230,.06) 1px, transparent 1px)",
-              backgroundSize: "28px 28px",
-            }} />
-            <div className="absolute left-[38%] top-[46%] h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border border-draw" style={{ boxShadow: "0 0 0 6px rgba(55,138,221,.12)" }} />
-            <div className="absolute left-[38%] top-[46%] h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-draw-fg" />
-            <div className="absolute bottom-3 right-3 rounded-card border border-border bg-panel/90 px-3 py-2 font-mono text-[10.5px] leading-relaxed text-muted backdrop-blur">
-              43.3714° N 8.4127° W<br />
-              <span className="text-subtle">radio ~ ejemplo, no medido</span>
+        <div className="flex gap-1.5 p-2.5">
+          {MINIATURAS.slice(0, 8).map((m, i) => (
+            <div key={i} className="relative h-10 flex-1 rounded-[6px] border border-border bg-elevated">
+              <span
+                className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full"
+                style={{ background: m.estado === "resuelta" ? "#f2f3f5" : m.estado === "curso" ? "#efb968" : "#6a6c70" }}
+              />
             </div>
-          </div>
-          <div className="flex gap-1.5 p-2.5">
-            {MINIATURAS.map((m, i) => (
-              <div
-                key={i}
-                className="relative h-10 flex-1 rounded-[6px] border border-border bg-elevated"
-              >
-                <span
-                  className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full"
-                  style={{
-                    background: m.estado === "resuelta" ? "#f2f3f5" : m.estado === "curso" ? "#efb968" : "#6a6c70",
-                  }}
-                />
-              </div>
-            ))}
-          </div>
+          ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** 02 — el análisis avanza a la vista: la cola de miniaturas ocupando casi
+ *  todo el espacio, con su estado como único dato. */
+function PantallaCola() {
+  return (
+    <div className="flex h-full flex-col bg-surface p-4">
+      <div className="font-mono text-[10px] uppercase tracking-wide text-subtle">cola de análisis</div>
+      <div className="mt-3 grid flex-1 grid-cols-4 gap-2.5">
+        {[...MINIATURAS, ...MINIATURAS.slice(0, 4)].map((m, i) => (
+          <div key={i} className="relative rounded-card border border-border bg-elevated">
+            <span
+              className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full"
+              style={{ background: m.estado === "resuelta" ? "#f2f3f5" : m.estado === "curso" ? "#efb968" : "#6a6c70" }}
+            />
+            <span className="absolute bottom-2 left-2 font-mono text-[9.5px] text-subtle">
+              {m.estado === "resuelta" ? "resuelta" : m.estado === "curso" ? "en curso" : "en cola"}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 03 — el mapa, no un cuadro de texto: el mapa a pantalla completa con la
+ *  hipótesis anclada sobre el terreno. */
+function PantallaMapa() {
+  return (
+    <div className="relative h-full bg-[#101216]">
+      <div
+        className="absolute inset-0 opacity-40"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(232,232,230,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(232,232,230,.06) 1px, transparent 1px)",
+          backgroundSize: "28px 28px",
+        }}
+      />
+      <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-draw" style={{ boxShadow: "0 0 0 8px rgba(55,138,221,.12)" }} />
+      <div className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-draw-fg" />
+      <div className="absolute bottom-4 right-4 rounded-card border border-border bg-panel/90 px-3 py-2 font-mono text-[10.5px] leading-relaxed text-muted backdrop-blur">
+        43.3714° N 8.4127° W<br />
+        <span className="text-subtle">radio ~ ejemplo, no medido</span>
+      </div>
+    </div>
+  );
+}
+
+/** 04 — control total del servidor: un panel de administración con
+ *  modelos y GPUs, no un cuadro de mando genérico. */
+function PantallaControl() {
+  return (
+    <div className="flex h-full flex-col bg-surface p-4">
+      <div className="font-mono text-[10px] uppercase tracking-wide text-subtle">servidor</div>
+      <div className="mt-3 grid grid-cols-3 gap-2.5">
+        {["Lumi Mini", "Lumi Pro", "Lumi Vision"].map((n) => (
+          <div key={n} className="rounded-card border border-border bg-elevated p-3">
+            <div className="text-[12.5px] text-fg">{n}</div>
+            <div className="mt-1.5 font-mono text-[10.5px] text-subtle">instalado</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex-1 rounded-card border border-border bg-elevated p-3">
+        <div className="font-mono text-[10px] uppercase tracking-wide text-subtle">gpu</div>
+        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-panel">
+          <div className="h-full w-[62%] bg-draw" />
+        </div>
+        <div className="mt-1.5 font-mono text-[10.5px] text-subtle">carga en uso — pendiente de medir</div>
       </div>
     </div>
   );
