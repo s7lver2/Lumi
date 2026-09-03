@@ -1,27 +1,13 @@
-"use client";
-
-import { useState } from "react";
 import { HeroOrbita } from "../components/HeroOrbita";
 import { Sobrevuelo } from "../components/Sobrevuelo";
 import { Escalera } from "../components/Escalera";
 import { Agentes } from "../components/Agentes";
+import { Cobertura } from "../components/Cobertura";
+import { BotonCopiarComando } from "../components/BotonCopiarComando";
 
 const COMANDO = "curl -fsSL lumi.s7lver.xyz/install | sh";
 
 export default function Home() {
-  const [copiado, setCopiado] = useState(false);
-
-  async function copiar() {
-    try {
-      await navigator.clipboard.writeText(COMANDO);
-    } catch {
-      // clipboard no disponible (contexto no seguro, permisos…): sin fallback,
-      // el usuario puede seleccionar el comando a mano.
-    }
-    setCopiado(true);
-    setTimeout(() => setCopiado(false), 1800);
-  }
-
   return (
     <main>
       <section className="relative flex min-h-[92vh] items-center overflow-hidden">
@@ -59,13 +45,7 @@ export default function Home() {
               <code className="flex-1 truncate font-mono text-[13px]">
                 curl -fsSL lumi.s7lver.xyz/install<span className="text-subtle"> | sh</span>
               </code>
-              <button
-                type="button"
-                onClick={copiar}
-                className="rounded-[6px] border border-border px-2 py-1 font-mono text-[11px] text-muted hover:text-fg"
-              >
-                {copiado ? "copiado" : "copiar"}
-              </button>
+              <BotonCopiarComando comando={COMANDO} />
             </div>
           </div>
           <p className="mt-3 font-mono text-[11px] text-subtle">
@@ -79,6 +59,8 @@ export default function Home() {
       <Escalera />
 
       <Agentes />
+
+      <Cobertura />
     </main>
   );
 }
