@@ -44,12 +44,32 @@ export function InstallFlow({ token, onCerrar, onInstalado }: {
       registro: [], terminado: false, error: null, rotas: [],
     });
     await startIndicesEvents(token);
+    let cerrado = false;
     const un = await listen<ProgresoInstalacion>("indices-progress", (e) => {
       setProgreso(e.payload);
       if (e.payload.terminado) {
+        cerrado = true;
         un();
         if (!e.payload.error) onInstalado();
       }
+    });
+    // Si el flujo se corta sin haber llegado a `terminado`, la barra se
+    // quedaría quieta indefinidamente y no habría forma de saber por qué —
+    // era exactamente el falso "se ha colgado la instalación". El daemon
+    // sigue instalando por su cuenta; lo que se ha perdido es el progreso,
+    // y eso es lo que hay que decir.
+    const unCaido = await listen<string>("indices-down", (e) => {
+      if (cerrado) return;
+      cerrado = true;
+      un();
+      unCaido();
+      setProgreso((p) => p && {
+        ...p,
+        terminado: true,
+        error: e.payload
+          ? `se perdió el progreso de la instalación: ${e.payload}. El servidor sigue por su cuenta; vuelve a abrir esta ventana para ver cómo acabó`
+          : "se perdió el progreso de la instalación. El servidor sigue por su cuenta; vuelve a abrir esta ventana para ver cómo acabó",
+      });
     });
   }
 

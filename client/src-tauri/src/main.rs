@@ -49,6 +49,10 @@ impl rustls::client::danger::ServerCertVerifier for PinnedVerifier {
 struct Conn {
     base: Option<String>,
     client: Option<reqwest::Client>,
+    /// El mismo cliente pero SIN tope de petición entera, para los SSE. Ver
+    /// `client_flujo_for`: no es una optimización, es que `client` no puede
+    /// servir un flujo largo.
+    flujo: Option<reqwest::Client>,
     /// El token de sesión vive aquí y no en las URLs del esquema `lumi://`:
     /// es un secreto, y las rutas acaban en logs y trazas de error.
     token: Option<String>,
@@ -389,6 +393,34 @@ fn client_for(fingerprint: &str) -> Result<reqwest::Client, String> {
         .map_err(|e| e.to_string())
 }
 
+/// El cliente de los SSE. Es aparte de `client_for` por una razón sola: el
+/// `.timeout()` de reqwest es el tope de la petición ENTERA, cuerpo de la
+/// respuesta incluido, y un SSE es justo un cuerpo que no se acaba nunca.
+/// Con los 15s de `client_for`, TODOS los flujos del cliente (telemetría,
+/// cola, admin, logs, progreso de instalar un índice) se cortaban a los 15
+/// segundos exactos. La cola y la telemetría lo disimulaban porque reconectan
+/// en bucle, pero el progreso de instalación no reintenta: la barra se quedaba
+/// clavada para siempre, siempre donde fuera la descarga a los 15s — de ahí
+/// los porcentajes distintos cada vez, que parecían un cuelgue del daemon
+/// cuando el daemon estaba perfectamente.
+///
+/// `read_timeout` es lo que hacía falta: un tope de INACTIVIDAD, no de
+/// duración. Sigue protegiendo del servidor que acepta la conexión y se queda
+/// mudo —la razón por la que existe el timeout de arriba— sin poner techo a un
+/// flujo que va llegando. 45s es holgado frente al keep-alive de 15s que manda
+/// axum, así que un flujo parado pero vivo no se confunde con uno muerto.
+fn client_flujo_for(fingerprint: &str) -> Result<reqwest::Client, String> {
+    let cfg = rustls::ClientConfig::builder()
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(PinnedVerifier { fingerprint: fingerprint.into() }))
+        .with_no_client_auth();
+    reqwest::Client::builder()
+        .use_preconfigured_tls(cfg)
+        .read_timeout(std::time::Duration::from_secs(45))
+        .build()
+        .map_err(|e| e.to_string())
+}
+
 async fn connect(addr: &str, fingerprint: &str, state: &Shared, forzar: bool) -> Result<serde_json::Value, String> {
     let client = client_for(fingerprint)?;
     let base = format!("https://{addr}");
@@ -411,6 +443,7 @@ async fn connect(addr: &str, fingerprint: &str, state: &Shared, forzar: bool) ->
         let mut c = state.lock().unwrap();
         c.base = Some(base);
         c.client = Some(client);
+        c.flujo = Some(client_flujo_for(fingerprint)?);
     }
 
     let propia = env!("CARGO_PKG_VERSION");
@@ -491,7 +524,7 @@ async fn start_telemetry(
     use tauri::Emitter;
     let (base, client) = {
         let c = state.lock().unwrap();
-        (c.base.clone().ok_or("sin servidor")?, c.client.clone().ok_or("sin cliente")?)
+        (c.base.clone().ok_or("sin servidor")?, c.flujo.clone().ok_or("sin cliente")?)
     };
     tokio::spawn(async move {
         loop {
@@ -542,7 +575,7 @@ async fn start_task_log(
     use tauri::Emitter;
     let (base, client) = {
         let c = state.lock().unwrap();
-        (c.base.clone().ok_or("sin servidor")?, c.client.clone().ok_or("sin cliente")?)
+        (c.base.clone().ok_or("sin servidor")?, c.flujo.clone().ok_or("sin cliente")?)
     };
     tokio::spawn(async move {
         let url = format!("{base}/v1/tasks/{id}/log?from={from}");
@@ -589,7 +622,7 @@ async fn start_queue_events(
     use tauri::Emitter;
     let (base, client) = {
         let c = state.lock().unwrap();
-        (c.base.clone().ok_or("sin servidor")?, c.client.clone().ok_or("sin cliente")?)
+        (c.base.clone().ok_or("sin servidor")?, c.flujo.clone().ok_or("sin cliente")?)
     };
     tokio::spawn(async move {
         loop {
@@ -632,28 +665,44 @@ async fn start_indices_events(
     use tauri::Emitter;
     let (base, client) = {
         let c = state.lock().unwrap();
-        (c.base.clone().ok_or("sin servidor")?, c.client.clone().ok_or("sin cliente")?)
+        (c.base.clone().ok_or("sin servidor")?, c.flujo.clone().ok_or("sin cliente")?)
     };
     tokio::spawn(async move {
-        let Ok(res) = client.get(format!("{base}/v1/indices/eventos")).bearer_auth(&token).send().await else {
-            let _ = app.emit("indices-down", ());
-            return;
+        // `indices-down` viaja con el motivo, no vacío: al contrario que la
+        // cola, este puente no reintenta, así que si el flujo se corta la
+        // barra de instalación se queda quieta y esa cadena es lo único que
+        // puede explicar por qué. Un `Err` del flujo se comía en silencio con
+        // el `while let Some(Ok(_))` de antes.
+        let res = match client.get(format!("{base}/v1/indices/eventos")).bearer_auth(&token).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = app.emit("indices-down", e.to_string());
+                return;
+            }
         };
         let mut stream = res.bytes_stream();
         let mut buf = String::new();
-        while let Some(Ok(chunk)) = stream.next().await {
-            buf.push_str(&String::from_utf8_lossy(&chunk));
-            while let Some(i) = buf.find("\n\n") {
-                let frame = buf[..i].to_string();
-                buf.drain(..i + 2);
-                if let Some(d) = frame.strip_prefix("data: ") {
-                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(d) {
-                        let _ = app.emit("indices-progress", v);
+        let motivo = loop {
+            match stream.next().await {
+                Some(Ok(chunk)) => {
+                    buf.push_str(&String::from_utf8_lossy(&chunk));
+                    while let Some(i) = buf.find("\n\n") {
+                        let frame = buf[..i].to_string();
+                        buf.drain(..i + 2);
+                        if let Some(d) = frame.strip_prefix("data: ") {
+                            if let Ok(v) = serde_json::from_str::<serde_json::Value>(d) {
+                                let _ = app.emit("indices-progress", v);
+                            }
+                        }
                     }
                 }
+                Some(Err(e)) => break e.to_string(),
+                // Fin limpio: es lo que pasa cuando `eventos()` corta al
+                // poner `terminado`, o sea el caso normal.
+                None => break String::new(),
             }
-        }
-        let _ = app.emit("indices-down", ());
+        };
+        let _ = app.emit("indices-down", motivo);
     });
     Ok(())
 }
@@ -669,7 +718,7 @@ async fn start_admin_events(
     use tauri::Emitter;
     let (base, client) = {
         let c = state.lock().unwrap();
-        (c.base.clone().ok_or("sin servidor")?, c.client.clone().ok_or("sin cliente")?)
+        (c.base.clone().ok_or("sin servidor")?, c.flujo.clone().ok_or("sin cliente")?)
     };
     tokio::spawn(async move {
         let Ok(res) = client.get(format!("{base}/v1/admin/events")).bearer_auth(&token).send().await else {
@@ -705,7 +754,7 @@ async fn start_logs_stream(
     use tauri::Emitter;
     let (base, client) = {
         let c = state.lock().unwrap();
-        (c.base.clone().ok_or("sin servidor")?, c.client.clone().ok_or("sin cliente")?)
+        (c.base.clone().ok_or("sin servidor")?, c.flujo.clone().ok_or("sin cliente")?)
     };
     tokio::spawn(async move {
         let Ok(res) = client.get(format!("{base}/v1/admin/logs/stream")).bearer_auth(&token).send().await else {
