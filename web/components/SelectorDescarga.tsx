@@ -22,6 +22,10 @@ function formatoMB(bytes: number) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
+// Cliente e Indexer se instalan mediante el Instalador — el archivo que se
+// ofrece al final para estos dos productos es el suyo, no un build suelto.
+const PRODUCTOS_VIA_INSTALADOR = new Set(["cliente", "indexer"]);
+
 const ICONOS_PLATAFORMA: Record<string, React.ReactNode> = {
   "windows-x86_64": (
     <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
@@ -158,11 +162,19 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
     );
   }
 
+  // Cliente e Indexer no se descargan sueltos: se instalan a través del
+  // Instalador, así que no aparece como una quinta opción en el
+  // cuestionario — es el propio archivo que se ofrece para esos dos.
+  const productosSeleccionables = productos.filter((p) => p.producto !== "instalador");
+  const instaladorEntry = productos.find((p) => p.producto === "instalador") ?? null;
+
   const productoElegido = producto ? productos.find((p) => p.producto === producto) ?? null : null;
-  const plataformasDelProducto = productoElegido
-    ? Array.from(new Set(productoElegido.artefactos.map((a) => a.plataforma)))
+  const viaInstalador = productoElegido != null && PRODUCTOS_VIA_INSTALADOR.has(productoElegido.producto) && instaladorEntry != null;
+  const fuenteDescarga = viaInstalador ? instaladorEntry : productoElegido;
+  const plataformasDelProducto = fuenteDescarga
+    ? Array.from(new Set(fuenteDescarga.artefactos.map((a) => a.plataforma)))
     : [];
-  const artefactoFinal = productoElegido?.artefactos.find((a) => a.plataforma === plataforma) ?? null;
+  const artefactoFinal = fuenteDescarga?.artefactos.find((a) => a.plataforma === plataforma) ?? null;
 
   return (
     <>
@@ -204,7 +216,7 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
               <div className="p-6">
                 {!producto && (
                   <div className="grid grid-cols-4 gap-1">
-                    {productos.map((p) => (
+                    {productosSeleccionables.map((p) => (
                       <IconoOpcion
                         key={p.producto}
                         icono={ICONOS_PRODUCTO[p.producto]}
@@ -228,7 +240,7 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
                   </div>
                 )}
 
-                {producto && productoElegido && plataforma && artefactoFinal && (
+                {producto && productoElegido && plataforma && fuenteDescarga && artefactoFinal && (
                   <div className="flex flex-col items-center gap-4 py-4 text-center">
                     {ICONOS_PRODUCTO[productoElegido.producto]}
                     <div>
@@ -236,8 +248,11 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
                         {NOMBRES[productoElegido.producto] ?? productoElegido.producto} · {ETIQUETAS_PLATAFORMA[plataforma] ?? plataforma}
                       </div>
                       <div className="mt-1 font-mono text-[11px] text-subtle">
-                        v{productoElegido.version} · {formatoMB(artefactoFinal.bytes)}
+                        v{fuenteDescarga.version} · {formatoMB(artefactoFinal.bytes)}
                       </div>
+                      {viaInstalador && (
+                        <div className="mt-1 text-[11px] text-subtle">se instala con el instalador de Lumi</div>
+                      )}
                     </div>
                     <a
                       href={artefactoFinal.url}
