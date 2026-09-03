@@ -1,0 +1,2045 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lumi Station · geolocalización de imágenes por inferencia</title>
+<style>
+  /* Tokens idénticos a apps/web/tailwind.config.ts — nada inventado aquí. */
+  :root{
+    --bg:#0e0f11; --surface:#15171a; --panel:#1a1b1e; --elevated:#202226;
+    --border:#26282c; --muted:#9a9a95; --subtle:#6a6c70; --fg:#e8e8e6;
+    --accent:#f2f3f5; --draw:#378add; --draw-fg:#85b7eb;
+    --warning:#ef9f27; --warning-fg:#efb968; --danger:#a33; --danger-fg:#e88f8f;
+    --expo:cubic-bezier(.16,1,.3,1);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:#0b0c0e;
+    color:var(--fg);
+    font:15px/1.6 Inter,system-ui,sans-serif;
+    overflow-x:hidden;
+  }
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  a{color:inherit;text-decoration:none}
+  ::selection{background:rgba(255,255,255,.16)}
+
+  /* ---------------- utilidades ---------------- */
+  .wrap{max-width:1180px;margin:0 auto;padding:0 28px}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:7px;color:var(--subtle);
+    font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;
+  }
+  .eyebrow::before{content:"✦";color:var(--fg);font-size:11px}
+  h2{font-size:clamp(26px,3.4vw,38px);font-weight:600;letter-spacing:-.015em;margin:14px 0 10px}
+  .lead{color:var(--muted);font-size:14.5px;max-width:62ch;line-height:1.7}
+  .reveal{opacity:0;transform:translateY(18px);transition:opacity .7s var(--expo),transform .7s var(--expo)}
+  .reveal.on{opacity:1;transform:none}
+
+  /* ---------------- nav ---------------- */
+  .topnav{
+    position:fixed;top:0;left:0;right:0;z-index:100;height:56px;
+    display:flex;align-items:center;gap:16px;padding:0 28px;
+    background:rgba(11,12,14,.6);backdrop-filter:blur(14px);
+    border-bottom:1px solid transparent;
+    transition:border-color .4s var(--expo),background .4s var(--expo);
+  }
+  .topnav.scrolled{border-color:var(--border);background:rgba(11,12,14,.86)}
+  .navprogress{
+    position:absolute;left:0;top:0;height:2px;width:0%;
+    background:linear-gradient(90deg, var(--draw-fg), var(--fg));
+  }
+  .brand{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;letter-spacing:-.01em}
+  .brand .mark{color:var(--fg);display:inline-block;animation:markspin 9s linear infinite}
+  @keyframes markspin{to{transform:rotate(360deg)}}
+  .navdivider{width:1px;height:18px;background:var(--border)}
+  .navlinks{display:flex;gap:2px;align-items:center}
+  .navlinks a{
+    position:relative;font-size:12.5px;color:var(--subtle);padding:7px 11px;
+    transition:color .3s var(--expo);
+  }
+  .navlinks a::after{
+    content:"";position:absolute;left:11px;right:11px;bottom:3px;height:1px;background:var(--fg);
+    transform:scaleX(0);transform-origin:center;transition:transform .35s var(--expo);
+  }
+  .navlinks a:hover{color:var(--fg)}
+  .navlinks a:hover::after{transform:scaleX(1)}
+  .navgrow{flex:1}
+
+  /* ---------------- desplegable "Modelos" ---------------- */
+  .navmodels{position:relative}
+  .navmodels-trigger{
+    display:flex;align-items:center;gap:5px;position:relative;font-size:12.5px;color:var(--subtle);
+    padding:7px 11px;background:none;border:0;font:inherit;cursor:pointer;
+    transition:color .3s var(--expo);
+  }
+  .navmodels-trigger::after{
+    content:"";position:absolute;left:11px;right:11px;bottom:3px;height:1px;background:var(--fg);
+    transform:scaleX(0);transform-origin:center;transition:transform .35s var(--expo);
+  }
+  .navmodels-trigger .chev{
+    width:8px;height:8px;flex:none;transition:transform .4s var(--expo);
+  }
+  .navmodels-trigger .chev path{stroke:currentColor}
+  .navmodels:hover .navmodels-trigger, .navmodels.open .navmodels-trigger{color:var(--fg)}
+  .navmodels:hover .navmodels-trigger::after, .navmodels.open .navmodels-trigger::after{transform:scaleX(1)}
+  .navmodels.open .navmodels-trigger .chev{transform:rotate(180deg)}
+  .navdrop{
+    position:absolute;top:calc(100% + 10px);left:50%;translate:-50% 0;width:296px;
+    background:var(--panel);border:1px solid var(--border);border-radius:12px;
+    padding:8px;box-shadow:0 24px 60px -16px rgba(0,0,0,.7);
+    opacity:0;visibility:hidden;transform:translateY(-6px) scale(.98);transform-origin:50% 0;
+    transition:opacity .32s var(--expo),transform .32s var(--expo),visibility 0s linear .32s;
+  }
+  .navmodels:hover .navdrop, .navmodels.open .navdrop{
+    opacity:1;visibility:visible;transform:translateY(0) scale(1);
+    transition:opacity .32s var(--expo),transform .32s var(--expo),visibility 0s;
+  }
+  .navdrop-item{
+    display:flex;align-items:center;gap:12px;padding:10px 10px;border-radius:8px;
+    transition:background .28s var(--expo),transform .28s var(--expo);
+    opacity:0;transform:translateY(4px);
+  }
+  .navmodels.open .navdrop-item, .navmodels:hover .navdrop-item{
+    opacity:1;transform:none;transition:opacity .32s var(--expo),transform .32s var(--expo),background .28s var(--expo);
+  }
+  .navdrop-item:nth-child(1){transition-delay:.02s}
+  .navdrop-item:nth-child(2){transition-delay:.06s}
+  .navdrop-item:nth-child(3){transition-delay:.10s}
+  .navdrop-item:hover{background:rgba(255,255,255,.05);transform:translateX(2px) !important}
+  .navdrop-ring{flex:none;width:26px;height:26px}
+  .navdrop-copy .t{font-size:12.5px;color:var(--fg);font-weight:500}
+  .navdrop-copy .d{font-size:10.5px;color:var(--subtle);margin-top:1px}
+  .navdrop-arrow{margin-left:auto;flex:none;color:var(--subtle);opacity:0;transform:translateX(-3px);
+    transition:opacity .28s var(--expo),transform .28s var(--expo)}
+  .navdrop-item:hover .navdrop-arrow{opacity:1;transform:none;color:var(--fg)}
+  .navstatus{
+    display:flex;align-items:center;gap:7px;font-size:11px;color:var(--subtle);
+    padding:0 4px;white-space:nowrap;
+  }
+  .navstatus .d{width:6px;height:6px;border-radius:50%;background:var(--draw);flex:none;
+    box-shadow:0 0 0 0 rgba(55,138,221,.5);animation:pulse3 2.6s var(--expo) infinite}
+  .navcta{
+    font-size:12px;color:var(--fg);border:1px solid var(--border);border-radius:8px;
+    padding:7px 13px;background:rgba(255,255,255,.03);flex:none;
+    transition:background .3s var(--expo),border-color .3s var(--expo),transform .3s var(--expo);
+  }
+  .navcta:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18);transform:translateY(-1px)}
+  @media (max-width:760px){ .navlinks, .navstatus{display:none} }
+
+  /* =================================================================
+     HERO — triangulación en vivo
+     ================================================================= */
+  .hero{
+    position:relative;min-height:100vh;display:flex;flex-direction:column;
+    justify-content:center;overflow:hidden;
+    background:radial-gradient(90% 60% at 50% 10%, #16191d 0%, #0b0c0e 68%);
+  }
+  #hero3d{position:absolute;inset:0;z-index:1}
+  .hero-fade{
+    position:absolute;inset:0;z-index:2;pointer-events:none;
+    background:linear-gradient(180deg, transparent 0%, transparent 62%, #0b0c0e 100%);
+  }
+  .hero-content{position:relative;z-index:3;padding:120px 28px 90px}
+  .hero-hud{
+    position:absolute;top:70px;right:28px;z-index:3;text-align:right;
+    font-size:10.5px;color:var(--subtle);line-height:1.8;
+  }
+  .hero-hud .k{color:var(--draw-fg)}
+  .hero h1{
+    font-size:clamp(34px,6vw,64px);font-weight:600;letter-spacing:-.03em;
+    max-width:16ch;line-height:1.06;
+  }
+  .hero h1 em{font-style:normal;color:var(--muted)}
+  .hero h1 .word{display:inline-block;opacity:0;filter:blur(6px);transform:translateY(16px);
+    animation:wordIn .9s var(--expo) both;}
+  @keyframes wordIn{to{opacity:1;filter:blur(0);transform:none}}
+  .hero .lead{margin-top:18px;font-size:16px;max-width:52ch;
+    opacity:0;animation:fadeUp .9s var(--expo) .55s both}
+  .hero-actions{display:flex;gap:12px;margin-top:34px;
+    opacity:0;animation:fadeUp .9s var(--expo) .7s both}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  #heroParallax{will-change:transform}
+  .btn{
+    font:inherit;font-size:13px;font-weight:500;padding:11px 18px;border-radius:9px;
+    cursor:pointer;border:1px solid transparent;transition:all .3s var(--expo);
+    display:inline-flex;align-items:center;gap:8px;
+  }
+  .btn-primary{background:var(--accent);color:#0b0c0e}
+  .btn-primary:hover{background:#fff;transform:translateY(-1px)}
+  .btn-ghost{border-color:var(--border);color:var(--fg);background:rgba(255,255,255,.02)}
+  .btn-ghost:hover{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.2)}
+  .hero-caption{
+    margin-top:56px;display:flex;align-items:center;gap:10px;
+    font-size:11.5px;color:var(--subtle);
+    opacity:0;animation:fadeUp .9s var(--expo) .85s both;
+  }
+  .hero-caption .dot3{width:6px;height:6px;border-radius:50%;background:var(--draw);
+    box-shadow:0 0 0 0 rgba(55,138,221,.5);animation:pulse3 2.6s var(--expo) infinite}
+  @keyframes pulse3{0%{box-shadow:0 0 0 0 rgba(55,138,221,.45)}70%{box-shadow:0 0 0 6px rgba(55,138,221,0)}100%{box-shadow:0 0 0 0 rgba(55,138,221,0)}}
+
+  /* -----------------------------------------------------------------
+     HERO — hueco de instalación: un "corte" hundido en la propia
+     superficie del hero (inset shadow, no una card flotando encima)
+     que deja ver el globo detrás como si fuera una ventana al motor.
+     ----------------------------------------------------------------- */
+  .hero-portal{
+    position:relative;z-index:3;margin-top:46px;max-width:520px;
+    opacity:0;animation:fadeUp .9s var(--expo) 1s both;
+  }
+  .hero-portal-frame{
+    position:relative;border-radius:12px;padding:1px;
+    background:linear-gradient(160deg, rgba(255,255,255,.14), rgba(255,255,255,.02) 40%, rgba(55,138,221,.16));
+  }
+  .hero-portal-hole{
+    position:relative;border-radius:11px;overflow:hidden;
+    background:rgba(6,7,8,.62);backdrop-filter:blur(18px) saturate(140%);
+    -webkit-backdrop-filter:blur(18px) saturate(140%);
+    box-shadow:
+      inset 0 1px 0 rgba(0,0,0,.6),
+      inset 0 0 0 1px rgba(0,0,0,.5),
+      inset 0 18px 34px -20px rgba(0,0,0,.85),
+      inset 0 -1px 0 rgba(255,255,255,.04);
+  }
+  .hero-portal-hole::before{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(120% 140% at 18% -10%, rgba(133,183,235,.10), transparent 55%);
+  }
+  .hero-portal-top{
+    display:flex;align-items:center;gap:8px;padding:10px 14px;
+    border-bottom:1px solid rgba(255,255,255,.06);
+  }
+  .hero-portal-top .dot4{width:6px;height:6px;border-radius:50%;background:var(--draw);
+    box-shadow:0 0 0 0 rgba(55,138,221,.5);animation:pulse3 2.6s var(--expo) infinite}
+  .hero-portal-top span{font-size:10.5px;color:var(--subtle);letter-spacing:.03em}
+  .hero-portal-body{display:flex;align-items:center;gap:12px;padding:14px 14px 15px}
+  .hero-portal-prompt{color:var(--draw-fg);flex:none;user-select:none}
+  .hero-portal-cmd{
+    flex:1;min-width:0;font-size:12.5px;letter-spacing:-.01em;color:var(--fg);
+    white-space:nowrap;overflow-x:auto;scrollbar-width:none;
+  }
+  .hero-portal-cmd::-webkit-scrollbar{display:none}
+  .hero-portal-cmd .dim{color:var(--subtle)}
+  .hero-portal-copy{
+    flex:none;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--subtle);
+    border:1px solid var(--border);border-radius:7px;padding:6px 10px;background:rgba(255,255,255,.02);
+    cursor:pointer;transition:all .25s var(--expo);
+  }
+  .hero-portal-copy:hover{color:var(--fg);border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.06)}
+  .hero-portal-copy svg{width:11px;height:11px;flex:none}
+  .hero-portal-copy.done{color:var(--draw-fg);border-color:rgba(55,138,221,.4)}
+  .hero-portal-caption{margin-top:10px;font-size:10.5px;color:var(--subtle);padding-left:2px}
+
+  /* =================================================================
+     SECCIÓN: ventana viva (reveal de interfaz por scroll)
+     ================================================================= */
+  .ifsection{position:relative;background:#0b0c0e}
+  .ifscroll{height:460vh;position:relative}
+  .ifsticky{
+    position:sticky;top:0;height:100vh;display:flex;align-items:center;
+    gap:56px;padding:0 28px;max-width:1180px;margin:0 auto;
+    transition:flex-direction 0s;
+  }
+  /* frame 1 — título de apertura, centrado sobre la ventana en perspectiva;
+     se retira en cuanto arranca la secuencia de pasos captionados */
+  .ifintro{
+    position:absolute;left:0;right:0;top:11%;z-index:6;text-align:center;
+    pointer-events:none;will-change:transform,opacity;
+  }
+  .ifintro .eyebrow{justify-content:center}
+  .ifintro h2{margin:12px auto 0;max-width:14ch}
+  /* frame 4 — remate: etiqueta de "vista ampliada" que reemplaza los
+     captions cuando la ventana termina su zoom final */
+  .ifoutro{
+    position:absolute;left:0;right:0;bottom:9%;z-index:6;text-align:center;
+    opacity:0;pointer-events:none;will-change:transform,opacity;
+  }
+  .ifoutro .mono{font-size:11px;color:var(--subtle);letter-spacing:.06em}
+  .ifoutro p{font-size:14.5px;color:var(--muted);max-width:38ch;margin:8px auto 0}
+  .ifsticky.reverse{flex-direction:row-reverse}
+  .ifside{transition:transform .78s var(--expo)}
+  .ifside-window{flex:1;min-width:0}
+  .ifcaptions{width:300px;flex:none;will-change:transform}
+  .ifstep{
+    opacity:.28;transition:opacity .4s var(--expo);padding:14px 0 14px 16px;
+    border-left:2px solid var(--border);
+  }
+  .ifstep.on{opacity:1;border-color:var(--fg)}
+  .ifstep .n{font-size:11px;color:var(--subtle);letter-spacing:.06em}
+  .ifstep h3{font-size:16.5px;font-weight:600;margin:5px 0 6px;letter-spacing:-.01em}
+  .ifstep p{font-size:13px;color:var(--muted);line-height:1.6}
+
+  .ifsticky{perspective:1400px}
+  .fakewin{
+    flex:1;height:560px;position:relative;background:var(--bg);
+    border:1px solid var(--border);border-radius:12px;overflow:hidden;
+    box-shadow:0 40px 90px -24px rgba(0,0,0,.8);
+    transform-style:preserve-3d;will-change:transform;
+    transform-origin:50% 100%;
+  }
+  .fwcursor{
+    position:absolute;width:13px;height:13px;z-index:50;pointer-events:none;
+    transition:left .7s var(--expo),top .7s var(--expo),opacity .3s var(--expo);
+    filter:drop-shadow(0 2px 4px rgba(0,0,0,.5));
+  }
+  .fwcursor svg{display:block}
+  .fwclickring{
+    position:absolute;width:20px;height:20px;border-radius:50%;
+    border:1.5px solid rgba(255,255,255,.7);transform:translate(-50%,-50%) scale(0);
+    opacity:0;pointer-events:none;
+  }
+  .fwclickring.go{animation:clickring .5s var(--expo)}
+  @keyframes clickring{from{transform:translate(-50%,-50%) scale(.4);opacity:.9}to{transform:translate(-50%,-50%) scale(1.6);opacity:0}}
+  .fwbar{
+    height:38px;display:flex;align-items:center;gap:8px;padding:0 12px;
+    border-bottom:1px solid var(--border);background:rgba(13,15,17,.9);
+  }
+  .fwbar .fdot{width:8px;height:8px;border-radius:50%}
+  .fwbar span{font-size:11px;color:var(--subtle);margin-left:4px}
+  .fwbody{position:relative;height:calc(100% - 38px);display:flex}
+  .fwrail{
+    width:44px;flex:none;border-right:1px solid var(--border);
+    display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 0;
+  }
+  .fwrail .ri{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--subtle)}
+  .fwrail .ri.on{background:rgba(255,255,255,.08);color:var(--fg)}
+  .fwmain{flex:1;position:relative;overflow:hidden}
+  .fwscreen{
+    position:absolute;inset:0;opacity:0;padding:22px;
+    transform:translateX(18px) scale(.98);
+    transition:opacity .5s var(--expo),transform .5s var(--expo);
+  }
+  .fwscreen.on{opacity:1;transform:none}
+
+  .thumbgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .thumb{
+    aspect-ratio:4/3;border-radius:8px;background:var(--panel);border:1px solid var(--border);
+    position:relative;overflow:hidden;
+  }
+  .thumb .pbar{position:absolute;left:6px;right:6px;bottom:6px;height:3px;border-radius:2px;background:rgba(255,255,255,.1)}
+  .thumb .pbar i{display:block;height:100%;border-radius:2px;background:var(--draw-fg);transition:width .5s var(--expo)}
+
+  .fwmap{position:absolute;inset:0;background:radial-gradient(120% 90% at 50% 30%,#171b20 0%,#0d0e10 72%)}
+  .fwmap::before{
+    content:"";position:absolute;inset:-40%;
+    background:
+      repeating-linear-gradient(0deg,rgba(255,255,255,.028) 0 1px,transparent 1px 46px),
+      repeating-linear-gradient(90deg,rgba(255,255,255,.028) 0 1px,transparent 1px 46px);
+    transform:rotate(-1.5deg);
+  }
+  .fwmarker{
+    position:absolute;width:16px;height:16px;border-radius:50%;background:var(--accent);
+    transform:translate(-50%,-50%);
+  }
+  .fwhalo{
+    position:absolute;border-radius:50%;border:1px solid rgba(255,255,255,.5);
+    transform:translate(-50%,-50%);animation:fwhalo 3s var(--expo) infinite;
+  }
+  @keyframes fwhalo{0%,100%{opacity:.5}50%{opacity:.95}}
+
+  .fwadmin{padding-top:6px}
+  .fwrow{display:flex;justify-content:space-between;align-items:center;padding:11px 4px;
+    border-bottom:1px solid var(--border);font-size:12px}
+  .fwrow .name{color:var(--fg)}
+  .fwrow .stat{font-size:10.5px;color:var(--subtle)}
+  .fwrow .stat.up{color:var(--draw-fg)}
+
+  /* =================================================================
+     SECCIÓN: Meet Lumi (modelos) — "los modelos en órbita": un único
+     diagrama fijo (imagen de entrada en el centro, un anillo por
+     modelo) que el scroll recorre en tres tramos. Cada tramo dibuja
+     su anillo, acelera su verificador y trae su copy — sin trasladar
+     nada en el eje X, todo ocurre en el mismo lugar, como en el hero.
+     ================================================================= */
+  .models{padding:150px 0 0}
+  .models-head{padding-bottom:4px}
+  .modelsscroll{height:390vh;position:relative}
+  .modelssticky{position:sticky;top:0;height:100vh;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .orbitalstage{
+    display:flex;align-items:center;justify-content:center;gap:6vw;width:100%;
+    max-width:1180px;padding:0 28px;transition:transform .6s var(--expo);
+    --mc:55,138,221;perspective:1500px;
+  }
+  .orbital-copy{width:400px;flex:none;position:relative;height:330px}
+  .ocopy{
+    position:absolute;inset:0 auto auto 0;width:100%;
+    opacity:0;transform:translateY(18px);pointer-events:none;
+    transition:opacity .55s var(--expo),transform .55s var(--expo);
+  }
+  .ocopy.on{opacity:1;transform:none;pointer-events:auto}
+  .ocopy-head{display:flex;align-items:center;gap:10px}
+  .ocopy-ring{flex:none;width:22px;height:22px}
+  .ocopy .tag{font-size:12px;color:rgb(var(--mc));letter-spacing:.02em}
+  .ocopy h3{font-size:clamp(26px,2.6vw,36px);font-weight:600;letter-spacing:-.02em;margin:10px 0 6px}
+  .ocopy .voice{
+    font-size:13.5px;color:var(--fg);opacity:.8;line-height:1.5;max-width:40ch;
+    padding-left:14px;border-left:2px solid rgba(var(--mc),.4);margin-bottom:16px;
+  }
+  .ocopy p.desc{font-size:13.5px;color:var(--muted);line-height:1.7;max-width:42ch}
+
+  .panel-stats{
+    display:grid;grid-template-columns:repeat(4,auto);gap:6px 20px;
+    margin:18px 0 4px;padding:14px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+  }
+  .panel-stat .v{font-size:15px;letter-spacing:-.01em;color:var(--fg)}
+  .panel-stat .l{font-size:9.5px;color:var(--subtle);letter-spacing:.06em;text-transform:uppercase;margin-top:3px;white-space:nowrap}
+
+  .panel-fit{margin-top:14px;display:flex;flex-direction:column;gap:7px}
+  .panel-fit li{font-size:12.5px;color:var(--muted);display:flex;gap:8px;align-items:flex-start;list-style:none}
+  .panel-fit li::before{content:"→";color:rgb(var(--mc));flex:none;font-size:11px;line-height:1.6}
+
+  .ocopy .go{
+    display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--fg);
+    margin-top:20px;padding-bottom:2px;border-bottom:1px solid var(--border);
+    transition:gap .3s var(--expo),border-color .3s var(--expo);
+  }
+  .ocopy.on .go{border-color:rgb(var(--mc));gap:9px}
+
+  /* -----------------------------------------------------------------
+     GALAXIA 3D — perspectiva CSS real, no un dibujo en 2D. Vision es
+     el sol, fijo en el centro y en el punto más profundo de la escena;
+     Mini y Pro orbitan alrededor suyo, cada uno en su propio plano de
+     profundidad. El scroll no anima un dibujo: mueve la cámara a
+     través de la escena (translateZ sobre .galaxy-cam), así que el
+     acercamiento a cada planeta es una proyección 3D real del
+     navegador, con su propio foreshortening.
+     ----------------------------------------------------------------- */
+  .orbital-visual{
+    position:relative;flex:none;width:min(52vw,600px);height:min(52vw,600px);
+    display:grid;place-items:center;perspective:1100px;
+  }
+  .galaxy-cam{
+    position:relative;width:100%;height:100%;transform-style:preserve-3d;
+    will-change:transform;
+  }
+  .galaxy-starfield{
+    position:absolute;inset:-40%;border-radius:50%;pointer-events:none;
+    background-image:
+      radial-gradient(1.4px 1.4px at 20% 30%, rgba(255,255,255,.5), transparent),
+      radial-gradient(1.4px 1.4px at 70% 18%, rgba(255,255,255,.4), transparent),
+      radial-gradient(1px 1px at 85% 62%, rgba(255,255,255,.35), transparent),
+      radial-gradient(1.6px 1.6px at 40% 80%, rgba(255,255,255,.4), transparent),
+      radial-gradient(1px 1px at 12% 68%, rgba(255,255,255,.3), transparent),
+      radial-gradient(1.2px 1.2px at 55% 48%, rgba(255,255,255,.3), transparent);
+    opacity:.5;transform:translateZ(-1100px);
+  }
+  .gdepth{position:absolute;inset:0;transform-style:preserve-3d}
+  .gspin{position:absolute;inset:0;transform-style:preserve-3d}
+  @keyframes gspin{from{transform:rotateY(0)}to{transform:rotateY(360deg)}}
+  .gorbitring{
+    position:absolute;left:50%;top:50%;border-radius:50%;
+    border:1px solid rgba(255,255,255,.08);pointer-events:none;
+  }
+  .gplanet{
+    position:absolute;left:50%;top:50%;border-radius:50%;
+    display:grid;place-items:center;text-align:center;
+  }
+  .gplanet .core{
+    width:100%;height:100%;border-radius:50%;position:relative;
+    background:radial-gradient(120% 120% at 30% 25%, rgb(var(--mc)) 0%, rgba(var(--mc),.55) 45%, rgba(var(--mc),.18) 100%);
+    box-shadow:0 0 40px rgba(var(--mc),.35), inset -8px -10px 18px rgba(0,0,0,.4), inset 4px 6px 10px rgba(255,255,255,.18);
+  }
+  .gplanet.ring .core::after{
+    content:"";position:absolute;left:50%;top:50%;width:210%;height:46%;
+    transform:translate(-50%,-50%) rotate(-18deg) scaleY(.42);
+    border-radius:50%;border:2px solid rgba(var(--mc),.5);pointer-events:none;
+  }
+  .gplanet .glabel{
+    position:absolute;bottom:-22px;left:50%;transform:translate(-50%,0);
+    font-size:9.5px;letter-spacing:.08em;color:var(--subtle);white-space:nowrap;
+    opacity:0;transition:opacity .4s var(--expo);
+  }
+  .gplanet.on .glabel{opacity:1;color:rgb(var(--mc))}
+
+  /* Vision — el sol, en el centro y en el punto más profundo de la escena */
+  .gsun-wrap{position:absolute;inset:0;transform-style:preserve-3d}
+  .gsun{
+    position:absolute;left:50%;top:50%;width:150px;height:150px;
+    margin:-75px 0 0 -75px;border-radius:50%;
+    background:radial-gradient(circle at 34% 30%, #fff 0%, #f2ede0 22%, #e8c27a 52%, #b9791f 100%);
+    box-shadow:0 0 90px rgba(239,185,104,.55), 0 0 200px rgba(239,185,104,.25);
+    animation:sunspin 40s linear infinite;
+  }
+  .gsun::after{
+    content:"";position:absolute;inset:-34px;border-radius:50%;pointer-events:none;
+    background:radial-gradient(circle, rgba(239,185,104,.22), transparent 68%);
+    animation:sunpulse 5s var(--expo) infinite;
+  }
+  @keyframes sunspin{to{background-position:60px 0}}
+  @keyframes sunpulse{0%,100%{opacity:.7;transform:scale(1)}50%{opacity:1;transform:scale(1.08)}}
+  .gsun-label{
+    position:absolute;left:50%;top:calc(50% + 96px);transform:translateX(-50%);
+    font-size:9.5px;letter-spacing:.08em;color:var(--warning-fg);white-space:nowrap;
+    opacity:0;transition:opacity .4s var(--expo);
+  }
+  .gsun-wrap.on .gsun-label{opacity:1}
+
+  .panel-dots{
+    position:relative;margin-top:8px;display:flex;gap:8px;z-index:5;justify-content:center;
+  }
+  .panel-dots i{width:5px;height:5px;border-radius:50%;background:var(--border);
+    transition:background .3s var(--expo),transform .3s var(--expo)}
+  .panel-dots i.on{background:rgb(var(--mc));transform:scale(1.6)}
+
+  /* =================================================================
+     SECCIÓN: mapa de cobertura + barra de precisión
+     ================================================================= */
+  .coverage{padding:20px 0 140px;position:relative}
+  .mapbleed{
+    position:relative;width:100vw;left:50%;margin-left:-50vw;
+    margin-top:36px;padding:20px 0 6px;
+    background:radial-gradient(60% 100% at 50% 42%, rgba(55,138,221,.055), transparent 72%);
+    -webkit-mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent),
+                        linear-gradient(180deg,transparent,#000 12%,#000 88%,transparent),
+                        radial-gradient(85% 145% at 50% 46%,#000 62%,transparent 100%);
+    -webkit-mask-composite:source-in,source-in;mask-composite:intersect,intersect;
+    mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent),
+                linear-gradient(180deg,transparent,#000 12%,#000 88%,transparent),
+                radial-gradient(85% 145% at 50% 46%,#000 62%,transparent 100%);
+  }
+  .mapbleed::after{
+    content:"";position:absolute;inset:0;pointer-events:none;z-index:2;
+    background:linear-gradient(100deg, transparent 42%, rgba(133,183,235,.07) 50%, transparent 58%);
+    background-size:280% 100%;animation:mapsweep 10s linear infinite;
+  }
+  @keyframes mapsweep{from{background-position:130% 0}to{background-position:-30% 0}}
+  #worldmap{display:block;width:100%;height:auto;position:relative;z-index:1}
+  .legend{display:flex;gap:22px;flex-wrap:wrap;justify-content:center;margin-top:6px}
+  .legend .li{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--subtle)}
+  .legend .sw{width:8px;height:8px;border-radius:50%}
+
+  .precision{
+    margin-top:34px;border:1px solid var(--border);border-radius:14px;
+    padding:26px 24px 28px;background:var(--surface);
+  }
+  .precision-top{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px}
+  .precision-label{font-size:12px;color:var(--subtle);letter-spacing:.02em}
+  .precision-num{font-size:15px;letter-spacing:.01em}
+  .precision-num .settled{color:var(--fg)}
+  .precision-num .settling{color:var(--subtle)}
+  .precision-num .pct{color:var(--muted);font-size:13px;margin-left:2px}
+  .precision-bar{height:3px;border-radius:2px;background:rgba(255,255,255,.08);margin-top:14px;overflow:hidden}
+  .precision-bar i{display:block;height:100%;width:0%;background:var(--accent);
+    transition:width 2.2s var(--expo)}
+
+  footer{border-top:1px solid var(--border);margin-top:10px;padding:64px 0 0}
+  .footer-grid{display:flex;justify-content:space-between;gap:60px;flex-wrap:wrap;padding-bottom:44px}
+  .footer-brand{max-width:360px}
+  .footer-brand .lead{margin-top:14px;font-size:12.5px}
+  .footer-status{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--subtle);margin-top:24px}
+  .footer-status .d{width:6px;height:6px;border-radius:50%;background:var(--draw);flex:none;
+    box-shadow:0 0 0 0 rgba(55,138,221,.5);animation:pulse3 2.6s var(--expo) infinite}
+  .footer-cols{display:flex;gap:64px}
+  .footer-col{display:flex;flex-direction:column;gap:10px}
+  .footer-h{color:var(--subtle);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
+  .footer-col a{font-size:13px;color:var(--muted);transition:color .3s var(--expo)}
+  .footer-col a:hover{color:var(--fg)}
+  .footer-bottom{
+    border-top:1px solid var(--border);padding:16px 0 32px;display:flex;
+    justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:10.5px;color:var(--subtle);
+  }
+  @media (max-width:640px){
+    .footer-grid{flex-direction:column;gap:32px}
+    .footer-cols{gap:40px}
+  }
+
+  /* -----------------------------------------------------------------
+     REVEAL BAJO EL FOOTER — a la Hermès: el footer sigue su flujo
+     normal y se retira hacia arriba con el scroll; justo debajo, fija
+     al fondo del viewport, hay una imagen (aquí un placeholder) que se
+     queda pegada mientras dura ese tramo extra de scroll — el efecto
+     de "el footer sube y la imagen se queda abajo".
+     ----------------------------------------------------------------- */
+  .footer-reveal{height:100vh;position:relative}
+  .footer-reveal-sticky{
+    position:sticky;top:0;height:100vh;overflow:hidden;
+    border-top:1px solid var(--border);
+  }
+  .footer-reveal-ph{
+    position:relative;width:100%;height:100%;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:radial-gradient(120% 90% at 50% 30%, #1b1e23 0%, #0b0c0e 70%);
+  }
+  .footer-reveal-ph::before{
+    content:"";position:absolute;width:220px;height:220px;border-radius:50%;
+    background:radial-gradient(circle, rgba(55,138,221,.28), transparent 70%);
+    filter:blur(6px);animation:frPulse 6s var(--expo) infinite;
+  }
+  @keyframes frPulse{0%,100%{transform:scale(1);opacity:.7}50%{transform:scale(1.18);opacity:1}}
+  .footer-reveal-ph span{position:relative;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--subtle)}
+  .footer-reveal-ph .sub{font-size:10.5px;letter-spacing:.04em;text-transform:none;color:var(--subtle);opacity:.7}
+  @media (max-width:640px){ .footer-reveal, .footer-reveal-sticky{height:70vh} }
+
+  @media (max-width:860px){
+    .ifintro,.ifoutro{display:none}
+    .ifsticky, .ifsticky.reverse{flex-direction:column;justify-content:flex-start;padding-top:90px;gap:24px}
+    .ifside{transform:none !important;width:100%}
+    .ifside-window .fakewin{transform:none !important}
+    .ifcaptions{width:100%;opacity:1 !important;transform:none !important}
+    .fakewin{width:100%;height:340px}
+    .ifscroll{height:420vh}
+
+    /* los tres modelos se apilan como tarjetas: sin scroll-jack ni
+       diagrama orbital compartido en móvil, cada uno lleva su propio
+       anillo pequeño */
+    .modelsscroll{height:auto}
+    .modelssticky{position:static;height:auto;overflow:visible;display:block}
+    .orbitalstage{flex-direction:column;gap:56px;transform:none !important}
+    .orbital-visual{display:none}
+    .orbital-copy{width:100%;height:auto}
+    .ocopy{
+      position:static;opacity:1 !important;transform:none !important;pointer-events:auto;
+      max-width:380px;margin:0 auto;text-align:center;padding:36px 0;
+      border-top:1px solid var(--border);
+    }
+    .ocopy:first-child{border-top:0}
+    .ocopy-head{justify-content:center}
+    .ocopy .voice{margin-left:auto;margin-right:auto;text-align:left}
+    .panel-stats{justify-content:center}
+    .panel-fit{align-items:center}
+    .panel-fit li{text-align:left}
+    .panel-dots{display:none}
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:.001ms !important;transition-duration:.001ms !important}
+  }
+</style>
+</head>
+<body>
+
+<nav class="topnav" id="topnav">
+  <div class="navprogress" id="navprogress"></div>
+  <div class="brand"><span class="mark">✦</span> Lumi Station</div>
+  <div class="navdivider"></div>
+  <div class="navlinks">
+    <div class="navmodels" id="navModels">
+      <button class="navmodels-trigger" id="navModelsTrigger" aria-expanded="false">
+        Modelos
+        <svg class="chev" viewBox="0 0 8 8" fill="none"><path d="M1.5 2.5L4 5.5L6.5 2.5" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="navdrop" id="navDrop">
+        <a class="navdrop-item" href="/meetmini">
+          <svg class="navdrop-ring" viewBox="0 0 26 26"><circle cx="13" cy="13" r="10.5" fill="none" stroke="rgb(55,138,221)" stroke-width="1.6"/></svg>
+          <div class="navdrop-copy"><div class="t">Lumi Mini</div><div class="d">un verificador · coste bajo</div></div>
+          <svg class="navdrop-arrow" width="12" height="10" viewBox="0 0 12 10" fill="none"><path d="M1 5H11M11 5L7 1M11 5L7 9" stroke="currentColor" stroke-width="1.3"/></svg>
+        </a>
+        <a class="navdrop-item" href="/meetpro">
+          <svg class="navdrop-ring" viewBox="0 0 26 26"><circle cx="13" cy="13" r="10.5" fill="none" stroke="rgb(239,185,104)" stroke-width="1.6"/><circle cx="13" cy="13" r="7" fill="none" stroke="rgb(239,185,104)" stroke-width="1.2" opacity=".55"/></svg>
+          <div class="navdrop-copy"><div class="t">Lumi Pro</div><div class="d">varios en cadena · coste medio</div></div>
+          <svg class="navdrop-arrow" width="12" height="10" viewBox="0 0 12 10" fill="none"><path d="M1 5H11M11 5L7 1M11 5L7 9" stroke="currentColor" stroke-width="1.3"/></svg>
+        </a>
+        <a class="navdrop-item" href="/meetvision">
+          <svg class="navdrop-ring" viewBox="0 0 26 26"><circle cx="13" cy="13" r="10.5" fill="none" stroke="rgb(242,243,245)" stroke-width="1.6"/><circle cx="13" cy="13" r="7" fill="none" stroke="rgb(242,243,245)" stroke-width="1.2" opacity=".55"/><circle cx="13" cy="13" r="3.5" fill="none" stroke="rgb(242,243,245)" stroke-width="1" opacity=".4"/></svg>
+          <div class="navdrop-copy"><div class="t">Lumi Vision</div><div class="d">competencia entre varios · coste alto</div></div>
+          <svg class="navdrop-arrow" width="12" height="10" viewBox="0 0 12 10" fill="none"><path d="M1 5H11M11 5L7 1M11 5L7 9" stroke="currentColor" stroke-width="1.3"/></svg>
+        </a>
+      </div>
+    </div>
+    <a href="/index">Indexado</a>
+    <a href="/aboutme">Sobre mí</a>
+  </div>
+  <div class="navgrow"></div>
+  <div class="navstatus"><span class="d"></span> 3 verificadores en línea</div>
+  <a class="navcta" href="#">Descargar cliente</a>
+</nav>
+
+<!-- =================== HERO =================== -->
+<section class="hero">
+  <canvas id="hero3d"></canvas>
+  <div class="hero-fade"></div>
+  <div class="hero-hud mono">
+    MODELOS EN ÓRBITA <span class="k" id="hudSat">3</span><br/>
+    ÚLTIMO BARRIDO <span class="k" id="hudLat">—</span> <span class="k" id="hudLng">—</span><br/>
+    ESTADO <span class="k" id="hudState">orbitando</span>
+  </div>
+  <div class="hero-content wrap" id="heroParallax">
+    <h1 id="heroTitle"></h1>
+    <p class="lead">
+      Lumi encadena varios verificadores geométricos que compiten por acercarse
+      más al punto real — no es un modelo mejor, es la competencia entre varios.
+      Autoalojado: tus imágenes y tus GPUs no salen de tu servidor.
+    </p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="#coverage">Ver el mapa de cobertura</a>
+      <a class="btn btn-ghost" href="#models">Conocer los modelos</a>
+    </div>
+
+    <div class="hero-portal">
+      <div class="hero-portal-frame">
+        <div class="hero-portal-hole">
+          <div class="hero-portal-top"><span class="dot4"></span><span class="mono">instalación · un solo comando</span></div>
+          <div class="hero-portal-body">
+            <span class="hero-portal-prompt mono">$</span>
+            <code class="hero-portal-cmd mono" id="heroCmd">curl -fsSL lumi.sh/install<span class="dim"> | sh</span></code>
+            <button class="hero-portal-copy mono" id="heroCopyBtn" type="button">
+              <svg viewBox="0 0 14 14" fill="none" id="heroCopyIcon"><rect x="4.5" y="4.5" width="8" height="8" rx="1.4" stroke="currentColor" stroke-width="1.2"/><path d="M2.5 9.5V2.9C2.5 2.4 2.9 2 3.4 2H9.5" stroke="currentColor" stroke-width="1.2"/></svg>
+              <span id="heroCopyLabel">copiar</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="hero-portal-caption mono">se autoaloja en tu propio servidor — sin cuentas, sin nube de terceros</div>
+    </div>
+
+    <div class="hero-caption">
+      <span class="dot3"></span> Mini, Pro y Vision orbitando la Tierra, indexando la superficie en este mismo instante
+    </div>
+  </div>
+</section>
+
+<!-- =================== VENTANA VIVA =================== -->
+<section class="ifsection" id="interface">
+  <div class="ifscroll" id="ifscroll">
+    <div class="ifsticky" id="ifsticky">
+      <div class="ifintro" id="ifintro">
+        <span class="eyebrow mono">meet lumi</span>
+        <h2>La misma interfaz, sin importar el modelo</h2>
+      </div>
+      <div class="ifoutro" id="ifoutro">
+        <span class="mono">vista ampliada</span>
+        <p>Cada verificación queda escrita en el terreno, no en una tabla — con su radio de confianza real.</p>
+      </div>
+      <div class="ifside" id="ifsideCaptions">
+      <div class="ifcaptions" id="ifcaptions">
+        <div class="ifstep" data-step="0">
+          <div class="n mono">01</div>
+          <h3>Tus proyectos, siempre a mano</h3>
+          <p>Cada investigación es un espacio propio: imágenes, casos y análisis anteriores, exactamente donde los dejaste.</p>
+        </div>
+        <div class="ifstep" data-step="1">
+          <div class="n mono">02</div>
+          <h3>El análisis avanza a la vista</h3>
+          <p>Cada miniatura muestra en qué punto está su verificación — en cola, en curso o resuelta.</p>
+        </div>
+        <div class="ifstep" data-step="2">
+          <div class="n mono">03</div>
+          <h3>El mapa, no un cuadro de texto</h3>
+          <p>El resultado se ancla sobre el terreno, con el radio de confianza real del verificador que lo resolvió.</p>
+        </div>
+        <div class="ifstep" data-step="3">
+          <div class="n mono">04</div>
+          <h3>Control total del servidor</h3>
+          <p>Modelos, GPUs y usuarios, gestionados desde el mismo cliente — nunca desde un panel de terceros.</p>
+        </div>
+      </div>
+      </div>
+
+      <div class="ifside ifside-window" id="ifsideWindow">
+      <div class="fakewin">
+        <div class="fwbar">
+          <span class="fdot" style="background:#e88f8f"></span>
+          <span class="fdot" style="background:#efb968"></span>
+          <span class="fdot" style="background:#85b7eb"></span>
+          <span class="mono">costa norte / lote 04</span>
+        </div>
+        <div class="fwbody">
+          <div class="fwrail">
+            <div class="ri on" id="ri0">▤</div>
+            <div class="ri" id="ri1">◍</div>
+            <div class="ri" id="ri2">▦</div>
+          </div>
+          <div class="fwmain">
+            <div class="fwscreen on" id="fws0">
+              <div class="thumbgrid" id="thumbgrid"></div>
+            </div>
+            <div class="fwscreen" id="fws1">
+              <div class="fwmap" id="fwmapEl"></div>
+            </div>
+            <div class="fwscreen" id="fws2">
+              <div class="fwadmin">
+                <div class="fwrow"><span class="name">RTX 4090 · 0</span><span class="stat up mono">62% VRAM</span></div>
+                <div class="fwrow"><span class="name">RTX 4090 · 1</span><span class="stat up mono">41% VRAM</span></div>
+                <div class="fwrow"><span class="name">Cola de verificación</span><span class="stat mono">7 en espera</span></div>
+                <div class="fwrow"><span class="name">Usuarios activos</span><span class="stat mono">4</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =================== MEET LUMI =================== -->
+<section class="models" id="models">
+  <div class="wrap models-head">
+    <span class="eyebrow reveal">meet lumi</span>
+    <h2 class="reveal">Un mecanismo, tres temperamentos</h2>
+    <p class="lead reveal">La diferencia entre los tres no está en la arquitectura, sino en cuántos verificadores compiten dentro — y cuánto se ajusta el círculo antes de cerrar. Cifras de referencia sobre RTX 4090, no promesas de laboratorio.</p>
+  </div>
+
+  <div class="modelsscroll" id="modelsscroll">
+    <div class="modelssticky">
+      <div class="orbitalstage" id="orbitalStage">
+
+        <div class="orbital-copy" id="orbitalCopy">
+          <div class="ocopy on" data-idx="0">
+            <div class="ocopy-head">
+              <span class="ocopy-ring" style="--mc:55,138,221"><svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="10.5" fill="none" stroke="rgb(55,138,221)" stroke-width="1.6"/></svg></span>
+              <span class="tag mono">01 · un verificador · coste bajo</span>
+            </div>
+            <h3>Lumi Mini</h3>
+            <p class="voice">El primero en responder, no el más exigente.</p>
+            <p class="desc">Un único verificador geométrico (p. ej. RoMa). No delibera con nadie — da su mejor lectura y se aparta.</p>
+            <div class="panel-stats mono">
+              <div class="panel-stat"><div class="v" data-count="1" data-decimals="0">0</div><div class="l">verificador</div></div>
+              <div class="panel-stat"><div class="v" data-count="1.2" data-decimals="1" data-suffix="s">0.0s</div><div class="l">latencia media</div></div>
+              <div class="panel-stat"><div class="v" data-count="340" data-decimals="0" data-suffix=" m">0 m</div><div class="l">radio de confianza</div></div>
+              <div class="panel-stat"><div class="v" data-count="18" data-decimals="0" data-suffix="%">0%</div><div class="l">carga de gpu</div></div>
+            </div>
+            <ul class="panel-fit">
+              <li>Vas a triar cientos de imágenes de un tirón</li>
+              <li>Una sola GPU de consumo, sin cola que gestionar</li>
+            </ul>
+            <a class="go" href="/meetmini">Conocer Mini →</a>
+          </div>
+
+          <div class="ocopy" data-idx="1">
+            <div class="ocopy-head">
+              <span class="ocopy-ring" style="--mc:239,185,104"><svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="10.5" fill="none" stroke="rgb(239,185,104)" stroke-width="1.6"/><circle cx="13" cy="13" r="7" fill="none" stroke="rgb(239,185,104)" stroke-width="1.2" opacity=".55"/></svg></span>
+              <span class="tag mono">02 · varios en cadena · coste medio</span>
+            </div>
+            <h3>Lumi Pro</h3>
+            <p class="voice">Cada modelo acota antes de pasar el testigo al siguiente.</p>
+            <p class="desc">Encadena varios verificadores; ninguno parte de cero, cada uno hereda el círculo ya reducido por el anterior.</p>
+            <div class="panel-stats mono">
+              <div class="panel-stat"><div class="v" data-count="3" data-decimals="0">0</div><div class="l">verificadores</div></div>
+              <div class="panel-stat"><div class="v" data-count="4.1" data-decimals="1" data-suffix="s">0.0s</div><div class="l">latencia media</div></div>
+              <div class="panel-stat"><div class="v" data-count="85" data-decimals="0" data-suffix=" m">0 m</div><div class="l">radio de confianza</div></div>
+              <div class="panel-stat"><div class="v" data-count="46" data-decimals="0" data-suffix="%">0%</div><div class="l">carga de gpu</div></div>
+            </div>
+            <ul class="panel-fit">
+              <li>El caso tiene tiempo, pero no infinito</li>
+              <li>Quieres precisión sin saturar el servidor</li>
+            </ul>
+            <a class="go" href="/meetpro">Conocer Pro →</a>
+          </div>
+
+          <div class="ocopy" data-idx="2">
+            <div class="ocopy-head">
+              <span class="ocopy-ring" style="--mc:242,243,245"><svg viewBox="0 0 26 26"><circle cx="13" cy="13" r="10.5" fill="none" stroke="rgb(242,243,245)" stroke-width="1.6"/><circle cx="13" cy="13" r="7" fill="none" stroke="rgb(242,243,245)" stroke-width="1.2" opacity=".55"/><circle cx="13" cy="13" r="3.5" fill="none" stroke="rgb(242,243,245)" stroke-width="1" opacity=".4"/></svg></span>
+              <span class="tag mono">03 · varios compitiendo · coste alto</span>
+            </div>
+            <h3>Lumi Vision</h3>
+            <p class="voice">Ninguno gana solo — compiten hasta que el círculo no puede cerrarse más.</p>
+            <p class="desc">Varios verificadores trabajan la misma imagen a la vez y se disputan cada metro. Resultados muy superiores; cómputo real, sin atajos.</p>
+            <div class="panel-stats mono">
+              <div class="panel-stat"><div class="v" data-count="4" data-decimals="0">0</div><div class="l">verificadores</div></div>
+              <div class="panel-stat"><div class="v" data-count="11.6" data-decimals="1" data-suffix="s">0.0s</div><div class="l">latencia media</div></div>
+              <div class="panel-stat"><div class="v" data-count="19" data-decimals="0" data-suffix=" m">0 m</div><div class="l">radio de confianza</div></div>
+              <div class="panel-stat"><div class="v" data-count="82" data-decimals="0" data-suffix="%">0%</div><div class="l">carga de gpu</div></div>
+            </div>
+            <ul class="panel-fit">
+              <li>El caso importa y sobran GPUs</li>
+              <li>Cada metro de margen cuenta de verdad</li>
+            </ul>
+            <a class="go" href="/meetvision">Conocer Vision →</a>
+          </div>
+        </div>
+
+        <div class="orbital-visual" id="orbitalVisual">
+          <div class="galaxy-cam" id="galaxyCam">
+            <div class="galaxy-starfield"></div>
+
+            <!-- Vision — el sol: fijo en el centro, en el punto más
+                 profundo de la escena. Llegar hasta aquí es el remate
+                 del viaje, no un anillo más. -->
+            <div class="gsun-wrap" id="gsunWrap" style="transform:translateZ(-900px)">
+              <div class="gsun"></div>
+              <div class="gsun-label mono">vision · el sol</div>
+            </div>
+
+            <div class="gdepth" style="transform:translateZ(-150px)">
+              <div class="gorbitring" style="width:230px;height:230px;margin:-115px 0 0 -115px;transform:rotateX(74deg)"></div>
+              <div class="gspin" style="animation:gspin 15s linear infinite">
+                <div class="gplanet" id="gplanetMini" style="--mc:55,138,221;width:40px;height:40px;margin:-20px 0 0 -20px;transform:translateX(115px)">
+                  <div class="core"></div>
+                  <div class="glabel mono">mini</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="gdepth" style="transform:translateZ(-450px)">
+              <div class="gorbitring" style="width:360px;height:360px;margin:-180px 0 0 -180px;transform:rotateX(74deg)"></div>
+              <div class="gspin" style="animation:gspin 24s linear infinite reverse">
+                <div class="gplanet ring" id="gplanetPro" style="--mc:239,185,104;width:56px;height:56px;margin:-28px 0 0 -28px;transform:translateX(180px)">
+                  <div class="core"></div>
+                  <div class="glabel mono">pro</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="panel-dots" id="panelDots"><i class="on"></i><i></i><i></i></div>
+    </div>
+  </div>
+</section>
+
+<!-- =================== MAPA DE COBERTURA =================== -->
+<section class="coverage" id="coverage">
+  <div class="wrap">
+    <span class="eyebrow reveal">indexado</span>
+    <h2 class="reveal">Cuánto mundo ya reconoce Lumi</h2>
+    <p class="lead reveal">Cada baliza marca una región con actividad de indexado sobre el terreno real — el resto del mapa, sin marcar, es lo que aún falta por recorrer.</p>
+
+  </div>
+
+  <div class="mapbleed reveal">
+    <canvas id="worldmap" width="1200" height="520"></canvas>
+  </div>
+
+  <div class="wrap">
+    <div class="legend">
+      <div class="li"><span class="sw" style="background:rgba(255,255,255,.14)"></span> sin marcar = sin indexar todavía</div>
+      <div class="li"><span class="sw" style="background:var(--warning-fg)"></span> indexado parcialmente (parpadea)</div>
+      <div class="li"><span class="sw" style="background:var(--accent)"></span> indexado (respira)</div>
+    </div>
+
+    <div class="precision reveal">
+      <div class="precision-top">
+        <div class="precision-label mono">cobertura global exacta</div>
+        <div class="precision-num mono" id="precisionNum">
+          <span class="settled">0</span><span class="settled">.</span><span class="settling">0000000000</span><span class="pct">%</span>
+        </div>
+      </div>
+      <div class="precision-bar"><i id="precisionBarFill"></i></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap footer-grid">
+    <div class="footer-brand">
+      <div class="brand"><span class="mark">✦</span> Lumi Station</div>
+      <p class="lead">Geolocalización de imágenes por inferencia, de código abierto y autoalojada. Tus imágenes y tus GPUs no salen de tu servidor.</p>
+      <div class="footer-status"><span class="d"></span> 3 verificadores en línea</div>
+    </div>
+    <div class="footer-cols">
+      <div class="footer-col">
+        <div class="footer-h mono">modelos</div>
+        <a href="/meetmini">Lumi Mini</a>
+        <a href="/meetpro">Lumi Pro</a>
+        <a href="/meetvision">Lumi Vision</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-h mono">proyecto</div>
+        <a href="/index">Indexado</a>
+        <a href="/aboutme">Sobre mí</a>
+        <a href="#">Descargar cliente</a>
+      </div>
+    </div>
+  </div>
+  <div class="wrap footer-bottom">
+    <span class="mono">v2.0 · Rust + Python · autoalojado</span>
+    <span class="mono">cobertura 21.4738291046%</span>
+  </div>
+</footer>
+
+<!-- =================== REVEAL BAJO EL FOOTER (estilo Hermès) ===================
+     El footer se va hacia arriba con el scroll; esto queda fijo abajo. -->
+<div class="footer-reveal">
+  <div class="footer-reveal-sticky">
+    <div class="footer-reveal-ph">
+      <span class="mono">placeholder — imagen / animación</span>
+      <span class="mono sub">sustituir por el vídeo o loop animado definitivo</span>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =================================================================
+   CONTINENTES COMPARTIDOS — polígonos en fracción (0..1) de un mapa
+   equirectangular. Los usan tanto el globo del hero como el mapa de
+   cobertura de más abajo, para que ambos dibujen la misma silueta.
+   NOTA: simplificación dibujada a mano — sustituir por datos reales
+   (p. ej. Natural Earth) antes de producción.
+   ================================================================= */
+const CONTINENTS_F = [
+  [[0.035,0.22],[0.03,0.20],[0.045,0.155],[0.065,0.125],[0.12,0.095],[0.155,0.11],
+   [0.175,0.145],[0.205,0.165],[0.2,0.20],[0.205,0.235],[0.205,0.27],[0.215,0.31],
+   [0.218,0.355],[0.19,0.375],[0.16,0.372],[0.135,0.40],[0.10,0.405],[0.085,0.375],
+   [0.09,0.335],[0.06,0.30],[0.04,0.26]],                              // norteamérica + centroamérica
+  [[0.30,0.09],[0.335,0.075],[0.375,0.10],[0.365,0.15],[0.335,0.185],
+   [0.30,0.16],[0.29,0.12]],                                           // groenlandia
+  [[0.135,0.40],[0.16,0.43],[0.205,0.44],[0.235,0.45],[0.28,0.48],
+   [0.315,0.515],[0.325,0.55],[0.30,0.60],[0.285,0.66],[0.27,0.73],
+   [0.26,0.81],[0.245,0.885],[0.225,0.925],[0.205,0.88],[0.198,0.80],
+   [0.19,0.70],[0.185,0.60],[0.19,0.52],[0.20,0.46]],                  // sudamérica
+  [[0.435,0.225],[0.45,0.185],[0.485,0.15],[0.51,0.165],[0.525,0.20],
+   [0.545,0.225],[0.565,0.26],[0.555,0.285],[0.52,0.30],[0.49,0.29],
+   [0.455,0.30],[0.435,0.27]],                                        // europa
+  [[0.455,0.32],[0.485,0.30],[0.53,0.305],[0.565,0.325],[0.60,0.38],
+   [0.615,0.425],[0.60,0.47],[0.585,0.535],[0.565,0.60],[0.545,0.665],
+   [0.53,0.71],[0.505,0.665],[0.50,0.58],[0.485,0.50],[0.465,0.44],
+   [0.45,0.38]],                                                      // áfrica
+  [[0.565,0.135],[0.60,0.10],[0.66,0.075],[0.72,0.07],[0.79,0.09],
+   [0.845,0.115],[0.885,0.145],[0.905,0.19],[0.885,0.225],[0.855,0.245],
+   [0.83,0.265],[0.80,0.30],[0.775,0.36],[0.755,0.42],[0.735,0.465],
+   [0.755,0.50],[0.75,0.535],[0.715,0.525],[0.685,0.50],[0.665,0.45],
+   [0.645,0.40],[0.615,0.36],[0.60,0.30],[0.585,0.25],[0.57,0.19]],   // asia
+  [[0.735,0.615],[0.77,0.605],[0.815,0.615],[0.845,0.65],[0.845,0.70],
+   [0.825,0.745],[0.79,0.755],[0.755,0.735],[0.74,0.69],[0.735,0.65]], // oceanía
+  [[0.735,0.525],[0.77,0.53],[0.80,0.545],[0.775,0.565],[0.74,0.56]],  // indonesia (aprox.)
+];
+
+// máscara equirectangular reutilizable: dado (lng -180..180, lat -90..90)
+// dice si ese punto cae sobre tierra. La usa el globo 3D del hero para
+// que el planeta lea como planeta, no como nube de puntos genérica.
+const _maskCanvas = document.createElement("canvas");
+_maskCanvas.width = 720; _maskCanvas.height = 360;
+(function(){
+  const mctx = _maskCanvas.getContext("2d");
+  mctx.fillStyle = "#fff";
+  CONTINENTS_F.forEach(poly => {
+    mctx.beginPath();
+    poly.forEach(([fx,fy], i) => {
+      const x = fx*720, y = fy*360;
+      if (i===0) mctx.moveTo(x,y); else mctx.lineTo(x,y);
+    });
+    mctx.closePath();
+    mctx.fill();
+  });
+})();
+const _maskData = _maskCanvas.getContext("2d").getImageData(0,0,720,360).data;
+function isLand(lng, lat){
+  const x = Math.max(0, Math.min(719, Math.round(((lng+180)/360)*720)));
+  const y = Math.max(0, Math.min(359, Math.round(((90-lat)/180)*360)));
+  return _maskData[(y*720+x)*4+3] > 120;
+}
+
+/* ---------------------------------------------------------------
+   nav: borde y barra de progreso al hacer scroll
+--------------------------------------------------------------- */
+const topnav = document.getElementById("topnav");
+const navprogress = document.getElementById("navprogress");
+window.addEventListener("scroll", () => {
+  topnav.classList.toggle("scrolled", window.scrollY > 8);
+  const total = document.documentElement.scrollHeight - window.innerHeight;
+  navprogress.style.width = (total>0 ? Math.min(100, window.scrollY/total*100) : 0) + "%";
+}, {passive:true});
+
+/* ---------------------------------------------------------------
+   nav: desplegable "Modelos" — hover en escritorio (CSS), click
+   como respaldo para touch, y cierre al tocar fuera.
+--------------------------------------------------------------- */
+(function(){
+  const wrap = document.getElementById("navModels");
+  const trigger = document.getElementById("navModelsTrigger");
+  if (!wrap || !trigger) return;
+  trigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const willOpen = !wrap.classList.contains("open");
+    wrap.classList.toggle("open", willOpen);
+    trigger.setAttribute("aria-expanded", String(willOpen));
+  });
+  document.addEventListener("click", () => {
+    wrap.classList.remove("open");
+    trigger.setAttribute("aria-expanded", "false");
+  });
+  wrap.addEventListener("click", (e) => e.stopPropagation());
+})();
+
+/* ---------------------------------------------------------------
+   hero: copiar el comando de instalación del "hueco"
+--------------------------------------------------------------- */
+(function(){
+  const btn = document.getElementById("heroCopyBtn");
+  const label = document.getElementById("heroCopyLabel");
+  const cmdEl = document.getElementById("heroCmd");
+  if (!btn) return;
+  const cmd = "curl -fsSL lumi.sh/install | sh";
+  let resetT;
+  btn.addEventListener("click", async () => {
+    try{
+      await navigator.clipboard.writeText(cmd);
+    }catch(e){
+      const range = document.createRange();
+      range.selectNode(cmdEl);
+      window.getSelection().removeAllRanges();
+      window.getSelection().addRange(range);
+      document.execCommand("copy");
+      window.getSelection().removeAllRanges();
+    }
+    btn.classList.add("done");
+    label.textContent = "copiado";
+    clearTimeout(resetT);
+    resetT = setTimeout(() => { btn.classList.remove("done"); label.textContent = "copiar"; }, 1800);
+  });
+})();
+
+/* ---------------------------------------------------------------
+   hero: título palabra a palabra + parallax suave con el scroll
+--------------------------------------------------------------- */
+(function(){
+  const title = document.getElementById("heroTitle");
+  const parts = [
+    {text:"La foto dice dónde.", em:false},
+    {text:"Nosotros la escuchamos.", em:true},
+  ];
+  let delay = 0.05;
+  parts.forEach((part, pi) => {
+    const words = part.text.split(" ");
+    words.forEach((w, wi) => {
+      const span = document.createElement("span");
+      span.className = "word";
+      span.style.animationDelay = delay.toFixed(2)+"s";
+      span.textContent = w + (wi < words.length-1 ? "\u00A0" : "");
+      if (part.em){ const em = document.createElement("em"); em.appendChild(span); title.appendChild(em); }
+      else title.appendChild(span);
+      delay += 0.06;
+    });
+    if (pi === 0) title.appendChild(document.createTextNode(" "));
+  });
+
+  const parallax = document.getElementById("heroParallax");
+  window.addEventListener("scroll", () => {
+    const y = window.scrollY;
+    if (y < window.innerHeight){
+      parallax.style.transform = `translateY(${y*0.18}px)`;
+      parallax.style.opacity = String(Math.max(0, 1 - y/(window.innerHeight*0.8)));
+    }
+  }, {passive:true});
+})();
+
+/* ---------------------------------------------------------------
+   reveal genérico por IntersectionObserver
+--------------------------------------------------------------- */
+const revealer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add("on"); });
+}, {threshold:.2});
+document.querySelectorAll(".reveal").forEach(el => revealer.observe(el));
+
+/* =================================================================
+   HERO 3D — planeta con satélites indexando
+   Motor 3D propio en canvas 2D (proyección de perspectiva manual):
+   esfera de puntos con halo atmosférico + varios satélites, cada
+   uno en su propio plano orbital, que de vez en cuando descienden
+   sobre una zona y la "encienden" — eco directo del mapa de
+   cobertura de más abajo. Sin librerías externas.
+   ================================================================= */
+(function(){
+  const canvas = document.getElementById("hero3d");
+  const ctx = canvas.getContext("2d");
+  let W, H, DPR;
+  function size(){
+    DPR = Math.min(devicePixelRatio||1, 2);
+    W = canvas.parentElement.clientWidth;
+    H = canvas.parentElement.clientHeight;
+    canvas.width = W*DPR; canvas.height = H*DPR;
+    canvas.style.width = W+"px"; canvas.style.height = H+"px";
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  size(); window.addEventListener("resize", size);
+
+  const R = 1;
+  // esfera de puntos por espiral áurea
+  const N = 1400;
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  const sphere = [];
+  for(let i=0;i<N;i++){
+    const y = 1 - (i/(N-1))*2;
+    const r = Math.sqrt(Math.max(0,1-y*y));
+    const t = golden*i;
+    sphere.push({x:Math.cos(t)*r*R, y:y*R, z:Math.sin(t)*r*R, lit:0, land:false});
+  }
+
+  function toAngles(p){
+    const r = Math.hypot(p.x,p.y,p.z) || 1;
+    const lat = 90 - Math.acos(p.y/r)*180/Math.PI;
+    const lng = Math.atan2(p.z, -p.x)*180/Math.PI - 180;
+    return {lat, lng: ((lng+540)%360)-180};
+  }
+
+  // cada punto es fijo sobre la esfera — su lat/lng no cambia al girar,
+  // así que la máscara de continentes solo hace falta una vez: es lo
+  // que hace que el planeta lea como planeta y no como nube uniforme.
+  for(let i=0;i<sphere.length;i++){
+    const ang = toAngles(sphere[i]);
+    sphere[i].land = isLand(ang.lng, ang.lat);
+  }
+
+  // anillos de referencia (ecuador + 2 meridianos) — puro adorno de
+  // navegación, no llevan datos
+  function circlePts(axis){
+    const pts = [];
+    for (let i=0;i<=64;i++){
+      const a = (i/64)*Math.PI*2;
+      if (axis === "eq") pts.push({x:Math.cos(a)*R, y:0, z:Math.sin(a)*R});
+      else if (axis === "m0") pts.push({x:0, y:Math.cos(a)*R, z:Math.sin(a)*R});
+      else pts.push({x:Math.sin(a)*R*0.94, y:Math.cos(a)*R*0.94, z:0.34*R});
+    }
+    return pts;
+  }
+  const GRATICULE = [circlePts("eq"), circlePts("m0"), circlePts("m1")];
+
+  // rotar alrededor de Y, luego X (leve inclinación), y proyectar en perspectiva
+  function project(p, rotY, tiltX, camZ, scale, cx, cy){
+    let x = p.x*Math.cos(rotY) - p.z*Math.sin(rotY);
+    let z = p.x*Math.sin(rotY) + p.z*Math.cos(rotY);
+    let y = p.y*Math.cos(tiltX) - z*Math.sin(tiltX);
+    z = p.y*Math.sin(tiltX) + z*Math.cos(tiltX);
+    // profundidad con un mínimo — sin esto, un satélite cuyo z rotado se
+    // acerca al de la cámara divide por casi cero y "explota" de tamaño
+    // en pantalla (el bug de los planetas gigantes)
+    const depth = Math.max(camZ*0.42, camZ - z);
+    const f = scale / depth;
+    return {sx: cx + x*f, sy: cy - y*f, z, f};
+  }
+
+  // cada modelo (Mini / Pro / Vision) es un mini-planeta con su propio
+  // plano orbital (inclinación + nodo aleatorios) que alterna entre
+  // "orbitar" y "descender a escanear" — los mismos 3 colores que ya
+  // identifican a los modelos en el resto del sitio, para que el hero
+  // lea como "estos son los 3 modelos, orbitando de verdad" y no como
+  // una nube genérica de satélites.
+  const SAT_MODELS = [
+    {c:"55,138,221",  name:"Mini",   radius:5.5, ring:false},
+    {c:"239,185,104", name:"Pro",    radius:7,   ring:true},
+    {c:"242,243,245", name:"Vision", radius:8.5, ring:true},
+  ];
+  const satellites = SAT_MODELS.map((m,i) => ({
+    c:m.c, name:m.name, radius:m.radius, ring:m.ring,
+    incl:(0.22+i*0.16)*(i%2?1:-1), node:(i/SAT_MODELS.length)*Math.PI*2 + 0.4,
+    speed:0.16+i*0.05, phase:Math.random()*Math.PI*2,
+    orbitR:R*(1.55+i*0.34),
+    state:"orbit", t0:0, from:null, to:null, targetIdx:-1, _pos:null,
+  }));
+
+  // trazo estático de cada órbita (elipse en 3D, muestreada una vez por
+  // ángulo) — se re-proyecta cada frame porque el planeta gira, pero el
+  // muestreo de puntos en sí es fijo, así que sale casi gratis
+  const ORBIT_SAMPLES = 56;
+  satellites.forEach(sat => {
+    sat.orbitPath = [];
+    for (let k=0;k<=ORBIT_SAMPLES;k++){
+      sat.orbitPath.push(orbitPosStatic(sat, (k/ORBIT_SAMPLES)*Math.PI*2));
+    }
+  });
+  function orbitPosStatic(sat, a){
+    const x = Math.cos(a)*sat.orbitR, y0 = 0, z = Math.sin(a)*sat.orbitR;
+    const y1 = y0*Math.cos(sat.incl) - z*Math.sin(sat.incl);
+    const z1 = y0*Math.sin(sat.incl) + z*Math.cos(sat.incl);
+    const x2 = x*Math.cos(sat.node) - z1*Math.sin(sat.node);
+    const z2 = x*Math.sin(sat.node) + z1*Math.cos(sat.node);
+    return {x:x2, y:y1, z:z2};
+  }
+
+  function orbitPos(sat, t){
+    const a = sat.phase + t*sat.speed;
+    const x = Math.cos(a)*sat.orbitR, y0 = 0, z = Math.sin(a)*sat.orbitR;
+    const y1 = y0*Math.cos(sat.incl) - z*Math.sin(sat.incl);
+    const z1 = y0*Math.sin(sat.incl) + z*Math.cos(sat.incl);
+    const x2 = x*Math.cos(sat.node) - z1*Math.sin(sat.node);
+    const z2 = x*Math.sin(sat.node) + z1*Math.cos(sat.node);
+    return {x:x2, y:y1, z:z2};
+  }
+
+  function maybeStartDive(sat, t){
+    if (sat.state !== "orbit") return;
+    if (Math.random() < 0.0011){
+      const idx = Math.floor(Math.random()*sphere.length);
+      sat.state = "diving"; sat.t0 = t; sat.targetIdx = idx;
+      sat.from = orbitPos(sat, t);
+      const sp = sphere[idx];
+      sat.to = {x:sp.x*1.12, y:sp.y*1.12, z:sp.z*1.12};
+    }
+  }
+
+  const hudLat = document.getElementById("hudLat");
+  const hudLng = document.getElementById("hudLng");
+  const hudSat = document.getElementById("hudSat");
+  const hudState = document.getElementById("hudState");
+  hudSat.textContent = String(satellites.length);
+  const t0 = performance.now();
+
+  function frame(now){
+    requestAnimationFrame(frame);
+    const t = (now-t0)/1000;
+
+    ctx.clearRect(0,0,W,H);
+    const cx = W*0.66, cy = H*0.46;
+    const scale = Math.min(W,H)*0.62;
+    const camZ = 3.1;
+    const rotY = t*0.07;
+    const tiltX = 0.3 + Math.sin(t*0.12)*0.04;
+
+    // atmósfera: halo tenue justo fuera de la silueta, más denso hacia
+    // un lado — es lo que hace que se lea como esfera y no como nube plana
+    const rad = scale/(camZ-R*0.02);
+    const grad = ctx.createRadialGradient(cx-rad*0.26,cy-rad*0.3,rad*0.55, cx,cy,rad*1.16);
+    grad.addColorStop(0,"rgba(255,255,255,0)");
+    grad.addColorStop(0.78,"rgba(255,255,255,0)");
+    grad.addColorStop(0.92,"rgba(200,214,230,0.10)");
+    grad.addColorStop(1,"rgba(120,150,180,0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(cx,cy,rad*1.18,0,Math.PI*2); ctx.fill();
+
+    // graticulo — ecuador + un par de meridianos, para que se lea como
+    // instrumento de navegación y no solo como nube de puntos
+    ctx.lineWidth = 1;
+    GRATICULE.forEach(ring => {
+      ctx.beginPath();
+      let started = false;
+      for (let i=0;i<=ring.length;i++){
+        const gp = ring[i%ring.length];
+        const p = project(gp, rotY, tiltX, camZ, scale, cx, cy);
+        if (p.z > R*0.06){ started = false; continue; }
+        if (!started){ ctx.moveTo(p.sx,p.sy); started = true; } else ctx.lineTo(p.sx,p.sy);
+      }
+      ctx.strokeStyle = "rgba(180,196,214,.08)";
+      ctx.stroke();
+    });
+
+    // barrido de escaneo — banda tenue que gira despacio alrededor del
+    // planeta, como un radar leyendo la superficie en bucle continuo
+    const sweepA = t*0.35;
+    const sw1 = project({x:Math.cos(sweepA)*R*1.01,y:0,z:Math.sin(sweepA)*R*1.01}, rotY, tiltX, camZ, scale, cx, cy);
+    if (sw1.z < R*0.4){
+      const sweepGrad = ctx.createLinearGradient(cx-rad,cy,cx+rad,cy);
+      const gStop = Math.max(0,Math.min(1,(sw1.sx-(cx-rad))/(rad*2)));
+      sweepGrad.addColorStop(Math.max(0,gStop-0.05),"rgba(55,138,221,0)");
+      sweepGrad.addColorStop(gStop,"rgba(133,183,235,.10)");
+      sweepGrad.addColorStop(Math.min(1,gStop+0.05),"rgba(55,138,221,0)");
+      ctx.fillStyle = sweepGrad;
+      ctx.beginPath(); ctx.arc(cx,cy,rad,0,Math.PI*2); ctx.fill();
+    }
+
+    // trazo tenue de cada órbita — lo que hace leer "planetas en órbita"
+    // en vez de "puntos sueltos alrededor de una esfera"
+    satellites.forEach(sat => {
+      ctx.beginPath();
+      let started = false;
+      for (let k=0;k<sat.orbitPath.length;k++){
+        const p = project(sat.orbitPath[k], rotY, tiltX, camZ, scale, cx, cy);
+        if (p.z > R*0.05){ started = false; continue; }
+        if (!started){ ctx.moveTo(p.sx,p.sy); started = true; } else ctx.lineTo(p.sx,p.sy);
+      }
+      ctx.strokeStyle = `rgba(${sat.c},.14)`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+
+    let activeTarget = null;
+
+    satellites.forEach(sat => {
+      maybeStartDive(sat, t);
+      let pos;
+      if (sat.state === "orbit"){
+        pos = orbitPos(sat, t);
+      } else if (sat.state === "diving"){
+        const p = Math.min(1, (t-sat.t0)/1.1);
+        pos = {
+          x: sat.from.x+(sat.to.x-sat.from.x)*p,
+          y: sat.from.y+(sat.to.y-sat.from.y)*p,
+          z: sat.from.z+(sat.to.z-sat.from.z)*p,
+        };
+        if (p >= 1){ sat.state = "scanning"; sat.t0 = t; }
+      } else if (sat.state === "scanning"){
+        pos = sat.to;
+        const p = Math.min(1, (t-sat.t0)/0.9);
+        const target = sphere[sat.targetIdx];
+        const scanR = 0.34;
+        for (let i=0;i<sphere.length;i++){
+          const sp = sphere[i];
+          const d = Math.hypot(sp.x-target.x, sp.y-target.y, sp.z-target.z);
+          if (d < scanR) sp.lit = Math.max(sp.lit, 1-d/scanR);
+        }
+        activeTarget = target;
+        if (p >= 1){ sat.state = "returning"; sat.t0 = t; sat.from = pos; sat.to = orbitPos(sat,t); }
+      } else { // returning
+        const p = Math.min(1, (t-sat.t0)/0.9);
+        const liveOrbit = orbitPos(sat, t);
+        pos = {
+          x: sat.from.x+(liveOrbit.x-sat.from.x)*p,
+          y: sat.from.y+(liveOrbit.y-sat.from.y)*p,
+          z: sat.from.z+(liveOrbit.z-sat.from.z)*p,
+        };
+        if (p >= 1) sat.state = "orbit";
+      }
+      sat._pos = pos;
+    });
+
+    // enfriar el brillo de zonas ya escaneadas
+    for (let i=0;i<sphere.length;i++) sphere[i].lit *= 0.985;
+
+    // puntos del globo — tierra más densa y brillante que océano, así
+    // se lee la silueta de los continentes al girar; los recién
+    // escaneados brillan y se apagan poco a poco encima de eso
+    for (let i=0;i<sphere.length;i++){
+      const sp = sphere[i];
+      const p = project(sp, rotY, tiltX, camZ, scale, cx, cy);
+      if (p.z > R*0.15) continue; // cara trasera, ocultarla
+      const near = 1 - Math.min(1, Math.max(0,(p.z+R)/(R*1.4)));
+      const lit = sp.lit;
+      const baseA = sp.land ? 0.38 : 0.06;
+      const nearGain = sp.land ? 0.55 : 0.14;
+      const radBase = sp.land ? 0.95 : 0.42;
+      const radGain = sp.land ? 1.2 : 0.5;
+      const radDot = radBase + near*radGain + lit*0.9;
+      const a = Math.min(1, baseA + near*nearGain + lit*0.85);
+      const grey = (sp.land ? 176 : 132) + lit*(242-(sp.land?176:132));
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(${grey|0},${grey|0},${(grey-5)|0},${a})`;
+      ctx.arc(p.sx, p.sy, radDot, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    // satélites: punto + haz hacia la zona, y un cono de lectura (varios
+    // rayos finos, no uno solo) mientras escanean — para que se note que
+    // están leyendo una superficie y no solo apuntando a un pixel
+    satellites.forEach(sat => {
+      const p = project(sat._pos, rotY, tiltX, camZ, scale, cx, cy);
+      const dim = sat.state === "orbit" ? 0.5 : 1;
+      const scanning = sat.state === "diving" || sat.state === "scanning";
+
+      if (scanning){
+        const tp = project(sat.to, rotY, tiltX, camZ, scale, cx, cy);
+        const spread = 5.5;
+        ctx.lineWidth = 1;
+        for (let k=-1;k<=1;k++){
+          ctx.beginPath();
+          ctx.strokeStyle = `rgba(${sat.c},${k===0?.55:.22})`;
+          ctx.moveTo(p.sx, p.sy);
+          ctx.lineTo(tp.sx + k*spread, tp.sy + k*spread*0.6);
+          ctx.stroke();
+        }
+      }
+
+      // halo pulsante alrededor del satélite mientras lee
+      if (sat.state === "scanning"){
+        const pulse = 0.5 + 0.5*Math.sin(t*9 + sat.phase);
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(${sat.c},${0.35+pulse*0.35})`;
+        ctx.lineWidth = 1;
+        ctx.arc(p.sx, p.sy, 4.5+pulse*1.6, 0, Math.PI*2);
+        ctx.stroke();
+      }
+
+      // mini-planeta: esfera con sombreado radial (no un punto plano) +
+      // anillo fino para Pro/Vision, como los que ya usan sus iconos
+      // en la nav y en la sección de modelos — mismo lenguaje visual.
+      // El tamaño usa un factor de cercanía ACOTADO (0..1), no el factor
+      // de perspectiva crudo — así nunca "explota" cuando el satélite
+      // pasa cerca de la cámara.
+      const nearSat = Math.max(0, Math.min(1, (p.z + R*2.4) / (R*3.4)));
+      const pr = sat.radius * (sat.state==="orbit" ? 0.6 : 0.92) * (0.65 + nearSat*0.7);
+      if (sat.ring){
+        ctx.save();
+        ctx.translate(p.sx, p.sy);
+        ctx.scale(1, 0.42);
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(${sat.c},${dim*0.55})`;
+        ctx.lineWidth = 1.1;
+        ctx.arc(0, 0, pr*1.85, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.restore();
+      }
+      const pgrad = ctx.createRadialGradient(p.sx-pr*0.35, p.sy-pr*0.35, pr*0.1, p.sx, p.sy, pr*1.05);
+      pgrad.addColorStop(0, `rgba(${sat.c},${dim})`);
+      pgrad.addColorStop(0.7, `rgba(${sat.c},${dim*0.85})`);
+      pgrad.addColorStop(1, `rgba(${sat.c},${dim*0.25})`);
+      ctx.beginPath();
+      ctx.fillStyle = pgrad;
+      ctx.arc(p.sx, p.sy, pr, 0, Math.PI*2);
+      ctx.fill();
+    });
+
+    // marcador de lectura sobre el terreno: retícula + dos anillos de
+    // sonar desfasados que se expanden y se apagan, con la posición
+    // exacta escrita al lado — esto es lo que hace visible que un
+    // satélite concreto está leyendo esa zona ahora mismo
+    satellites.forEach(sat => {
+      if (sat.state !== "scanning") return;
+      const p = Math.min(1, (t-sat.t0)/0.9);
+      const tp = project(sat.to, rotY, tiltX, camZ, scale, cx, cy);
+      const ang = toAngles(sphere[sat.targetIdx]);
+
+      [0, 0.35].forEach(delay => {
+        const lp = Math.max(0, Math.min(1, (p-delay)/(1-delay)));
+        if (lp<=0 || lp>=1) return;
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(${sat.c},${(1-lp)*0.8})`;
+        ctx.lineWidth = 1;
+        ctx.arc(tp.sx, tp.sy, 2+lp*15, 0, Math.PI*2);
+        ctx.stroke();
+      });
+
+      ctx.strokeStyle = `rgba(${sat.c},.75)`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(tp.sx-6, tp.sy); ctx.lineTo(tp.sx-2, tp.sy);
+      ctx.moveTo(tp.sx+2, tp.sy); ctx.lineTo(tp.sx+6, tp.sy);
+      ctx.moveTo(tp.sx, tp.sy-6); ctx.lineTo(tp.sx, tp.sy-2);
+      ctx.moveTo(tp.sx, tp.sy+2); ctx.lineTo(tp.sx, tp.sy+6);
+      ctx.stroke();
+
+      ctx.font = "9.5px ui-monospace, SFMono-Regular, Menlo, monospace";
+      ctx.fillStyle = `rgba(${sat.c},.85)`;
+      ctx.fillText(`${ang.lat.toFixed(2)}° ${ang.lng.toFixed(2)}°`, tp.sx+10, tp.sy-8);
+    });
+
+    if (activeTarget){
+      const ang = toAngles(activeTarget);
+      hudLat.textContent = ang.lat.toFixed(4)+"°";
+      hudLng.textContent = ang.lng.toFixed(4)+"°";
+      const scanning = satellites.find(s => s.state === "scanning");
+      hudState.textContent = scanning ? `leyendo · ${scanning.name}` : "escaneando";
+    } else {
+      hudState.textContent = "orbitando";
+    }
+  }
+  requestAnimationFrame(frame);
+})();
+
+/* =================================================================
+   VENTANA VIVA — el scroll dispara los mismos estados que ya
+   existen en el producto real: miniaturas avanzando, mapa con
+   halo, panel de admin.
+   ================================================================= */
+(function(){
+  const grid = document.getElementById("thumbgrid");
+  const N = 8;
+  const state = [];
+  for(let i=0;i<N;i++){
+    const t = document.createElement("div");
+    t.className = "thumb";
+    const bar = document.createElement("div");
+    bar.className = "pbar";
+    bar.innerHTML = `<i style="width:0%"></i>`;
+    t.appendChild(bar);
+    grid.appendChild(t);
+    state.push({el:t, pct: i<3 ? 100 : 0});
+  }
+  function paintThumbs(progress){
+    // progress 0..1 dentro del paso 0: hace avanzar las miniaturas en cola
+    state.forEach((s, i) => {
+      if (i < 3) { s.pct = 100; }
+      else {
+        const local = Math.max(0, Math.min(1, (progress*N - i)));
+        s.pct = Math.round(local*100);
+      }
+      s.el.querySelector("i").style.width = s.pct + "%";
+    });
+  }
+  paintThumbs(0.4);
+
+  // marcador + halo en el mapa falso
+  const fwmapEl = document.getElementById("fwmapEl");
+  const marker = document.createElement("div");
+  marker.className = "fwmarker";
+  marker.style.left = "62%"; marker.style.top = "44%";
+  const haloEl = document.createElement("div");
+  haloEl.className = "fwhalo";
+  haloEl.style.left = "62%"; haloEl.style.top = "44%";
+  haloEl.style.width = "46px"; haloEl.style.height="46px";
+  fwmapEl.appendChild(marker); fwmapEl.appendChild(haloEl);
+
+  const steps = [...document.querySelectorAll(".ifstep")];
+  const screens = [...document.querySelectorAll(".fwscreen")];
+  const rails = [document.getElementById("ri0"), document.getElementById("ri1"), document.getElementById("ri2")];
+  const scrollSection = document.getElementById("ifscroll");
+  const fakewin = document.querySelector(".fakewin");
+  const fwbody = document.querySelector(".fwbody");
+  const ifcaptions = document.querySelector(".ifcaptions");
+  const ifsticky = document.getElementById("ifsticky");
+  const ifsideCaptions = document.getElementById("ifsideCaptions");
+  const ifsideWindow = document.getElementById("ifsideWindow");
+  const ifintro = document.getElementById("ifintro");
+  const ifoutro = document.getElementById("ifoutro");
+  const easeIO = x => x<0.5 ? 4*x*x*x : 1-Math.pow(-2*x+2,3)/2;
+
+  // paso par → texto a la izquierda, ventana a la derecha; paso impar →
+  // se invierte. El cambio se anima con la técnica FLIP: medimos antes
+  // y después de voltear el flex-direction, y reproducimos la diferencia
+  // como un transform que se relaja — así "se ve" moverse la interfaz
+  // en vez de saltar de sitio.
+  let isReversed = false;
+  function swapSides(reverse){
+    if (reverse === isReversed || window.innerWidth <= 860) { isReversed = reverse; return; }
+    const r1 = ifsideCaptions.getBoundingClientRect();
+    const w1 = ifsideWindow.getBoundingClientRect();
+    ifsticky.classList.toggle("reverse", reverse);
+    isReversed = reverse;
+    const r2 = ifsideCaptions.getBoundingClientRect();
+    const w2 = ifsideWindow.getBoundingClientRect();
+    const capDx = r1.left - r2.left;
+    const winDx = w1.left - w2.left;
+    [[ifsideCaptions, capDx], [ifsideWindow, winDx]].forEach(([el, dx]) => {
+      el.style.transition = "none";
+      el.style.transform = `translateX(${dx}px)`;
+      void el.offsetWidth;
+      el.style.transition = "";
+      el.style.transform = "";
+    });
+  }
+
+  // cursor falso que "hace clic" sobre lo que cambia en cada paso
+  const cursor = document.createElement("div");
+  cursor.className = "fwcursor";
+  cursor.innerHTML = `<svg width="13" height="17" viewBox="0 0 13 17"><path d="M1 1 L1 14 L4.5 11 L7 16 L9 15 L6.5 10 L11 10 Z" fill="#f2f3f5" stroke="#0e0f11" stroke-width="1"/></svg>`;
+  const clickring = document.createElement("div");
+  clickring.className = "fwclickring";
+  fwbody.appendChild(clickring);
+  fwbody.appendChild(cursor);
+  const cursorTargets = [
+    {left:"34px", top:"70px"},   // rail: proyectos
+    {left:"34px", top:"116px"},  // rail: mapa
+    {left:"34px", top:"162px"},  // rail: admin
+  ];
+  let lastScreen = -1;
+  function moveCursorTo(pos, click){
+    cursor.style.left = pos.left; cursor.style.top = pos.top;
+    if (click){
+      clickring.style.left = pos.left; clickring.style.top = pos.top;
+      clickring.classList.remove("go"); void clickring.offsetWidth; clickring.classList.add("go");
+    }
+  }
+  moveCursorTo(cursorTargets[0], false);
+
+  function setActive(stepIndex){
+    steps.forEach(s => s.classList.toggle("on", Number(s.dataset.step) === stepIndex));
+    const screenIndex = stepIndex >= 3 ? 2 : (stepIndex >= 2 ? 1 : 0);
+    screens.forEach((s,i) => s.classList.toggle("on", i === screenIndex));
+    rails.forEach((r,i) => r.classList.toggle("on", i === screenIndex));
+    if (screenIndex !== lastScreen){
+      moveCursorTo(cursorTargets[screenIndex], true);
+      lastScreen = screenIndex;
+    }
+    swapSides(stepIndex % 2 === 1);
+  }
+  setActive(0);
+
+  // secuencia completa en 3 tramos sobre el mismo scroll de 460vh:
+  // frame 1 (0 → INTRO_END) título + ventana en trapezoide de apertura
+  // frame 2-3 (INTRO_END → OUTRO_START) los 4 pasos captionados, lados alternos
+  // frame 4 (OUTRO_START → 1) zoom final de remate, sin captions
+  // Secuencia en 4 tiempos, tal cual el boceto a mano:
+  //  1) tumbada en el suelo   → rotateX muy abierto, como mirando una
+  //     pantalla apoyada casi plana, con el pivote en su base
+  //  2) se levanta            → rotateX se cierra hasta quedar de pie
+  //  3) se inclina a un lado  → rotateY hacia un lado, ligado al primer
+  //     paso captionado (texto a la derecha / ventana a la izquierda)
+  //  4) se va para el otro    → rotateY al lado contrario, en el remate
+  //     con zoom final — el mismo giro que ya dispara swapSides()
+  const INTRO_END = 0.16;
+  const OUTRO_START = 0.85;
+  const GROUND_RX = -82;   // "tumbada en el suelo" — casi horizontal, como sobrevolándola
+  const SIDE_TILT = 13;    // cuánto se inclina a cada lado
+  let tiltTarget = -SIDE_TILT;
+  let currentTiltY = -SIDE_TILT;
+  let currentTransX = 0;
+  let currentScale = 1.14;
+  let currentIntroRX = GROUND_RX;
+  let currentGroundY = 168; // empuja la ventana hacia el borde inferior del viewport al inicio
+  function onScroll(){
+    const rect = scrollSection.getBoundingClientRect();
+    const total = scrollSection.offsetHeight - window.innerHeight;
+    const passed = Math.min(Math.max(-rect.top, 0), total);
+    const raw = total > 0 ? passed/total : 0;
+
+    const introP = Math.min(1, raw/INTRO_END);
+    const outroP = Math.max(0, Math.min(1, (raw-OUTRO_START)/(1-OUTRO_START)));
+    const stepsP = Math.max(0, Math.min(1, (raw-INTRO_END)/(OUTRO_START-INTRO_END)));
+
+    const introE = easeIO(introP), outroE = easeIO(outroP);
+    ifintro.style.opacity = String(1-introE);
+    ifintro.style.transform = `translateY(${-introE*30}px)`;
+    ifoutro.style.opacity = String(outroE);
+    ifoutro.style.transform = `translateY(${(1-outroE)*18}px)`;
+
+    const stepIndex = Math.min(3, Math.floor(stepsP*4));
+    setActive(stepIndex);
+    if (stepIndex === 0) paintThumbs(0.35 + stepsP*1.6);
+    // texto a la izquierda / ventana a la derecha en pasos pares →
+    // inclinada hacia un lado; en pasos impares, hacia el otro — el
+    // mismo swapSides() de siempre, ahora con un giro que se nota
+    tiltTarget = stepsP > 0 ? (stepIndex % 2 === 1 ? SIDE_TILT : -SIDE_TILT) : -SIDE_TILT;
+    // la ventana avanza hacia la derecha y el texto se retira a la
+    // izquierda a otra velocidad: dos capas de parallax horizontal
+    currentTransX = stepsP*64;
+
+    const capVisible = introE * (1-outroE);
+    ifcaptions.style.transform = `translateX(${-stepsP*42}px)`;
+    ifcaptions.style.opacity = String((1 - stepsP*0.15) * capVisible);
+
+    // frame 1 → 2: de tumbada cubriendo el borde inferior a de pie,
+    // con la bisagra en la base (transform-origin: 50% 100%)
+    currentIntroRX = GROUND_RX * (1-introE);
+    currentGroundY = 168 * (1-introE);
+    currentScale = 1.14 - 0.42*introE + outroE*0.42;
+  }
+  window.addEventListener("scroll", onScroll, {passive:true});
+  onScroll();
+
+  // flotación continua + inclinación suavizada (se anima sola hacia su
+  // objetivo cada vez que cambia de lado, en vez de saltar) + traslación
+  // de scroll, todo combinado en un único transform
+  const t0f = performance.now();
+  function floatLoop(now){
+    requestAnimationFrame(floatLoop);
+    const t = (now-t0f)/1000;
+    const floatY = Math.sin(t*1.05)*6;
+    const floatRX = Math.sin(t*1.05)*0.6;
+    currentTiltY += (tiltTarget - currentTiltY) * 0.045;
+    fakewin.style.transform = `translateX(${currentTransX}px) translateY(${floatY+currentGroundY}px) scale(${currentScale}) rotateX(${floatRX+currentIntroRX}deg) rotateY(${currentTiltY}deg)`;
+  }
+  requestAnimationFrame(floatLoop);
+})();
+
+/* =================================================================
+   MEET LUMI — "los modelos en órbita". Un solo diagrama fijo (input
+   en el centro, un anillo por modelo) que el scroll recorre en 3
+   tramos iguales. En cada tramo: el anillo del modelo se traza
+   (65%), su verificador acelera de órbita lenta a rápida, y su copy
+   entra en fade — todo en el mismo sitio, sin desplazamiento en X.
+   ================================================================= */
+(function(){
+  const scrollSection = document.getElementById("modelsscroll");
+  const stage = document.getElementById("orbitalStage");
+  const visual = document.getElementById("orbitalVisual");
+  if (!scrollSection || !stage) return;
+  const rings = [...document.querySelectorAll(".oring")];
+  const dots = [...document.querySelectorAll(".orbit-dot")];
+  const copies = [...document.querySelectorAll(".ocopy")];
+  const navDots = [...document.querySelectorAll("#panelDots i")];
+  const N = copies.length;
+  const MC = ["55,138,221", "239,185,104", "242,243,245"];
+  const DOT_SPEED_ORBIT = [16, 24, 32];
+  const DOT_SPEED_ACTIVE = [5.5, 7, 8.5];
+
+  const ringData = rings.map(r => {
+    const rad = Number(r.getAttribute("r"));
+    const c = 2 * Math.PI * rad;
+    r.style.strokeDasharray = String(c);
+    r.style.strokeDashoffset = String(c);
+    return {el: r, c};
+  });
+
+  function ease(x){ return 1 - Math.pow(1-x, 3); }
+
+  // benchmark: los números de cada modelo cuentan hacia su cifra real la
+  // primera vez que ese modelo queda activo — lectura de instrumento
+  const statsAnimated = new WeakSet();
+  function animateStats(panel){
+    if (statsAnimated.has(panel)) return;
+    statsAnimated.add(panel);
+    const nodes = [...panel.querySelectorAll(".panel-stat .v[data-count]")];
+    const dur = 900;
+    const t0 = performance.now();
+    function tick(now){
+      const p = Math.min(1, (now-t0)/dur);
+      const e = 1 - Math.pow(1-p, 3);
+      nodes.forEach(n => {
+        const target = parseFloat(n.dataset.count);
+        const decimals = Number(n.dataset.decimals||0);
+        const suffix = n.dataset.suffix||"";
+        n.textContent = (target*e).toFixed(decimals) + suffix;
+      });
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+  // en móvil los tres modelos quedan siempre visibles: anima sus stats
+  // por IntersectionObserver en vez de por el scroll-jack
+  if ("IntersectionObserver" in window){
+    const statsIO = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.isIntersecting && window.innerWidth <= 860) animateStats(e.target); });
+    }, {threshold:.4});
+    copies.forEach(c => statsIO.observe(c));
+  }
+
+  function setActive(i, drawFrac){
+    ringData.forEach((r, idx) => {
+      if (idx < i) r.el.style.strokeDashoffset = "0";
+      else if (idx === i) r.el.style.strokeDashoffset = String(r.c * (1-ease(drawFrac)));
+      else r.el.style.strokeDashoffset = String(r.c);
+      r.el.classList.toggle("on", idx <= i);
+    });
+    dots.forEach((d, idx) => {
+      const on = idx === i;
+      d.classList.toggle("on", on);
+      d.style.setProperty("--speed", (on ? DOT_SPEED_ACTIVE[idx] : DOT_SPEED_ORBIT[idx]) + "s");
+    });
+    copies.forEach((c, idx) => {
+      const on = idx === i;
+      c.classList.toggle("on", on);
+      if (on) animateStats(c);
+    });
+    navDots.forEach((d, idx) => d.classList.toggle("on", idx === i));
+    stage.style.setProperty("--mc", MC[i]);
+  }
+  setActive(0, 0);
+
+  function onScroll(){
+    if (window.innerWidth <= 860) return; // en móvil los tres quedan apilados, sin scroll-jack
+
+    const rect = scrollSection.getBoundingClientRect();
+    const total = scrollSection.offsetHeight - window.innerHeight;
+    const passed = Math.min(Math.max(-rect.top, 0), total);
+    const progress = total > 0 ? passed/total : 0;
+
+    const raw = progress * N;
+    const i = Math.min(N-1, Math.floor(raw));
+    const local = Math.min(1, raw - i);
+    const drawFrac = Math.min(1, local/0.65);
+
+    setActive(i, drawFrac);
+    // leve rotación de cámara del conjunto — el gesto "apple" de la
+    // sección, sutil y una sola vez, no decoración repetida
+    stage.style.transform = `rotate(${(progress-0.5)*3.5}deg)`;
+
+    // isométrica: el diagrama entero se inclina como si viéramos los
+    // anillos orbitales desde arriba y de lado — no una vista en planta.
+    // El zoom avanza anillo a anillo, como si la cámara se acercase a la
+    // órbita de cada modelo (la de Vision, la más externa, queda la más
+    // "cerca" de las tres).
+    if (visual){
+      const ZOOM = [1, 1.22, 1.46];
+      const zNext = ZOOM[Math.min(N-1, i+1)];
+      const zoom = ZOOM[i] + (zNext - ZOOM[i]) * ease(drawFrac);
+      const rz = -10 + (progress-0.5)*6;
+      visual.style.transform = `rotateX(56deg) rotateZ(${rz.toFixed(2)}deg) scale(${zoom.toFixed(3)})`;
+    }
+  }
+  window.addEventListener("scroll", onScroll, {passive:true});
+  window.addEventListener("resize", onScroll, {passive:true});
+  onScroll();
+})();
+
+/* =================================================================
+   MAPA DE COBERTURA — ahora se dibuja el mapa de verdad (silueta de
+   continentes rellena + graticula, con la misma silueta CONTINENTS_F
+   que usa el globo del hero) y los puntos van ENCIMA como balizas de
+   cobertura: unos pocos por región, no un muestreo denso, y todos
+   parpadean — el indexado con una respiración suave y constante, el
+   parcial con un parpadeo más marcado, para que se lea como "todavía
+   trabajando" y no como "apagado".
+   NOTA: los polígonos son una simplificación dibujada a mano — a
+   sustituir por datos reales (p. ej. Natural Earth) antes de
+   producción, tal y como ya señala ARCHITECTURE.md.
+   ================================================================= */
+(function(){
+  const canvas = document.getElementById("worldmap");
+  const ctx = canvas.getContext("2d");
+  let W, H, DPR, staticLayer;
+
+  // CONTINENTS_F ahora es compartida (ver arriba del script) — el mismo
+  // dato que usa el globo del hero, para que ambos mapas coincidan.
+  const REGIONS_F = [
+    {x:.13,  y:.28, r:.15,  state:"indexed", n:9}, // norteamérica
+    {x:.49,  y:.24, r:.075, state:"indexed", n:5}, // europa occidental
+    {x:.565, y:.235,r:.06,  state:"partial", n:4}, // europa del este
+    {x:.53,  y:.40, r:.075, state:"partial", n:3}, // norte de áfrica
+    {x:.55,  y:.62, r:.10,  state:"none",    n:0}, // áfrica subsahariana
+    {x:.24,  y:.55, r:.08,  state:"partial", n:4}, // sudamérica norte
+    {x:.225, y:.82, r:.075, state:"none",    n:0}, // sudamérica sur
+    {x:.79,  y:.20, r:.11,  state:"indexed", n:7}, // asia oriental
+    {x:.72,  y:.47, r:.075, state:"partial", n:4}, // sudeste asiático
+    {x:.63,  y:.20, r:.09,  state:"none",    n:0}, // asia central
+    {x:.78,  y:.68, r:.07,  state:"partial", n:3}, // oceanía
+  ];
+
+  function colorFor(state){
+    if (state === "indexed") return "242,243,245";
+    return "239,185,104"; // partial
+  }
+
+  let dots = [];
+  let maskInside = () => false;
+
+  function buildMask(){
+    const mask = document.createElement("canvas");
+    mask.width = W; mask.height = H;
+    const mctx = mask.getContext("2d");
+    mctx.fillStyle = "#fff";
+    CONTINENTS_F.forEach(poly => {
+      mctx.beginPath();
+      poly.forEach(([fx,fy], i) => {
+        const x = fx*W, y = fy*H;
+        if (i===0) mctx.moveTo(x,y); else mctx.lineTo(x,y);
+      });
+      mctx.closePath();
+      mctx.fill();
+    });
+    const img = mctx.getImageData(0,0,W,H).data;
+    maskInside = (x,y) => {
+      const xi = Math.max(0,Math.min(W-1,x|0)), yi = Math.max(0,Math.min(H-1,y|0));
+      return img[(yi*W+xi)*4+3] > 120;
+    };
+  }
+
+  // capa estática: graticula + silueta rellena de los continentes —
+  // se dibuja una vez por tamaño, no en cada frame
+  function buildStaticLayer(){
+    staticLayer = document.createElement("canvas");
+    staticLayer.width = W; staticLayer.height = H;
+    const sctx = staticLayer.getContext("2d");
+    const cx = W/2, cy = H/2;
+
+    // graticula "curva" — meridianos y paralelos ligeramente arqueados
+    // hacia el centro, como en una proyección real, en vez de una
+    // cuadrícula plana: es lo que hace que el mapa lea como una
+    // superficie y no como una hoja cuadriculada
+    sctx.strokeStyle = "rgba(255,255,255,.04)";
+    sctx.lineWidth = 1;
+    const gStepX = Math.max(28, Math.round(W/32));
+    const gStepY = Math.max(28, Math.round(H/13));
+    for (let x=0; x<=W; x+=gStepX){
+      const bow = ((x-cx)/cx) * 16;
+      sctx.beginPath();
+      sctx.moveTo(x, 0);
+      sctx.quadraticCurveTo(x - bow, H/2, x, H);
+      sctx.stroke();
+    }
+    for (let y=0; y<=H; y+=gStepY){
+      const bow = ((y-cy)/cy) * 10;
+      sctx.beginPath();
+      sctx.moveTo(0, y);
+      sctx.quadraticCurveTo(W/2, y - bow, W, y);
+      sctx.stroke();
+    }
+
+    const fill = sctx.createLinearGradient(0,0,0,H);
+    fill.addColorStop(0, "rgba(133,183,235,.09)");
+    fill.addColorStop(0.55, "rgba(255,255,255,.055)");
+    fill.addColorStop(1, "rgba(255,255,255,.025)");
+    CONTINENTS_F.forEach(poly => {
+      sctx.beginPath();
+      poly.forEach(([fx,fy], i) => {
+        const x = fx*W, y = fy*H;
+        if (i===0) sctx.moveTo(x,y); else sctx.lineTo(x,y);
+      });
+      sctx.closePath();
+      // sombra sutil hacia adentro para dar volumen a la silueta,
+      // luego relleno y un contorno fino con un ligero resplandor
+      sctx.save();
+      sctx.shadowColor = "rgba(55,138,221,.25)";
+      sctx.shadowBlur = 14;
+      sctx.fillStyle = fill;
+      sctx.fill();
+      sctx.restore();
+      sctx.strokeStyle = "rgba(255,255,255,.16)";
+      sctx.lineWidth = 1;
+      sctx.stroke();
+    });
+  }
+
+  function buildDots(){
+    dots = [];
+    REGIONS_F.forEach(r => {
+      if (r.state === "none" || !r.n) return;
+      const cx = r.x*W, cy = r.y*H, rad = r.r*W*0.7;
+      let placed = 0, tries = 0;
+      while (placed < r.n && tries < r.n*30){
+        tries++;
+        const a = Math.random()*Math.PI*2;
+        const d = Math.sqrt(Math.random())*rad;
+        const x = cx + Math.cos(a)*d, y = cy + Math.sin(a)*d*0.85;
+        if (!maskInside(x,y)) continue;
+        dots.push({
+          x, y, state:r.state,
+          blinkSeed: Math.random()*Math.PI*2,
+          size: 1.7 + Math.random()*0.9,
+        });
+        placed++;
+      }
+    });
+  }
+
+  function sizeMap(){
+    DPR = Math.min(devicePixelRatio||1, 2);
+    W = window.innerWidth;
+    H = Math.round(W*0.42);
+    canvas.width = W*DPR; canvas.height = H*DPR;
+    canvas.style.width = W+"px"; canvas.style.height = H+"px";
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    buildMask();
+    buildStaticLayer();
+    buildDots();
+  }
+
+  function draw(t){
+    ctx.clearRect(0,0,W,H);
+    ctx.drawImage(staticLayer, 0, 0, W, H);
+    for (const d of dots){
+      const isIndexed = d.state === "indexed";
+      // respiración lenta y suave para indexado; parpadeo más marcado
+      // y algo irregular para parcial — ambos parpadean, ninguno queda fijo
+      const wave = Math.sin(t*(isIndexed?0.0012:0.0026) + d.blinkSeed);
+      const alpha = isIndexed ? 0.55 + wave*0.35 : 0.3 + Math.abs(wave)*0.65;
+      const halo = isIndexed ? 0 : Math.max(0, wave)*3.2;
+      const c = colorFor(d.state);
+
+      if (halo > 0.4){
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(${c},${0.14*(halo/3.2)})`;
+        ctx.arc(d.x, d.y, d.size + halo, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.save();
+      ctx.shadowColor = `rgba(${c},${isIndexed?0.55:0.4})`;
+      ctx.shadowBlur = isIndexed ? 4.5 : 3;
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(${c},${alpha})`;
+      ctx.arc(d.x, d.y, d.size, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+    requestAnimationFrame(draw);
+  }
+  sizeMap();
+  let resizeT;
+  window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(sizeMap, 150); });
+  requestAnimationFrame(draw);
+})();
+
+/* =================================================================
+   BARRA DE PRECISIÓN — porcentaje exacto, hasta 10 decimales,
+   con asentamiento tipo instrumento de laboratorio: los dígitos
+   de la izquierda se fijan antes que los últimos decimales.
+   ================================================================= */
+(function(){
+  const FINAL = "21.4738291046"; // cifra de referencia — a conectar con el dato real
+  const [intPart, decPart] = FINAL.split(".");
+  const el = document.getElementById("precisionNum");
+  const barFill = document.getElementById("precisionBarFill");
+  let done = false;
+
+  function render(settledUpTo){
+    let html = `<span class="settled">${intPart}</span><span class="settled">.</span>`;
+    for (let i=0;i<decPart.length;i++){
+      if (i < settledUpTo) html += `<span class="settled">${decPart[i]}</span>`;
+      else html += `<span class="settling">${Math.floor(Math.random()*10)}</span>`;
+    }
+    html += `<span class="pct">%</span>`;
+    el.innerHTML = html;
+  }
+
+  function run(){
+    if (done) return; done = true;
+    barFill.style.width = intPart + "%";
+    let settledUpTo = 0;
+    const totalSteps = decPart.length + 14; // pasos extra de "búsqueda" antes de fijar el primero
+    let step = 0;
+    const iv = setInterval(() => {
+      step++;
+      if (step > 14) settledUpTo = Math.min(decPart.length, step-14);
+      render(settledUpTo);
+      if (settledUpTo >= decPart.length) clearInterval(iv);
+    }, 90);
+  }
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) run(); });
+  }, {threshold:.5});
+  io.observe(document.querySelector(".precision"));
+})();
+</script>
+</body>
+</html>
