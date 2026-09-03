@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ProductoDescargable } from "../lib/version";
 
 const NOMBRES: Record<string, string> = {
@@ -73,22 +74,23 @@ const ICONOS_PRODUCTO: Record<string, React.ReactNode> = {
   ),
 };
 
-/** Una opción del cuestionario: solo el icono y su etiqueta, sin caja ni
- *  borde. El icono vive en `subtle` en reposo y pasa a `fg` (blanco) al
- *  pasar el ratón, con un levantamiento sutil — la selección es el propio
- *  gesto de click, no un estado "elegido" que haya que confirmar aparte. */
+/** Una opción del cuestionario: solo el icono, sin caja ni borde ni
+ *  etiqueta visible en reposo. El icono vive en `subtle` y pasa a `fg`
+ *  (blanco) al pasar el ratón, momento en el que también aparece su
+ *  nombre — la selección es el propio gesto de click, no un estado
+ *  "elegido" que haya que confirmar aparte. */
 function IconoOpcion({ icono, etiqueta, onClick }: { icono: React.ReactNode; etiqueta: string; onClick: () => void }) {
   return (
     <button
       type="button"
-      className="flex flex-col items-center gap-3 rounded-card py-5 text-subtle transition-all duration-200 hover:-translate-y-0.5 hover:text-fg"
+      className="group flex flex-col items-center gap-2.5 rounded-card py-5 text-subtle transition-all duration-200 hover:-translate-y-0.5 hover:text-fg"
       style={{ transitionTimingFunction: "cubic-bezier(.22,1,.36,1)" }}
       onClick={onClick}
     >
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
         {icono}
       </svg>
-      <span className="text-[12.5px]">{etiqueta}</span>
+      <span className="text-[12.5px] opacity-0 transition-opacity duration-200 group-hover:opacity-100">{etiqueta}</span>
     </button>
   );
 }
@@ -102,6 +104,11 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
   const [abierto, setAbierto] = useState(false);
   const [plataforma, setPlataforma] = useState<string | null>(null);
   const [producto, setProducto] = useState<string | null>(null);
+  const [montado, setMontado] = useState(false);
+
+  useEffect(() => {
+    setMontado(true);
+  }, []);
 
   useEffect(() => {
     if (!abierto) return;
@@ -150,86 +157,89 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
         Descargar Lumi
       </button>
 
-      {abierto && (
-        <div
-          className="fixed inset-0 z-[60] flex items-start justify-center bg-[rgba(5,7,10,.72)] px-5 pt-[14vh] backdrop-blur-md"
-          onClick={cerrar}
-        >
+      {abierto &&
+        montado &&
+        createPortal(
           <div
-            className="jg-reveal-up w-full max-w-[480px] rounded-card border border-border bg-panel text-left shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[60] flex items-start justify-center bg-[rgba(5,7,10,.72)] px-5 pt-[14vh] backdrop-blur-md"
+            onClick={cerrar}
           >
-            <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
-              <span className="text-[14px] font-medium">
-                {!plataforma ? "¿Qué sistema usas?" : !producto ? "¿Qué quieres descargar?" : "Listo"}
-              </span>
-              <button
-                type="button"
-                aria-label="Cerrar"
-                className="jg-micro flex h-6 w-6 items-center justify-center rounded-[6px] text-subtle hover:bg-elevated hover:text-fg"
-                onClick={cerrar}
-              >
-                <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
-                  <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="p-8">
-              {!plataforma && (
-                <div className="grid grid-cols-2 gap-2">
-                  {plataformas.map((plat) => (
-                    <IconoOpcion
-                      key={plat}
-                      icono={ICONOS_PLATAFORMA[plat]}
-                      etiqueta={ETIQUETAS_PLATAFORMA[plat] ?? plat}
-                      onClick={() => setPlataforma(plat)}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {plataforma && !producto && (
-                <div className="grid grid-cols-2 gap-2">
-                  {productosDeLaPlataforma.map((p) => (
-                    <IconoOpcion
-                      key={p.producto}
-                      icono={ICONOS_PRODUCTO[p.producto]}
-                      etiqueta={NOMBRES[p.producto] ?? p.producto}
-                      onClick={() => setProducto(p.producto)}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {plataforma && productoElegido && artefactoFinal && (
-                <div className="flex flex-col items-center gap-4 py-4 text-center">
-                  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" className="text-fg">
-                    {ICONOS_PRODUCTO[productoElegido.producto]}
+            <div
+              className="jg-reveal-up w-full max-w-[480px] rounded-card border border-border bg-panel text-left shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
+                <span className="text-[14px] font-medium">
+                  {!plataforma ? "¿Qué sistema usas?" : !producto ? "¿Qué quieres descargar?" : "Listo"}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Cerrar"
+                  className="jg-micro flex h-6 w-6 items-center justify-center rounded-[6px] text-subtle hover:bg-elevated hover:text-fg"
+                  onClick={cerrar}
+                >
+                  <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
+                    <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
                   </svg>
-                  <div>
-                    <div className="text-[14px] font-medium">
-                      {NOMBRES[productoElegido.producto] ?? productoElegido.producto} · {ETIQUETAS_PLATAFORMA[plataforma] ?? plataforma}
-                    </div>
-                    <div className="mt-1 font-mono text-[11px] text-subtle">
-                      v{productoElegido.version} · {formatoMB(artefactoFinal.bytes)}
-                    </div>
+                </button>
+              </div>
+
+              <div className="p-8">
+                {!plataforma && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {plataformas.map((plat) => (
+                      <IconoOpcion
+                        key={plat}
+                        icono={ICONOS_PLATAFORMA[plat]}
+                        etiqueta={ETIQUETAS_PLATAFORMA[plat] ?? plat}
+                        onClick={() => setPlataforma(plat)}
+                      />
+                    ))}
                   </div>
-                  <a
-                    href={artefactoFinal.url}
-                    className="jg-micro jg-micro-scale w-full rounded-card bg-accent px-4 py-2.5 text-[13px] font-medium text-bg hover:opacity-90"
-                  >
-                    Descargar
-                  </a>
-                  <button type="button" className="jg-micro text-[12px] text-subtle hover:text-fg" onClick={reiniciar}>
-                    elegir otra vez
-                  </button>
-                </div>
-              )}
+                )}
+
+                {plataforma && !producto && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {productosDeLaPlataforma.map((p) => (
+                      <IconoOpcion
+                        key={p.producto}
+                        icono={ICONOS_PRODUCTO[p.producto]}
+                        etiqueta={NOMBRES[p.producto] ?? p.producto}
+                        onClick={() => setProducto(p.producto)}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {plataforma && productoElegido && artefactoFinal && (
+                  <div className="flex flex-col items-center gap-4 py-4 text-center">
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" className="text-fg">
+                      {ICONOS_PRODUCTO[productoElegido.producto]}
+                    </svg>
+                    <div>
+                      <div className="text-[14px] font-medium">
+                        {NOMBRES[productoElegido.producto] ?? productoElegido.producto} · {ETIQUETAS_PLATAFORMA[plataforma] ?? plataforma}
+                      </div>
+                      <div className="mt-1 font-mono text-[11px] text-subtle">
+                        v{productoElegido.version} · {formatoMB(artefactoFinal.bytes)}
+                      </div>
+                    </div>
+                    <a
+                      href={artefactoFinal.url}
+                      className="jg-micro jg-micro-scale w-full rounded-card bg-accent px-4 py-2.5 text-[13px] font-medium text-bg hover:opacity-90"
+                    >
+                      Descargar
+                    </a>
+                    <button type="button" className="jg-micro text-[12px] text-subtle hover:text-fg" onClick={reiniciar}>
+                      elegir otra vez
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
