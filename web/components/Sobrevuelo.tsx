@@ -27,7 +27,7 @@ import { usarEscenaViva } from "./usarEscenaViva";
  */
 
 const TUMBE = 75;
-const DESDE = 980; // suficientemente lejos: en scroll=0 la ventana queda fuera de campo
+const DESDE = 680; // lejos, pero no tanto: en scroll=0 sigue fuera de campo, sin dejar un tramo largo de terreno vacío antes de que asome
 const HASTA = -355; // centra la ventana por geometría: 92 + Y·cos75° ≈ 0
 const FIN_VUELO = 0.46; // hasta aquí el viaje termina de llegar a HASTA
 const INICIO_ALZA = 0.28; // el alzamiento empieza a mezclarse ANTES de que el viaje acabe — las dos cosas a la vez, no una detrás de otra

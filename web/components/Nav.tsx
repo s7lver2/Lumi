@@ -36,7 +36,7 @@ export function Nav() {
   return (
     <nav
       className={`fixed inset-x-0 top-0 z-50 flex h-14 items-center gap-5 border-b px-6 backdrop-blur transition-colors duration-300 ${
-        scrolled ? "border-border bg-bg/85" : "border-transparent bg-transparent"
+        scrolled ? "border-border bg-bg/85 shadow-[0_1px_24px_rgba(0,0,0,.35)]" : "border-border/35 bg-bg/30"
       }`}
     >
       <div className="absolute inset-x-0 top-0 h-px bg-draw" style={{ width: `${progreso}%`, transition: "width .1s linear" }} />

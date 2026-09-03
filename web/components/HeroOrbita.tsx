@@ -154,8 +154,9 @@ export function HeroOrbita() {
       ctx!.clearRect(0, 0, W, H);
       // El planeta se ancla cerca del borde inferior y mucho más grande —
       // cámara casi rozando la superficie en vez de la esfera completa
-      // flotando pequeña en el centro.
-      const cx = W * 0.6, cy = H * 1.04;
+      // flotando pequeña en el centro. Centrado en X: el hero ya no reserva
+      // el lado izquierdo para texto asimétrico.
+      const cx = W * 0.5, cy = H * 1.04;
       const scale = Math.min(W, H) * 0.98;
       const camZ = 2.55;
       const rotY = t * 0.07;

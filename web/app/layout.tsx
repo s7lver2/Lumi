@@ -1,6 +1,7 @@
 import "./globals.css";
 import { Nav } from "../components/Nav";
 import { Pie } from "../components/Pie";
+import { TransicionPagina } from "../components/TransicionPagina";
 
 export const metadata = {
   title: "Lumi Station · geolocalización de imágenes por inferencia",
@@ -13,7 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es">
       <body className="min-h-screen">
         <Nav />
-        {children}
+        <TransicionPagina>{children}</TransicionPagina>
         <Pie />
       </body>
     </html>
