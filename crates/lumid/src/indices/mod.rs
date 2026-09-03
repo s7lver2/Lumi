@@ -166,13 +166,25 @@ fn hechos_de(app: &crate::App, paquete: &str) -> std::collections::HashSet<Strin
 /// abrirlo, no al final del paquete: es justo lo que permite que matar el
 /// daemon a mitad de una instalación no repita descarga ni descifrado de lo
 /// que ya está en disco.
+///
+/// El orden de estas dos líneas es el arreglo de un cuelgue real, no estilo:
+/// antes se tomaba el guard de `conn()` ARRIBA y solo después se llamaba a
+/// `hechos_de`, que pide `conn()` otra vez. `Store::conn()` devuelve un
+/// `MutexGuard` de un `std::sync::Mutex` pelado, que no es reentrante: el
+/// hilo se quedaba esperando un mutex que él mismo tenía cogido, para
+/// siempre. Con `worker_threads = 2`, el segundo hilo caía en cuanto
+/// cualquier petición pedía la base —el propio cliente sondeando el progreso
+/// de la instalación bastaba— y el daemon entero dejaba de responder, con la
+/// CPU a cero y todos los hilos en `FUTEX_WAIT`. Se manifestaba como "la
+/// instalación se congela a mitad" a porcentajes distintos cada vez, porque
+/// lo que dispara esto no es la descarga sino el primer asset que TERMINA.
+/// `hechos_de` toma y suelta el mutex antes de que se vuelva a pedir.
 fn marcar_hecho(app: &crate::App, paquete: &str, asset: &str) -> Result<()> {
-    let c = app.store.conn();
     let mut hechos = hechos_de(app, paquete);
     if !hechos.insert(asset.to_string()) {
         return Ok(());
     }
-    c.execute(
+    app.store.conn().execute(
         "UPDATE installed_indices SET hechos = ?2 WHERE paquete = ?1",
         rusqlite::params![paquete, hechos.into_iter().collect::<Vec<_>>().join("\n")],
     )?;
@@ -269,7 +281,24 @@ async fn bajar_con_vigilante(
                 };
             }
             _ = tokio::time::sleep(Duration::from_secs(2)) => {
-                let actuales = progreso.lock().unwrap().as_ref().map(|p| p.asset_bytes_hechos).unwrap_or(0);
+                let (actuales, total) = progreso
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .map(|p| (p.asset_bytes_hechos, p.asset_bytes_total))
+                    .unwrap_or((0, 0));
+                // Con todos los bytes ya recibidos, la tarea pasa a descifrar
+                // (AES sobre el asset entero) y a descomprimir: dos fases que
+                // no mueven ni un byte de este contador y que en un disco
+                // lento tardan de sobra más que `SIN_AVANCE_MAX`. Vigilar ahí
+                // sería abortar instalaciones sanas, así que el vigilante se
+                // retira y se limita a esperar el resultado.
+                if total > 0 && actuales >= total {
+                    return match (&mut tarea).await {
+                        Ok(r) => r,
+                        Err(e) => Err(anyhow!("la tarea de descarga murió sin avisar: {e}")),
+                    };
+                }
                 if actuales != vistos {
                     vistos = actuales;
                     desde_ultimo_avance = Instant::now();
