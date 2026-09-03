@@ -51,12 +51,38 @@ pub async fn traer_y_abrir(
         p.asset_bytes_total = respuesta.content_length().unwrap_or(0);
     }
 
+    // Sin tope: si la conexión se queda muda a mitad de transferencia (un
+    // salto de red, un proxy que suelta la conexión en silencio, un borde
+    // de CDN que deja de mandar bytes sin cerrar nada), `flujo.next()` se
+    // queda esperando para siempre — nada en `reqwest::Client::new()` pone
+    // un límite. Eso es justo "se queda atascado en este punto y no
+    // vuelve": la tarea nunca falla, así que tampoco hay error que ver ni
+    // forma de que la instalación se recupere sola. Cada `next()` va
+    // envuelto en un timeout de inactividad: si no llega NADA en este
+    // margen, se corta con un error claro en vez de colgar para siempre.
+    // Es un timeout de inactividad, no de duración total — una descarga de
+    // 1.65GB legítima pero lenta sigue completando mientras sigan llegando
+    // bytes, por lentos que sean.
+    const TIMEOUT_INACTIVIDAD: std::time::Duration = std::time::Duration::from_secs(45);
+
     let mut hasher = Sha256::new();
     let mut recibidos: u64 = 0;
     {
         let mut fichero = tokio::fs::File::create(&temporal).await?;
         let mut flujo = respuesta.bytes_stream();
-        while let Some(trozo) = flujo.next().await {
+        loop {
+            let siguiente = match tokio::time::timeout(TIMEOUT_INACTIVIDAD, flujo.next()).await {
+                Ok(v) => v,
+                Err(_) => {
+                    let _ = std::fs::remove_file(&temporal);
+                    return Err(anyhow!(
+                        "la descarga se quedó sin recibir datos más de {}s a los {recibidos} bytes — \
+                         conexión colgada, no un fallo declarado",
+                        TIMEOUT_INACTIVIDAD.as_secs()
+                    ));
+                }
+            };
+            let Some(trozo) = siguiente else { break };
             let trozo = trozo.map_err(|e| {
                 let _ = std::fs::remove_file(&temporal);
                 anyhow!("se cortó la descarga: {e}")

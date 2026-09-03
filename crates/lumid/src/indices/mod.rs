@@ -49,7 +49,15 @@ async fn traer_ficha(http: &reqwest::Client, url: &str) -> Result<Ficha> {
 }
 
 pub async fn instalar(app: crate::App, url: String) -> Result<()> {
-    let http = reqwest::Client::new();
+    // Sin User-Agent, `reqwest::Client::new()` no manda ninguno — a
+    // diferencia de curl, que siempre se identifica como `curl/x.x.x`. Un
+    // CDN de asset binarios (el de GitHub Releases incluido) puede tratar
+    // eso como sospechoso y no cortar la conexión con un error, sino
+    // arrastrar la respuesta a un goteo o dejarla de mandar bytes sin
+    // cerrar nada: exactamente "se queda atascado y no vuelve", reproducido
+    // en el mismo asset con curl completando en segundos y lumid colgado
+    // media hora.
+    let http = reqwest::Client::builder().user_agent(concat!("lumid/", env!("CARGO_PKG_VERSION"))).build()?;
     let raiz_ficha = traer_ficha(&http, &url).await?;
 
     // De qué URL salió cada ficha, para poder derivar la de sus assets (misma
