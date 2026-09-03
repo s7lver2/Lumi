@@ -82,7 +82,7 @@ function pintar(p: number): Pintura {
   const tramo = Math.min(N - 2, Math.floor(indiceFloat));
   const frac = indiceFloat - tramo;
   const fracSuave = easeInOutCubic(frac);
-  const ANCHO_TRAMO = 480; // px de salto por parada — llega cerca del borde, sin ser tan brusco como 560
+  const ANCHO_TRAMO = 640; // px de salto por parada — prácticamente al borde del encuadre
   // Salto alterno: cada pantalla nueva entra desde el lado contrario a la
   // anterior (derecha, izquierda, derecha…) en vez de un barrido monótono
   // en una sola dirección — se siente como hojear pestañas, no como una
@@ -267,20 +267,9 @@ export function Sobrevuelo() {
                 impares/pares en offsetX): cuando la ventana salta a la
                 derecha el texto se funde a la izquierda, y viceversa — las
                 dos cosas se mueven, no solo la ventana. */}
-            <TextoPantalla
-              pantalla={pantallaTexto}
-              idx={idxCercano}
-              total={PANTALLAS.length}
-              lado="izquierda"
-              opacidad={idxCercano % 2 === 0 ? opacidadTexto : 0}
-            />
-            <TextoPantalla
-              pantalla={pantallaTexto}
-              idx={idxCercano}
-              total={PANTALLAS.length}
-              lado="derecha"
-              opacidad={idxCercano % 2 === 1 ? opacidadTexto : 0}
-            />
+            <TextoPantalla pantalla={pantallaTexto} lado="izquierda" opacidad={idxCercano % 2 === 0 ? opacidadTexto : 0} />
+            <TextoPantalla pantalla={pantallaTexto} lado="derecha" opacidad={idxCercano % 2 === 1 ? opacidadTexto : 0} />
+            <PuntosProgreso total={PANTALLAS.length} idx={idxCercano} opacidad={fase === "showcase" ? 1 : 0} />
           </>
         )}
 
@@ -371,38 +360,51 @@ export function Sobrevuelo() {
   );
 }
 
+/** Puntos de progreso de la fase C, fijos abajo del todo — separados del
+ *  texto a propósito: pegados a él (como antes) el propio texto los tapaba
+ *  y quedaban invisibles. Aquí no compiten con nada más. */
+function PuntosProgreso({ total, idx, opacidad }: { total: number; idx: number; opacidad: number }) {
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 bottom-9 z-10 flex justify-center gap-1.5"
+      style={{ opacity: opacidad, transition: "opacity .2s linear" }}
+    >
+      {Array.from({ length: total }).map((_, i) => (
+        <span
+          key={i}
+          className={i === idx ? "h-[3px] w-6 rounded-full bg-fg transition-all duration-300" : "h-[3px] w-3 rounded-full bg-subtle/50 transition-all duration-300"}
+        />
+      ))}
+    </div>
+  );
+}
+
 /** El texto de una pantalla del showcase, en uno de los dos lados fijos
- *  (izquierda/derecha) — el que está activo se funde in, el otro a 0.
- *  Lleva más peso que antes: etiqueta + título + descripción + una fila de
- *  puntos que marca cuál de las cuatro pantallas es esta. */
+ *  (izquierda/derecha) — el que está activo se funde in, el otro a 0. Es
+ *  el elemento con más protagonismo de la fase C, no un rótulo de esquina:
+ *  etiqueta + título grande + descripción. Los puntos de progreso viven
+ *  aparte, abajo del todo (`PuntosProgreso`) — pegados al texto quedaban
+ *  tapados por él. */
 function TextoPantalla({
-  pantalla, idx, total, lado, opacidad,
+  pantalla, lado, opacidad,
 }: {
-  pantalla: (typeof PANTALLAS)[number]; idx: number; total: number; lado: "izquierda" | "derecha"; opacidad: number;
+  pantalla: (typeof PANTALLAS)[number]; lado: "izquierda" | "derecha"; opacidad: number;
 }) {
   const derecha = lado === "derecha";
   return (
     <div
-      className={`pointer-events-none absolute top-1/2 z-10 max-w-[340px] -translate-y-1/2 ${
-        derecha ? "right-7 text-right" : "left-7 text-left"
+      className={`pointer-events-none absolute top-1/2 z-10 max-w-[400px] -translate-y-1/2 ${
+        derecha ? "right-8 text-right" : "left-8 text-left"
       }`}
       style={{ opacity: opacidad, transition: "opacity .16s linear" }}
     >
-      <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wide text-subtle" style={{ justifyContent: derecha ? "flex-end" : "flex-start" }}>
-        <span>{pantalla.n} / {String(total).padStart(2, "0")}</span>
+      <div className="flex items-center gap-2 font-mono text-[11.5px] uppercase tracking-wide text-subtle" style={{ justifyContent: derecha ? "flex-end" : "flex-start" }}>
+        <span>{pantalla.n} / 04</span>
         <span className="text-subtle/50">·</span>
         <span>{pantalla.etiqueta}</span>
       </div>
-      <h3 className="mt-2 text-[24px] font-semibold leading-snug tracking-tight">{pantalla.t}</h3>
-      <p className="mt-3 leading-relaxed text-muted">{pantalla.d}</p>
-      <div className="mt-4 flex gap-1.5" style={{ justifyContent: derecha ? "flex-end" : "flex-start" }}>
-        {Array.from({ length: total }).map((_, i) => (
-          <span
-            key={i}
-            className={i === idx ? "h-[3px] w-5 rounded-full bg-fg transition-all duration-300" : "h-[3px] w-2.5 rounded-full bg-subtle/40 transition-all duration-300"}
-          />
-        ))}
-      </div>
+      <h3 className="mt-3 text-[34px] font-semibold leading-[1.08] tracking-tight">{pantalla.t}</h3>
+      <p className="mt-4 text-[15px] leading-relaxed text-muted">{pantalla.d}</p>
     </div>
   );
 }

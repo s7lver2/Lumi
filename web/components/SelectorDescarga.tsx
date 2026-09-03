@@ -4,23 +4,16 @@ import { useEffect, useState } from "react";
 import type { ProductoDescargable } from "../lib/version";
 
 const NOMBRES: Record<string, string> = {
-  cliente: "Cliente Lumi",
-  indexer: "Lumi Indexer",
-  lumid: "lumid (servidor)",
-  instalador: "Instalador guiado",
-};
-
-const DESCRIPCIONES: Record<string, string> = {
-  cliente: "La app de escritorio para investigadores: proyectos, análisis y mapa.",
-  indexer: "Herramienta aparte, de un solo operador, para construir el catálogo de imágenes georreferenciadas.",
-  lumid: "El daemon que se instala en tu propio servidor con GPU — es el que hace la inferencia.",
-  instalador: "Deja lumid preparado en un servidor Windows, paso a paso, sin usar la terminal.",
+  cliente: "Cliente",
+  indexer: "Indexer",
+  lumid: "lumid",
+  instalador: "Instalador",
 };
 
 const ETIQUETAS_PLATAFORMA: Record<string, string> = {
   "windows-x86_64": "Windows",
-  "macos-aarch64": "macOS (Apple Silicon)",
-  "macos-x86_64": "macOS (Intel)",
+  "macos-aarch64": "macOS",
+  "macos-x86_64": "macOS",
   "linux-x86_64": "Linux",
 };
 
@@ -28,12 +21,67 @@ function formatoMB(bytes: number) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
-/** Botón "Descargar" que abre un selector real de productos — lee
- *  `productosDescargables()` (releases/versiones.json), así que nunca
- *  ofrece un producto o una plataforma que no se haya publicado de
- *  verdad. Sustituye a la caja de instalación como CTA principal. */
+const ICONOS_PLATAFORMA: Record<string, React.ReactNode> = {
+  "windows-x86_64": (
+    <path d="M4 5h7v7H4zM13 5h7v7h-7zM4 13h7v6H4zM13 13h7v6h-7z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+  ),
+  "linux-x86_64": (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="1.5" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M7 9l3 3-3 3M13 15h4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+};
+
+const ICONOS_PRODUCTO: Record<string, React.ReactNode> = {
+  cliente: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="1.5" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M3.5 8.5h17" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="6.3" cy="6.5" r=".5" fill="currentColor" stroke="none" />
+      <circle cx="8.3" cy="6.5" r=".5" fill="currentColor" stroke="none" />
+    </>
+  ),
+  indexer: (
+    <path
+      d="M12 3l8 4-8 4-8-4 8-4zM4 11l8 4 8-4M4 15l8 4 8-4"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+  lumid: (
+    <>
+      <rect x="6" y="6" width="12" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        d="M9 6V3M15 6V3M9 21v-3M15 21v-3M6 9H3M6 15H3M21 9h-3M21 15h-3"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+    </>
+  ),
+  instalador: (
+    <path
+      d="M12 3v12M8 11l4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+};
+
+/** Botón "Descargar" que abre un cuestionario de dos preguntas —
+ *  plataforma, luego producto, ambas solo con iconos — y al final enseña
+ *  la descarga real correspondiente. Nunca ofrece una plataforma o un
+ *  producto que no se haya publicado de verdad (`productosDescargables()`,
+ *  leído de `releases/versiones.json`). */
 export function SelectorDescarga({ productos }: { productos: ProductoDescargable[] }) {
   const [abierto, setAbierto] = useState(false);
+  const [plataforma, setPlataforma] = useState<string | null>(null);
+  const [producto, setProducto] = useState<string | null>(null);
 
   useEffect(() => {
     if (!abierto) return;
@@ -43,6 +91,16 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
     document.addEventListener("keydown", tecla);
     return () => document.removeEventListener("keydown", tecla);
   }, [abierto]);
+
+  function reiniciar() {
+    setPlataforma(null);
+    setProducto(null);
+  }
+
+  function cerrar() {
+    setAbierto(false);
+    reiniciar();
+  }
 
   if (productos.length === 0) {
     return (
@@ -55,6 +113,13 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
     );
   }
 
+  const plataformas = Array.from(new Set(productos.flatMap((p) => p.artefactos.map((a) => a.plataforma))));
+  const productosDeLaPlataforma = plataforma
+    ? productos.filter((p) => p.artefactos.some((a) => a.plataforma === plataforma))
+    : [];
+  const productoElegido = producto ? productos.find((p) => p.producto === producto) ?? null : null;
+  const artefactoFinal = productoElegido?.artefactos.find((a) => a.plataforma === plataforma) ?? null;
+
   return (
     <>
       <button
@@ -66,21 +131,20 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
       </button>
 
       {abierto && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(5,7,10,.6)] px-5 backdrop-blur-sm"
-          onClick={() => setAbierto(false)}
-        >
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(5,7,10,.6)] px-5 backdrop-blur-sm" onClick={cerrar}>
           <div
-            className="jg-reveal-up w-full max-w-[560px] rounded-card border border-border bg-panel text-left shadow-2xl"
+            className="jg-reveal-up w-full max-w-[480px] rounded-card border border-border bg-panel text-left shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
-              <span className="text-[14px] font-medium">Descargar Lumi</span>
+              <span className="text-[14px] font-medium">
+                {!plataforma ? "¿Qué sistema usas?" : !producto ? "¿Qué quieres descargar?" : "Listo"}
+              </span>
               <button
                 type="button"
                 aria-label="Cerrar"
                 className="jg-micro flex h-6 w-6 items-center justify-center rounded-[6px] text-subtle hover:bg-elevated hover:text-fg"
-                onClick={() => setAbierto(false)}
+                onClick={cerrar}
               >
                 <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
                   <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
@@ -88,36 +152,67 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
               </button>
             </div>
 
-            <div className="max-h-[70vh] overflow-y-auto p-2.5">
-              {productos.map((p) => (
-                <div key={p.producto} className="flex items-start justify-between gap-4 rounded-[8px] px-3 py-3 hover:bg-elevated">
-                  <div className="min-w-0">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-[13.5px] font-medium text-fg">{NOMBRES[p.producto] ?? p.producto}</span>
-                      <span className="font-mono text-[10.5px] text-subtle">v{p.version}</span>
-                    </div>
-                    <p className="mt-1 max-w-[340px] text-[12.5px] leading-relaxed text-muted">
-                      {DESCRIPCIONES[p.producto] ?? ""}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1.5 pt-0.5">
-                    {p.artefactos.map((a) => (
-                      <a
-                        key={a.plataforma}
-                        href={a.url}
-                        className="jg-micro flex items-center gap-2 whitespace-nowrap rounded-[7px] border border-border px-2.5 py-1.5 text-[12px] text-fg hover:border-subtle hover:bg-panel"
-                      >
-                        {ETIQUETAS_PLATAFORMA[a.plataforma] ?? a.plataforma}
-                        <span className="font-mono text-[10.5px] text-subtle">{formatoMB(a.bytes)}</span>
-                      </a>
-                    ))}
-                  </div>
+            <div className="p-6">
+              {!plataforma && (
+                <div className="grid grid-cols-2 gap-3">
+                  {plataformas.map((plat) => (
+                    <button
+                      key={plat}
+                      type="button"
+                      className="jg-micro flex flex-col items-center gap-2.5 rounded-card border border-border py-6 hover:border-subtle hover:bg-elevated"
+                      onClick={() => setPlataforma(plat)}
+                    >
+                      <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
+                        {ICONOS_PLATAFORMA[plat]}
+                      </svg>
+                      <span className="text-[12.5px] text-muted">{ETIQUETAS_PLATAFORMA[plat] ?? plat}</span>
+                    </button>
+                  ))}
                 </div>
-              ))}
-            </div>
+              )}
 
-            <div className="border-t border-border px-5 py-3 font-mono text-[10.5px] text-subtle">
-              cada binario se publica directamente desde el repositorio — sin cuentas, sin cliente de terceros
+              {plataforma && !producto && (
+                <div className="grid grid-cols-2 gap-3">
+                  {productosDeLaPlataforma.map((p) => (
+                    <button
+                      key={p.producto}
+                      type="button"
+                      className="jg-micro flex flex-col items-center gap-2.5 rounded-card border border-border py-6 hover:border-subtle hover:bg-elevated"
+                      onClick={() => setProducto(p.producto)}
+                    >
+                      <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
+                        {ICONOS_PRODUCTO[p.producto]}
+                      </svg>
+                      <span className="text-[12.5px] text-muted">{NOMBRES[p.producto] ?? p.producto}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {plataforma && productoElegido && artefactoFinal && (
+                <div className="flex flex-col items-center gap-4 py-4 text-center">
+                  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" className="text-fg">
+                    {ICONOS_PRODUCTO[productoElegido.producto]}
+                  </svg>
+                  <div>
+                    <div className="text-[14px] font-medium">
+                      {NOMBRES[productoElegido.producto] ?? productoElegido.producto} · {ETIQUETAS_PLATAFORMA[plataforma] ?? plataforma}
+                    </div>
+                    <div className="mt-1 font-mono text-[11px] text-subtle">
+                      v{productoElegido.version} · {formatoMB(artefactoFinal.bytes)}
+                    </div>
+                  </div>
+                  <a
+                    href={artefactoFinal.url}
+                    className="jg-micro jg-micro-scale w-full rounded-card bg-accent px-4 py-2.5 text-[13px] font-medium text-bg hover:opacity-90"
+                  >
+                    Descargar
+                  </a>
+                  <button type="button" className="jg-micro text-[12px] text-subtle hover:text-fg" onClick={reiniciar}>
+                    elegir otra vez
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

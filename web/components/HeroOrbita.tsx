@@ -220,7 +220,17 @@ export function HeroOrbita() {
 
       satelites.forEach((sat) => {
         if (sat.estado === "orbit" && Math.random() < 0.0011) {
-          const idx = Math.floor(Math.random() * esfera.length);
+          // El objetivo se elige del lado visible de la esfera: un punto al
+          // otro lado nunca se pinta (se descarta en el bucle de la
+          // esfera), pero el haz de escaneo sí se dibujaba igual — una
+          // línea que parecía salir de la nada. Hasta 6 intentos por un
+          // candidato con z de cara a cámara antes de rendirse.
+          let idx = Math.floor(Math.random() * esfera.length);
+          for (let intento = 0; intento < 6; intento++) {
+            const pc = project(esfera[idx], rotY, tiltX, camZ, scale, cx, cy);
+            if (pc.z <= -R * 0.1) break;
+            idx = Math.floor(Math.random() * esfera.length);
+          }
           sat.estado = "diving"; sat.t0 = t; sat.targetIdx = idx;
           sat.from = orbitPosAt(sat, sat.fase + t * sat.velocidad);
           const sp = esfera[idx];
@@ -278,14 +288,20 @@ export function HeroOrbita() {
 
         if (escaneando && sat.to) {
           const tp = project(sat.to, rotY, tiltX, camZ, scale, cx, cy);
-          const spread = 5.5;
-          ctx!.lineWidth = 1;
-          for (let k = -1; k <= 1; k++) {
-            ctx!.beginPath();
-            ctx!.strokeStyle = `rgba(${sat.c},${k === 0 ? 0.55 : 0.22})`;
-            ctx!.moveTo(p.sx, p.sy);
-            ctx!.lineTo(tp.sx + k * spread, tp.sy + k * spread * 0.6);
-            ctx!.stroke();
+          // Red de seguridad además de la elección de objetivo: si el
+          // planeta gira lo bastante durante el descenso como para que el
+          // satélite o su destino acaben de espaldas a cámara, el haz
+          // simplemente no se pinta ese fotograma — mejor que una línea rota.
+          if (p.z <= R * 0.35 && tp.z <= R * 0.35) {
+            const spread = 5.5;
+            ctx!.lineWidth = 1;
+            for (let k = -1; k <= 1; k++) {
+              ctx!.beginPath();
+              ctx!.strokeStyle = `rgba(${sat.c},${k === 0 ? 0.55 : 0.22})`;
+              ctx!.moveTo(p.sx, p.sy);
+              ctx!.lineTo(tp.sx + k * spread, tp.sy + k * spread * 0.6);
+              ctx!.stroke();
+            }
           }
         }
 
