@@ -278,6 +278,9 @@ mod tests {
             fuente: fuente.into(),
             licencia: licencia.map(|s| s.to_string()),
             quadkey: "AAA".into(),
+            ruta: "a.jpg".into(),
+            lat: 0.0,
+            lng: 0.0,
         }
     }
 
