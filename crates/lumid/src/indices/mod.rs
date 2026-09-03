@@ -10,6 +10,7 @@ use lumi_index::ficha::Ficha;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Progreso {
@@ -57,7 +58,17 @@ pub async fn instalar(app: crate::App, url: String) -> Result<()> {
     // cerrar nada: exactamente "se queda atascado y no vuelve", reproducido
     // en el mismo asset con curl completando en segundos y lumid colgado
     // media hora.
-    let http = reqwest::Client::builder().user_agent(concat!("lumid/", env!("CARGO_PKG_VERSION"))).build()?;
+    // `pool_max_idle_per_host(0)`: esta instalación hace varias peticiones
+    // pequeñas (cada ficha.json) antes de la descarga grande del cuerpo, y
+    // todas comparten este mismo cliente. Si una conexión pooled y
+    // reutilizada arrastra algún estado interno raro de una petición
+    // anterior a la siguiente, es terreno fértil para el tipo de "tarea
+    // que deja de sondearse" cazado con tokio-console — cada petición
+    // fuerza una conexión nueva en vez de arriesgarse a heredar una.
+    let http = reqwest::Client::builder()
+        .user_agent(concat!("lumid/", env!("CARGO_PKG_VERSION")))
+        .pool_max_idle_per_host(0)
+        .build()?;
     let raiz_ficha = traer_ficha(&http, &url).await?;
 
     // De qué URL salió cada ficha, para poder derivar la de sus assets (misma
@@ -208,6 +219,73 @@ fn assets_de(ficha: &Ficha) -> usize {
     ficha.cuerpos.len() + ficha.capas.iter().map(|c| c.assets.len()).sum::<usize>()
 }
 
+/// Envuelve `paquete::traer_y_abrir` en su propia tarea de tokio y la
+/// vigila desde FUERA, en vez de confiar en un timeout que corre dentro de
+/// la misma tarea que se quiere vigilar.
+///
+/// Diagnosticado en vivo con tokio-console y un latido de 2s aparte: el
+/// runtime seguia sano (el latido nunca dejo de sonar) y `ss -i` mostraba
+/// el asset entero YA recibido por el kernel (`bytes_received` igual al
+/// tamaño del fichero, `lastrcv` de minutos atras) mientras el progreso
+/// del cliente seguia clavado — los datos habian llegado, pero la tarea
+/// que los consume dejo de ser sondeada por el scheduler (un despertar
+/// perdido). Un timeout de inactividad DENTRO de esa misma tarea nunca
+/// dispara en ese caso: si la tarea entera no vuelve a sondearse, tampoco
+/// se sondea su propio timeout. Por eso esto vive en una tarea aparte:
+/// si la de descarga se pierde, esta sigue funcionando (es un `select!`
+/// distinto, con su propio despertar via `tokio::time::sleep`) y puede
+/// abortar la perdida y devolver un error real en vez de colgar para
+/// siempre.
+async fn bajar_con_vigilante(
+    http: &reqwest::Client,
+    url: &str,
+    sha256_esperado: &str,
+    clave: &[u8; 32],
+    destino: &std::path::Path,
+    progreso: &EnCurso,
+) -> Result<()> {
+    let http = http.clone();
+    let url = url.to_string();
+    let sha256_esperado = sha256_esperado.to_string();
+    let clave = *clave;
+    let destino = destino.to_path_buf();
+    let progreso_tarea = progreso.clone();
+    let mut tarea = tokio::spawn(async move {
+        paquete::traer_y_abrir(&http, &url, &sha256_esperado, &clave, &destino, &progreso_tarea).await
+    });
+
+    // Generoso a propósito: un asset legítimo pero lento sigue avanzando
+    // bytes de sobra dentro de este margen. Lo que esto caza es la
+    // ausencia TOTAL de avance, no la lentitud.
+    const SIN_AVANCE_MAX: Duration = Duration::from_secs(90);
+    let mut vistos: u64 = 0;
+    let mut desde_ultimo_avance = Instant::now();
+    loop {
+        tokio::select! {
+            resultado = &mut tarea => {
+                return match resultado {
+                    Ok(r) => r,
+                    Err(e) => Err(anyhow!("la tarea de descarga murió sin avisar: {e}")),
+                };
+            }
+            _ = tokio::time::sleep(Duration::from_secs(2)) => {
+                let actuales = progreso.lock().unwrap().as_ref().map(|p| p.asset_bytes_hechos).unwrap_or(0);
+                if actuales != vistos {
+                    vistos = actuales;
+                    desde_ultimo_avance = Instant::now();
+                } else if desde_ultimo_avance.elapsed() > SIN_AVANCE_MAX {
+                    tarea.abort();
+                    return Err(anyhow!(
+                        "la descarga dejó de avanzar más de {}s a los {actuales} bytes — \
+                         la tarea se perdió (no es un fallo de red), se aborta para poder reintentar",
+                        SIN_AVANCE_MAX.as_secs()
+                    ));
+                }
+            }
+        }
+    }
+}
+
 async fn instalar_uno(app: &crate::App, http: &reqwest::Client, ficha: &Ficha, ficha_url: &str) -> Result<()> {
     let clave = paquete::clave_de(&ficha.cifrado)?;
     let raiz = app.dir.join("indices").join(&ficha.paquete);
@@ -253,7 +331,7 @@ async fn instalar_uno(app: &crate::App, http: &reqwest::Client, ficha: &Ficha, f
             p.asset_bytes_hechos = 0;
             p.asset_bytes_total = 0;
         }
-        paquete::traer_y_abrir(http, &url_de(ficha_url, &a.nombre), &a.sha256, &clave, &raiz, &app.indices_en_curso).await?;
+        bajar_con_vigilante(http, &url_de(ficha_url, &a.nombre), &a.sha256, &clave, &raiz, &app.indices_en_curso).await?;
         marcar_hecho(app, &ficha.paquete, &a.nombre)?;
         avanzar(app, 1);
     }
