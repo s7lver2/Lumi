@@ -14,6 +14,7 @@ pub mod coverage;
 pub mod desreclamos;
 pub mod embed;
 pub mod ficha;
+pub mod filas;
 pub mod filter;
 pub mod fusion;
 pub mod geo;

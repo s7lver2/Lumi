@@ -1046,7 +1046,7 @@ impl Almacen {
     pub fn filas_publicables(&self, indice_id: i64) -> Result<Vec<crate::package::FilaPublicable>> {
         let c = self.0.lock().unwrap();
         let mut q = c.prepare(
-            "SELECT i.id, l.fuente, i.licencia, i.quadkey
+            "SELECT i.id, l.fuente, i.licencia, i.quadkey, i.ruta, i.lat, i.lng
                FROM imagenes i JOIN lotes l ON l.id = i.lote_id
               WHERE i.indice_id = ?1 AND i.saltada_motivo IS NULL
                 AND (i.revision IS NULL OR i.revision <> 'rechazada')
@@ -1059,6 +1059,9 @@ impl Almacen {
                     fuente: r.get(1)?,
                     licencia: r.get(2)?,
                     quadkey: r.get(3)?,
+                    ruta: r.get(4)?,
+                    lat: r.get(5)?,
+                    lng: r.get(6)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;

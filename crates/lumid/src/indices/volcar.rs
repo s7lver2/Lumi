@@ -4,39 +4,39 @@
 //! permite que una búsqueda vectorial devuelva algo con autor, y lo que hace
 //! que desinstalar sea borrar por id sin tocar lo de nadie más.
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use lumi_index::ficha::Ficha;
+use lumi_index::filas::FilaImagen;
+use std::collections::HashMap;
 use std::path::Path;
 
 pub async fn paquete(app: &crate::App, ficha: &Ficha, raiz: &Path) -> Result<usize> {
-    // Las filas del índice publicado. `indice.db` es SQLite y viaja dentro del
-    // paquete: leerlo es más barato y más fiable que reconstruirlo del EXIF.
-    let filas: Vec<(String, f64, f64, String, String)> = {
-        // `Connection::open` CREA el fichero si no existe. Sin esta
-        // comprobación, un paquete que no trae `indice.db` se abría como una
-        // base vacía y reventaba en el `prepare` de abajo con "no such table:
-        // imagenes" — un error que no dice nada de lo que pasa de verdad y
-        // que, encima, dejaba en disco un `indice.db` de 0 bytes que hacía
-        // parecer que el paquete sí lo traía.
-        let indice = raiz.join("indice.db");
-        if std::fs::metadata(&indice).map(|m| m.len()).unwrap_or(0) == 0 {
-            return Err(anyhow!(
-                "el paquete {} no trae indice.db: sin él no hay ruta, lat/lng ni fuente por \
-                 imagen, así que los vectores no se pueden atribuir a ningún sitio. Lo tiene \
-                 que meter la publicación junto a las imágenes del cuerpo",
-                ficha.paquete
-            ));
+    // Las filas del paquete, una lista por tesela. Antes esto leía un
+    // `indice.db` dentro del paquete que el sellado del Indexer nunca escribió
+    // —ni para un paquete local ni para uno publicado—, así que instalar un
+    // índice fallaba siempre; y `Connection::open` lo creaba vacío de paso,
+    // con lo que el error acababa siendo un "no such table: imagenes" que no
+    // decía nada. Ahora las filas viajan dentro de cada cuerpo, partidas por
+    // tesela igual que los fragmentos (ver `lumi_index::filas`).
+    let teselas = lumi_index::filas::quadkeys(raiz);
+    if teselas.is_empty() {
+        return Err(anyhow!(
+            "el paquete {} no trae la carpeta `{}`: sin lat/lng ni fuente por imagen los \
+             vectores no se pueden situar en el mapa ni atribuir a nadie. La escribe el \
+             sellado del Indexer y viaja dentro de cada cuerpo — un paquete publicado \
+             antes de que eso existiera hay que volverlo a publicar",
+            ficha.paquete,
+            lumi_index::filas::DIR
+        ));
+    }
+
+    let mut por_tesela: Vec<(String, Vec<FilaImagen>)> = Vec::new();
+    for qk in teselas {
+        let filas = lumi_index::filas::leer(raiz, &qk)?;
+        if !filas.is_empty() {
+            por_tesela.push((qk, filas));
         }
-        let db = rusqlite::Connection::open(&indice).context("abrir el indice.db del paquete")?;
-        let mut q = db.prepare(
-            "SELECT ruta, lat, lng, quadkey, fuente FROM imagenes
-              WHERE lat IS NOT NULL AND lng IS NOT NULL",
-        )?;
-        let filas = q
-            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?
-            .collect::<Result<Vec<_>, _>>()?;
-        filas
-    };
+    }
 
     // Las filas primero: si el proceso muere entre esto y Qdrant, la
     // reanudación vuelve a subir los vectores de este asset y no pasa nada.
@@ -61,25 +61,45 @@ pub async fn paquete(app: &crate::App, ficha: &Ficha, raiz: &Path) -> Result<usi
     let app_store = app.store.clone();
     let paquete_nombre = ficha.paquete.clone();
     let raiz_owned = raiz.to_path_buf();
-    let ids: Vec<i64> = tokio::task::spawn_blocking(move || -> Result<Vec<i64>> {
-        let mut ids = Vec::with_capacity(filas.len());
-        for bloque in filas.chunks(FILAS_POR_BLOQUE) {
-            let mut c = app_store.conn();
-            let tx = c.transaction()?;
-            for (ruta, lat, lng, quadkey, fuente) in bloque {
-                let abs = raiz_owned.join("imagenes").join(ruta);
-                tx.execute(
-                    "INSERT INTO reference_images (paquete, ruta, lat, lng, quadkey, fuente)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                    rusqlite::params![&paquete_nombre, abs.to_string_lossy(), lat, lng, quadkey, fuente],
-                )?;
-                ids.push(tx.last_insert_rowid());
+    let entrada = por_tesela;
+    let ids_por_tesela: HashMap<String, Vec<i64>> =
+        tokio::task::spawn_blocking(move || -> Result<HashMap<String, Vec<i64>>> {
+            // Aplanado con su tesela delante: el troceado de la transacción es
+            // por número de filas, no por tesela, así que un bloque puede
+            // partir una tesela por la mitad y cada fila tiene que saber a
+            // cuál pertenece.
+            let plano: Vec<(&str, &FilaImagen)> = entrada
+                .iter()
+                .flat_map(|(qk, fs)| fs.iter().map(move |f| (qk.as_str(), f)))
+                .collect();
+            let mut fuera: HashMap<String, Vec<i64>> = HashMap::new();
+            for bloque in plano.chunks(FILAS_POR_BLOQUE) {
+                let mut c = app_store.conn();
+                let tx = c.transaction()?;
+                for (qk, f) in bloque {
+                    let abs = raiz_owned.join("imagenes").join(&f.ruta);
+                    tx.execute(
+                        "INSERT INTO reference_images (paquete, ruta, lat, lng, quadkey, fuente)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                        rusqlite::params![
+                            &paquete_nombre,
+                            abs.to_string_lossy(),
+                            f.lat,
+                            f.lng,
+                            qk,
+                            &f.fuente
+                        ],
+                    )?;
+                    // El orden dentro de cada tesela es el de su fichero de
+                    // filas, que es el mismo con el que el sellado escribió el
+                    // fragmento. De eso vive el emparejamiento de abajo.
+                    fuera.entry((*qk).to_string()).or_default().push(tx.last_insert_rowid());
+                }
+                tx.commit()?;
             }
-            tx.commit()?;
-        }
-        Ok(ids)
-    })
-    .await??;
+            Ok(fuera)
+        })
+        .await??;
 
     // Una colección por capa. Antes se tomaba `capas.first()` y las demás se
     // perdían en silencio, que con un solo modelo no se notaba y con ocho
@@ -90,19 +110,49 @@ pub async fn paquete(app: &crate::App, ficha: &Ficha, raiz: &Path) -> Result<usi
         let coleccion = crate::qdrant::coleccion_de(&capa.modelo, &capa.version);
         cliente.asegurar_coleccion(&coleccion, capa.dims).await?;
 
-        let vectores = lumi_index::vectors::leer_fragmentos(
+        let fragmentos = lumi_index::vectors::leer_fragmentos_por_quadkey(
             &raiz.join("fragmentos"),
             &capa.modelo,
             &capa.version,
             capa.dims,
         )?;
-        // ponytail: se asume que el orden de los vectores del fragmento es el
-        // de las filas de `indice.db`, que es como los escribe el sellado del
-        // 7a. Si alguna vez dejan de ir a la par, el paquete trae el orden
-        // explícito y habría que leerlo — no adivinarlo aquí.
-        let n = ids.len().min(vectores.len());
-        cliente.subir(&coleccion, &ids[..n], &vectores[..n]).await?;
-        subidos = subidos.max(n);
+
+        let mut de_esta_capa = 0usize;
+        for (qk, vectores) in fragmentos {
+            let Some(ids) = ids_por_tesela.get(&qk) else {
+                // Un fragmento cuya tesela no trajo filas. Subirlo dejaría
+                // puntos que no se pueden atribuir a nada, que es justo lo que
+                // el orden de este volcado existe para evitar.
+                tracing::warn!(
+                    "{}: hay fragmento de {qk} para {}-{} pero el paquete no trajo sus filas; \
+                     esa tesela no se sube",
+                    ficha.paquete,
+                    capa.modelo,
+                    capa.version
+                );
+                continue;
+            };
+            // Emparejar por posición con longitudes distintas le pegaría a
+            // cada imagen las coordenadas de otra, en silencio y para siempre.
+            // El sellado escribe el fragmento desde la misma lista que las
+            // filas, así que esto no debería pasar nunca; si pasa, el paquete
+            // está mal y decirlo es mejor que envenenar el índice.
+            if ids.len() != vectores.len() {
+                return Err(anyhow!(
+                    "{}: la tesela {qk} trae {} filas y {} vectores de {}-{}",
+                    ficha.paquete,
+                    ids.len(),
+                    vectores.len(),
+                    capa.modelo,
+                    capa.version
+                ));
+            }
+            cliente.subir(&coleccion, ids, &vectores).await?;
+            de_esta_capa += ids.len();
+        }
+        // El máximo y no la suma: cada capa cubre las MISMAS imágenes, así que
+        // sumarlas contaría cada imagen una vez por modelo.
+        subidos = subidos.max(de_esta_capa);
     }
 
     Ok(subidos)

@@ -144,22 +144,23 @@ pub fn leer_b1(r: &mut impl Read) -> Result<Vec<Vec<bool>>> {
     Ok(fuera)
 }
 
-/// Lee todos los vectores de un modelo/versión de la carpeta `fragmentos/` de
-/// un paquete ya abierto (`fragmentos/<quadkey>/<modelo>-<version>.i8`).
+/// Lee los vectores de un modelo/versión de la carpeta `fragmentos/` de un
+/// paquete ya abierto (`fragmentos/<quadkey>/<modelo>-<version>.i8`),
+/// AGRUPADOS por quadkey y con el quadkey delante.
 ///
-/// ponytail: el ORDEN entre directorios de quadkey es el de `Path::cmp`
-/// (alfabético), no el de `indice.db`. Es una aproximación: el formato del
-/// fragmento ata un vector a su fila por POSICIÓN dentro de un mismo fichero,
-/// pero no dice en qué orden concatenar varios ficheros de teselas distintas.
-/// Quien llama (`lumid::indices::volcar`) ya asume esa misma limitación al
-/// leer `indice.db` sin `ORDER BY`. El techo es ese; la salida, si algún día
-/// hace falta exactitud, es que la ficha declare el orden explícito.
-pub fn leer_fragmentos(
+/// Agrupados y no concatenados porque el formato del fragmento ata cada vector
+/// a su imagen por POSICIÓN dentro del fichero de ESE quadkey, y no dice nada
+/// sobre en qué orden concatenar teselas distintas. Devolver una lista plana
+/// obligaba a quien llama a suponer ese orden global, y esa suposición era una
+/// forma silenciosa de pegarle a cada imagen las coordenadas de otra. Con las
+/// filas del paquete partidas por quadkey igual que los fragmentos
+/// (`lumi_index::filas`), el emparejamiento es local a la tesela y exacto.
+pub fn leer_fragmentos_por_quadkey(
     dir: &std::path::Path,
     modelo: &str,
     version: &str,
     dims: u32,
-) -> Result<Vec<Vec<f32>>> {
+) -> Result<Vec<(String, Vec<Vec<f32>>)>> {
     let mut quadkeys: Vec<_> = match std::fs::read_dir(dir) {
         Ok(it) => it.flatten().map(|e| e.path()).collect(),
         Err(_) => return Ok(Vec::new()),
@@ -173,14 +174,17 @@ pub fn leer_fragmentos(
         if !f.exists() {
             continue;
         }
+        let Some(clave) = qk.file_name().and_then(|s| s.to_str()).map(str::to_string) else {
+            continue;
+        };
         let mut file = std::fs::File::open(&f)?;
-        let mut vs = leer_i8(&mut file)?;
+        let vs = leer_i8(&mut file)?;
         if let Some(v) = vs.first() {
             if dims != 0 && v.len() != dims as usize {
                 bail!("{}: {} dimensiones, se esperaban {dims}", f.display(), v.len());
             }
         }
-        fuera.append(&mut vs);
+        fuera.push((clave, vs));
     }
     Ok(fuera)
 }

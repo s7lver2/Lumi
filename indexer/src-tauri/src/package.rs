@@ -184,6 +184,13 @@ pub struct FilaPublicable {
     pub fuente: String,
     pub licencia: Option<String>,
     pub quadkey: String,
+    /// Los tres campos que el paquete tiene que llevar por imagen para que un
+    /// vector se pueda situar y atribuir al instalarlo. `ruta` es la de la
+    /// máquina que sella; lo que viaja es solo su nombre de fichero, que es
+    /// como se copia a `imagenes/`. Ver `lumi_index::filas`.
+    pub ruta: String,
+    pub lat: f64,
+    pub lng: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]

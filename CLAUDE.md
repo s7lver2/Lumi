@@ -140,13 +140,22 @@ boundary the queue and the projects subsystem must respect).
 ### Indexer specifics
 
 `.lumidx` package layout: `manifiesto.json` (provenance for *both* images and work),
-`indice.db` (SQLite), `cobertura.json` (z14 tile coverage + hash), `fragmentos/<quadkey
-z14>/<modelo>-<version>.{b1,i8}` (binary/int8 vectors), `imagenes/`, `SHA256SUMS`. Sealing is
-irreversible and refuses to succeed if `indice.db` rows don't match each model's vectors — a
-half-sealed package is worse than none. Opening always verifies every file hash first; no
-"open anyway". Before spending provider quota or GPU time, every z14 tile in a drawn area is
-classified `local` / `catálogo` / `nueva`; an area fully covered offers to install what exists
-rather than showing a disabled "index" button.
+`cobertura.json` (z14 tile coverage + hash), `fragmentos/<quadkey
+z14>/<modelo>-<version>.{b1,i8}` (binary/int8 vectors), `filas/<quadkey z14>.jsonl`
+(`lumi_index::filas`: one line per image with `ruta`/`lat`/`lng`/`fuente`), `imagenes/`,
+`SHA256SUMS`. `filas/` is split per tile for the same reason the fragments are: a vector is
+tied to its image by POSITION inside that tile's file, so row N of a tile is vector N of the
+same tile and nothing has to assume a global order across tiles — pairing them by a guessed
+order silently glues each image to another one's coordinates. Sealing writes `filas/` from the
+very list it just wrote the fragments from, so the two match by construction; installing
+refuses a tile whose row and vector counts differ. Sealing is irreversible and refuses to
+succeed if the rows don't match each model's vectors — a half-sealed package is worse than
+none. (There is no `indice.db` inside a package: docs claimed one for a long time, `lumid`
+read it, and no sealing ever wrote it, so installing an index failed every single time.)
+Opening always verifies every file hash first; no "open anyway". Before spending provider
+quota or GPU time, every z14 tile in a drawn area is classified `local` / `catálogo` /
+`nueva`; an area fully covered offers to install what exists rather than showing a disabled
+"index" button.
 
 El `.lumidx` **publicado** es ese mismo formato partido para viajar: la ficha (`ficha.json`)
 va **en claro** —firmada Ed25519, kilobytes, y es lo que resuelve buscador, cobertura, reclamo

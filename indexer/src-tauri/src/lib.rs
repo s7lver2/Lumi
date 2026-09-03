@@ -1172,6 +1172,47 @@ async fn sellar(
         }
     }
 
+    // Las filas que hacen utilizable el paquete. Sin `lat`/`lng` y `fuente`
+    // por imagen, un vector instalado no se puede situar en el mapa ni
+    // atribuir a nadie, y eso es justo lo que le pasaba a `lumid`: esperaba
+    // encontrarlas en un `indice.db` dentro del paquete que este sellado nunca
+    // escribió, así que instalar un índice fallaba SIEMPRE, publicado o no.
+    //
+    // Se escriben recorriendo `por_qk`, no lanzando otra consulta, para que el
+    // orden sea EL MISMO que el de los fragmentos por construcción y no por
+    // coincidencia: `por_qk` es literalmente la lista con la que se acaban de
+    // escribir los `.i8` de ahí arriba.
+    let datos: std::collections::HashMap<i64, &package::FilaPublicable> =
+        publicables.iter().map(|f| (f.id, f)).collect();
+    for (qk, filas) in &por_qk {
+        let mut salida = Vec::with_capacity(filas.len());
+        for (id, ruta) in filas {
+            let Some(d) = datos.get(id) else {
+                // No puede pasar (`por_qk` se filtra con `viajan`, que sale de
+                // `publicables`), pero saltarla en silencio correría una
+                // posición y dejaría cada imagen pegada a las coordenadas de
+                // otra. Antes se rompe.
+                return Err(format!(
+                    "la imagen {id} viaja en {qk} pero no está entre las publicables:                      las filas no cuadrarían con el fragmento"
+                ));
+            };
+            // Lo que viaja es el nombre, no la ruta de la máquina que sella:
+            // es como se copia a `imagenes/` unas líneas más abajo.
+            let nombre = std::path::Path::new(ruta)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or(ruta)
+                .to_string();
+            salida.push(lumi_index::filas::FilaImagen {
+                ruta: nombre,
+                lat: d.lat,
+                lng: d.lng,
+                fuente: d.fuente.clone(),
+            });
+        }
+        lumi_index::filas::escribir(&raiz, qk, &salida).map_err(|e| e.to_string())?;
+    }
+
     prog.etapa("imágenes");
     let imgs_dir = raiz.join("imagenes");
     std::fs::create_dir_all(&imgs_dir)

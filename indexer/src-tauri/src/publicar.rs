@@ -560,7 +560,7 @@ async fn asegurar_release(
 fn ficheros_del_trozo(raiz: &Path, trozo: &Trozo, por_qk: &BTreeMap<String, Vec<String>>) -> Vec<PathBuf> {
     let imgs = raiz.join("imagenes");
     let mut vistos = std::collections::HashSet::new();
-    trozo
+    let mut fuera: Vec<PathBuf> = trozo
         .quadkeys
         .iter()
         .filter_map(|q| por_qk.get(q))
@@ -570,7 +570,21 @@ fn ficheros_del_trozo(raiz: &Path, trozo: &Trozo, por_qk: &BTreeMap<String, Vec<
             let p = imgs.join(nombre);
             p.exists().then_some(p)
         })
-        .collect()
+        .collect();
+
+    // Las filas de cada tesela viajan con SUS imágenes, en el mismo cuerpo.
+    // Antes el cuerpo llevaba solo `imagenes/`, así que quien instalaba se
+    // encontraba fotos y vectores sin una sola coordenada con la que situarlos
+    // — y la ficha no puede llevarlas: es en claro y de kilobytes a propósito.
+    // Que vayan por tesela es lo que mantiene el cuerpo autosuficiente aunque
+    // la publicación se parta en varios.
+    for q in &trozo.quadkeys {
+        let p = raiz.join(lumi_index::filas::DIR).join(format!("{q}.jsonl"));
+        if p.is_file() {
+            fuera.push(p);
+        }
+    }
+    fuera
 }
 
 /// Todo el trabajo de una publicación, de principio a fin.
