@@ -11,11 +11,10 @@ export function Pie() {
       <div className="mx-auto grid max-w-[1180px] gap-10 sm:grid-cols-[1.3fr_1fr]">
         <div>
           <div className="flex items-center gap-2 text-[13px] font-medium tracking-tight">
-            <span className="text-accent">✦</span> Lumi Station
+            <span className="text-accent">✦</span> Lumi
           </div>
           <p className="mt-3 max-w-[46ch] leading-relaxed text-muted">
-            Geolocalización de imágenes por inferencia, de código abierto y autoalojada.
-            Tus imágenes y tus GPUs no salen de tu servidor.
+            Forensic analysis tool
           </p>
         </div>
         <div className="grid grid-cols-2 gap-6 text-[13px]">
@@ -39,7 +38,7 @@ export function Pie() {
       </div>
 
       <div className="mx-auto mt-10 flex max-w-[1180px] flex-wrap items-center justify-between gap-3 font-mono text-[11px] text-subtle">
-        <span>v2.0 · Rust + Python · autoalojado</span>
+        <span>v2.0 · Rust + Python · self-hosted</span>
         {version && <span>última publicación · v{version.version}</span>}
       </div>
 
