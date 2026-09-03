@@ -32,7 +32,7 @@ const HASTA = -355; // centra la ventana por geometría: 92 + Y·cos75° ≈ 0
 const FIN_VUELO = 0.46; // hasta aquí el viaje termina de llegar a HASTA
 const INICIO_ALZA = 0.28; // el alzamiento empieza a mezclarse ANTES de que el viaje acabe — las dos cosas a la vez, no una detrás de otra
 const FIN_LEVANTAMIENTO = 0.58;
-const RECORRIDO_PX = 12200; // fase A+B como antes, más recorrido para la fase C: más scroll por salto, menos sensación de caos
+const RECORRIDO_PX = 15400; // fase A+B como antes, más recorrido para la fase C: más scroll por salto, menos sensación de caos
 
 function easeOutCubic(x: number) {
   return 1 - Math.pow(1 - x, 3);
@@ -120,17 +120,19 @@ const PANTALLAS: {
     n: "01", etiqueta: "proyectos",
     t: "Tus proyectos, siempre a mano",
     d: "Cada investigación es un espacio propio: imágenes, casos y análisis anteriores, exactamente donde los dejaste.",
+    zoom: { escala: 1.16, origen: "24% 46%" }, // se acerca a la lista de proyectos
   },
   {
     n: "02", etiqueta: "cola de análisis",
     t: "El análisis avanza a la vista",
     d: "Cada miniatura muestra en qué punto está su verificación — en cola, en curso o resuelta.",
+    zoom: { escala: 1.14, origen: "50% 70%" }, // se acerca a la fila de miniaturas
   },
   {
     n: "03", etiqueta: "mapa de resultado",
     t: "El mapa, no un cuadro de texto",
     d: "El resultado se ancla sobre el terreno, con el radio de confianza real del verificador que lo resolvió.",
-    zoom: { escala: 1.34, origen: "50% 50%" }, // se acerca al círculo de resultado
+    zoom: { escala: 1.4, origen: "50% 50%" }, // se acerca al círculo de resultado
   },
   {
     n: "04", etiqueta: "administración",

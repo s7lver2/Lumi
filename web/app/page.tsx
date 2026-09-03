@@ -5,16 +5,14 @@ import { Agentes } from "../components/Agentes";
 import { Cobertura } from "../components/Cobertura";
 import { BotonCopiarComando } from "../components/BotonCopiarComando";
 import { SelectorDescarga } from "../components/SelectorDescarga";
-import { IndicadorSecciones } from "../components/IndicadorSecciones";
-import { artefactosCliente } from "../lib/version";
+import { productosDescargables } from "../lib/version";
 
 const COMANDO = "curl -fsSL lumi.s7lver.xyz/install | sh";
 
 export default function Home() {
-  const artefactos = artefactosCliente();
+  const productos = productosDescargables();
   return (
     <main>
-      <IndicadorSecciones />
       <section id="hero" className="relative flex min-h-[100vh] items-center justify-center overflow-hidden">
         <div className="absolute inset-0">
           <HeroOrbita />
@@ -30,7 +28,7 @@ export default function Home() {
             className="jg-hero-in mt-4 text-[clamp(36px,6.6vw,66px)] font-semibold leading-[1.04] tracking-tight"
             style={{ animationDelay: ".07s" }}
           >
-            Meet Lumi. <em className="italic text-muted">The definitive AI forensic toolkit.</em>
+            Lumi. <em className="italic text-muted">Give it a photo — it tells you where.</em>
           </h1>
           <p
             className="jg-hero-in mx-auto mt-6 max-w-[48ch] leading-relaxed text-muted"
@@ -42,7 +40,7 @@ export default function Home() {
           </p>
 
           <div className="jg-hero-in mt-8 flex flex-wrap items-start justify-center gap-3" style={{ animationDelay: ".24s" }}>
-            <SelectorDescarga artefactos={artefactos} />
+            <SelectorDescarga productos={productos} />
             <a
               className="jg-micro jg-micro-scale rounded-card border border-border px-4 py-2 text-[13px] font-medium text-fg hover:border-subtle hover:bg-elevated"
               href="#modelos"

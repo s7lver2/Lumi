@@ -2,6 +2,7 @@ import "./globals.css";
 import { Nav } from "../components/Nav";
 import { Pie } from "../components/Pie";
 import { TransicionPagina } from "../components/TransicionPagina";
+import { IndicadorSecciones } from "../components/IndicadorSecciones";
 
 export const metadata = {
   title: "Lumi Station · geolocalización de imágenes por inferencia",
@@ -14,6 +15,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es">
       <body className="min-h-screen">
         <Nav />
+        {/* Fuera de TransicionPagina a propósito: ese wrapper anima su
+            propio `transform` al entrar, y cualquier `position: fixed`
+            dentro de un ancestro con transform activo deja de fijarse al
+            viewport y se posiciona relativo a ese ancestro — el indicador
+            "saltaba" hacia arriba en cuanto la animación de entrada
+            terminaba y el transform volvía a `none`. */}
+        <IndicadorSecciones />
         <TransicionPagina>{children}</TransicionPagina>
         <Pie />
       </body>

@@ -21,10 +21,24 @@ export function ultimaVersion(): { version: string; publicado: string } | null {
   return { version: ultima.version, publicado: ultima.publicado };
 }
 
-/** Los artefactos reales del cliente para la última publicación — la lista
- *  que alimenta el selector de descarga del hero. Nunca se inventan
- *  plataformas: si el manifiesto solo publicó windows-x86_64, el selector
- *  solo ofrece esa. `[]` si no hay publicación de `cliente`. */
-export function artefactosCliente(): Artefacto[] {
-  return ultimaPublicacion("cliente")?.artefactos ?? [];
+export type ProductoDescargable = { producto: string; version: string; artefactos: Artefacto[] };
+
+// Los cuatro binarios que de verdad publica tools/release_flow.py — nunca se
+// inventa un quinto. El CLI `lumi` no está en esta lista porque no se
+// publica todavía (ver /install, que instala vía script en vez de binario).
+const PRODUCTOS_PUBLICABLES = ["cliente", "indexer", "lumid", "instalador"] as const;
+
+/** La última publicación de cada producto real, con sus artefactos. Un
+ *  producto que nunca se publicó, o que solo tiene publicaciones retiradas,
+ *  no aparece — el selector nunca ofrece un producto sin nada que
+ *  descargar. */
+export function productosDescargables(): ProductoDescargable[] {
+  const resultado: ProductoDescargable[] = [];
+  for (const producto of PRODUCTOS_PUBLICABLES) {
+    const ultima = ultimaPublicacion(producto);
+    if (ultima && ultima.artefactos?.length) {
+      resultado.push({ producto, version: ultima.version, artefactos: ultima.artefactos });
+    }
+  }
+  return resultado;
 }
