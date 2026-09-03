@@ -4,7 +4,7 @@
 //! permite que una búsqueda vectorial devuelva algo con autor, y lo que hace
 //! que desinstalar sea borrar por id sin tocar lo de nadie más.
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use lumi_index::ficha::Ficha;
 use std::path::Path;
 
@@ -12,8 +12,22 @@ pub async fn paquete(app: &crate::App, ficha: &Ficha, raiz: &Path) -> Result<usi
     // Las filas del índice publicado. `indice.db` es SQLite y viaja dentro del
     // paquete: leerlo es más barato y más fiable que reconstruirlo del EXIF.
     let filas: Vec<(String, f64, f64, String, String)> = {
-        let db = rusqlite::Connection::open(raiz.join("indice.db"))
-            .context("abrir el indice.db del paquete")?;
+        // `Connection::open` CREA el fichero si no existe. Sin esta
+        // comprobación, un paquete que no trae `indice.db` se abría como una
+        // base vacía y reventaba en el `prepare` de abajo con "no such table:
+        // imagenes" — un error que no dice nada de lo que pasa de verdad y
+        // que, encima, dejaba en disco un `indice.db` de 0 bytes que hacía
+        // parecer que el paquete sí lo traía.
+        let indice = raiz.join("indice.db");
+        if std::fs::metadata(&indice).map(|m| m.len()).unwrap_or(0) == 0 {
+            return Err(anyhow!(
+                "el paquete {} no trae indice.db: sin él no hay ruta, lat/lng ni fuente por \
+                 imagen, así que los vectores no se pueden atribuir a ningún sitio. Lo tiene \
+                 que meter la publicación junto a las imágenes del cuerpo",
+                ficha.paquete
+            ));
+        }
+        let db = rusqlite::Connection::open(&indice).context("abrir el indice.db del paquete")?;
         let mut q = db.prepare(
             "SELECT ruta, lat, lng, quadkey, fuente FROM imagenes
               WHERE lat IS NOT NULL AND lng IS NOT NULL",

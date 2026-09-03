@@ -52,6 +52,12 @@ pub async fn instalar(
     let a = app.clone();
     tokio::spawn(async move {
         if let Err(e) = crate::indices::instalar(a.clone(), p.url).await {
+            // Al journal TAMBIÉN, no solo al `Progreso`: sin esto, una
+            // instalación que falla deja el daemon sano y ocioso sin una sola
+            // línea en el log, y desde fuera es indistinguible de un cuelgue.
+            // Costó horas de perseguir un falso "se congela a mitad" que en
+            // realidad era un error mudo.
+            tracing::error!("la instalación del índice falló: {e:#}");
             if let Some(g) = a.indices_en_curso.lock().unwrap().as_mut() {
                 g.error = Some(e.to_string());
                 g.terminado = true;
