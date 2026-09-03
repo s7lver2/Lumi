@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { HeroOrbita } from "../components/HeroOrbita";
 import { Sobrevuelo } from "../components/Sobrevuelo";
+import { Escalera } from "../components/Escalera";
 
 const COMANDO = "curl -fsSL lumi.s7lver.xyz/install | sh";
 
@@ -73,6 +74,8 @@ export default function Home() {
       </section>
 
       <Sobrevuelo />
+
+      <Escalera />
     </main>
   );
 }
