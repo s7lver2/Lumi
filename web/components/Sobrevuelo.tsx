@@ -98,7 +98,11 @@ function pintar(p: number): Pintura {
   const direccionTramo = Math.sign(posiciones[tramo + 1] - posiciones[tramo]) || 1;
   const giroY = direccionTramo * Math.sin(fracSuave * Math.PI) * 9; // menos giro que antes (16°) — se sentía caótico
   return {
-    y: HASTA, alza: 26, rot: -TUMBE, opSombra: 0, opSuelo: 0.15, deriva: 0,
+    // opSuelo en 0, no 0.15: en el showcase la mirada está en la interfaz,
+    // no en el terreno — el suelo no aporta nada aquí, y apagarlo del todo
+    // (en vez de dejarlo asomar tenue) descarta también cualquier resto de
+    // la costura diagonal que seguía viniendo de ese plano.
+    y: HASTA, alza: 26, rot: -TUMBE, opSombra: 0, opSuelo: 0, deriva: 0,
     fase: "showcase", indiceFloat, offsetX, giroY,
   };
 }
@@ -123,16 +127,16 @@ const PANTALLAS: {
     zoom: { escala: 1.16, origen: "24% 46%" }, // se acerca a la lista de proyectos
   },
   {
-    n: "02", etiqueta: "cola de análisis",
-    t: "El análisis avanza a la vista",
-    d: "Cada miniatura muestra en qué punto está su verificación — en cola, en curso o resuelta.",
-    zoom: { escala: 1.14, origen: "50% 70%" }, // se acerca a la fila de miniaturas
+    n: "02", etiqueta: "análisis",
+    t: "El análisis, no una cola",
+    d: "Cada imagen se enfrenta a varios verificadores geométricos a la vez — gana quien se acerque más al punto real, no un modelo único.",
+    zoom: { escala: 1.16, origen: "78% 50%" }, // se acerca al panel de verificadores
   },
   {
-    n: "03", etiqueta: "mapa de resultado",
-    t: "El mapa, no un cuadro de texto",
-    d: "El resultado se ancla sobre el terreno, con el radio de confianza real del verificador que lo resolvió.",
-    zoom: { escala: 1.4, origen: "50% 50%" }, // se acerca al círculo de resultado
+    n: "03", etiqueta: "resultado",
+    t: "La sección de resultado, tal cual",
+    d: "Cada hipótesis lista los verificadores que compitieron y su distancia entre sí, anclada sobre el terreno con el radio de confianza real.",
+    zoom: { escala: 1.32, origen: "68% 50%" }, // se acerca al mapa y su marcador
   },
   {
     n: "04", etiqueta: "administración",
@@ -298,13 +302,24 @@ export function Sobrevuelo() {
                 maskImage: "radial-gradient(900px 460px at 50% 50%, black 0%, black 35%, transparent 62%)",
                 WebkitMaskImage: "radial-gradient(900px 460px at 50% 50%, black 0%, black 35%, transparent 62%)",
                 opacity: opSuelo,
+                backfaceVisibility: "hidden",
+                WebkitBackfaceVisibility: "hidden",
               }}
             />
 
-            {/* .carril — mismo plano que el suelo, SIN máscara: aquí cuelga la ventana */}
+            {/* .carril — mismo plano que el suelo, SIN máscara: aquí cuelga la ventana.
+                backface-visibility: hidden también aquí — es una de las dos placas
+                giradas 75° que se solapan con la ventana, y sin esto el navegador
+                puede dejar un resto de la cara trasera del plano visible como una
+                línea fina donde se cruza con el borde de la ventana. */}
             <div
               className="preserva-3d absolute inset-0"
-              style={{ transform: "translateY(92px) rotateX(75deg)", transformOrigin: "50% 50%" }}
+              style={{
+                transform: "translateY(92px) rotateX(75deg)",
+                transformOrigin: "50% 50%",
+                backfaceVisibility: "hidden",
+                WebkitBackfaceVisibility: "hidden",
+              }}
             >
               {/* .pieza */}
               <div
@@ -444,9 +459,9 @@ function PantallaContenido({ indice, src }: { indice: number; src?: string }) {
     case 0:
       return <PantallaProyectos />;
     case 1:
-      return <PantallaCola />;
+      return <PantallaAnalisis />;
     case 2:
-      return <PantallaMapa />;
+      return <PantallaResultado />;
     default:
       return <PantallaControl />;
   }
@@ -485,47 +500,84 @@ function PantallaProyectos() {
   );
 }
 
-/** 02 — el análisis avanza a la vista: la cola de miniaturas ocupando casi
- *  todo el espacio, con su estado como único dato. */
-function PantallaCola() {
+const VERIFICADORES: { nombre: string; estado: "resuelta" | "curso" | "cola"; puntuacion?: string }[] = [
+  { nombre: "geometría del horizonte", estado: "resuelta", puntuacion: "0.94" },
+  { nombre: "sombras y acimut solar", estado: "curso" },
+  { nombre: "vegetación y clima", estado: "cola" },
+  { nombre: "señalética y tipografía", estado: "cola" },
+];
+
+/** 02 — el análisis, no una cola: la imagen en curso de verificación con
+ *  sus puntos candidatos, y el panel de verificadores que compiten por
+ *  ella — no una fila de miniaturas esperando turno. */
+function PantallaAnalisis() {
   return (
-    <div className="flex h-full flex-col bg-surface p-4">
-      <div className="font-mono text-[10px] uppercase tracking-wide text-subtle">cola de análisis</div>
-      <div className="mt-3 grid flex-1 grid-cols-4 gap-2.5">
-        {[...MINIATURAS, ...MINIATURAS.slice(0, 4)].map((m, i) => (
-          <div key={i} className="relative rounded-card border border-border bg-elevated">
-            <span
-              className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full"
-              style={{ background: m.estado === "resuelta" ? "#f2f3f5" : m.estado === "curso" ? "#efb968" : "#6a6c70" }}
-            />
-            <span className="absolute bottom-2 left-2 font-mono text-[9.5px] text-subtle">
-              {m.estado === "resuelta" ? "resuelta" : m.estado === "curso" ? "en curso" : "en cola"}
-            </span>
-          </div>
-        ))}
+    <div className="flex h-full">
+      <div className="relative flex-1 border-r border-border bg-[#101216]">
+        <div className="absolute inset-6 rounded-card border border-dashed border-border/60" />
+        <div className="absolute left-[42%] top-[38%] h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-draw-fg" />
+        <div className="absolute left-[58%] top-[52%] h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-draw-fg" />
+        <div className="absolute left-[47%] top-[63%] h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-draw-fg" />
+      </div>
+      <div className="w-[230px] shrink-0 bg-surface p-3.5">
+        <div className="font-mono text-[10px] uppercase tracking-wide text-subtle">verificadores</div>
+        <div className="mt-2.5 flex flex-col gap-2">
+          {VERIFICADORES.map((v) => (
+            <div key={v.nombre} className="rounded-card border border-border bg-elevated px-2.5 py-2">
+              <div className="text-[11.5px] text-fg">{v.nombre}</div>
+              <div className="mt-1 flex items-center gap-1.5">
+                <span
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{ background: v.estado === "resuelta" ? "#f2f3f5" : v.estado === "curso" ? "#efb968" : "#6a6c70" }}
+                />
+                <span className="font-mono text-[9.5px] text-subtle">
+                  {v.estado === "resuelta" ? v.puntuacion : v.estado === "curso" ? "en curso" : "en cola"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-/** 03 — el mapa, no un cuadro de texto: el mapa a pantalla completa con la
- *  hipótesis anclada sobre el terreno. */
-function PantallaMapa() {
+const HIPOTESIS: { nombre: string; distancia: string }[] = [
+  { nombre: "geometría del horizonte", distancia: "140 m" },
+  { nombre: "sombras y acimut solar", distancia: "310 m" },
+  { nombre: "vegetación y clima", distancia: "890 m" },
+];
+
+/** 03 — la sección de resultado tal cual: el panel con las hipótesis de
+ *  cada verificador y su distancia entre sí, junto al mapa con el
+ *  marcador anclado — no un mapa a pantalla completa sin más contexto. */
+function PantallaResultado() {
   return (
-    <div className="relative h-full bg-[#101216]">
-      <div
-        className="absolute inset-0 opacity-40"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(232,232,230,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(232,232,230,.06) 1px, transparent 1px)",
-          backgroundSize: "28px 28px",
-        }}
-      />
-      <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-draw" style={{ boxShadow: "0 0 0 8px rgba(55,138,221,.12)" }} />
-      <div className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-draw-fg" />
-      <div className="absolute bottom-4 right-4 rounded-card border border-border bg-panel/90 px-3 py-2 font-mono text-[10.5px] leading-relaxed text-muted backdrop-blur">
-        43.3714° N 8.4127° W<br />
-        <span className="text-subtle">radio ~ ejemplo, no medido</span>
+    <div className="flex h-full">
+      <div className="w-[220px] shrink-0 border-r border-border bg-surface p-3.5">
+        <div className="font-mono text-[10px] uppercase tracking-wide text-subtle">resultado</div>
+        <div className="mt-2 text-[12.5px] text-fg">43.3714° N · 8.4127° W</div>
+        <div className="mt-1 font-mono text-[10px] text-subtle">radio ~ ejemplo, no medido</div>
+        <div className="mt-3 flex flex-col gap-1.5">
+          {HIPOTESIS.map((h) => (
+            <div key={h.nombre} className="flex items-center justify-between rounded-[6px] bg-elevated px-2 py-1.5">
+              <span className="text-[11px] text-muted">{h.nombre}</span>
+              <span className="font-mono text-[10px] text-subtle">{h.distancia}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="relative flex-1 bg-[#101216]">
+        <div
+          className="absolute inset-0 opacity-40"
+          style={{
+            backgroundImage:
+              "linear-gradient(rgba(232,232,230,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(232,232,230,.06) 1px, transparent 1px)",
+            backgroundSize: "28px 28px",
+          }}
+        />
+        <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-draw" style={{ boxShadow: "0 0 0 8px rgba(55,138,221,.12)" }} />
+        <div className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-draw-fg" />
       </div>
     </div>
   );
