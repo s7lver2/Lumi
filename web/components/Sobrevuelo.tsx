@@ -45,7 +45,8 @@ type Pintura = {
   y: number; alza: number; rot: number; opSombra: number; opSuelo: number; deriva: number;
   fase: "vuelo" | "levantamiento" | "showcase";
   indiceFloat: number; // posición continua dentro de PANTALLAS durante la fase C
-  offsetX: number; // desplazamiento horizontal de la pieza ya plana, fase C
+  offsetX: number; // desplazamiento horizontal de la ventana, fase C — llega casi al borde
+  giroY: number; // grados de rotateY durante el salto: la ventana "mira" hacia donde viaja
 };
 
 function pintar(p: number): Pintura {
@@ -68,19 +69,20 @@ function pintar(p: number): Pintura {
       opSombra: Math.min(1, vCurva * 3) * (1 - s),
       opSuelo: 1 - s * 0.85,
       deriva: Math.sin(vCurva * Math.PI) * 26,
-      fase: p < FIN_VUELO ? "vuelo" : "levantamiento", indiceFloat: 0, offsetX: 0,
+      fase: p < FIN_VUELO ? "vuelo" : "levantamiento", indiceFloat: 0, offsetX: 0, giroY: 0,
     };
   }
-  // Fase C: la pieza ya está plana (s=1 fijo) y ahora se desplaza en X,
-  // parada a parada, con una curva de aceleración/frenado por tramo — no
-  // un mapeo 1:1 del scroll a la posición horizontal.
+  // Fase C: la pieza ya está plana (s=1 fijo) y ahora salta de parada en
+  // parada, casi hasta el borde del encuadre, con una curva de
+  // aceleración/frenado por tramo — no un mapeo 1:1 del scroll a la
+  // posición horizontal.
   const u = Math.max(0, Math.min(1, (p - FIN_LEVANTAMIENTO) / (1 - FIN_LEVANTAMIENTO)));
   const N = PANTALLAS.length;
   const indiceFloat = u * (N - 1);
   const tramo = Math.min(N - 2, Math.floor(indiceFloat));
   const frac = indiceFloat - tramo;
   const fracSuave = easeInOutCubic(frac);
-  const ANCHO_TRAMO = 230; // px de salto por parada
+  const ANCHO_TRAMO = 560; // px de salto por parada — llega cerca del borde del encuadre, no un tramo tímido
   // Salto alterno: cada pantalla nueva entra desde el lado contrario a la
   // anterior (derecha, izquierda, derecha…) en vez de un barrido monótono
   // en una sola dirección — se siente como hojear pestañas, no como una
@@ -89,9 +91,15 @@ function pintar(p: number): Pintura {
   for (let i = 1; i < N; i++) posiciones.push(posiciones[i - 1] + (i % 2 === 1 ? -1 : 1) * ANCHO_TRAMO);
   const centro = posiciones.reduce((a, b) => a + b, 0) / N;
   const offsetX = posiciones[tramo] + (posiciones[tramo + 1] - posiciones[tramo]) * fracSuave - centro;
+  // giroY: durante el salto la ventana gira levemente hacia el lado al que
+  // viaja (perspectiva jugando con el ángulo) y vuelve a quedar de frente
+  // en cuanto se asienta en la parada — nunca rotateZ (trampa 2), esto es
+  // un rotateY sobre la propia pieza, no sobre la cámara.
+  const direccionTramo = Math.sign(posiciones[tramo + 1] - posiciones[tramo]) || 1;
+  const giroY = direccionTramo * Math.sin(fracSuave * Math.PI) * 16;
   return {
     y: HASTA, alza: 26, rot: -TUMBE, opSombra: 0, opSuelo: 0.15, deriva: 0,
-    fase: "showcase", indiceFloat, offsetX,
+    fase: "showcase", indiceFloat, offsetX, giroY,
   };
 }
 
@@ -100,27 +108,33 @@ function pintar(p: number): Pintura {
 // ventana. Para sustituir un mockup ilustrado por una captura real: añade
 // src: "/ruta.png" aquí y PantallaContenido la usa en vez del mockup.
 //
-// `zoom` es opcional: cuando existe, la pantalla se acerca sobre ese punto
-// (origen en % del propio recuadro) al quedar centrada y se aleja al
-// salir — un acercamiento para resaltar el detalle real, no una foto fija.
+// `zoom` es opcional: cuando existe, es TODA la ventana (marco incluido) la
+// que se acerca sobre ese punto (origen en % del propio recuadro) al quedar
+// centrada, y se aleja al salir — no es un recorte de la captura, es la
+// pieza entera resaltando su propio detalle.
 const PANTALLAS: {
-  n: string; t: string; d: string; src?: string; zoom?: { escala: number; origen: string };
+  n: string; etiqueta: string; t: string; d: string; src?: string;
+  zoom?: { escala: number; origen: string };
 }[] = [
   {
-    n: "01", t: "Tus proyectos, siempre a mano",
+    n: "01", etiqueta: "proyectos",
+    t: "Tus proyectos, siempre a mano",
     d: "Cada investigación es un espacio propio: imágenes, casos y análisis anteriores, exactamente donde los dejaste.",
   },
   {
-    n: "02", t: "El análisis avanza a la vista",
+    n: "02", etiqueta: "cola de análisis",
+    t: "El análisis avanza a la vista",
     d: "Cada miniatura muestra en qué punto está su verificación — en cola, en curso o resuelta.",
   },
   {
-    n: "03", t: "El mapa, no un cuadro de texto",
+    n: "03", etiqueta: "mapa de resultado",
+    t: "El mapa, no un cuadro de texto",
     d: "El resultado se ancla sobre el terreno, con el radio de confianza real del verificador que lo resolvió.",
     zoom: { escala: 1.34, origen: "50% 50%" }, // se acerca al círculo de resultado
   },
   {
-    n: "04", t: "Control total del servidor",
+    n: "04", etiqueta: "administración",
+    t: "Control total del servidor",
     d: "Modelos, GPUs y usuarios, gestionados desde el mismo cliente — nunca desde un panel de terceros.",
     zoom: { escala: 1.24, origen: "50% 82%" }, // se acerca a la carga de GPU
   },
@@ -208,11 +222,17 @@ export function Sobrevuelo() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viva, movil]);
 
-  const { y, alza, rot, opSombra, opSuelo, deriva, fase, indiceFloat, offsetX } = movil ? pintar(1) : pintura;
+  const { y, alza, rot, opSombra, opSuelo, deriva, fase, indiceFloat, offsetX, giroY } = movil ? pintar(1) : pintura;
 
-  const idxCercano = Math.round(indiceFloat);
+  const idxCercano = Math.max(0, Math.min(PANTALLAS.length - 1, Math.round(indiceFloat)));
   const opacidadTexto = fase === "showcase" ? 1 - Math.min(1, Math.abs(indiceFloat - idxCercano) * 2.4) : 0;
-  const pantallaTexto = PANTALLAS[Math.max(0, Math.min(PANTALLAS.length - 1, idxCercano))];
+  const pantallaTexto = PANTALLAS[idxCercano];
+  // El zoom es de TODA la ventana, no de la captura interior: cuando una
+  // pantalla con `zoom` queda centrada, el marco entero se acerca sobre su
+  // punto de interés y se aleja de nuevo al abandonarla.
+  const enfoqueActivo = Math.max(0, 1 - Math.min(1, Math.abs(indiceFloat - idxCercano) * 1.15));
+  const zoomActivo = pantallaTexto.zoom;
+  const escalaZoomVentana = zoomActivo ? 1 + (zoomActivo.escala - 1) * enfoqueActivo : 1;
 
   return (
     <section
@@ -244,28 +264,20 @@ export function Sobrevuelo() {
                 impares/pares en offsetX): cuando la ventana salta a la
                 derecha el texto se funde a la izquierda, y viceversa — las
                 dos cosas se mueven, no solo la ventana. */}
-            <div
-              className="pointer-events-none absolute left-7 top-1/2 z-10 max-w-[300px] -translate-y-1/2 text-left"
-              style={{
-                opacity: idxCercano % 2 === 0 ? opacidadTexto : 0,
-                transition: "opacity .16s linear",
-              }}
-            >
-              <div className="font-mono text-[11px] text-subtle">{pantallaTexto.n}</div>
-              <h3 className="mt-1 text-[19px] font-semibold">{pantallaTexto.t}</h3>
-              <p className="mt-2 leading-relaxed text-muted">{pantallaTexto.d}</p>
-            </div>
-            <div
-              className="pointer-events-none absolute right-7 top-1/2 z-10 max-w-[300px] -translate-y-1/2 text-right"
-              style={{
-                opacity: idxCercano % 2 === 1 ? opacidadTexto : 0,
-                transition: "opacity .16s linear",
-              }}
-            >
-              <div className="font-mono text-[11px] text-subtle">{pantallaTexto.n}</div>
-              <h3 className="mt-1 text-[19px] font-semibold">{pantallaTexto.t}</h3>
-              <p className="mt-2 leading-relaxed text-muted">{pantallaTexto.d}</p>
-            </div>
+            <TextoPantalla
+              pantalla={pantallaTexto}
+              idx={idxCercano}
+              total={PANTALLAS.length}
+              lado="izquierda"
+              opacidad={idxCercano % 2 === 0 ? opacidadTexto : 0}
+            />
+            <TextoPantalla
+              pantalla={pantallaTexto}
+              idx={idxCercano}
+              total={PANTALLAS.length}
+              lado="derecha"
+              opacidad={idxCercano % 2 === 1 ? opacidadTexto : 0}
+            />
           </>
         )}
 
@@ -307,31 +319,34 @@ export function Sobrevuelo() {
                 />
                 {/* .giro — contrarrota el tumbe */}
                 <div className="preserva-3d" style={{ transform: `rotateX(${rot}deg)`, transformOrigin: "50% 50%" }}>
-                  {/* Fase C: la ventana ya plana se desplaza en X — un
-                      translateX plano, sin rotación, así que no reabre
+                  {/* Fase C: la ventana entera —marco incluido— salta en X,
+                      gira levemente hacia donde viaja (giroY, nunca
+                      rotateZ) y se acerca como un todo sobre la pantalla
+                      que resalta (escalaZoomVentana). Sigue siendo
+                      preserve-3d dentro de .giro, así que no reabre
                       ninguna de las cuatro trampas. */}
-                  <div style={{ transform: `translateX(${offsetX}px) scale(${1 + (alza / 26) * 0.24})` }}>
+                  <div
+                    className="preserva-3d"
+                    style={{
+                      transform: `translateX(${offsetX}px) rotateY(${giroY}deg) scale(${(1 + (alza / 26) * 0.24) * escalaZoomVentana})`,
+                      transformOrigin: zoomActivo?.origen ?? "50% 50%",
+                    }}
+                  >
                     <div className="relative w-[1040px] max-w-[92vw] overflow-hidden rounded-card border border-border bg-panel shadow-2xl">
                       <BarraVentana />
                       <div className="relative h-[520px]">
-                        {PANTALLAS.map((pn, i) => {
-                          const enfoque = Math.max(0, 1 - Math.min(1, Math.abs(indiceFloat - i) * 1.15));
-                          const escalaZoom = pn.zoom ? 1 + (pn.zoom.escala - 1) * enfoque : 1;
-                          return (
-                            <div
-                              key={pn.n}
-                              className="absolute inset-0 overflow-hidden"
-                              style={{ opacity: enfoque, pointerEvents: i === idxCercano ? "auto" : "none" }}
-                            >
-                              <div
-                                className="h-full w-full"
-                                style={{ transform: `scale(${escalaZoom})`, transformOrigin: pn.zoom?.origen ?? "50% 50%" }}
-                              >
-                                <PantallaContenido indice={i} src={pn.src} />
-                              </div>
-                            </div>
-                          );
-                        })}
+                        {PANTALLAS.map((pn, i) => (
+                          <div
+                            key={pn.n}
+                            className="absolute inset-0"
+                            style={{
+                              opacity: Math.max(0, 1 - Math.min(1, Math.abs(indiceFloat - i) * 1.15)),
+                              pointerEvents: i === idxCercano ? "auto" : "none",
+                            }}
+                          >
+                            <PantallaContenido indice={i} src={pn.src} />
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
@@ -344,6 +359,42 @@ export function Sobrevuelo() {
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-bg to-transparent" />
       </div>
     </section>
+  );
+}
+
+/** El texto de una pantalla del showcase, en uno de los dos lados fijos
+ *  (izquierda/derecha) — el que está activo se funde in, el otro a 0.
+ *  Lleva más peso que antes: etiqueta + título + descripción + una fila de
+ *  puntos que marca cuál de las cuatro pantallas es esta. */
+function TextoPantalla({
+  pantalla, idx, total, lado, opacidad,
+}: {
+  pantalla: (typeof PANTALLAS)[number]; idx: number; total: number; lado: "izquierda" | "derecha"; opacidad: number;
+}) {
+  const derecha = lado === "derecha";
+  return (
+    <div
+      className={`pointer-events-none absolute top-1/2 z-10 max-w-[340px] -translate-y-1/2 ${
+        derecha ? "right-7 text-right" : "left-7 text-left"
+      }`}
+      style={{ opacity: opacidad, transition: "opacity .16s linear" }}
+    >
+      <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wide text-subtle" style={{ justifyContent: derecha ? "flex-end" : "flex-start" }}>
+        <span>{pantalla.n} / {String(total).padStart(2, "0")}</span>
+        <span className="text-subtle/50">·</span>
+        <span>{pantalla.etiqueta}</span>
+      </div>
+      <h3 className="mt-2 text-[24px] font-semibold leading-snug tracking-tight">{pantalla.t}</h3>
+      <p className="mt-3 leading-relaxed text-muted">{pantalla.d}</p>
+      <div className="mt-4 flex gap-1.5" style={{ justifyContent: derecha ? "flex-end" : "flex-start" }}>
+        {Array.from({ length: total }).map((_, i) => (
+          <span
+            key={i}
+            className={i === idx ? "h-[3px] w-5 rounded-full bg-fg transition-all duration-300" : "h-[3px] w-2.5 rounded-full bg-subtle/40 transition-all duration-300"}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 

@@ -5,6 +5,7 @@ import { Agentes } from "../components/Agentes";
 import { Cobertura } from "../components/Cobertura";
 import { BotonCopiarComando } from "../components/BotonCopiarComando";
 import { SelectorDescarga } from "../components/SelectorDescarga";
+import { IndicadorSecciones } from "../components/IndicadorSecciones";
 import { artefactosCliente } from "../lib/version";
 
 const COMANDO = "curl -fsSL lumi.s7lver.xyz/install | sh";
@@ -13,7 +14,8 @@ export default function Home() {
   const artefactos = artefactosCliente();
   return (
     <main>
-      <section className="relative flex min-h-[100vh] items-center justify-center overflow-hidden">
+      <IndicadorSecciones />
+      <section id="hero" className="relative flex min-h-[100vh] items-center justify-center overflow-hidden">
         <div className="absolute inset-0">
           <HeroOrbita />
         </div>
