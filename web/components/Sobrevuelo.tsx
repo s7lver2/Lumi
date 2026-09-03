@@ -27,7 +27,7 @@ import { usarEscenaViva } from "./usarEscenaViva";
  */
 
 const TUMBE = 75;
-const DESDE = 680; // lejos, pero no tanto: en scroll=0 sigue fuera de campo, sin dejar un tramo largo de terreno vacío antes de que asome
+const DESDE = 830; // sigue fuera de campo en scroll=0, pero el tramo vacío antes de asomar es más corto que el original 980, no cero
 const HASTA = -355; // centra la ventana por geometría: 92 + Y·cos75° ≈ 0
 const FIN_VUELO = 0.46; // hasta aquí el viaje termina de llegar a HASTA
 const INICIO_ALZA = 0.28; // el alzamiento empieza a mezclarse ANTES de que el viaje acabe — las dos cosas a la vez, no una detrás de otra
@@ -99,26 +99,30 @@ function pintar(p: number): Pintura {
 // el texto de esquina, ahora también gobierna qué se ve dentro de la
 // ventana. Para sustituir un mockup ilustrado por una captura real: añade
 // src: "/ruta.png" aquí y PantallaContenido la usa en vez del mockup.
-const PANTALLAS = [
+//
+// `zoom` es opcional: cuando existe, la pantalla se acerca sobre ese punto
+// (origen en % del propio recuadro) al quedar centrada y se aleja al
+// salir — un acercamiento para resaltar el detalle real, no una foto fija.
+const PANTALLAS: {
+  n: string; t: string; d: string; src?: string; zoom?: { escala: number; origen: string };
+}[] = [
   {
     n: "01", t: "Tus proyectos, siempre a mano",
     d: "Cada investigación es un espacio propio: imágenes, casos y análisis anteriores, exactamente donde los dejaste.",
-    src: undefined as string | undefined,
   },
   {
     n: "02", t: "El análisis avanza a la vista",
     d: "Cada miniatura muestra en qué punto está su verificación — en cola, en curso o resuelta.",
-    src: undefined as string | undefined,
   },
   {
     n: "03", t: "El mapa, no un cuadro de texto",
     d: "El resultado se ancla sobre el terreno, con el radio de confianza real del verificador que lo resolvió.",
-    src: undefined as string | undefined,
+    zoom: { escala: 1.34, origen: "50% 50%" }, // se acerca al círculo de resultado
   },
   {
     n: "04", t: "Control total del servidor",
     d: "Modelos, GPUs y usuarios, gestionados desde el mismo cliente — nunca desde un panel de terceros.",
-    src: undefined as string | undefined,
+    zoom: { escala: 1.24, origen: "50% 82%" }, // se acerca a la carga de GPU
   },
 ];
 
@@ -235,14 +239,34 @@ export function Sobrevuelo() {
         )}
 
         {!movil && (
-          <div
-            className="pointer-events-none absolute left-7 top-1/2 z-10 max-w-[300px] -translate-y-1/2"
-            style={{ opacity: opacidadTexto, transition: "opacity .12s linear" }}
-          >
-            <div className="font-mono text-[11px] text-subtle">{pantallaTexto.n}</div>
-            <h3 className="mt-1 text-[19px] font-semibold">{pantallaTexto.t}</h3>
-            <p className="mt-2 leading-relaxed text-muted">{pantallaTexto.d}</p>
-          </div>
+          <>
+            {/* El texto salta de lado contrario a la ventana (ver PANTALLAS
+                impares/pares en offsetX): cuando la ventana salta a la
+                derecha el texto se funde a la izquierda, y viceversa — las
+                dos cosas se mueven, no solo la ventana. */}
+            <div
+              className="pointer-events-none absolute left-7 top-1/2 z-10 max-w-[300px] -translate-y-1/2 text-left"
+              style={{
+                opacity: idxCercano % 2 === 0 ? opacidadTexto : 0,
+                transition: "opacity .16s linear",
+              }}
+            >
+              <div className="font-mono text-[11px] text-subtle">{pantallaTexto.n}</div>
+              <h3 className="mt-1 text-[19px] font-semibold">{pantallaTexto.t}</h3>
+              <p className="mt-2 leading-relaxed text-muted">{pantallaTexto.d}</p>
+            </div>
+            <div
+              className="pointer-events-none absolute right-7 top-1/2 z-10 max-w-[300px] -translate-y-1/2 text-right"
+              style={{
+                opacity: idxCercano % 2 === 1 ? opacidadTexto : 0,
+                transition: "opacity .16s linear",
+              }}
+            >
+              <div className="font-mono text-[11px] text-subtle">{pantallaTexto.n}</div>
+              <h3 className="mt-1 text-[19px] font-semibold">{pantallaTexto.t}</h3>
+              <p className="mt-2 leading-relaxed text-muted">{pantallaTexto.d}</p>
+            </div>
+          </>
         )}
 
         <div
@@ -290,18 +314,24 @@ export function Sobrevuelo() {
                     <div className="relative w-[1040px] max-w-[92vw] overflow-hidden rounded-card border border-border bg-panel shadow-2xl">
                       <BarraVentana />
                       <div className="relative h-[520px]">
-                        {PANTALLAS.map((pn, i) => (
-                          <div
-                            key={pn.n}
-                            className="absolute inset-0"
-                            style={{
-                              opacity: 1 - Math.min(1, Math.abs(indiceFloat - i) * 1.15),
-                              pointerEvents: i === idxCercano ? "auto" : "none",
-                            }}
-                          >
-                            <PantallaContenido indice={i} src={pn.src} />
-                          </div>
-                        ))}
+                        {PANTALLAS.map((pn, i) => {
+                          const enfoque = Math.max(0, 1 - Math.min(1, Math.abs(indiceFloat - i) * 1.15));
+                          const escalaZoom = pn.zoom ? 1 + (pn.zoom.escala - 1) * enfoque : 1;
+                          return (
+                            <div
+                              key={pn.n}
+                              className="absolute inset-0 overflow-hidden"
+                              style={{ opacity: enfoque, pointerEvents: i === idxCercano ? "auto" : "none" }}
+                            >
+                              <div
+                                className="h-full w-full"
+                                style={{ transform: `scale(${escalaZoom})`, transformOrigin: pn.zoom?.origen ?? "50% 50%" }}
+                              >
+                                <PantallaContenido indice={i} src={pn.src} />
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>

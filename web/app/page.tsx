@@ -4,10 +4,13 @@ import { Escalera } from "../components/Escalera";
 import { Agentes } from "../components/Agentes";
 import { Cobertura } from "../components/Cobertura";
 import { BotonCopiarComando } from "../components/BotonCopiarComando";
+import { SelectorDescarga } from "../components/SelectorDescarga";
+import { artefactosCliente } from "../lib/version";
 
 const COMANDO = "curl -fsSL lumi.s7lver.xyz/install | sh";
 
 export default function Home() {
+  const artefactos = artefactosCliente();
   return (
     <main>
       <section className="relative flex min-h-[100vh] items-center justify-center overflow-hidden">
@@ -36,46 +39,32 @@ export default function Home() {
             Autoalojado: tus imágenes y tus GPUs no salen de tu servidor.
           </p>
 
-          <div className="jg-hero-in mt-8 flex flex-wrap justify-center gap-3" style={{ animationDelay: ".24s" }}>
-            <a
-              className="jg-micro jg-micro-scale rounded-card bg-accent px-4 py-2 text-[13px] font-medium text-bg hover:opacity-90"
-              href="#cobertura"
-            >
-              Ver el mapa de cobertura
-            </a>
+          <div className="jg-hero-in mt-8 flex flex-wrap items-start justify-center gap-3" style={{ animationDelay: ".24s" }}>
+            <SelectorDescarga artefactos={artefactos} />
             <a
               className="jg-micro jg-micro-scale rounded-card border border-border px-4 py-2 text-[13px] font-medium text-fg hover:border-subtle hover:bg-elevated"
               href="#modelos"
             >
               Conocer los modelos
             </a>
+            <a
+              className="jg-micro jg-micro-scale rounded-card border border-border px-4 py-2 text-[13px] font-medium text-fg hover:border-subtle hover:bg-elevated"
+              href="#cobertura"
+            >
+              Ver el mapa de cobertura
+            </a>
           </div>
 
           <div
-            className="jg-hero-in mx-auto mt-10 max-w-[480px] rounded-card border border-border bg-panel/80 text-left backdrop-blur"
+            className="jg-hero-in mt-6 inline-flex items-center gap-2 font-mono text-[11.5px] text-subtle"
             style={{ animationDelay: ".32s" }}
           >
-            <div className="flex items-center justify-between gap-3 border-b border-border px-3.5 py-2">
-              <span className="flex items-center gap-2 font-mono text-[10.5px] text-subtle">
-                <span className="h-1.5 w-1.5 rounded-full bg-draw" />
-                instalación
-              </span>
-              <a
-                className="jg-micro font-mono text-[10.5px] text-subtle hover:text-fg"
-                href="https://github.com/s7lver2/Lumi/releases/latest"
-              >
-                o descarga el cliente ↓
-              </a>
-            </div>
-            <div className="flex items-center gap-2 px-3.5 py-3">
-              <span className="font-mono text-[13px] text-subtle">$</span>
-              <code className="flex-1 truncate font-mono text-[13px]">
-                curl -fsSL lumi.s7lver.xyz/install<span className="text-subtle"> | sh</span>
-              </code>
-              <BotonCopiarComando comando={COMANDO} />
-            </div>
+            <span className="text-subtle/70">$</span>
+            <code>curl -fsSL lumi.s7lver.xyz/install | sh</code>
+            <BotonCopiarComando comando={COMANDO} />
+            <span className="text-subtle/60">— instala el CLI en tu servidor</span>
           </div>
-          <p className="jg-hero-in mt-3 font-mono text-[11px] text-subtle" style={{ animationDelay: ".36s" }}>
+          <p className="jg-hero-in mt-2 font-mono text-[11px] text-subtle" style={{ animationDelay: ".36s" }}>
             se autoaloja en tu propio servidor — sin cuentas, sin nube de terceros
           </p>
         </div>

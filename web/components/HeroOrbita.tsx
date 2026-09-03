@@ -116,8 +116,6 @@ export function HeroOrbita() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { viva, reducido } = usarEscenaViva(seccionRef);
   const [movil, setMovil] = useState(false);
-  const [estadoTexto, setEstadoTexto] = useState("orbitando");
-  const [barrido, setBarrido] = useState<{ lat: string; lng: string } | null>(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)");
@@ -220,9 +218,6 @@ export function HeroOrbita() {
         ctx!.stroke();
       });
 
-      let objetivoActivo: Punto | null = null;
-      let satEscaneando: Satelite | null = null;
-
       satelites.forEach((sat) => {
         if (sat.estado === "orbit" && Math.random() < 0.0011) {
           const idx = Math.floor(Math.random() * esfera.length);
@@ -249,7 +244,6 @@ export function HeroOrbita() {
             const d = Math.hypot(sp.x - objetivo.x, sp.y - objetivo.y, sp.z - objetivo.z);
             if (d < scanR) sp.lit = Math.max(sp.lit, 1 - d / scanR);
           }
-          objetivoActivo = objetivo; satEscaneando = sat;
           if (p >= 1) { sat.estado = "returning"; sat.t0 = t; sat.from = sat.pos; sat.to = orbitPosAt(sat, sat.fase + t * sat.velocidad); }
         } else {
           const p = Math.min(1, (t - sat.t0) / 0.9);
@@ -318,16 +312,6 @@ export function HeroOrbita() {
         ctx!.fill();
       });
 
-      if (objetivoActivo) {
-        const oa = objetivoActivo as Punto;
-        const r = Math.hypot(oa.x, oa.y, oa.z) || 1;
-        const lat = 90 - (Math.acos(oa.y / r) * 180) / Math.PI;
-        const lng = ((Math.atan2(oa.z, -oa.x) * 180) / Math.PI - 180 + 540) % 360 - 180;
-        setBarrido({ lat: lat.toFixed(4) + "°", lng: lng.toFixed(4) + "°" });
-        setEstadoTexto(satEscaneando ? `leyendo · ${(satEscaneando as Satelite).nombre}` : "escaneando");
-      } else {
-        setEstadoTexto("orbitando");
-      }
     }
 
     function bucle(now: number) {
@@ -350,14 +334,6 @@ export function HeroOrbita() {
   return (
     <div ref={seccionRef} className="relative h-full w-full">
       <canvas ref={canvasRef} className="absolute inset-0" />
-      {!movil && (
-        <div className="pointer-events-none absolute left-6 top-20 font-mono text-[10.5px] leading-relaxed text-subtle">
-          {barrido && (
-            <>ÚLTIMO BARRIDO <span className="text-muted">{barrido.lat} {barrido.lng}</span><br /></>
-          )}
-          ESTADO <span className="text-muted">{estadoTexto}</span>
-        </div>
-      )}
     </div>
   );
 }
