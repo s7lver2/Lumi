@@ -6,6 +6,7 @@ const SECCIONES = [
   { id: "hero", etiqueta: "inicio" },
   { id: "interfaz", etiqueta: "interfaz" },
   { id: "modelos", etiqueta: "modelos" },
+  { id: "video", etiqueta: "vídeo" },
   { id: "agentes", etiqueta: "agentes" },
   { id: "cobertura", etiqueta: "cobertura" },
 ];

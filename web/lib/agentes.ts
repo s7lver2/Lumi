@@ -11,7 +11,10 @@ import senalizacion from "../../registros/agentes/senalizacion.json";
 import toponimos from "../../registros/agentes/toponimos.json";
 import vegetacion from "../../registros/agentes/vegetacion.json";
 
-export type Agente = { id: string; nombre: string; tipo: string; restriccion?: string };
+export type Agente = {
+  id: string; nombre: string; tipo: string; restriccion?: string;
+  motor: string; pregunta: string; etiquetas: string[]; umbral_confianza: number;
+};
 
 const REGISTRO = [
   climaAparente, dimensiones, escena, estacion, horaSombras, idioma,

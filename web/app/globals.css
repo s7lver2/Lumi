@@ -44,6 +44,10 @@
 .jg-micro-scale:hover { transform: scale(1.015); }
 .jg-micro-scale:active { transform: scale(0.985); }
 
+/* Pista de carrusel con scroll nativo (mejor accesibilidad y gesto táctil
+   que reinventar el arrastre a mano) pero sin la barra de scroll visible. */
+.jg-carrusel::-webkit-scrollbar { display: none; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration:.001ms !important; transition-duration:.001ms !important; }
 }

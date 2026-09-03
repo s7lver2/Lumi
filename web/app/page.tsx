@@ -1,6 +1,7 @@
 import { HeroOrbita } from "../components/HeroOrbita";
 import { Sobrevuelo } from "../components/Sobrevuelo";
 import { Escalera } from "../components/Escalera";
+import { VideoDemo } from "../components/VideoDemo";
 import { Agentes } from "../components/Agentes";
 import { Cobertura } from "../components/Cobertura";
 import { SelectorDescarga } from "../components/SelectorDescarga";
@@ -62,6 +63,8 @@ export default function Home() {
       <Sobrevuelo />
 
       <Escalera />
+
+      <VideoDemo />
 
       <Agentes />
 
