@@ -32,7 +32,7 @@ const HASTA = -355; // centra la ventana por geometría: 92 + Y·cos75° ≈ 0
 const FIN_VUELO = 0.46; // hasta aquí el viaje termina de llegar a HASTA
 const INICIO_ALZA = 0.28; // el alzamiento empieza a mezclarse ANTES de que el viaje acabe — las dos cosas a la vez, no una detrás de otra
 const FIN_LEVANTAMIENTO = 0.58;
-const RECORRIDO_PX = 8600; // fase A+B como antes, más el recorrido de la fase C (showcase)
+const RECORRIDO_PX = 12200; // fase A+B como antes, más recorrido para la fase C: más scroll por salto, menos sensación de caos
 
 function easeOutCubic(x: number) {
   return 1 - Math.pow(1 - x, 3);
@@ -82,7 +82,7 @@ function pintar(p: number): Pintura {
   const tramo = Math.min(N - 2, Math.floor(indiceFloat));
   const frac = indiceFloat - tramo;
   const fracSuave = easeInOutCubic(frac);
-  const ANCHO_TRAMO = 560; // px de salto por parada — llega cerca del borde del encuadre, no un tramo tímido
+  const ANCHO_TRAMO = 480; // px de salto por parada — llega cerca del borde, sin ser tan brusco como 560
   // Salto alterno: cada pantalla nueva entra desde el lado contrario a la
   // anterior (derecha, izquierda, derecha…) en vez de un barrido monótono
   // en una sola dirección — se siente como hojear pestañas, no como una
@@ -96,7 +96,7 @@ function pintar(p: number): Pintura {
   // en cuanto se asienta en la parada — nunca rotateZ (trampa 2), esto es
   // un rotateY sobre la propia pieza, no sobre la cámara.
   const direccionTramo = Math.sign(posiciones[tramo + 1] - posiciones[tramo]) || 1;
-  const giroY = direccionTramo * Math.sin(fracSuave * Math.PI) * 16;
+  const giroY = direccionTramo * Math.sin(fracSuave * Math.PI) * 9; // menos giro que antes (16°) — se sentía caótico
   return {
     y: HASTA, alza: 26, rot: -TUMBE, opSombra: 0, opSuelo: 0.15, deriva: 0,
     fase: "showcase", indiceFloat, offsetX, giroY,
@@ -229,8 +229,9 @@ export function Sobrevuelo() {
   const pantallaTexto = PANTALLAS[idxCercano];
   // El zoom es de TODA la ventana, no de la captura interior: cuando una
   // pantalla con `zoom` queda centrada, el marco entero se acerca sobre su
-  // punto de interés y se aleja de nuevo al abandonarla.
-  const enfoqueActivo = Math.max(0, 1 - Math.min(1, Math.abs(indiceFloat - idxCercano) * 1.15));
+  // punto de interés y se aleja de nuevo al abandonarla. 0.95 en vez de
+  // 1.15: el cruce entre pantallas dura más scroll, se siente menos brusco.
+  const enfoqueActivo = Math.max(0, 1 - Math.min(1, Math.abs(indiceFloat - idxCercano) * 0.95));
   const zoomActivo = pantallaTexto.zoom;
   const escalaZoomVentana = zoomActivo ? 1 + (zoomActivo.escala - 1) * enfoqueActivo : 1;
 
@@ -296,8 +297,14 @@ export function Sobrevuelo() {
                 transform: "translateY(92px) rotateX(75deg)",
                 transformOrigin: "50% 50%",
                 background: "rgba(232,232,230,.035)",
-                maskImage: "radial-gradient(60% 50% at 50% 50%, black 0%, black 55%, transparent 85%)",
-                WebkitMaskImage: "radial-gradient(60% 50% at 50% 50%, black 0%, black 55%, transparent 85%)",
+                // La máscara termina en transparente del todo bastante antes
+                // del borde real del div (48% en vez de 85%): si el
+                // desvanecido llega justo al borde, el navegador deja una
+                // costura fina y brillante donde el rectángulo transformado
+                // en 3D encuentra su propio límite — visible como las líneas
+                // diagonales que se veían en el sobrevuelo.
+                maskImage: "radial-gradient(58% 46% at 50% 50%, black 0%, black 40%, transparent 68%, transparent 100%)",
+                WebkitMaskImage: "radial-gradient(58% 46% at 50% 50%, black 0%, black 40%, transparent 68%, transparent 100%)",
                 opacity: opSuelo,
               }}
             />
@@ -332,15 +339,15 @@ export function Sobrevuelo() {
                       transformOrigin: zoomActivo?.origen ?? "50% 50%",
                     }}
                   >
-                    <div className="relative w-[1040px] max-w-[92vw] overflow-hidden rounded-card border border-border bg-panel shadow-2xl">
+                    <div className="relative w-[1180px] max-w-[94vw] overflow-hidden rounded-card border border-border bg-panel shadow-2xl">
                       <BarraVentana />
-                      <div className="relative h-[520px]">
+                      <div className="relative h-[560px]">
                         {PANTALLAS.map((pn, i) => (
                           <div
                             key={pn.n}
                             className="absolute inset-0"
                             style={{
-                              opacity: Math.max(0, 1 - Math.min(1, Math.abs(indiceFloat - i) * 1.15)),
+                              opacity: Math.max(0, 1 - Math.min(1, Math.abs(indiceFloat - i) * 0.95)),
                               pointerEvents: i === idxCercano ? "auto" : "none",
                             }}
                           >
