@@ -3,6 +3,7 @@ import { Sobrevuelo } from "../components/Sobrevuelo";
 import { Escalera } from "../components/Escalera";
 import { VideoDemo } from "../components/VideoDemo";
 import { Agentes } from "../components/Agentes";
+import { Confianza } from "../components/Confianza";
 import { Cobertura } from "../components/Cobertura";
 import { SeparadorSeccion } from "../components/SeparadorSeccion";
 import { SelectorDescarga } from "../components/SelectorDescarga";
@@ -73,6 +74,10 @@ export default function Home() {
       <SeparadorSeccion />
 
       <Agentes />
+
+      <SeparadorSeccion />
+
+      <Confianza />
 
       <SeparadorSeccion />
 

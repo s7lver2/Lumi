@@ -48,6 +48,17 @@
    que reinventar el arrastre a mano) pero sin la barra de scroll visible. */
 .jg-carrusel::-webkit-scrollbar { display: none; }
 
+/* Marquesina infinita: la pista lleva el contenido duplicado por duplicado
+   y se traslada exactamente la mitad de su ancho — al llegar ahí es
+   pixel-idéntica al fotograma inicial, así que el salto de vuelta a 0% es
+   invisible. Lineal a propósito (no ease-out): un acento de marca que
+   frenara y acelerase se sentiría nervioso en un bucle continuo. */
+@keyframes jg-marquesina { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.jg-marquesina { animation: jg-marquesina 28s linear infinite; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration:.001ms !important; transition-duration:.001ms !important; }
+  /* La regla de arriba congelaría la marquesina a mitad de fotograma con un
+     parpadeo constante en vez de pararla — aquí se detiene de verdad. */
+  .jg-marquesina { animation-play-state: paused !important; }
 }
