@@ -145,13 +145,22 @@ export function Sobrevuelo() {
       className="relative"
       style={{ height: movil ? undefined : `calc(100vh + ${RECORRIDO_PX}px)` }}
     >
-      <div className={movil ? "relative py-24" : "sticky top-0 h-screen overflow-hidden"}>
-        <div className="pointer-events-none absolute left-0 right-0 top-16 z-10 mx-auto max-w-[720px] px-7 text-center">
-          <span className="font-mono text-[11px] uppercase tracking-wide text-subtle">meet lumi</span>
-          <h2 className="mt-2 text-[clamp(24px,3.4vw,36px)] font-semibold tracking-tight">
-            La misma interfaz, sin importar el modelo
-          </h2>
-        </div>
+      <div className={movil ? "relative py-16" : "sticky top-0 h-screen overflow-hidden"}>
+        {movil ? (
+          <div className="mx-auto max-w-[720px] px-7 text-center">
+            <span className="font-mono text-[11px] uppercase tracking-wide text-subtle">meet lumi</span>
+            <h2 className="mt-2 text-[clamp(24px,3.4vw,36px)] font-semibold tracking-tight">
+              La misma interfaz, sin importar el modelo
+            </h2>
+          </div>
+        ) : (
+          <div className="pointer-events-none absolute left-0 right-0 top-16 z-10 mx-auto max-w-[720px] px-7 text-center">
+            <span className="font-mono text-[11px] uppercase tracking-wide text-subtle">meet lumi</span>
+            <h2 className="mt-2 text-[clamp(24px,3.4vw,36px)] font-semibold tracking-tight">
+              La misma interfaz, sin importar el modelo
+            </h2>
+          </div>
+        )}
 
         {!movil && (
           <div className="pointer-events-none absolute left-7 top-1/2 z-10 max-w-[300px] -translate-y-1/2">
@@ -162,7 +171,7 @@ export function Sobrevuelo() {
         )}
 
         <div
-          className="preserva-3d sin-perspectiva-origen absolute inset-0"
+          className={movil ? "preserva-3d sin-perspectiva-origen relative mt-10 h-[340px]" : "preserva-3d sin-perspectiva-origen absolute inset-0"}
           style={{ perspective: 820 }}
         >
           {/* .camara — solo translateX. Nunca rotateZ (trampa 2). */}
