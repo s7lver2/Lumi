@@ -281,21 +281,22 @@ export function Sobrevuelo() {
           <div className="preserva-3d absolute inset-0" style={{ transform: `translateX(${deriva}px)` }}>
             {/* .suelo — lleva la máscara del horizonte (trampa 1). Sin
                 cuadrícula: solo un plano tenue que se desvanece hacia el
-                horizonte con la misma máscara radial de antes. */}
+                horizonte con la misma máscara radial de antes.
+                El div es mucho más grande que el viewport (inset -60%) y la
+                máscara usa píxeles fijos, no porcentaje de su propia caja:
+                así el borde recto del rectángulo transformado en 3D —la
+                costura que se veía como líneas diagonales— queda muy fuera
+                del frustum de la cámara, en vez de solo intentar que se
+                desvanezca justo a tiempo. */}
             <div
-              className="absolute inset-0"
+              className="absolute"
               style={{
+                inset: "-60%",
                 transform: "translateY(92px) rotateX(75deg)",
                 transformOrigin: "50% 50%",
                 background: "rgba(232,232,230,.035)",
-                // La máscara termina en transparente del todo bastante antes
-                // del borde real del div (48% en vez de 85%): si el
-                // desvanecido llega justo al borde, el navegador deja una
-                // costura fina y brillante donde el rectángulo transformado
-                // en 3D encuentra su propio límite — visible como las líneas
-                // diagonales que se veían en el sobrevuelo.
-                maskImage: "radial-gradient(58% 46% at 50% 50%, black 0%, black 40%, transparent 68%, transparent 100%)",
-                WebkitMaskImage: "radial-gradient(58% 46% at 50% 50%, black 0%, black 40%, transparent 68%, transparent 100%)",
+                maskImage: "radial-gradient(900px 460px at 50% 50%, black 0%, black 35%, transparent 62%)",
+                WebkitMaskImage: "radial-gradient(900px 460px at 50% 50%, black 0%, black 35%, transparent 62%)",
                 opacity: opSuelo,
               }}
             />

@@ -73,6 +73,26 @@ const ICONOS_PRODUCTO: Record<string, React.ReactNode> = {
   ),
 };
 
+/** Una opción del cuestionario: solo el icono y su etiqueta, sin caja ni
+ *  borde. El icono vive en `subtle` en reposo y pasa a `fg` (blanco) al
+ *  pasar el ratón, con un levantamiento sutil — la selección es el propio
+ *  gesto de click, no un estado "elegido" que haya que confirmar aparte. */
+function IconoOpcion({ icono, etiqueta, onClick }: { icono: React.ReactNode; etiqueta: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="flex flex-col items-center gap-3 rounded-card py-5 text-subtle transition-all duration-200 hover:-translate-y-0.5 hover:text-fg"
+      style={{ transitionTimingFunction: "cubic-bezier(.22,1,.36,1)" }}
+      onClick={onClick}
+    >
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+        {icono}
+      </svg>
+      <span className="text-[12.5px]">{etiqueta}</span>
+    </button>
+  );
+}
+
 /** Botón "Descargar" que abre un cuestionario de dos preguntas —
  *  plataforma, luego producto, ambas solo con iconos — y al final enseña
  *  la descarga real correspondiente. Nunca ofrece una plataforma o un
@@ -131,7 +151,10 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
       </button>
 
       {abierto && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(5,7,10,.6)] px-5 backdrop-blur-sm" onClick={cerrar}>
+        <div
+          className="fixed inset-0 z-[60] flex items-start justify-center bg-[rgba(5,7,10,.72)] px-5 pt-[14vh] backdrop-blur-md"
+          onClick={cerrar}
+        >
           <div
             className="jg-reveal-up w-full max-w-[480px] rounded-card border border-border bg-panel text-left shadow-2xl"
             onClick={(e) => e.stopPropagation()}
@@ -152,39 +175,29 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
               </button>
             </div>
 
-            <div className="p-6">
+            <div className="p-8">
               {!plataforma && (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2">
                   {plataformas.map((plat) => (
-                    <button
+                    <IconoOpcion
                       key={plat}
-                      type="button"
-                      className="jg-micro flex flex-col items-center gap-2.5 rounded-card border border-border py-6 hover:border-subtle hover:bg-elevated"
+                      icono={ICONOS_PLATAFORMA[plat]}
+                      etiqueta={ETIQUETAS_PLATAFORMA[plat] ?? plat}
                       onClick={() => setPlataforma(plat)}
-                    >
-                      <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
-                        {ICONOS_PLATAFORMA[plat]}
-                      </svg>
-                      <span className="text-[12.5px] text-muted">{ETIQUETAS_PLATAFORMA[plat] ?? plat}</span>
-                    </button>
+                    />
                   ))}
                 </div>
               )}
 
               {plataforma && !producto && (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2">
                   {productosDeLaPlataforma.map((p) => (
-                    <button
+                    <IconoOpcion
                       key={p.producto}
-                      type="button"
-                      className="jg-micro flex flex-col items-center gap-2.5 rounded-card border border-border py-6 hover:border-subtle hover:bg-elevated"
+                      icono={ICONOS_PRODUCTO[p.producto]}
+                      etiqueta={NOMBRES[p.producto] ?? p.producto}
                       onClick={() => setProducto(p.producto)}
-                    >
-                      <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
-                        {ICONOS_PRODUCTO[p.producto]}
-                      </svg>
-                      <span className="text-[12.5px] text-muted">{NOMBRES[p.producto] ?? p.producto}</span>
-                    </button>
+                    />
                   ))}
                 </div>
               )}
