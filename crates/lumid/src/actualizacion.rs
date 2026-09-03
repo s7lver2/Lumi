@@ -334,7 +334,18 @@ pub async fn aplicar(app: &App, version_objetivo: Option<&str>) -> Result<(), Ap
     }
 
     // 4. Copia de seguridad de la base antes de tocar nada en disco.
-    let ruta_backup = app.dir.join(format!("lumi.db.bak-{version_instalada}"));
+    //
+    // El nombre lleva TAMBIÉN el momento del intento, no solo la versión
+    // instalada: `VACUUM INTO` de SQLite exige que el fichero destino no
+    // exista ("output file already exists"), y un reintento después de un
+    // fallo (cola atascada, hash que no coincidía, lo que sea) vuelve a
+    // pasar por aquí con la MISMA `version_instalada` — nada la cambió, la
+    // actualización nunca llegó a aplicarse. Sin el momento en el nombre,
+    // ese segundo intento chocaba contra el backup del primero y la
+    // actualización quedaba bloqueada para siempre, sin que nada la
+    // limpiara ni dijera por qué: el propio backup de seguridad era lo que
+    // impedía reintentar.
+    let ruta_backup = app.dir.join(format!("lumi.db.bak-{version_instalada}-{}", crate::routes::access::now()));
     app.store
         .conn()
         .execute("VACUUM INTO ?1", [ruta_backup.to_string_lossy().as_ref()])
