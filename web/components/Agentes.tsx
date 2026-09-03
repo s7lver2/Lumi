@@ -172,7 +172,7 @@ function TarjetaAgente({ a }: { a: Agente }) {
         <h3 className="text-[18px] font-semibold text-fg">{a.nombre}</h3>
         <span
           className={`shrink-0 rounded-[5px] px-1.5 py-0.5 font-mono text-[10px] ${
-            a.tipo === "filtra" ? "bg-draw/15 text-draw-fg" : "bg-elevated text-subtle"
+            a.tipo === "filtra" ? "border border-fg/25 text-fg" : "bg-elevated text-subtle"
           }`}
         >
           {a.tipo}
@@ -207,7 +207,7 @@ function TarjetaAgente({ a }: { a: Agente }) {
           <span className="text-fg tabular-nums">{a.umbral_confianza.toFixed(2)}</span>
         </div>
         <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-elevated">
-          <div className="h-full rounded-full bg-draw" style={{ width: `${a.umbral_confianza * 100}%` }} />
+          <div className="h-full rounded-full bg-fg" style={{ width: `${a.umbral_confianza * 100}%` }} />
         </div>
       </div>
     </div>

@@ -600,7 +600,7 @@ function PantallaControl() {
       <div className="mt-3 flex-1 rounded-card border border-border bg-elevated p-3">
         <div className="font-mono text-[10px] uppercase tracking-wide text-subtle">gpu</div>
         <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-panel">
-          <div className="h-full w-[62%] bg-draw" />
+          <div className="h-full w-[62%] bg-fg" />
         </div>
         <div className="mt-1.5 font-mono text-[10.5px] text-subtle">carga en uso — pendiente de medir</div>
       </div>

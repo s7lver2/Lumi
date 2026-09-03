@@ -39,7 +39,7 @@ export function Nav() {
         scrolled ? "border-border bg-bg/85 shadow-[0_1px_24px_rgba(0,0,0,.35)]" : "border-border/35 bg-bg/30"
       }`}
     >
-      <div className="absolute inset-x-0 top-0 h-px bg-draw" style={{ width: `${progreso}%`, transition: "width .1s linear" }} />
+      <div className="absolute inset-x-0 top-0 h-px bg-fg" style={{ width: `${progreso}%`, transition: "width .1s linear" }} />
 
       <a href="/" className="flex items-center gap-2 text-[13px] font-medium tracking-tight">
         <span className="text-accent">✦</span> Lumi Station

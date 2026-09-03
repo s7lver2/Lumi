@@ -4,9 +4,14 @@ import { niveles } from "../lib/niveles";
 import { usarRevelado } from "./usarRevelado";
 import { usarConteo } from "./usarConteo";
 
+// Nada de azul/naranja como acento decorativo: esos tokens (draw,
+// warning-fg) significan estado real en el resto de la app — "dibujo en
+// mapa, en curso" y "atención, sellado, cifrado" — no "este es el nivel
+// pro". La escalera se distingue en monocromo, subiendo de peso visual de
+// mini a vision, que además encaja con "más, no mejor".
 const COLOR: Record<string, string> = {
-  mini: "#378add", // draw
-  pro: "#efb968", // warning-fg
+  mini: "#9a9a95", // muted
+  pro: "#e8e8e6", // fg
   vision: "#f2f3f5", // accent
 };
 
