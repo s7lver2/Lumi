@@ -27,33 +27,45 @@ pub async fn paquete(app: &crate::App, ficha: &Ficha, raiz: &Path) -> Result<usi
     // Las filas primero: si el proceso muere entre esto y Qdrant, la
     // reanudación vuelve a subir los vectores de este asset y no pasa nada.
     // Al revés —vectores sin fila— dejaría puntos que no se pueden atribuir.
-    let mut ids = Vec::with_capacity(filas.len());
-    {
-        // Una sola transacción para todo el paquete: antes cada INSERT era
-        // su propio commit/fsync, y mientras duraba (miles de filas en un
-        // índice grande) el mutex único de `Store::conn()` dejaba a TODO
-        // el daemon con la base de datos bloqueada — mismo síntoma que el
-        // freeze de hoy, aquí disparado por instalar un índice.
-        let mut c = app.store.conn();
-        let tx = c.transaction()?;
-        for (ruta, lat, lng, quadkey, fuente) in &filas {
-            let abs = raiz.join("imagenes").join(ruta);
-            tx.execute(
-                "INSERT INTO reference_images (paquete, ruta, lat, lng, quadkey, fuente)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                rusqlite::params![
-                    &ficha.paquete,
-                    abs.to_string_lossy(),
-                    lat,
-                    lng,
-                    quadkey,
-                    fuente
-                ],
-            )?;
-            ids.push(tx.last_insert_rowid());
+    //
+    // Un índice real trae miles de filas. Meterlas TODAS en una única
+    // transacción síncrona, dentro de esta misma tarea async, ocupaba un
+    // hilo de tokio entero (`worker_threads = 2` en main.rs) sin ceder el
+    // control ni una vez durante todo el volcado — y `Store::conn()` es un
+    // único `std::sync::Mutex` que pide CUALQUIER ruta, empezando por el
+    // login. En cuanto una segunda petición necesitaba ese mismo mutex,
+    // bloqueaba el segundo hilo también: con los dos hilos atascados, el
+    // daemon entero dejaba de responder — el freeze real reportado al
+    // instalar un índice grande, con la CPU en reposo (el hilo bloqueado
+    // en el mutex no gasta CPU, solo espera). Dos cambios: el volcado corre
+    // en el pool de `spawn_blocking` (mismo patrón que descomprimir el zip,
+    // ver `paquete::traer_y_abrir`) para no ocupar un hilo async, y la
+    // transacción se trocea por bloques — el mutex se suelta y se retoma
+    // entre bloques, así que login y el resto de la app pueden colarse
+    // entre medias en vez de esperar al paquete entero de una sentada.
+    const FILAS_POR_BLOQUE: usize = 2000;
+    let app_store = app.store.clone();
+    let paquete_nombre = ficha.paquete.clone();
+    let raiz_owned = raiz.to_path_buf();
+    let ids: Vec<i64> = tokio::task::spawn_blocking(move || -> Result<Vec<i64>> {
+        let mut ids = Vec::with_capacity(filas.len());
+        for bloque in filas.chunks(FILAS_POR_BLOQUE) {
+            let mut c = app_store.conn();
+            let tx = c.transaction()?;
+            for (ruta, lat, lng, quadkey, fuente) in bloque {
+                let abs = raiz_owned.join("imagenes").join(ruta);
+                tx.execute(
+                    "INSERT INTO reference_images (paquete, ruta, lat, lng, quadkey, fuente)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    rusqlite::params![&paquete_nombre, abs.to_string_lossy(), lat, lng, quadkey, fuente],
+                )?;
+                ids.push(tx.last_insert_rowid());
+            }
+            tx.commit()?;
         }
-        tx.commit()?;
-    }
+        Ok(ids)
+    })
+    .await??;
 
     // Una colección por capa. Antes se tomaba `capas.first()` y las demás se
     // perdían en silencio, que con un solo modelo no se notaba y con ocho
