@@ -167,6 +167,25 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(telemetry::muestrear_historial(app.clone()));
     tokio::spawn(actualizacion::tick(app.clone()));
 
+    // Latido de diagnostico temporal: si el runtime entero se queda sin
+    // repartir tiempo a NINGUNA tarea (el bloqueo que se esta cazando),
+    // esto deja de imprimir tambien. Si sigue imprimiendo cada 2s mientras
+    // una instalacion se ve "colgada" en el cliente, el runtime esta sano
+    // y el problema esta acotado a la tarea de esa instalacion en
+    // concreto, no al daemon entero. ponytail: quitar una vez cazado.
+    tokio::spawn(async {
+        let mut tick: u64 = 0;
+        let mut anterior = std::time::Instant::now();
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            let ahora = std::time::Instant::now();
+            let retraso = ahora.duration_since(anterior).as_secs_f64() - 2.0;
+            tracing::info!("latido #{tick} (retraso frente a los 2s esperados: {retraso:.3}s)");
+            anterior = ahora;
+            tick += 1;
+        }
+    });
+
     tokio::spawn({
         let app = app.clone();
         async move {
