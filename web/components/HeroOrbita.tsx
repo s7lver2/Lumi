@@ -66,6 +66,16 @@ function orbitPosAt(sat: Pick<Satelite, "orbitR" | "incl" | "nodo">, a: number) 
   return { x: x2, y: y1, z: z2 };
 }
 
+/** ease-out cúbica — timing no lineal para el pulso de "bloqueo de escaneo":
+ *  arranca rápido y se asienta, en vez del lerp plano que había antes. */
+function easeOutCubic(x: number) {
+  return 1 - Math.pow(1 - x, 3);
+}
+
+function rad_outer(scale: number, camZ: number) {
+  return scale / (camZ - R * 0.02);
+}
+
 function project(p: { x: number; y: number; z: number }, rotY: number, tiltX: number, camZ: number, scale: number, cx: number, cy: number) {
   let x = p.x * Math.cos(rotY) - p.z * Math.sin(rotY);
   let z = p.x * Math.sin(rotY) + p.z * Math.cos(rotY);
@@ -148,14 +158,36 @@ export function HeroOrbita() {
       const rotY = t * 0.07;
       const tiltX = 0.3 + Math.sin(t * 0.12) * 0.04;
 
+      // Capa de fondo casi imperceptible: un anillo muy amplio y muy tenue
+      // que gira a una fracción de la velocidad del planeta — da la lectura
+      // de profundidad (algo lejos, algo cerca) sin añadir polvo estelar
+      // ni paralaje decorativo nuevo, solo una segunda velocidad angular.
+      ctx!.save();
+      ctx!.translate(cx, cy);
+      ctx!.rotate(rotY * 0.22);
+      ctx!.beginPath();
+      ctx!.ellipse(0, 0, rad_outer(scale, camZ) * 1.62, rad_outer(scale, camZ) * 0.58, 0, 0, Math.PI * 2);
+      ctx!.strokeStyle = "rgba(160,176,196,.05)";
+      ctx!.lineWidth = 1;
+      ctx!.stroke();
+      ctx!.restore();
+
       const rad = scale / (camZ - R * 0.02);
-      const grad = ctx!.createRadialGradient(cx - rad * 0.26, cy - rad * 0.3, rad * 0.55, cx, cy, rad * 1.16);
+      // Iluminación del planeta: halo frontal más marcado + sombra de
+      // terminador tenue en el borde opuesto para dar volumen real.
+      const grad = ctx!.createRadialGradient(cx - rad * 0.3, cy - rad * 0.34, rad * 0.5, cx, cy, rad * 1.16);
       grad.addColorStop(0, "rgba(255,255,255,0)");
-      grad.addColorStop(0.78, "rgba(255,255,255,0)");
-      grad.addColorStop(0.92, "rgba(200,214,230,0.10)");
+      grad.addColorStop(0.72, "rgba(255,255,255,0)");
+      grad.addColorStop(0.9, "rgba(206,220,236,0.13)");
       grad.addColorStop(1, "rgba(120,150,180,0)");
       ctx!.fillStyle = grad;
       ctx!.beginPath(); ctx!.arc(cx, cy, rad * 1.18, 0, Math.PI * 2); ctx!.fill();
+
+      const terminador = ctx!.createRadialGradient(cx + rad * 0.4, cy + rad * 0.42, rad * 0.2, cx, cy, rad * 1.02);
+      terminador.addColorStop(0, "rgba(5,7,10,.32)");
+      terminador.addColorStop(1, "rgba(5,7,10,0)");
+      ctx!.fillStyle = terminador;
+      ctx!.beginPath(); ctx!.arc(cx, cy, rad * 1.02, 0, Math.PI * 2); ctx!.fill();
 
       ctx!.lineWidth = 1;
       GRATICULE.forEach((ring) => {
@@ -205,8 +237,9 @@ export function HeroOrbita() {
         } else if (sat.estado === "scanning") {
           sat.pos = sat.to!;
           const p = Math.min(1, (t - sat.t0) / 0.9);
+          const pe = easeOutCubic(p); // bloqueo: rápido al entrar, se asienta al final
           const objetivo = esfera[sat.targetIdx];
-          const scanR = 0.34;
+          const scanR = 0.1 + pe * 0.24; // el radio de barrido crece con la curva, no de golpe
           for (let i = 0; i < esfera.length; i++) {
             const sp = esfera[i];
             const d = Math.hypot(sp.x - objetivo.x, sp.y - objetivo.y, sp.z - objetivo.z);
@@ -313,12 +346,14 @@ export function HeroOrbita() {
   return (
     <div ref={seccionRef} className="relative h-full w-full">
       <canvas ref={canvasRef} className="absolute inset-0" />
-      <div className="pointer-events-none absolute left-6 top-20 font-mono text-[10.5px] leading-relaxed text-subtle">
-        {barrido && (
-          <>ÚLTIMO BARRIDO <span className="text-muted">{barrido.lat} {barrido.lng}</span><br /></>
-        )}
-        ESTADO <span className="text-muted">{estadoTexto}</span>
-      </div>
+      {!movil && (
+        <div className="pointer-events-none absolute left-6 top-20 font-mono text-[10.5px] leading-relaxed text-subtle">
+          {barrido && (
+            <>ÚLTIMO BARRIDO <span className="text-muted">{barrido.lat} {barrido.lng}</span><br /></>
+          )}
+          ESTADO <span className="text-muted">{estadoTexto}</span>
+        </div>
+      )}
     </div>
   );
 }

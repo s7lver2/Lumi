@@ -18,7 +18,31 @@
 @keyframes jg-core-pulse { 0%,100% { opacity:.45 } 50% { opacity:1 } }
 @keyframes jg-mark-spin { to { transform: rotate(360deg) } }
 
+/* Entrada orquestada del hero: opacidad + traslación + un desenfoque leve
+   que se resuelve, más marcada que jg-fade-rise para el bloque de texto
+   que abre la página. */
+@keyframes jg-hero-in {
+  from { opacity:0; transform: translateY(28px); filter: blur(6px); }
+  to { opacity:1; transform:none; filter: blur(0); }
+}
+
+/* Revelado de secciones al hacer scroll — mismo lenguaje que jg-fade-rise
+   pero con algo más de recorrido, pensado para bloques enteros de sección. */
+@keyframes jg-reveal-up {
+  from { opacity:0; transform: translateY(22px); }
+  to { opacity:1; transform:none; }
+}
+
 .jg-fade-rise { animation: jg-fade-rise .7s cubic-bezier(.16,1,.3,1) both; }
+.jg-hero-in { animation: jg-hero-in .9s cubic-bezier(.16,1,.3,1) both; }
+.jg-reveal-up { animation: jg-reveal-up .8s cubic-bezier(.16,1,.3,1) both; }
+
+/* Micro-interacciones: transición corta ease-out-expo para hover/press en
+   botones, enlaces de nav y tarjetas. Sin rebote, sin escalas agresivas. */
+.jg-micro { transition: border-color .18s cubic-bezier(.22,1,.36,1), background-color .18s cubic-bezier(.22,1,.36,1), color .18s cubic-bezier(.22,1,.36,1), transform .18s cubic-bezier(.22,1,.36,1), opacity .18s cubic-bezier(.22,1,.36,1); }
+.jg-micro-lift:hover { transform: translateY(-2px); }
+.jg-micro-scale:hover { transform: scale(1.015); }
+.jg-micro-scale:active { transform: scale(0.985); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration:.001ms !important; transition-duration:.001ms !important; }
