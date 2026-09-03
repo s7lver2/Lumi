@@ -1,3 +1,7 @@
+import { feature } from "topojson-client";
+import type { Topology, GeometryCollection } from "topojson-specification";
+import type { MultiPolygon } from "geojson";
+import landTopo from "world-atlas/land-110m.json";
 import { cobertura } from "../lib/catalogo";
 import { RevelaSeccion } from "./RevelaSeccion";
 
@@ -6,10 +10,11 @@ import { RevelaSeccion } from "./RevelaSeccion";
  *  responde, la sección lo dice explícitamente; nunca un cero fabricado ni
  *  un mapa vacío en silencio.
  *
- *  ponytail: el concepto pintaba la silueta real de los continentes con un
- *  bitmap aparte que no forma parte de esta tanda; aquí el fondo es un
- *  graticulo equirectangular (meridianos/paralelos), puro adorno de
- *  navegación, no dato — las balizas sí son datos reales. */
+ *  La silueta de los continentes es geografía real (Natural Earth 110m vía
+ *  world-atlas), no un bitmap aparte ni un trazado inventado a mano: se
+ *  recorre el mismo `proyectar()` que ya posiciona las balizas, así que
+ *  costa y balizas comparten exactamente la misma proyección — nunca
+ *  podrían desalinearse entre sí. */
 
 function quadkeyATile(quadkey: string) {
   let x = 0, y = 0;
@@ -40,8 +45,40 @@ function proyectar(lon: number, lat: number, w: number, h: number) {
 
 const W = 960, H = 460;
 
+/** El anillo de un polígono, como una `M x,y L x,y … Z` de SVG — mismo
+ *  proyector que las balizas, así que comparten exactamente el mismo
+ *  mapeo lon/lat → píxel. */
+function anilloAPath(anillo: [number, number][]): string {
+  return anillo
+    .map(([lon, lat], i) => {
+      const { x, y } = proyectar(lon, lat, W, H);
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ") + "Z";
+}
+
+/** La silueta completa de los continentes (Natural Earth 110m), como un
+ *  único `d` de SVG — se computa en el servidor una sola vez por
+ *  renderizado, nunca viaja al cliente como JS. */
+function siluetaContinentes(): string {
+  const topologia = landTopo as unknown as Topology<{ land: GeometryCollection }>;
+  const geometria = feature(topologia, topologia.objects.land) as unknown as {
+    features: { geometry: MultiPolygon }[];
+  };
+  const partes: string[] = [];
+  for (const f of geometria.features) {
+    for (const poligono of f.geometry.coordinates) {
+      for (const anillo of poligono) {
+        partes.push(anilloAPath(anillo as [number, number][]));
+      }
+    }
+  }
+  return partes.join(" ");
+}
+
 export async function Cobertura() {
   const resumen = await cobertura();
+  const costa = siluetaContinentes();
 
   return (
     <section id="cobertura" className="mx-auto max-w-[1180px] px-7 py-28">
@@ -58,6 +95,7 @@ export async function Cobertura() {
         <div className="jg-micro mt-10 overflow-hidden rounded-card border border-border bg-panel hover:border-subtle">
           <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Mapa de cobertura">
             <rect width={W} height={H} fill="#101216" />
+            <path d={costa} fill="rgba(232,232,230,.06)" stroke="rgba(232,232,230,.14)" strokeWidth={0.75} />
             {Array.from({ length: 12 }).map((_, i) => (
               <line key={`m${i}`} x1={(i / 12) * W} y1={0} x2={(i / 12) * W} y2={H} stroke="rgba(232,232,230,.06)" />
             ))}

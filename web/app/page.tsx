@@ -4,6 +4,7 @@ import { Escalera } from "../components/Escalera";
 import { VideoDemo } from "../components/VideoDemo";
 import { Agentes } from "../components/Agentes";
 import { Cobertura } from "../components/Cobertura";
+import { SeparadorSeccion } from "../components/SeparadorSeccion";
 import { SelectorDescarga } from "../components/SelectorDescarga";
 import { PalabraRotativa } from "../components/PalabraRotativa";
 import { productosDescargables } from "../lib/version";
@@ -33,9 +34,8 @@ export default function Home() {
             className="jg-hero-in mx-auto mt-6 max-w-[48ch] leading-relaxed text-muted"
             style={{ animationDelay: ".16s" }}
           >
-            Lumi encadena varios verificadores geométricos que compiten por acercarse
-            más al punto real — no es un modelo mejor, es la competencia entre varios.
-            Autoalojado: tus imágenes y tus GPUs no salen de tu servidor.
+            Lumi es una herramienta forense pensada para la deteccion, reconocimiento
+            y extraccion de informacion de imagenes. Autohosteada y completamente gratis
           </p>
 
           <div className="jg-hero-in mt-8 flex flex-wrap items-start justify-center gap-3" style={{ animationDelay: ".24s" }}>
@@ -55,18 +55,26 @@ export default function Home() {
           </div>
 
           <p className="jg-hero-in mt-6 font-mono text-[11px] text-subtle" style={{ animationDelay: ".32s" }}>
-            se autoaloja en tu propio servidor — sin cuentas, sin nube de terceros
+            local hosted — sin cuentas
           </p>
         </div>
       </section>
 
       <Sobrevuelo />
 
+      <SeparadorSeccion />
+
       <Escalera />
+
+      <SeparadorSeccion />
 
       <VideoDemo />
 
+      <SeparadorSeccion />
+
       <Agentes />
+
+      <SeparadorSeccion />
 
       <Cobertura />
     </main>
