@@ -36,11 +36,25 @@ def _construir(verificador, pesos):
     es el único que este trabajador sabe montar hoy: necesita además el
     backbone XFeat (de `verlab/accelerated_features`), que la propia función
     de fábrica de `romatch` trae por `torch.hub` la primera vez que se usa
-    (y cachea después) — no hace falta vendorizarlo aquí."""
+    (y cachea después) — no hace falta vendorizarlo aquí.
+
+    `tiny_roma_v1_outdoor(xfeat=None)` deja que XFeat lo traiga ELLA por
+    dentro con `torch.hub.load(..., trust_repo="check")` -- que sin una
+    terminal donde contestar "sí, confío en este repo" no pregunta, revienta
+    con `EOFError: EOF when reading a line` en el instante (stdin ya viene
+    cerrado, `verificar::afinar` lo cierra nada más mandar el trabajo). Por
+    eso una verificación "funcionaba" en un segundo sin verificar nada: el
+    proceso moría antes de tocar una sola imagen. Cargar XFeat aquí con
+    `trust_repo=True` explícito y pasarlo ya resuelto evita que `romatch`
+    llegue a hacer esa llamada sin confirmar."""
     import romatch
+    import torch
 
     if verificador == "tiny-roma":
-        return romatch.tiny_roma_v1_outdoor(device=DISPOSITIVO, weights=pesos)
+        xfeat = torch.hub.load(
+            "verlab/accelerated_features", "XFeat", pretrained=True, top_k=4096, trust_repo=True,
+        ).net
+        return romatch.tiny_roma_v1_outdoor(device=DISPOSITIVO, weights=pesos, xfeat=xfeat)
     raise ValueError(
         f"{verificador} no tiene una arquitectura conocida para reconstruir su state_dict "
         "-- hace falta añadir su caso en _construir(), igual que tiny-roma"
