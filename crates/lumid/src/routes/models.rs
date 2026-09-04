@@ -62,21 +62,29 @@ fn resolver_items(app: &App, ids: &[String]) -> Vec<ItemDescarga> {
                 id: m.id.clone(), fichero_url: m.fichero_url.clone(),
                 destino: format!("{models_dir}/{}/pesos.pth", m.id),
                 licencia_texto: m.licencia_texto.clone(), sha256: m.sha256.clone(),
-                gestion_propia: false,
+                gestion_propia: false, hf_repo: String::new(),
             });
         } else if let Some(v) = verificadores.iter().find(|v| &v.id == id) {
             fuera.push(ItemDescarga {
                 id: v.id.clone(), fichero_url: v.fichero_url.clone(),
                 destino: format!("{models_dir}/{}/pesos.pth", v.id),
                 licencia_texto: v.licencia_texto.clone(), sha256: v.sha256.clone(),
-                gestion_propia: false,
+                gestion_propia: false, hf_repo: String::new(),
             });
         } else if let Some(mo) = motores.iter().find(|mo| &mo.id == id) {
+            // Un motor con `hf_repo` cae como el repositorio entero en su
+            // propio directorio, no como un fichero suelto — `destino` deja
+            // de ser "la ruta de los pesos" y pasa a ser "dónde vive el
+            // repo".
+            let destino = if mo.hf_repo.is_empty() {
+                format!("{models_dir}/{}/model.safetensors", mo.id)
+            } else {
+                format!("{models_dir}/{}", mo.id)
+            };
             fuera.push(ItemDescarga {
-                id: mo.id.clone(), fichero_url: mo.fichero_url.clone(),
-                destino: format!("{models_dir}/{}/model.safetensors", mo.id),
+                id: mo.id.clone(), fichero_url: mo.fichero_url.clone(), destino,
                 licencia_texto: mo.licencia_texto.clone(), sha256: String::new(),
-                gestion_propia: mo.gestion_propia,
+                gestion_propia: mo.gestion_propia, hf_repo: mo.hf_repo.clone(),
             });
         } else if let Some(g) = recursos_geo.iter().find(|g| &g.id == id) {
             let nombre = if g.id == "paises" { "paises.json" } else { "koppen.bin" };
@@ -84,7 +92,7 @@ fn resolver_items(app: &App, ids: &[String]) -> Vec<ItemDescarga> {
                 id: g.id.clone(), fichero_url: g.fichero_url.clone(),
                 destino: crate::assets::ruta("registros/geo").join(nombre).to_string_lossy().into_owned(),
                 licencia_texto: g.licencia_texto.clone(), sha256: String::new(),
-                gestion_propia: false,
+                gestion_propia: false, hf_repo: String::new(),
             });
         }
     }
@@ -109,7 +117,7 @@ pub async fn download(
     }
 
     let items = resolver_items(&app, &req.items);
-    if items.iter().any(|i| i.fichero_url.is_empty() && !i.gestion_propia) {
+    if items.iter().any(|i| i.fichero_url.is_empty() && i.hf_repo.is_empty() && !i.gestion_propia) {
         return Err((StatusCode::BAD_REQUEST, "alguno de estos pesos no tiene URL de descarga: modo guía, no se puede pedir aquí".to_string()));
     }
 

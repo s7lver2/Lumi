@@ -79,6 +79,17 @@ pub struct Motor {
     /// escriba la licencia — es un caso, no una excepción silenciosa.
     #[serde(default)]
     pub gestion_propia: bool,
+    /// Un VLM/motor de profundidad de HuggingFace Transformers no es UN
+    /// fichero de pesos: es un repositorio entero (config, tokenizer,
+    /// preprocesador, uno o varios .safetensors) que `from_pretrained` espera
+    /// encontrar ya en disco. `fichero_url` no puede representar eso — es
+    /// justo el hueco que dejaba `qwen3-vl` con `fichero_url` vacío y sin
+    /// forma real de instalarse. Vacío significa lo de siempre: no se puede
+    /// bajar solo. Con esto puesto, la tarea de descarga usa
+    /// `huggingface_hub.snapshot_download` en vez de una petición HTTP a una
+    /// URL suelta.
+    #[serde(default)]
+    pub hf_repo: String,
 }
 
 pub fn cargar_motores(dir: &Path) -> Vec<Motor> {

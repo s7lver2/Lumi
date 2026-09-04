@@ -501,6 +501,11 @@ pub struct ItemDescarga {
     pub licencia_texto: String,
     pub sha256: String,
     pub gestion_propia: bool,
+    /// No vacío para un motor de HuggingFace Transformers (p. ej. Qwen3-VL):
+    /// `destino` pasa a ser el DIRECTORIO donde cae el repositorio entero
+    /// (`huggingface_hub.snapshot_download`), no la ruta de un solo fichero.
+    #[serde(default)]
+    pub hf_repo: String,
 }
 
 /// El ticket se devuelve UNA sola vez. El servidor guarda su hash.

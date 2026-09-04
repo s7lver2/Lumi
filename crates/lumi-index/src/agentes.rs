@@ -320,7 +320,7 @@ mod tests {
         crate::registro::Motor {
             id: id.into(), nombre: id.into(), clase: clase.into(), licencia: "Apache-2.0".into(),
             fichero_url: String::new(), licencia_url: String::new(), licencia_texto: String::new(),
-            puerta: None, gestion_propia: false,
+            puerta: None, gestion_propia: false, hf_repo: String::new(),
         }
     }
 

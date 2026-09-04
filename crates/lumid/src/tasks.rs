@@ -55,20 +55,22 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec
             "/bin/sh".into(),
             vec![
                 "-c".into(),
-                // Cuatro comprobaciones independientes, no una: cada paquete
+                // Seis comprobaciones independientes, no una: cada paquete
                 // (`romatch` para tiny-roma/roma, `safetensors` para MegaLoc,
-                // `lightglue` para lightglue-aliked) es una incorporación
-                // posterior a torch/torchvision, y un servidor que ya tenía
-                // el runtime instalado antes de que existiera un paquete
-                // nuevo se queda con el "nada que hacer" de siempre — con
-                // una sola comprobación conjunta, ese servidor nunca
-                // instalaría el que le falta, y "Reinstalar runtime" desde
-                // el panel es justamente la única vía de instalación que no
-                // exige tocar el servidor a mano por SSH. Cada bloque solo
-                // actúa si a SU paquete le falta algo — instalar uno no
-                // vuelve a tocar los demás ya instalados. `lightglue` no
-                // está en PyPI bajo ese nombre (el README del propio proyecto
-                // lo confirma): se instala directo desde su repo de GitHub.
+                // `lightglue` para lightglue-aliked, `transformers` para los
+                // motores vlm/profundidad de los agentes, `paddleocr` para
+                // su motor ocr) es una incorporación posterior a
+                // torch/torchvision, y un servidor que ya tenía el runtime
+                // instalado antes de que existiera un paquete nuevo se queda
+                // con el "nada que hacer" de siempre — con una sola
+                // comprobación conjunta, ese servidor nunca instalaría el
+                // que le falta, y "Reinstalar runtime" desde el panel es
+                // justamente la única vía de instalación que no exige tocar
+                // el servidor a mano por SSH. Cada bloque solo actúa si a SU
+                // paquete le falta algo — instalar uno no vuelve a tocar los
+                // demás ya instalados. `lightglue` no está en PyPI bajo ese
+                // nombre (el README del propio proyecto lo confirma): se
+                // instala directo desde su repo de GitHub.
                 //
                 // `uv` reemplaza a `pip`/`venv` aquí (resuelve e instala
                 // ambos en paralelo, sin la vuelta de red por dependencia que
@@ -108,6 +110,16 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec
                  else \
                    UV_HTTP_TIMEOUT=60 \"$UV\" pip install --python \"$1/bin/python3\" \
                    git+https://github.com/cvg/LightGlue.git; \
+                 fi; \
+                 if \"$1/bin/python3\" -c 'import transformers' 2>/dev/null; then \
+                   echo 'transformers ya instalado, nada que hacer'; \
+                 else \
+                   UV_HTTP_TIMEOUT=60 \"$UV\" pip install --python \"$1/bin/python3\" transformers; \
+                 fi; \
+                 if \"$1/bin/python3\" -c 'import paddleocr' 2>/dev/null; then \
+                   echo 'paddleocr ya instalado, nada que hacer'; \
+                 else \
+                   UV_HTTP_TIMEOUT=60 \"$UV\" pip install --python \"$1/bin/python3\" paddleocr; \
                  fi"
                     .into(),
                 "sh".into(),

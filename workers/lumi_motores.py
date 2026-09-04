@@ -14,15 +14,19 @@ producto (ver la spec del 5b: si no permite uso comercial, no entra):
     Las variantes Base, Large y Giant son CC-BY-NC-4.0 y NO se usan. Es el
     mismo caso que MASt3R en el 5b: mejor modelo, licencia incompatible.
 
-La comprobacion de hash y de LICENCIA.txt es la de `lumi_pesos`, sin excepcion:
-una regla que solo se aplica al peso incomodo se olvida el dia que entra el
-siguiente.
+La comprobacion de LICENCIA.txt es la de `lumi_pesos`, sin excepcion: una
+regla que solo se aplica al peso incomodo se olvida el dia que entra el
+siguiente. Qwen3-VL y Depth Anything V2 Small son un repositorio ENTERO de
+HuggingFace, no un fichero sha256'd a mano (se instalan con
+huggingface_hub.snapshot_download, ver workers/lumi_bajar.py) -- la
+integridad de cada fichero la verifica el propio hub, no un sha256 propio de
+este proyecto.
 """
 import json
 import os
 import re
 
-from lumi_pesos import _licencia, _verificar
+from lumi_pesos import _licencia
 
 # Rangos Unicode por escritura, en el orden en que se prueban. Se resuelve con
 # aritmetica y no con un modelo: que la letra pi sea griega no es una prediccion.
@@ -46,17 +50,6 @@ def _directorio(pesos_dir, nombre):
     return d
 
 
-def _hash_esperado(pesos_dir, nombre):
-    """El sha256 de un motor vive junto a sus pesos, en `sha256.txt`, y no en
-    el registro de agentes: un motor lo comparten varios agentes y repetir el
-    hash en doce ficheros es doce sitios donde desincronizarse."""
-    ruta = os.path.join(pesos_dir, nombre, "sha256.txt")
-    if not os.path.exists(ruta):
-        return ""
-    with open(ruta) as f:
-        return f.read().strip()
-
-
 class Vlm(object):
     """Qwen3-VL. Contesta eligiendo entre las etiquetas del agente.
 
@@ -70,10 +63,14 @@ class Vlm(object):
         import torch
         from transformers import AutoModelForImageTextToText, AutoProcessor
 
+        # Sin sha256 propio que comprobar: Qwen3-VL se instala entero con
+        # huggingface_hub.snapshot_download (ver workers/lumi_bajar.py), que
+        # verifica cada fichero por su cuenta (ETags) -- ese chequeo con
+        # _verificar() era el de un unico .safetensors sha256'd a mano, y
+        # aqui ademas el checkpoint real viene partido en dos fragmentos
+        # (model-00001-of-00002.safetensors, ...00002...), asi que ni
+        # siquiera existiria el fichero que ese chequeo esperaba.
         d = _directorio(pesos_dir, "qwen3-vl")
-        pesos = os.path.join(d, "model.safetensors")
-        if os.path.exists(pesos):
-            _verificar(pesos, _hash_esperado(pesos_dir, "qwen3-vl"))
         self.dispositivo = dispositivo
         self.proc = AutoProcessor.from_pretrained(d)
         self.red = AutoModelForImageTextToText.from_pretrained(
@@ -174,10 +171,13 @@ class Profundidad(object):
         import torch
         from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 
+        # Mismo caso que Vlm.__init__: se instala entero con
+        # huggingface_hub.snapshot_download, que verifica cada fichero por
+        # su cuenta -- no hay un sha256.txt propio que este proyecto escriba
+        # para un motor de hf_repo, así que ese chequeo era el candidato
+        # perfecto para reventar con "el registro no trae sha256" en vez de
+        # cargar nada.
         d = _directorio(pesos_dir, "depth-anything-v2-small")
-        pesos = os.path.join(d, "model.safetensors")
-        if os.path.exists(pesos):
-            _verificar(pesos, _hash_esperado(pesos_dir, "depth-anything-v2-small"))
         self.dispositivo = dispositivo
         self.proc = AutoImageProcessor.from_pretrained(d)
         self.red = AutoModelForDepthEstimation.from_pretrained(d)

@@ -61,6 +61,24 @@ def _abrir(url):
     return opener.open(accion.group(1) + "?" + urllib.parse.urlencode(campos))
 
 
+def _snapshot(repo_id, destino, item_id):
+    """Un motor con `hf_repo` no es un fichero: es un repositorio entero de
+    HuggingFace (config, tokenizer, uno o varios .safetensors) que
+    `from_pretrained` espera encontrar ya en disco -- `descargar()` no sirve
+    porque no hay una sola URL que pedir. `snapshot_download` ya resuelve
+    paralelismo, reanudación e integridad por fichero (ETags) por su cuenta,
+    así que aquí no hay un sha256 propio que calcular ni verificar: la
+    garantía es la del propio hub, no la nuestra -- misma postura que ya
+    toma `gestion_propia` para PaddleOCR, solo que aquí SÍ hay que traer los
+    ficheros nosotros, no dejar que la librería los pida sola la primera vez
+    que se instancia."""
+    from huggingface_hub import snapshot_download
+
+    os.makedirs(destino, exist_ok=True)
+    print(f"      descargando repositorio de huggingface {repo_id}…", flush=True)
+    snapshot_download(repo_id=repo_id, local_dir=destino)
+
+
 def descargar(url, destino, item_id):
     os.makedirs(os.path.dirname(destino), exist_ok=True)
     with _abrir(url) as resp:
@@ -100,6 +118,14 @@ def main():
             with open(os.path.join(directorio, "LICENCIA.txt"), "w") as f:
                 f.write(item["licencia_texto"])
             print(f"      gestion propia: licencia escrita, la libreria trae sus pesos sola", flush=True)
+            continue
+
+        if item.get("hf_repo"):
+            destino_dir = item["destino"]
+            _snapshot(item["hf_repo"], destino_dir, item_id)
+            with open(os.path.join(destino_dir, "LICENCIA.txt"), "w") as f:
+                f.write(item["licencia_texto"])
+            print(f"      licencia escrita en {destino_dir}/LICENCIA.txt", flush=True)
             continue
 
         destino = item["destino"]
