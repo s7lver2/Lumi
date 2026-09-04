@@ -249,7 +249,8 @@ mod tests {
         let log = std::env::temp_dir().join(format!("lumi-w-{}.log", std::process::id()));
         let (tx_ev, mut rx_ev) = mpsc::unbounded_channel();
         let registro = crate::assets::ruta("registros/modelos");
-        let w = spawn("cpu".into(), &python, &script, log.clone(), tx_ev, &registro).unwrap();
+        let pesos = crate::assets::ruta("registros/modelos");
+        let w = spawn("cpu".into(), &python, &script, log.clone(), tx_ev, &registro, &pesos).unwrap();
 
         // Arranca diciendo que está, todavía sin ningún modelo cargado.
         match rx_ev.recv().await {

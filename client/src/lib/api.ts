@@ -345,6 +345,10 @@ export interface Analysis {
   error: string | null;
   result_lat: number | null; result_lng: number | null;
   result_radius_m: number | null; result_confidence: number | null;
+  /** Respaldo geométrico de la PRINCIPAL, mismo criterio que
+   *  `Hipotesis.inliers`/`.verificador`: `null` significa que no pasó por
+   *  verificación, no que sacara cero. */
+  result_inliers: number | null; result_verificador: string | null;
   /** Las alternativas. La principal NO está aquí, sigue en result_*. */
   hypotheses: Hipotesis[];
   /** El nivel que realmente corrió si hubo descenso por capas que faltaban.

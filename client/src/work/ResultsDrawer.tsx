@@ -31,7 +31,7 @@ function HipotesisList({ a }: { a: Analysis }) {
   const principal: Hipotesis = {
     lat: a.result_lat, lng: a.result_lng, radio_m: a.result_radius_m ?? 0,
     peso: a.result_confidence ?? 0, indice: "", autor: "",
-    inliers: null, verificador: null,
+    inliers: a.result_inliers, verificador: a.result_verificador,
     motivo_agente: null,
   };
   const todas = [principal, ...a.hypotheses];

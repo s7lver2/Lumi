@@ -14,7 +14,8 @@ use axum::{http::HeaderMap, http::StatusCode, Json};
 use lumi_proto::api::{Analysis, AnalysisReq};
 
 const COLS: &str = "id, case_id, model, state, error, result_lat, result_lng,
-                    result_radius_m, result_confidence, created_at, finished_at, nivel_efectivo";
+                    result_radius_m, result_confidence, created_at, finished_at, nivel_efectivo,
+                    result_inliers, result_verificador";
 
 fn image_ids(c: &rusqlite::Connection, analysis_id: i64) -> Vec<i64> {
     let Ok(mut q) = c.prepare("SELECT image_id FROM analysis_images WHERE analysis_id = ?1") else {
@@ -42,6 +43,8 @@ fn row_to_analysis(r: &rusqlite::Row) -> rusqlite::Result<Analysis> {
         agentes: vec![],
         created_at: r.get(9)?,
         finished_at: r.get(10)?,
+        result_inliers: r.get(12)?,
+        result_verificador: r.get(13)?,
     })
 }
 
@@ -245,6 +248,8 @@ pub async fn create(
         result_lng: None,
         result_radius_m: None,
         result_confidence: None,
+        result_inliers: None,
+        result_verificador: None,
         image_ids: req.image_ids,
         hypotheses: vec![],
         nivel_efectivo: None,

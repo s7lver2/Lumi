@@ -425,6 +425,13 @@ fn migrate(c: &Connection) {
         // vuelve con el ticket, así que la decisión tiene que sobrevivir
         // hasta entonces en algún sitio que no sea la sesión del admin.
         ("access_requests", "granted_is_admin", "INTEGER NOT NULL DEFAULT 0"),
+        // La PRINCIPAL nunca tuvo dónde guardar su respaldo geométrico: solo
+        // `analysis_hypotheses` (las alternativas) lo tenía, así que un
+        // resultado principal verificado con miles de inliers se enseñaba
+        // igual que uno que nunca pasó por un verificador — "sin
+        // verificación geométrica" no era honesto, era un hueco de esquema.
+        ("analyses", "result_inliers", "INTEGER"),
+        ("analyses", "result_verificador", "TEXT"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }

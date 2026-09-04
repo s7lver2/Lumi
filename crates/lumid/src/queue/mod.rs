@@ -798,9 +798,14 @@ impl Queue {
 
                         self.guardar_agentes(id, &dictamen);
                         let h = crate::recuperar::hipotesis(&usar);
+                        // Para TODAS las hipótesis, principal incluida: antes
+                        // solo se calculaba para las alternativas (`skip(1)`)
+                        // porque `analyses` no tenía dónde guardar el
+                        // respaldo de la principal — un resultado con miles
+                        // de inliers de verdad se enseñaba igual que uno que
+                        // nunca pasó por un verificador.
                         let respaldo: Vec<(Option<u32>, Option<String>, Option<String>)> = h
                             .iter()
-                            .skip(1)
                             .map(|hip| {
                                 let k = clave(hip.lat, hip.lng);
                                 let (i, v) = respaldo_de
@@ -917,9 +922,12 @@ impl Queue {
         let _ = tx.execute(
             "UPDATE analyses SET state = 'hecho', error = NULL, result_lat = ?2,
                     result_lng = ?3, result_radius_m = ?4, result_confidence = ?5,
-                    finished_at = ?6
+                    result_inliers = ?6, result_verificador = ?7, finished_at = ?8
              WHERE id = ?1",
-            rusqlite::params![id, principal.lat, principal.lng, principal.radio_m, principal.peso, ahora()],
+            rusqlite::params![
+                id, principal.lat, principal.lng, principal.radio_m, principal.peso,
+                principal.inliers, principal.verificador, ahora()
+            ],
         );
         let _ = tx.execute("DELETE FROM analysis_hypotheses WHERE analysis_id = ?1", [id]);
         for (i, h) in alternativas.iter().enumerate() {
@@ -949,7 +957,16 @@ impl Queue {
         respaldo: &[(Option<u32>, Option<String>, Option<String>)],
     ) {
         let Some((principal, alternativas)) = hipotesis.split_first() else { return };
-        self.guardar_hipotesis(id, principal, alternativas, respaldo);
+        // `respaldo` está alineado 1:1 con `hipotesis` (misma construcción,
+        // ver el llamador) — el primer elemento es el de la principal, que
+        // antes se descartaba sin más porque `analyses` no tenía dónde
+        // guardarlo.
+        let (inliers, verificador, _) = respaldo.first().cloned().unwrap_or((None, None, None));
+        let mut principal = principal.clone();
+        principal.inliers = inliers;
+        principal.verificador = verificador;
+        let resp_alternativas = respaldo.get(1..).unwrap_or(&[]);
+        self.guardar_hipotesis(id, &principal, alternativas, resp_alternativas);
         self.anunciar(id, "hecho");
     }
 

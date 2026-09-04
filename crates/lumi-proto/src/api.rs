@@ -788,6 +788,13 @@ pub struct Analysis {
     pub result_lng: Option<f64>,
     pub result_radius_m: Option<f64>,
     pub result_confidence: Option<f64>,
+    /// Respaldo geométrico de la PRINCIPAL, mismo criterio que
+    /// `Hipotesis::inliers`/`verificador`: `None` significa que no pasó por
+    /// verificación, no que sacara cero.
+    #[serde(default)]
+    pub result_inliers: Option<u32>,
+    #[serde(default)]
+    pub result_verificador: Option<String>,
     /// Siempre una imagen hoy. La lista existe desde el primer día para que la
     /// cola no haya que rehacerla cuando un análisis agrupe varias tomas.
     pub image_ids: Vec<i64>,
