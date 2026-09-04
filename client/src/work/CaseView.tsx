@@ -7,9 +7,11 @@ import { KNOWN_MODELS } from "../lib/models";
 import { useServer } from "../lib/store";
 import { useDismissable } from "../lib/useDismissable";
 import { ContextMenu, type MenuState } from "../ui/ContextMenu";
+import { Icon } from "../ui/Icon";
+import { AttemptsRail } from "./AttemptsRail";
 import { CreditRequestDialog } from "./CreditRequestDialog";
 import { Dock, type ImgState } from "./Dock";
-import { DrawerTab, DRAWER_W, type DrawerId } from "./Drawer";
+import { DrawerTab, DRAWER_W, RAIL_W, type DrawerId } from "./Drawer";
 import { DropFrame, DropTarget } from "./DropTarget";
 import { MapCanvas, type Marker } from "./MapCanvas";
 import { ResultsDrawer } from "./ResultsDrawer";
@@ -218,6 +220,19 @@ export function CaseView({
     }
   }, [hasResults, drawerId]);
 
+  // Mismo patrón que el cajón de resultados: el carril de intentos se abre
+  // solo la primera vez que hay más de uno para la imagen seleccionada, y a
+  // partir de ahí manda el control manual del botón propio.
+  const [railOpen, setRailOpen] = useState<boolean | null>(null);
+  const railAbiertoYa = useRef(false);
+  useEffect(() => {
+    if (mine.length > 1 && !railAbiertoYa.current && railOpen === null) {
+      railAbiertoYa.current = true;
+      setRailOpen(true);
+    }
+  }, [mine.length, railOpen]);
+  const railMostrado = mine.length > 1 && (railOpen ?? false);
+
   /** En qué anda cada imagen: el más avanzado de sus análisis manda. */
   const estados = useMemo(() => {
     const m = new Map<number, ImgState>();
@@ -292,7 +307,9 @@ export function CaseView({
   const lastStaged = useRef<Image[]>([]);
   if (stagedImages.length > 0) lastStaged.current = stagedImages;
 
-  const inset = drawerId === null ? 0 : DRAWER_W;
+  const detailInset = drawerId === null ? 0 : DRAWER_W;
+  const railInset = railMostrado ? RAIL_W : 0;
+  const inset = detailInset + railInset;
   const vacio = images !== null && list.length === 0;
 
   return (
@@ -321,12 +338,26 @@ export function CaseView({
         <>
           <DrawerTab shifted={drawerId !== null} open={drawerId === "results"}
             onClick={() => setDrawer(drawerId === "results" ? null : "results")} />
-          <ResultsDrawer open={drawerId === "results"} image={image} analyses={mine}
-            selected={shown?.id ?? null} busy={busy}
-            onSelect={setSelAnalysis}
+          {mine.length > 1 && (
+            <button
+              onClick={() => setRailOpen(!railMostrado)}
+              title={railMostrado ? "Ocultar intentos" : "Ver intentos"}
+              style={{ right: detailInset }}
+              className="absolute top-[calc(50%+72px)] z-[23] grid h-[40px] w-[15px] -translate-y-1/2
+                place-items-center rounded-l-lg border border-r-0 border-border
+                bg-[rgba(16,18,21,.92)] text-subtle transition-[right,color,background-color]
+                duration-[420ms] ease-expo hover:bg-white/[.05] hover:text-fg">
+              <Icon name="layers" size={9} />
+            </button>
+          )}
+          <AttemptsRail open={railMostrado} shiftedBy={detailInset} analyses={mine}
+            selected={shown?.id ?? null} onSelect={setSelAnalysis}
             onAnalyze={() => (sel !== null ? setStaged([sel]) : void pick())}
-            onCenter={(lat, lng) => setFly({ lat, lng, zoom: 14 })}
             onMenu={setMenu} />
+          <ResultsDrawer open={drawerId === "results"} image={image} analysis={shown}
+            busy={busy}
+            onAnalyze={() => (sel !== null ? setStaged([sel]) : void pick())}
+            onCenter={(lat, lng) => setFly({ lat, lng, zoom: 14 })} />
         </>
       )}
 
