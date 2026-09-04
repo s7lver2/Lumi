@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { api, type LogSettings, type MuestraHistorial, type Problema, type SaludView } from "../lib/api";
+import { api, type LogSettings, type MuestraHistorial, type Problema, type SaludView, type TaskStatus } from "../lib/api";
 import { startLogsStream } from "../lib/bridge";
 import { Icon } from "../ui/Icon";
 import { Select } from "../ui/Select";
@@ -144,6 +145,8 @@ function SaludPanel({ token, onIr, irALogs }: {
         </div>
       </div>
 
+      <RuntimeCard token={token} />
+
       <div className="mt-2 flex flex-col gap-2">
         {activos.map((p) => (
           <div key={p.id}
@@ -176,6 +179,80 @@ function SaludPanel({ token, onIr, irALogs }: {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** El mismo mecanismo de tarea que usa `ProvisionStep` en el asistente de
+ *  emparejamiento (`POST /v1/tasks` con `kind: "inference_runtime"` +
+ *  `start_task_log`), para que reinstalar el runtime (torch/torchvision y,
+ *  desde que existe, `romatch`) no exija volver a pasar por el asistente ni
+ *  tocar el servidor por SSH — es la única vía de instalación sancionada. */
+function RuntimeCard({ token }: { token: string }) {
+  const [running, setRunning] = useState(false);
+  const [exitCode, setExitCode] = useState<number | null>(null);
+  const [log, setLog] = useState("");
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [abierto, setAbierto] = useState(false);
+
+  useEffect(() => {
+    const un = listen<string>("task-log", (e) => setLog((l) => l + e.payload));
+    return () => { un.then((f) => f()); };
+  }, []);
+
+  // Sondeo hasta que el proceso salga: el SSE de log no avisa por sí solo de
+  // que la tarea terminó, igual que en `ProvisionStep`.
+  useEffect(() => {
+    if (!running || !taskId) return;
+    const t = setInterval(async () => {
+      try {
+        const s = await api.get<TaskStatus>(`/v1/tasks/${taskId}`, token);
+        if (!s.running) { setRunning(false); setExitCode(s.exit_code); clearInterval(t); }
+      } catch {
+        // fallo de red puntual: se reintenta en el siguiente tick.
+      }
+    }, 1500);
+    return () => clearInterval(t);
+  }, [running, taskId, token]);
+
+  async function reinstalar() {
+    setExitCode(null);
+    setLog("");
+    setAbierto(true);
+    const t = await api.post<{ id: string }>("/v1/tasks", { kind: "inference_runtime" }, token);
+    setTaskId(t.id);
+    setRunning(true);
+    await invoke("start_task_log", { id: t.id, from: 0, token });
+  }
+
+  const failed = !running && exitCode !== null && exitCode !== 0;
+
+  return (
+    <div className="mt-2 rounded-xl border border-border/70 bg-panel p-3 px-4"
+      style={{ animation: "jg-fade-rise .35s cubic-bezier(.16,1,.3,1) both" }}>
+      <div className="flex items-center gap-3.5">
+        <Icon name="cli" size={16} className="shrink-0 text-muted" />
+        <div className="min-w-0 flex-1">
+          <div className="text-[12px] text-fg">Runtime de inferencia</div>
+          <div className="mt-0.5 text-[10.5px] text-subtle">
+            {running ? "instalando en el servidor…"
+              : failed ? `terminó con error · código ${exitCode}`
+              : "torch, torchvision y romatch (venv del servidor)"}
+          </div>
+        </div>
+        <button disabled={running} onClick={() => void reinstalar()}
+          className="jg-press flex shrink-0 items-center gap-1.5 rounded-[7px] border border-white/[.18]
+            bg-elevated px-3 py-1.5 text-[10.5px] text-fg disabled:opacity-55">
+          {running && <Icon name="spinner" size={11} />}
+          {running ? "instalando" : failed ? "reintentar" : "reinstalar runtime"}
+        </button>
+      </div>
+      {abierto && (running || log) && (
+        <pre className="mt-3 max-h-[160px] overflow-auto whitespace-pre rounded-lg border border-border
+          bg-[#08090b] px-3.5 py-3 font-mono text-[11px] leading-[1.7] text-muted">
+          {log || "esperando salida"}
+        </pre>
+      )}
     </div>
   );
 }

@@ -41,8 +41,9 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec
         // durante pruebas) volvía a descargar ~2 GB aunque nada hubiera
         // cambiado. pip ya cachea localmente, pero recrear el venv desde
         // cero seguía siendo trabajo y tiempo de sobra.
-        // La ruta del venv va como argumento posicional ($1), no interpolada
-        // en el texto del script: `format!` metiendo una ruta directamente en
+        // Las rutas del venv y de `models_dir` van como argumentos
+        // posicionales ($1 y $2), no interpoladas en el texto del script:
+        // `format!` metiendo una ruta directamente en
         // un `sh -c` es la forma clásica de inyección de shell si esa ruta
         // llegara alguna vez a depender de algo que no sea el propio
         // instalador local — y aunque hoy `models_dir` solo lo fija `lumi
@@ -63,25 +64,41 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec
                 // `romatch`, y "Reinstalar runtime" desde el panel es
                 // justamente la única vía de instalación que no exige tocar
                 // el servidor a mano por SSH. Cada bloque solo actúa si a SU
-                // paquete le falta algo — `pip install romatch` no vuelve a
-                // tocar el torch ya instalado, ya satisface su dependencia.
+                // paquete le falta algo — `uv pip install romatch` no vuelve
+                // a tocar el torch ya instalado, ya satisface su dependencia.
+                //
+                // `uv` reemplaza a `pip`/`venv` aquí (resuelve e instala
+                // ambos en paralelo, sin la vuelta de red por dependencia que
+                // hacía tan lento crear el venv de torch la primera vez). Se
+                // instala en `$2/uv` (dentro de `models_dir`, no en `$HOME`):
+                // el servicio corre como root bajo systemd sin `HOME`
+                // garantizado, y atarlo al mismo disco que ya eligió el
+                // instalador evita depender de esa variable. El instalador
+                // oficial es un binario estático — no pasa por pip, así que
+                // no reintroduce la dependencia que se está quitando.
                 "set -e; \
+                 UV=\"$2/uv/uv\"; \
+                 if [ ! -x \"$UV\" ]; then \
+                   mkdir -p \"$2/uv\"; \
+                   export UV_INSTALL_DIR=\"$2/uv\" UV_NO_MODIFY_PATH=1; \
+                   curl -LsSf https://astral.sh/uv/install.sh | sh; \
+                 fi; \
                  if \"$1/bin/python3\" -c 'import torch, torchvision' 2>/dev/null; then \
                    echo 'torch/torchvision ya instalados, nada que hacer'; \
                  else \
-                   python3 -m venv \"$1\"; \
-                   \"$1/bin/pip\" install --upgrade pip; \
-                   \"$1/bin/pip\" install --retries 5 --timeout 60 \
+                   \"$UV\" venv --python python3 \"$1\"; \
+                   UV_HTTP_TIMEOUT=60 \"$UV\" pip install --python \"$1/bin/python3\" \
                    torch torchvision --index-url https://download.pytorch.org/whl/cu126; \
                  fi; \
                  if \"$1/bin/python3\" -c 'import romatch' 2>/dev/null; then \
                    echo 'romatch ya instalado, nada que hacer'; \
                  else \
-                   \"$1/bin/pip\" install --retries 5 --timeout 60 romatch; \
+                   UV_HTTP_TIMEOUT=60 \"$UV\" pip install --python \"$1/bin/python3\" romatch; \
                  fi"
                     .into(),
                 "sh".into(),
                 venv.display().to_string(),
+                base.display().to_string(),
             ],
         ),
         TaskKind::Database => (
