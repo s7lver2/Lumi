@@ -106,6 +106,19 @@ const PATHS: Record<string, React.JSX.Element> = {
       <circle cx="17" cy="18" r="2.3" />
     </>
   ),
+  bocadillo: (
+    <>
+      <path d="M4 5h16v10H9l-4 4v-4H4V5Z" />
+      <path d="M8 9h8M8 12h5" />
+    </>
+  ),
+  via: (
+    <>
+      <line x1="12" y1="3" x2="12" y2="21" strokeDasharray="2.4 2.6" />
+      <rect x="14.5" y="7" width="5" height="8" rx="1.3" />
+      <circle cx="17" cy="8.4" r=".5" fill="currentColor" stroke="none" />
+    </>
+  ),
 };
 
 export type IconName = keyof typeof PATHS;
