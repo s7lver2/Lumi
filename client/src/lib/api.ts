@@ -208,6 +208,11 @@ export interface Resolucion {
   recuperacion_total: number;
   geometricos_instalados: number;
   geometricos_total: number;
+  /** Motores que los agentes de este nivel necesitan (uno por clase, no por
+   *  agente). `agentes_total === 0` es normal en niveles sin agentes con
+   *  motor propio, no una carencia. */
+  agentes_instalados: number;
+  agentes_total: number;
   faltan: string[];
 }
 export interface NivelEstado {

@@ -33,8 +33,8 @@ export function ModelosView({ token, nivelInicial, onLicenciasPendientesChange }
 
       <div className="flex flex-col gap-3">
         {(niveles ?? []).map((n) => {
-          const total = n.resolucion.recuperacion_total + n.resolucion.geometricos_total;
-          const instalado = n.resolucion.recuperacion_instalados + n.resolucion.geometricos_instalados;
+          const total = n.resolucion.recuperacion_total + n.resolucion.geometricos_total + n.resolucion.agentes_total;
+          const instalado = n.resolucion.recuperacion_instalados + n.resolucion.geometricos_instalados + n.resolucion.agentes_instalados;
           const completo = n.resolucion.faltan.length === 0;
           const abiertoAqui = abierto === n.id;
           return (
@@ -53,6 +53,7 @@ export function ModelosView({ token, nivelInicial, onLicenciasPendientesChange }
                   </h4>
                   <div className="mt-[3px] text-[10.5px] text-muted">
                     {n.resolucion.recuperacion_total} recuperadores · {n.resolucion.geometricos_total} verificadores
+                    {n.resolucion.agentes_total > 0 && ` · ${n.resolucion.agentes_total} motores de agente`}
                   </div>
                   <div className="mt-[9px] h-[3px] overflow-hidden rounded-sm bg-elevated">
                     <div className="h-full bg-fg transition-[width] duration-1000 ease-expo"

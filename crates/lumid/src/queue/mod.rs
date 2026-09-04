@@ -152,7 +152,9 @@ pub struct Queue {
     dir: PathBuf,
     eventos: mpsc::UnboundedSender<Evento>,
     pub(crate) niveles: Mutex<Vec<lumi_index::niveles::Nivel>>,
-    agentes: Mutex<Vec<lumi_index::agentes::Agente>>,
+    // `pub(crate)`: además de `agentes_de` aquí mismo, `crate::routes::models`
+    // lo necesita para saber qué motor pide cada agente de un nivel.
+    pub(crate) agentes: Mutex<Vec<lumi_index::agentes::Agente>>,
     geo: Mutex<lumi_index::geo::Datos>,
     // `pub(crate)`: sus lectores son las rutas de gestión de modelos, en
     // `crate::routes::models`, no este módulo.

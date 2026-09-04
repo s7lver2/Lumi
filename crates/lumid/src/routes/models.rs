@@ -198,13 +198,18 @@ pub async fn estado(
 ) -> Result<Json<Vec<NivelEstado>>, StatusCode> {
     require_admin(&app, &bearer(&headers))?;
     let niveles = app.queue.niveles.lock().unwrap().clone();
+    let agentes = app.queue.agentes.lock().unwrap().clone();
+    let motores = app.queue.motores.lock().unwrap().clone();
     let instalados = instalados_dir(&app);
 
     let fuera = niveles
         .iter()
-        .map(|n| NivelEstado {
-            id: n.id.clone(), nombre: n.nombre.clone(),
-            resolucion: lumi_index::niveles::resolver_composicion(n, &instalados),
+        .map(|n| {
+            let motores_necesarios = lumi_index::agentes::motores_de_agentes(&n.agentes, &agentes, &motores);
+            NivelEstado {
+                id: n.id.clone(), nombre: n.nombre.clone(),
+                resolucion: lumi_index::niveles::resolver_composicion(n, &motores_necesarios, &instalados),
+            }
         })
         .collect();
     Ok(Json(fuera))

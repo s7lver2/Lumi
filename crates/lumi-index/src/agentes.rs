@@ -76,6 +76,37 @@ pub struct Resultado {
     pub sin_filtrar: bool,
 }
 
+/// Los motores que hacen falta para que estos agentes puedan correr de
+/// verdad — deduplicados por CLASE de motor (`vlm`/`ocr`/`profundidad`), no
+/// por agente: dos agentes que comparten motor (p. ej. `clima-aparente` y
+/// `hora-sombras`, ambos `vlm`) comparten una sola instalación, no dos.
+///
+/// Existe porque "Lumi Mini instalado" solo comprobaba `recuperacion` y
+/// `geometricos` — un nivel podía marcarse `listo` con sus cuatro agentes
+/// mudos porque a ninguno de sus motores le llegó nunca a faltar en esa
+/// cuenta. El id que se devuelve es el del PRIMER motor de esa clase que
+/// exista en el registro: hoy hay uno por clase, y si algún día hay más,
+/// cualquiera de ellos basta para que el agente deje de callar.
+pub fn motores_de_agentes(
+    ids_agentes: &[String],
+    agentes: &[crate::agentes::Agente],
+    motores: &[crate::registro::Motor],
+) -> Vec<String> {
+    let clases: std::collections::HashSet<&str> = ids_agentes
+        .iter()
+        .filter_map(|id| agentes.iter().find(|a| &a.id == id))
+        .map(|a| a.motor.as_str())
+        .collect();
+    let mut fuera = Vec::new();
+    for clase in clases {
+        if let Some(m) = motores.iter().find(|m| m.clase == clase) {
+            fuera.push(m.id.clone());
+        }
+    }
+    fuera.sort();
+    fuera
+}
+
 pub fn aplicar(
     agentes: &[Agente],
     veredictos: &[Veredicto],
@@ -283,5 +314,45 @@ mod tests {
         // no un error que tumbe el análisis.
         let r = aplicar(&[idioma()], &[dice("idioma", "klingon", 0.99)], &[(en("NOR"), None)]);
         assert_eq!(r.ajustes[0].factor, 1.0);
+    }
+
+    fn motor(id: &str, clase: &str) -> crate::registro::Motor {
+        crate::registro::Motor {
+            id: id.into(), nombre: id.into(), clase: clase.into(), licencia: "Apache-2.0".into(),
+            fichero_url: String::new(), licencia_url: String::new(), licencia_texto: String::new(),
+            puerta: None, gestion_propia: false,
+        }
+    }
+
+    #[test]
+    fn dos_agentes_del_mismo_motor_piden_una_sola_instalacion() {
+        // clima-aparente y hora-sombras son los dos "vlm" del registro real.
+        let vlm1 = Agente { id: "clima".into(), motor: "vlm".into(), ..idioma() };
+        let vlm2 = Agente { id: "hora".into(), motor: "vlm".into(), ..idioma() };
+        let necesarios = motores_de_agentes(
+            &["clima".into(), "hora".into()],
+            &[vlm1, vlm2],
+            &[motor("qwen3-vl", "vlm")],
+        );
+        assert_eq!(necesarios, vec!["qwen3-vl".to_string()]);
+    }
+
+    #[test]
+    fn motores_de_clases_distintas_se_piden_todos() {
+        let necesarios = motores_de_agentes(
+            &["idioma".into(), "clima".into()],
+            &[idioma(), Agente { id: "clima".into(), motor: "vlm".into(), ..idioma() }],
+            &[motor("paddleocr", "ocr"), motor("qwen3-vl", "vlm")],
+        );
+        assert_eq!(necesarios, vec!["paddleocr".to_string(), "qwen3-vl".to_string()]);
+    }
+
+    #[test]
+    fn un_agente_sin_motor_registrado_no_pide_nada_que_no_exista() {
+        // Si el registro de motores no trae la clase que un agente necesita,
+        // no se inventa un id — la cuenta simplemente no la incluye, y por
+        // tanto tampoco puede marcarse "instalada" nunca.
+        let necesarios = motores_de_agentes(&["idioma".into()], &[idioma()], &[motor("qwen3-vl", "vlm")]);
+        assert!(necesarios.is_empty());
     }
 }
