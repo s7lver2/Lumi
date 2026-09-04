@@ -1,9 +1,7 @@
-import type { Analysis, DichoDeAgente, Hipotesis, Image } from "../lib/api";
 import { lumiUrl } from "../lib/bridge";
-import type { MenuEntry, MenuState } from "../ui/ContextMenu";
-import { menuAt } from "../ui/ContextMenu";
-import { Icon } from "../ui/Icon";
+import type { Analysis, DichoDeAgente, Hipotesis, Image } from "../lib/api";
 import { Drawer } from "./Drawer";
+import { Icon } from "../ui/Icon";
 
 /** Metros entre dos coordenadas. Haversine con el radio medio de la Tierra:
  *  precisión de sobra para decir «el EXIF declara un GPS a 300 m de aquí». */
@@ -17,15 +15,9 @@ export function metersBetween(aLat: number, aLng: number, bLat: number, bLng: nu
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-/** Bajo el análisis seleccionado: la principal (sin índice ni autor propios en
- *  la API, viven en `result_*`) y sus alternativas, numeradas y con su barra
- *  de peso. Que haya alternativas es en sí la señal de que el motor duda, sin
- *  números que interpretar — la frase de arriba es la única lectura que hace
- *  falta.
- *
- *  ponytail: `Hipotesis` no lleva cuántos candidatos respaldan el grupo (eso
- *  es `Grupo::candidatos` en Rust, que no cruza la API); se enseña la
- *  coordenada, el radio, el peso y la procedencia, que es lo que sí viaja. */
+/** Resultado principal + alternativas, con su barra de peso y su respaldo
+ *  geométrico si lo tiene. Sin lista de intentos aquí (vive en
+ *  `AttemptsRail`) — todo este espacio es del intento seleccionado. */
 function HipotesisList({ a }: { a: Analysis }) {
   if (a.state !== "hecho" || a.result_lat == null || a.result_lng == null) return null;
   const principal: Hipotesis = {
@@ -37,184 +29,183 @@ function HipotesisList({ a }: { a: Analysis }) {
   const todas = [principal, ...a.hypotheses];
   const maxPeso = Math.max(...todas.map((h) => h.peso), 1e-9);
   return (
-    <div className="flex flex-col gap-2 rounded-[10px] border border-border p-[8px_9px]">
-      <p className="text-[10px] leading-relaxed text-muted">
-        {a.hypotheses.length > 0
-          ? <>Le saca <b className="text-fg">{(a.result_confidence ?? 0).toFixed(1)}×</b> a la siguiente</>
-          : "Ninguna otra zona reúne votos suficientes para competir"}
-      </p>
-      <div className="flex flex-col gap-1.5">
-        {todas.map((h, i) => (
-          <div key={i} className="flex items-start gap-2">
-            <span className="mt-px w-3 shrink-0 font-mono text-[9px] text-subtle">{i + 1}</span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline gap-1.5">
-                <span className="font-mono text-[10.5px] text-fg">
-                  {h.lat.toFixed(4)}, {h.lng.toFixed(4)}
-                </span>
-                <span className="font-mono text-[9px] text-subtle">± {Math.round(h.radio_m)} m</span>
-              </div>
-              <div className="mt-1 h-[3px] overflow-hidden rounded-full bg-white/[.06]">
-                <div className="h-full bg-white/40"
-                  style={{ width: `${Math.max(6, (h.peso / maxPeso) * 100)}%` }} />
-              </div>
-              {h.indice && (
-                <p className="mt-1 truncate font-mono text-[9px] text-subtle">{h.indice} · @{h.autor}</p>
-              )}
-              {h.verificador && (
-                <p className="mt-0.5 text-[10px] text-subtle">
-                  verificado por {h.verificador} ·{" "}
-                  <span className="font-mono tabular-nums">{h.inliers}</span> correspondencias
-                </p>
-              )}
-              {!h.verificador && (
-                <p className="mt-0.5 text-[10px] text-subtle">
-                  sin verificación geométrica · coordenada de recuperación
-                </p>
-              )}
-              {h.motivo_agente && (
-                <p className="mt-0.5 text-[10px] leading-relaxed text-warning-fg">
-                  {h.motivo_agente}
-                </p>
-              )}
-            </div>
-          </div>
-        ))}
+    <div className="flex flex-col gap-2.5 rounded-[10px] border border-border p-3">
+      <div className="font-mono text-[18px] leading-none text-fg">
+        {principal.lat.toFixed(4)}, {principal.lng.toFixed(4)}
       </div>
+      <div className="flex gap-4">
+        <div>
+          <div className="text-[8px] uppercase tracking-[.08em] text-subtle">Radio</div>
+          <div className="mt-0.5 font-mono text-[12.5px] text-fg">± {Math.round(principal.radio_m)} m</div>
+        </div>
+        <div>
+          <div className="text-[8px] uppercase tracking-[.08em] text-subtle">Confianza</div>
+          <div className="mt-0.5 font-mono text-[12.5px] text-fg">{principal.peso.toFixed(1)}×</div>
+        </div>
+      </div>
+      {/* Insignia de verificación: SIEMPRE en `fg`/blanco, nunca verde —
+          DESIGN.md lo prohíbe ("Completado se representa en blanco"). */}
+      <div className="flex items-center gap-1.5 border-t border-border pt-2.5">
+        {principal.verificador ? (
+          <>
+            <Icon name="check" size={12} className="text-fg" />
+            <span className="text-[10.5px] text-fg">
+              verificado por {principal.verificador} ·{" "}
+              <span className="font-mono tabular-nums">{principal.inliers}</span> correspondencias
+            </span>
+          </>
+        ) : (
+          <span className="text-[10.5px] text-subtle">sin verificación geométrica · coordenada de recuperación</span>
+        )}
+      </div>
+      {a.hypotheses.length > 0 && (
+        <div className="flex flex-col gap-1.5 border-t border-border pt-2.5">
+          <p className="text-[8px] uppercase tracking-[.08em] text-subtle">Alternativas</p>
+          {todas.slice(1).map((h, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="w-3 shrink-0 font-mono text-[9px] text-subtle">{i + 2}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="font-mono text-[10px] text-fg">{h.lat.toFixed(4)}, {h.lng.toFixed(4)}</span>
+                  <span className="font-mono text-[9px] text-subtle">± {Math.round(h.radio_m)} m</span>
+                </div>
+                <div className="mt-1 h-[3px] overflow-hidden rounded-full bg-white/[.06]">
+                  <div className="h-full bg-white/40" style={{ width: `${Math.max(6, (h.peso / maxPeso) * 100)}%` }} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-/** Lo que la imagen dice de sí misma. Los abstenidos NO desaparecen: se ven
- *  diciendo que no hubo señal suficiente, que es la misma regla que la matriz
- *  de capacidades — nada se esconde, todo lleva su causa legible. */
+/** Icono propio por agente — no una plantilla repetida con el icono
+ *  cambiado (DESIGN.md prohíbe rejillas de tarjetas idénticas). El de
+ *  `hora-sombras` es el único cuyo dibujo depende del dato real: la aguja
+ *  rota al ángulo estimado a partir de la hora que dice `etiqueta`
+ *  ("~13:00" → 13h). El resto son formas fijas. */
+function AgenteIcono({ agente, etiqueta, apagado }: { agente: string; etiqueta: string; apagado: boolean }) {
+  const color = apagado ? "#6a6c70" : "#e8e8e6";
+  if (agente === "hora-sombras") {
+    const m = /(\d{1,2})(?::\d{2})?/.exec(etiqueta);
+    const hora = m ? Number(m[1]) : 12;
+    // Mediodía (12h) = aguja recta hacia arriba (0°); cada hora de
+    // diferencia gira 15° (360°/24h) hacia el lado que corresponda.
+    const grados = (hora - 12) * 15;
+    return (
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.7}
+        strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+        <circle cx="12" cy="12" r="8.5" />
+        <line x1="12" y1="12" x2="12" y2="6" transform={`rotate(${grados} 12 12)`}
+          style={{ transition: "transform 1.1s cubic-bezier(.16,1,.3,1)" }} />
+        <circle cx="12" cy="12" r=".6" fill={color} stroke="none" />
+      </svg>
+    );
+  }
+  if (agente === "clima-aparente") {
+    return <Icon name="cloud" size={26} className={apagado ? "text-subtle" : "text-fg"} />;
+  }
+  if (agente === "lado-conduccion") {
+    return <Icon name="via" size={26} className={apagado ? "text-subtle" : "text-fg"} />;
+  }
+  // "idioma" y cualquier agente futuro sin icono propio: bocadillo genérico.
+  return <Icon name="bocadillo" size={26} className={apagado ? "text-subtle" : "text-fg"} />;
+}
+
+/** Lo que la imagen dice de sí misma. Una tarjeta por agente, con su icono
+ *  propio y su frase de motivo visible — antes era una lista apretada de
+ *  una columna con todos los `detalle` concatenados al final. Los
+ *  abstenidos NO desaparecen: se ven apagados, diciendo que no hubo señal
+ *  suficiente. */
 function AgentesPanel({ agentes }: { agentes: DichoDeAgente[] }) {
   if (agentes.length === 0) return null;
   return (
-    <div className="flex flex-col gap-1.5 rounded-[10px] border border-border p-[8px_9px]">
+    <div className="flex flex-col gap-2">
       <p className="text-[9px] uppercase tracking-[.11em] text-subtle">Lo que dice la imagen</p>
       {agentes.map((d) => {
         const calla = d.etiqueta === "abstiene";
         return (
-          <div key={d.agente} className="flex items-baseline gap-2">
-            <span className="w-[92px] shrink-0 truncate text-[10px] text-muted">{d.nombre}</span>
-            <span className={`flex-1 truncate text-[11px] ${calla ? "text-subtle" : "text-fg"}`}>
-              {calla ? "sin señal suficiente" : d.etiqueta}
-            </span>
-            {!calla && (
-              <span className="font-mono text-[9px] tabular-nums text-subtle">
-                {d.confianza.toFixed(2)}
-              </span>
-            )}
+          <div key={d.agente}
+            className={`flex items-center gap-3 rounded-lg bg-white/[.03] p-2.5 ${calla ? "opacity-50" : ""}`}>
+            <AgenteIcono agente={d.agente} etiqueta={d.etiqueta} apagado={calla} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-[10.5px] text-fg">{d.nombre}</span>
+                {!calla && <span className="font-mono text-[9px] tabular-nums text-subtle">{d.confianza.toFixed(2)}</span>}
+              </div>
+              <div className="mt-0.5 text-[12px] text-fg">{calla ? "sin señal suficiente" : d.etiqueta}</div>
+              {!calla && d.detalle && (
+                <p className="mt-0.5 text-[9.5px] leading-snug text-subtle">{d.detalle}</p>
+              )}
+            </div>
           </div>
         );
       })}
-      {agentes.some((d) => d.detalle) && (
-        <p className="mt-0.5 border-t border-border pt-1.5 font-mono text-[9.5px] leading-relaxed text-subtle">
-          {agentes.filter((d) => d.detalle).map((d) => d.detalle).join(" · ")}
-        </p>
-      )}
     </div>
   );
 }
 
-/** Lo que se sabe de la imagen elegida: la foto, los intentos y el GPS que
- *  declara la cámara. Cabe en el mismo carril que el de invitar y por eso solo
- *  puede estar abierto uno de los dos. */
+/** Lo que se sabe del intento seleccionado: la foto, el resultado y el GPS
+ *  que declara la cámara. `analysis` ya viene resuelto por quien monta este
+ *  componente (antes `ResultsDrawer` buscaba entre TODOS los intentos y
+ *  además los listaba aquí mismo — eso ahora es trabajo de `AttemptsRail`
+ *  y de `CaseView`, no de este componente). */
 export function ResultsDrawer({
-  open, image, analyses, selected, busy, onSelect, onAnalyze, onCenter, onMenu,
+  open, image, analysis, busy, onAnalyze, onCenter,
 }: {
   open: boolean;
   image: Image | null;
-  analyses: Analysis[];
-  selected: number | null;
+  analysis: Analysis | null;
   busy: boolean;
-  onSelect: (id: number) => void;
   onAnalyze: () => void;
   onCenter: (lat: number, lng: number) => void;
-  onMenu: (s: MenuState) => void;
 }) {
   const exif = image?.exif_lat != null && image.exif_lng != null;
-
-  const menuDe = (a: Analysis): MenuEntry[] => {
-    const hecho = a.state === "hecho";
-    return [
-      {
-        label: "Centrar en el mapa", disabled: !hecho,
-        onClick: () => hecho && onCenter(a.result_lat!, a.result_lng!),
-      },
-      {
-        label: "Copiar coordenadas", hint: "⌘C", disabled: !hecho,
-        onClick: () => hecho && void navigator.clipboard.writeText(
-          `${a.result_lat!.toFixed(6)}, ${a.result_lng!.toFixed(6)}`),
-      },
-      null,
-      { label: "Repetir con otro modelo…", onClick: onAnalyze },
-    ];
-  };
+  // `onCenter` se mantiene en la firma para no romper a quien monta este
+  // componente (centrar el mapa en una alternativa sigue siendo su
+  // contrato) aunque este fichero ya no dibuje el menú contextual que lo
+  // disparaba — ese menú vive ahora en `AttemptsRail`.
+  void onCenter;
 
   return (
     <Drawer open={open}>
       {image && (
-        <div className="flex items-center gap-2 rounded-[9px] bg-white/[.03] p-[7px]">
+        <div className="flex items-center gap-2.5 rounded-[9px] bg-white/[.03] p-[8px]">
           <img src={lumiUrl(`/v1/images/${image.id}/thumb`)} alt=""
-            className="h-[30px] w-[38px] shrink-0 rounded bg-elevated object-cover" />
-          <span className="truncate font-mono text-[10px] text-muted">{image.filename}</span>
+            className="h-9 w-11 shrink-0 rounded bg-elevated object-cover" />
+          <div className="min-w-0">
+            <div className="truncate font-mono text-[10.5px] text-fg">{image.filename}</div>
+            {analysis && (
+              <div className="mt-0.5 font-mono text-[9px] text-subtle">{analysis.model}</div>
+            )}
+          </div>
         </div>
       )}
 
-      {analyses.map((a, i) => {
-        const hecho = a.state === "hecho";
-        const on = a.id === selected;
-        return (
-          <button key={a.id} onClick={() => onSelect(a.id)}
-            onContextMenu={(e) => menuAt(e, `${i + 1} · ${a.model}`, menuDe(a), onMenu)}
-            style={{ animation: `jg-fade-rise 220ms ${Math.min(i, 6) * 30}ms cubic-bezier(.16,1,.3,1) both` }}
-            className={`rounded-[10px] border p-[8px_9px] text-left transition-[border-color,background-color,transform]
-              duration-300 ease-expo hover:-translate-x-0.5 ${
-                on ? "border-white/[.35] bg-white/[.04]" : "border-border hover:border-white/[.18]"}`}>
-            <div className="text-[9px] uppercase tracking-[.11em] text-subtle">{i + 1} · {a.model}</div>
-            <div className={`text-[11.5px] ${hecho ? "text-fg" : "text-muted"}`}>
-              {hecho
-                ? `${a.result_lat!.toFixed(4)}, ${a.result_lng!.toFixed(4)}`
-                : a.state === "error"
-                  ? a.error ?? "falló sin dejar motivo"
-                  : "esperando al motor"}
-            </div>
-            {hecho && (
-              <div className="mt-[3px] text-[9px] uppercase tracking-[.11em] text-subtle">
-                {(a.result_confidence ?? 0).toFixed(2)} · {Math.round(a.result_radius_m ?? 0)} m
-              </div>
-            )}
-            {a.nivel_efectivo && a.nivel_efectivo !== a.model && (
-              <p className="mt-1 flex items-start gap-2 text-[10.5px] leading-relaxed text-warning-fg">
-                <Icon name="alert" size={12} className="mt-px shrink-0" />
-                Se pidió {a.model} y corrió {a.nivel_efectivo}: a los índices instalados les
-                faltan capas de vectores de los modelos que {a.model} necesita.
-              </p>
-            )}
-          </button>
-        );
-      })}
+      {analysis && analysis.state !== "hecho" && (
+        <p className="text-[11.5px] text-muted">
+          {analysis.state === "error" ? analysis.error ?? "falló sin dejar motivo" : "esperando al motor"}
+        </p>
+      )}
 
-      {(() => {
-        const shownA = analyses.find((a) => a.id === selected) ?? null;
-        if (!shownA) return null;
-        return (
-          <>
-            <HipotesisList a={shownA} />
-            <AgentesPanel agentes={shownA.agentes} />
-            {shownA.state === "hecho" && shownA.agentes.length === 0 && (
-              <p className="text-[10px] leading-relaxed text-subtle">
-                Los agentes no llegaron a correr: sus modelos no están instalados en este servidor.
-              </p>
-            )}
-          </>
-        );
-      })()}
+      {analysis?.nivel_efectivo && analysis.nivel_efectivo !== analysis.model && (
+        <p className="flex items-start gap-2 text-[10.5px] leading-relaxed text-warning-fg">
+          <Icon name="alert" size={12} className="mt-px shrink-0" />
+          Se pidió {analysis.model} y corrió {analysis.nivel_efectivo}: a los índices instalados les
+          faltan capas de vectores de los modelos que {analysis.model} necesita.
+        </p>
+      )}
 
-      {/* El GPS declarado tiene sitio propio y color ámbar: no es una
-          candidata, es lo que dice la cámara. */}
+      {analysis && <HipotesisList a={analysis} />}
+      {analysis && <AgentesPanel agentes={analysis.agentes} />}
+      {analysis?.state === "hecho" && analysis.agentes.length === 0 && (
+        <p className="text-[10px] leading-relaxed text-subtle">
+          Los agentes no llegaron a correr: sus modelos no están instalados en este servidor.
+        </p>
+      )}
+
       {exif && (
         <div className="rounded-[10px] border border-warning/30 p-[8px_9px]">
           <div className="text-[9px] uppercase tracking-[.11em] text-subtle">E · EXIF</div>
