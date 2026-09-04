@@ -118,28 +118,40 @@ pub async fn candidatos(
 
 /// Agrupación por vecindad de tesela y atribución. Ya no consulta Qdrant, así
 /// que deja de ser `async`.
-pub fn hipotesis(cands: &[Candidato]) -> Vec<Hipotesis> {
+///
+/// Cada hipótesis viaja con las coordenadas ORIGINALES de los candidatos que
+/// formaron su grupo (`Grupo::miembros`) -- el centroide ponderado de arriba
+/// no coincide con la de ninguno en concreto, así que `queue::mod` (que es
+/// quien tiene los veredictos del verificador y busca respaldo por
+/// coordenada exacta) necesita esta lista, no solo el punto final.
+pub fn hipotesis(cands: &[Candidato]) -> Vec<(Hipotesis, Vec<(f64, f64)>)> {
     let grupos = en_grupos(cands);
     let conf = confianza(&grupos);
     grupos
         .into_iter()
         .enumerate()
-        .map(|(i, g)| Hipotesis {
-            lat: g.lat,
-            lng: g.lng,
-            radio_m: g.radio_m,
-            // La principal lleva la confianza comparada; las alternativas, su
-            // peso relativo. Son dos preguntas distintas y por eso dos números.
-            peso: if i == 0 { conf } else { g.peso },
-            indice: g.indice,
-            autor: g.autor,
-            // El respaldo se rellena aparte, en `queue::mod`, que es quien
-            // tiene los veredictos del verificador: `agrupar::Grupo` no los
-            // conoce.
-            inliers: None,
-            verificador: None,
-            // Lo rellena `queue::mod`, que es quien tiene los veredictos.
-            motivo_agente: None,
+        .map(|(i, g)| {
+            (
+                Hipotesis {
+                    lat: g.lat,
+                    lng: g.lng,
+                    radio_m: g.radio_m,
+                    // La principal lleva la confianza comparada; las
+                    // alternativas, su peso relativo. Son dos preguntas
+                    // distintas y por eso dos números.
+                    peso: if i == 0 { conf } else { g.peso },
+                    indice: g.indice,
+                    autor: g.autor,
+                    // El respaldo se rellena aparte, en `queue::mod`, que es
+                    // quien tiene los veredictos del verificador:
+                    // `agrupar::Grupo` no los conoce.
+                    inliers: None,
+                    verificador: None,
+                    // Lo rellena `queue::mod`, que es quien tiene los veredictos.
+                    motivo_agente: None,
+                },
+                g.miembros,
+            )
         })
         .collect()
 }

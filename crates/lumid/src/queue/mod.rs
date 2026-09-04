@@ -804,17 +804,35 @@ impl Queue {
                         // respaldo de la principal — un resultado con miles
                         // de inliers de verdad se enseñaba igual que uno que
                         // nunca pasó por un verificador.
+                        //
+                        // El centroide de un grupo (`hip.lat`/`hip.lng`) es
+                        // un promedio ponderado de sus miembros y casi nunca
+                        // coincide con la coordenada de NINGUNO de ellos —
+                        // con un solo candidato en el grupo sí coincide por
+                        // definición, pero con varios (el caso común una vez
+                        // la verificación de verdad confirma cosas) la
+                        // búsqueda por coordenada exacta del centroide nunca
+                        // encontraba nada. Se busca en cada miembro real del
+                        // grupo (`recuperar::hipotesis` los trae aparte) y se
+                        // usa el de más inliers, no el punto ya promediado.
                         let respaldo: Vec<(Option<u32>, Option<String>, Option<String>)> = h
                             .iter()
-                            .map(|hip| {
-                                let k = clave(hip.lat, hip.lng);
-                                let (i, v) = respaldo_de
-                                    .get(&k)
-                                    .map(|(i, v)| (Some(*i), Some(v.clone())))
-                                    .unwrap_or((None, None));
-                                (i, v, motivo_de.get(&k).cloned())
+                            .map(|(_, miembros)| {
+                                let mejor = miembros
+                                    .iter()
+                                    .filter_map(|&(lat, lng)| respaldo_de.get(&clave(lat, lng)))
+                                    .max_by_key(|(inliers, _)| *inliers);
+                                let motivo = miembros
+                                    .iter()
+                                    .find_map(|&(lat, lng)| motivo_de.get(&clave(lat, lng)))
+                                    .cloned();
+                                match mejor {
+                                    Some((i, v)) => (Some(*i), Some(v.clone()), motivo),
+                                    None => (None, None, motivo),
+                                }
                             })
                             .collect();
+                        let h: Vec<_> = h.into_iter().map(|(hip, _)| hip).collect();
                         self.guardar_resultado(id, &h, &respaldo);
                     }
                     // Sin candidatos NO es una avería: es una respuesta.

@@ -28,6 +28,12 @@ pub struct Grupo {
     pub candidatos: usize,
     pub indice: String,
     pub autor: String,
+    /// Coordenada original de cada candidato que aportó a este grupo -- el
+    /// centroide de arriba (`lat`/`lng`) es un promedio ponderado y casi
+    /// nunca coincide con la de ninguno en concreto, así que quien necesite
+    /// buscar algo asociado a UN candidato del grupo (p. ej. su respaldo
+    /// geométrico) tiene que mirar aquí, no al centroide.
+    pub miembros: Vec<(f64, f64)>,
 }
 
 /// Islas contiguas en el plano de teselas: dos candidatos caen en el mismo
@@ -103,6 +109,7 @@ fn resumir(cands: &[Candidato], isla: &[usize]) -> Grupo {
         candidatos: isla.len(),
         indice: cands[mejor].indice.clone(),
         autor: cands[mejor].autor.clone(),
+        miembros: isla.iter().map(|&i| (cands[i].lat, cands[i].lng)).collect(),
     }
 }
 
@@ -144,6 +151,7 @@ mod tests {
         Grupo {
             lat: 0.0, lng: 0.0, radio_m: 100.0, peso,
             candidatos: 1, indice: "A".into(), autor: "@ana".into(),
+            miembros: vec![(0.0, 0.0)],
         }
     }
 
