@@ -88,7 +88,7 @@ export function ProvisionStep({ onDone, onStatusChange }: {
   return (
     <>
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-xs text-fg">torch 2.5.1 + cu126</span>
+        <span className="text-xs text-fg">torch 2.5.1 + cu126 · romatch</span>
         <span className={`font-mono text-[11px] ${failed ? "text-danger-fg" : done ? "text-fg" : "text-muted"}`}>
           {running ? "en curso" : failed ? `error · código ${exitCode}` : done ? "instalado" : "sin iniciar"}
         </span>

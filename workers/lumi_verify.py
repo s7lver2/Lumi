@@ -30,6 +30,23 @@ def _log(txt):
     sys.stderr.flush()
 
 
+def _construir(verificador, pesos):
+    """Un state_dict crudo no dice qué arquitectura reconstruir por sí solo —
+    misma razón que `lumi_pesos._reconstruir` para el embebedor. `tiny-roma`
+    es el único que este trabajador sabe montar hoy: necesita además el
+    backbone XFeat (de `verlab/accelerated_features`), que la propia función
+    de fábrica de `romatch` trae por `torch.hub` la primera vez que se usa
+    (y cachea después) — no hace falta vendorizarlo aquí."""
+    import romatch
+
+    if verificador == "tiny-roma":
+        return romatch.tiny_roma_v1_outdoor(device=DISPOSITIVO, weights=pesos)
+    raise ValueError(
+        f"{verificador} no tiene una arquitectura conocida para reconstruir su state_dict "
+        "-- hace falta añadir su caso en _construir(), igual que tiny-roma"
+    )
+
+
 def _cargar(verificador):
     """Los pesos se verifican por sha256 igual que los del embebedor: se
     reutiliza `lumi_pesos._verificar` para no tener dos posturas distintas
@@ -44,15 +61,13 @@ def _cargar(verificador):
     ruta = os.path.join(directorio, "pesos.pth")
     lumi_pesos._licencia(directorio)
     lumi_pesos._verificar(ruta, ficha.get("sha256", ""))
-    # Este fichero guarda el módulo entero, no un state_dict — weights_only=True
-    # no puede reconstruir una clase arbitraria, así que aquí el camino seguro
-    # de verdad falla siempre y se cae al inseguro. Se intenta igual (por si
-    # algún verificador futuro sí guarda solo su state_dict) en vez de
-    # renunciar directamente a weights_only=True en todo el fichero.
-    try:
-        m = torch.load(ruta, map_location=DISPOSITIVO, weights_only=True)
-    except Exception:
-        m = torch.load(ruta, map_location=DISPOSITIVO, weights_only=False)
+    # Publicado como state_dict crudo, no como módulo entero: por eso
+    # `weights_only=True` sí puede leerlo directamente (es un contenedor
+    # básico de tensores, nada de pickling arbitrario) y por qué hace falta
+    # `_construir` -- cargarlo tal cual y llamar `.eval()` fallaba con
+    # "'collections.OrderedDict' object has no attribute 'eval'".
+    pesos = torch.load(ruta, map_location=DISPOSITIVO, weights_only=True)
+    m = _construir(verificador, pesos)
     m.eval()
     _cargados[verificador] = m
     _decir({"tipo": "listo", "dispositivo": DISPOSITIVO, "modelo": verificador})
@@ -61,20 +76,29 @@ def _cargar(verificador):
 
 def _inliers(matcher, consulta, candidato):
     """Correspondencias que sobreviven a RANSAC sobre la matriz fundamental.
-    Es la unica senal del arbitraje, y por eso es lo unico que se devuelve."""
+    Es la unica senal del arbitraje, y por eso es lo unico que se devuelve.
+
+    `matcher.match()` no da puntos sueltos: da un campo de flujo denso
+    (`warp`) más una `certainty` por pixel -- `sample()` es lo que reduce eso
+    a un puñado de correspondencias, y `to_pixel_coordinates()` las pasa de
+    coordenadas normalizadas [-1,1] a píxeles reales de cada imagen. Mismo
+    patrón que el propio `demo_fundamental.py` del proyecto."""
     import cv2
     import numpy as np
-    import torch
+    from PIL import Image
 
-    with torch.no_grad():
-        salida = matcher({"image0": consulta, "image1": candidato})
-    a = salida["keypoints0"].cpu().numpy()
-    b = salida["keypoints1"].cpu().numpy()
-    if len(a) < 8:
+    ancho_a, alto_a = Image.open(consulta).size
+    ancho_b, alto_b = Image.open(candidato).size
+    warp, certeza = matcher.match(consulta, candidato)
+    parejas, _ = matcher.sample(warp, certeza)
+    if len(parejas) < 8:
         # Por debajo de ocho puntos la matriz fundamental no se puede estimar:
         # no es «pocas correspondencias», es «ninguna respuesta».
         return 0
-    _, mascara = cv2.findFundamentalMat(a, b, cv2.FM_RANSAC, 3.0, 0.99)
+    kpts_a, kpts_b = matcher.to_pixel_coordinates(parejas, alto_a, ancho_a, alto_b, ancho_b)
+    _, mascara = cv2.findFundamentalMat(
+        kpts_a.cpu().numpy(), kpts_b.cpu().numpy(), cv2.FM_RANSAC, 3.0, 0.99
+    )
     return int(np.sum(mascara)) if mascara is not None else 0
 
 

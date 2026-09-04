@@ -54,14 +54,30 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec
             "/bin/sh".into(),
             vec![
                 "-c".into(),
+                // Dos comprobaciones independientes, no una: `romatch` (el
+                // verificador geométrico de tiny-roma) es una incorporación
+                // posterior a torch/torchvision, y un servidor que ya tenía
+                // el runtime instalado antes de que esto existiera se queda
+                // con el "nada que hacer" de siempre — con una sola
+                // comprobación conjunta, ese servidor nunca instalaría
+                // `romatch`, y "Reinstalar runtime" desde el panel es
+                // justamente la única vía de instalación que no exige tocar
+                // el servidor a mano por SSH. Cada bloque solo actúa si a SU
+                // paquete le falta algo — `pip install romatch` no vuelve a
+                // tocar el torch ya instalado, ya satisface su dependencia.
                 "set -e; \
                  if \"$1/bin/python3\" -c 'import torch, torchvision' 2>/dev/null; then \
-                   echo 'runtime ya instalado, nada que hacer'; \
+                   echo 'torch/torchvision ya instalados, nada que hacer'; \
                  else \
                    python3 -m venv \"$1\"; \
                    \"$1/bin/pip\" install --upgrade pip; \
                    \"$1/bin/pip\" install --retries 5 --timeout 60 \
                    torch torchvision --index-url https://download.pytorch.org/whl/cu126; \
+                 fi; \
+                 if \"$1/bin/python3\" -c 'import romatch' 2>/dev/null; then \
+                   echo 'romatch ya instalado, nada que hacer'; \
+                 else \
+                   \"$1/bin/pip\" install --retries 5 --timeout 60 romatch; \
                  fi"
                     .into(),
                 "sh".into(),
