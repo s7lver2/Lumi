@@ -26,17 +26,25 @@ pub struct Ganador {
     pub lng: f64,
 }
 
-/// Calibrado contra un puñado de pares de control de `Parskatt/RoMa`
-/// (verificados con `USAC_MAGSAC`, ver `workers/lumi_verify.py::_inliers`):
-/// la misma escena da 139-652 inliers, escenas distintas dan 84-123 -- 25
-/// (el valor anterior, puesto a ojo antes de medir nada) dejaba pasar
-/// CUALQUIER par, coincidiera o no. Sigue siendo pocos pares, no un
-/// conjunto de validación real: el 5c lo revisará con métricas delante. Va
-/// como constante con nombre y NO como ajuste de configuración — un ajuste
-/// invita a que cada instalación tenga el suyo y a que dos servidores den
+/// Calibrado contra 16 pares reales del corpus de prueba (verificados con
+/// `USAC_MAGSAC`, ver `workers/lumi_verify.py::_inliers`), emparejados por
+/// distancia GPS: 8 pares a <7 m (casi con toda seguridad la misma fachada)
+/// y 8 a >500 m (sitios distintos). Positivos: 126-2920 inliers. Negativos:
+/// 55-143. Un solo caso raro solapa (un par a más de 1 km dio 143) -- el
+/// umbral se pone con margen POR ENCIMA de todos los negativos medidos, no a
+/// medio camino: en una herramienta forense fallar hacia «no verificado» es
+/// seguro (`Hipotesis::inliers` en `None` no inventa nada), fallar hacia un
+/// falso positivo no lo es. Con esto se pierde el positivo más débil de los
+/// 16 (126, a 1.9 m) pero se rechazan los 8 negativos sin excepción. Un
+/// primer intento con 4 fotos turísticas de `Parskatt/RoMa` (25→130) ya
+/// mejoraba mucho el valor a ciegas anterior (25), pero con datos reales del
+/// propio corpus el margen sano está más alto. Sigue sin ser un conjunto de
+/// validación real: el 5c lo revisará con métricas delante. Va como
+/// constante con nombre y NO como ajuste de configuración — un ajuste invita
+/// a que cada instalación tenga el suyo y a que dos servidores den
 /// respuestas distintas al mismo caso, que en una herramienta forense es lo
 /// último que se quiere.
-pub const UMBRAL_INLIERS: u32 = 130;
+pub const UMBRAL_INLIERS: u32 = 200;
 
 /// `None` significa «este candidato se cae»: ninguno llegó al umbral.
 pub fn arbitrar(veredictos: &[Veredicto]) -> Option<Ganador> {

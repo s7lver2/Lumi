@@ -133,7 +133,10 @@ def _inliers(matcher, consulta, candidato):
     con miles de puntos muestreados RANSAC casi siempre encuentra una F que
     "explica" la mayoría. `USAC_MAGSAC` con el umbral/confianza/iteraciones
     que usa el propio `demo_fundamental.py` del proyecto separa mucho mejor
-    (mismos pares: 652 y 139 en positivos, 84-123 en negativos)."""
+    (mismos pares: 652 y 139 en positivos, 84-123 en negativos) -- la
+    calibración de verdad, con pares reales del corpus, vive en
+    `lumi_index::arbitro::UMBRAL_INLIERS`, no aquí: ese número puede cambiar
+    sin tocar este fichero."""
     import cv2
     import numpy as np
     import torch
