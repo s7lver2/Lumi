@@ -222,6 +222,18 @@ fn anotar(app: &crate::App, linea: String) {
 fn avanzar(app: &crate::App, n: usize) {
     if let Some(p) = app.indices_en_curso.lock().unwrap().as_mut() {
         p.hechos += n;
+        // El asset que acaba de contarse en `hechos` sigue con sus bytes a
+        // tope (la descarga termina con `asset_bytes_hechos == _total` antes
+        // de llegar aquí) y el siguiente asset del bucle es quien los pone a
+        // cero — para el ÚLTIMO asset del paquete no hay "siguiente" que los
+        // reinicie. El cliente suma la fracción de bytes del asset en curso
+        // a `hechos` para que la barra avance dentro de un asset grande
+        // (`fraccionAssetActual` en IndexToast/InstallFlow); sin este reset,
+        // ese mismo asset contaba doble — una vez como unidad entera en
+        // `hechos`, otra vez como fracción completa — y el paquete de dos
+        // assets terminaba mostrando 150% en vez de 100%.
+        p.asset_bytes_hechos = 0;
+        p.asset_bytes_total = 0;
     }
 }
 
