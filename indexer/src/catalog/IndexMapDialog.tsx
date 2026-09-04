@@ -244,6 +244,24 @@ function Galeria({ fichas }: { fichas: FichaMapa[] }) {
     estimateSize: () => altoFila + HUECO,
     overscan: 4,
   });
+  // `useVirtualizer` mide cada fila con `estimateSize` la primera vez que la
+  // necesita y CACHEA ese resultado — cambiar el número que captura la
+  // función (aquí, `altoFila`) en un render posterior no invalida ese caché
+  // por sí solo. En el primer render, antes de que el `ResizeObserver` de
+  // arriba mida el contenedor, `anchoColumna` vale 0 y por tanto `altoFila`
+  // también: la primera fila que el virtualizador llega a tocar se queda
+  // fijada en una altura de unos 10px (solo el hueco) para siempre. Cuando
+  // `anchoColumna` ya trae el valor real, las filas siguen posicionándose
+  // con ese primer cálculo diminuto — cada `top` calculado a partir de
+  // offsets de 10px en 10px, mientras el contenido real (fotos a
+  // aspect-[4/3] del ancho de verdad) mide cientos de píxeles — así que las
+  // filas de fotos, todas mucho más altas que la separación entre ellas, se
+  // dibujan unas encima de otras. `measure()` fuerza a recalcular con el
+  // `estimateSize` actual en cuanto `altoFila` deja de ser una suposición.
+  useEffect(() => {
+    if (altoFila > 0) virtualizador.measure();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [altoFila]);
 
   return (
     <div ref={contenedorRef} className="h-full overflow-y-auto p-4">
