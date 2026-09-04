@@ -115,6 +115,13 @@ pub async fn afinar(
             tracing::warn!("verificación geométrica: {}", errores.trim());
         }
     }
+    tracing::info!(
+        "verificación geométrica: {} candidatos, {} verificadores, {} veredictos, salida {:?}",
+        candidatos.len(),
+        nivel.geometricos.len(),
+        por_candidato.values().map(|v| v.len()).sum::<usize>(),
+        salida.as_ref().map(|s| s.code()),
+    );
 
     Ok(candidatos
         .into_iter()
