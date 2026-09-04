@@ -88,6 +88,28 @@ def _cargar(verificador):
     return m
 
 
+#: Lado más largo al que se reescala cada imagen antes de verificar. tiny-roma
+#: monta una correlación densa O((alto·ancho)²) sobre el mapa de rasgos de
+#: XFeat -- a resolución de cámara real (varios megapíxeles) eso pide decenas
+#: de GB de VRAM en una GPU de 12 GB, y bajo WSL2 ese OOM no siempre es
+#: limpio: puede colgar el driver entero y con él la máquina, que es justo lo
+#: que pasó al reintentar tras arreglar el prompt de confianza de XFeat. Los
+#: propios `assets/*.jpg` de demo del proyecto (`Parskatt/RoMa`) son VGA,
+#: 640×480 -- se replica esa escala aquí, no una intuida.
+LADO_MAX = 640
+
+
+def _redimensionar(ruta):
+    from PIL import Image
+
+    img = Image.open(ruta).convert("RGB")
+    ancho, alto = img.size
+    escala = LADO_MAX / max(ancho, alto)
+    if escala < 1:
+        img = img.resize((max(1, round(ancho * escala)), max(1, round(alto * escala))), Image.LANCZOS)
+    return img
+
+
 def _inliers(matcher, consulta, candidato):
     """Correspondencias que sobreviven a RANSAC sobre la matriz fundamental.
     Es la unica senal del arbitraje, y por eso es lo unico que se devuelve.
@@ -98,21 +120,18 @@ def _inliers(matcher, consulta, candidato):
     coordenadas normalizadas [-1,1] a píxeles reales de cada imagen. Mismo
     patrón que el propio `demo_fundamental.py` del proyecto.
 
-    `torch.inference_mode()` es obligatorio aquí: sin él, cada llamada monta
-    y RETIENE el grafo de autograd completo (XFeat + el refinador de
-    tiny-roma), y como este proceso verifica varios candidatos seguidos sin
-    liberar nada entre uno y otro, esa memoria se va acumulando hasta agotar
-    la VRAM -- que en paso por WSL2 no siempre da un OOM limpio: puede colgar
-    el driver entero y con él la máquina."""
+    Verifica sobre las imágenes YA reescaladas (`_redimensionar`), no las
+    originales: el conteo de inliers no depende de en qué escala se midió,
+    solo de cuántas correspondencias sobreviven a RANSAC."""
     import cv2
     import numpy as np
     import torch
-    from PIL import Image
 
-    ancho_a, alto_a = Image.open(consulta).size
-    ancho_b, alto_b = Image.open(candidato).size
+    img_a, img_b = _redimensionar(consulta), _redimensionar(candidato)
+    ancho_a, alto_a = img_a.size
+    ancho_b, alto_b = img_b.size
     with torch.inference_mode():
-        warp, certeza = matcher.match(consulta, candidato)
+        warp, certeza = matcher.match(img_a, img_b)
         parejas, _ = matcher.sample(warp, certeza)
         if len(parejas) < 8:
             # Por debajo de ocho puntos la matriz fundamental no se puede
