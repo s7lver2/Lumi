@@ -5,7 +5,8 @@ import { Icon } from "../ui/Icon";
  *  haya que pensarlo, y el dock nunca tiene que decidir a qué borde perseguir. */
 export type DrawerId = "results" | "invite" | null;
 
-export const DRAWER_W = 250;
+export const DRAWER_W = 360;
+export const RAIL_W = 80;
 
 /** El armazón: el carril de la derecha, con su animación de entrada y salida.
  *  Lo que lleva dentro lo pone quien lo monta. */
@@ -16,6 +17,23 @@ export function Drawer({ open, children }: { open: boolean; children: React.Reac
       className="absolute bottom-0 right-0 top-0 z-[22] flex flex-col gap-2 overflow-y-auto
         border-l border-border bg-[rgba(16,18,21,.92)] p-3 backdrop-blur-xl
         transition-transform duration-[420ms] ease-expo">
+      {children}
+    </aside>
+  );
+}
+
+/** El mismo armazón que `Drawer`, pero para el carril de intentos: se
+ *  desliza desde la derecha igual, pero su borde derecho se pega al cajón
+ *  de detalle cuando ese está abierto (`shiftedBy`), o al canto de la
+ *  pantalla cuando no lo está — nunca se solapan. */
+export function RailShell({ open, shiftedBy, children }:
+  { open: boolean; shiftedBy: number; children: React.ReactNode }) {
+  return (
+    <aside
+      style={{ width: RAIL_W, right: shiftedBy, transform: open ? "none" : "translateX(100%)" }}
+      className="absolute bottom-0 top-0 z-[21] flex flex-col gap-1 overflow-y-auto
+        border-l border-border bg-[rgba(16,18,21,.92)] p-2 backdrop-blur-xl
+        transition-[transform,right] duration-[420ms] ease-expo">
       {children}
     </aside>
   );
