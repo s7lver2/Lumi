@@ -1,0 +1,12 @@
+{
+  "id": "aliked-n16",
+  "nombre": "ALIKED-N16 (extractor de LightGlue)",
+  "tipo": "componente",
+  "licencia": "BSD-3-Clause",
+  "pesos_url": "https://github.com/Shiaoming/ALIKED",
+  "sha256": "",
+  "fichero_url": "https://github.com/Shiaoming/ALIKED/raw/main/models/aliked-n16.pth",
+  "licencia_url": "https://raw.githubusercontent.com/Shiaoming/ALIKED/main/LICENSE",
+  "licencia_texto": "BSD 3-Clause License\n\nCopyright (c) 2022, Zhao Xiaoming\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its\n   contributors may be used to endorse or promote products derived from\n   this software without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n\n== Nota tecnica ==\n\nEste es el segundo fichero que ya avisaba la nota tecnica de\nlightglue-aliked.json: el peso del EMPAREJADOR LightGlue (fichero_url de ese\nregistro) no trae el peso del EXTRACTOR ALIKED que le da los keypoints -- son\ndos redes distintas que _construir() en lumi_verify.py tiene que cargar juntas.\nSe instala en pesos/aliked-n16/pesos.pth, no dentro de pesos/lightglue-aliked/.\n",
+  "puerta": null
+}

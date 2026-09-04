@@ -9,6 +9,7 @@ arbitraje es logica pura y esta probada alli.
 Protocolo: una linea de JSON por mensaje, igual que los demas trabajadores. El
 log va por stderr y no tiene contrato.
 """
+import contextlib
 import json
 import os
 import sys
@@ -30,13 +31,54 @@ def _log(txt):
     sys.stderr.flush()
 
 
+@contextlib.contextmanager
+def _sin_descargas(mapa_urls):
+    """LightGlue (`features="aliked"`) y ALIKED llaman los dos, sin
+    excepcion y sin ningun parametro para evitarlo, a
+    `torch.hub.load_state_dict_from_url` con una URL fija -- ninguno de los
+    dos acepta por su API publica un fichero ya verificado en disco. Se
+    sustituye esa función durante la construcción para que devuelva los
+    pesos que este registro ya verificó por sha256, y se restaura al salir
+    -- igual de estricto que el resto del proyecto sobre "sin sha256/licencia
+    no se carga", solo que aquí hay que interceptar la descarga en vez de
+    evitarla desde fuera."""
+    import torch.hub
+
+    original = torch.hub.load_state_dict_from_url
+
+    def _interceptado(url, *args, **kwargs):
+        for prefijo, contenido in mapa_urls.items():
+            if url.startswith(prefijo):
+                return contenido
+        raise RuntimeError(f"descarga no verificada bloqueada: {url}")
+
+    torch.hub.load_state_dict_from_url = _interceptado
+    try:
+        yield
+    finally:
+        torch.hub.load_state_dict_from_url = original
+
+
+def _pesos_de(verificador_id):
+    """Carga (con licencia + sha256 verificados) el fichero de un
+    verificador que vive en su PROPIA entrada de registro -- el patrón que
+    usan `roma` (necesita "dinov2-vitl14" aparte) y `lightglue-aliked"
+    (necesita "aliked-n16" aparte) para su segundo fichero, en vez de
+    inventar un segundo campo en la ficha del verificador principal."""
+    import torch
+    import lumi_pesos
+
+    ficha = lumi_pesos._ficha(verificador_id, REGISTRO)
+    directorio = os.path.join(PESOS, verificador_id)
+    ruta = os.path.join(directorio, "pesos.pth")
+    lumi_pesos._licencia(directorio)
+    lumi_pesos._verificar(ruta, ficha.get("sha256", ""))
+    return torch.load(ruta, map_location=DISPOSITIVO, weights_only=True)
+
+
 def _construir(verificador, pesos):
     """Un state_dict crudo no dice qué arquitectura reconstruir por sí solo —
-    misma razón que `lumi_pesos._reconstruir` para el embebedor. `tiny-roma`
-    es el único que este trabajador sabe montar hoy: necesita además el
-    backbone XFeat (de `verlab/accelerated_features`), que la propia función
-    de fábrica de `romatch` trae por `torch.hub` la primera vez que se usa
-    (y cachea después) — no hace falta vendorizarlo aquí.
+    misma razón que `lumi_pesos._reconstruir` para el embebedor.
 
     `tiny_roma_v1_outdoor(xfeat=None)` deja que XFeat lo traiga ELLA por
     dentro con `torch.hub.load(..., trust_repo="check")` -- que sin una
@@ -55,6 +97,36 @@ def _construir(verificador, pesos):
             "verlab/accelerated_features", "XFeat", pretrained=True, top_k=4096, trust_repo=True,
         ).net
         return romatch.tiny_roma_v1_outdoor(device=DISPOSITIVO, weights=pesos, xfeat=xfeat)
+    if verificador == "roma":
+        # roma_outdoor (a diferencia de tiny_roma_v1_outdoor) necesita DOS
+        # state_dicts crudos: el matcher (`pesos`, ya resuelto por _cargar
+        # como cualquier otro verificador) y el backbone DINOv2 completo,
+        # que aquí SÍ viene de su propia entrada de registro
+        # ("dinov2-vitl14") en vez de un torch.hub.load_state_dict_from_url
+        # sin verificar dentro de romatch. Exige además matmul en precisión
+        # "highest" o revienta con RuntimeError -- se fija aquí, no
+        # globalmente al importar, para no afectar a otros verificadores
+        # que puedan cargarse en el mismo proceso.
+        torch.set_float32_matmul_precision("highest")
+        dinov2_weights = _pesos_de("dinov2-vitl14")
+        return romatch.roma_outdoor(device=DISPOSITIVO, weights=pesos, dinov2_weights=dinov2_weights)
+    if verificador == "lightglue-aliked":
+        # LightGlue+ALIKED es un pipeline disperso (keypoints + emparejador),
+        # no un flujo denso como RoMa -- necesita DOS redes distintas, no
+        # una, así que aquí se devuelve una tupla en vez de un solo módulo;
+        # `_inliers` más abajo distingue por tipo, no por una tabla aparte.
+        from lightglue import LightGlue
+        from lightglue.aliked import ALIKED
+
+        pesos_aliked = _pesos_de("aliked-n16")
+        mapa = {
+            "https://github.com/Shiaoming/ALIKED/raw/main/models/": pesos_aliked,
+            "https://github.com/cvg/LightGlue/releases/download/": pesos,
+        }
+        with _sin_descargas(mapa):
+            extractor = ALIKED(model_name="aliked-n16", max_num_keypoints=4096).eval().to(DISPOSITIVO)
+            matcher = LightGlue(features="aliked").eval().to(DISPOSITIVO)
+        return (extractor, matcher)
     raise ValueError(
         f"{verificador} no tiene una arquitectura conocida para reconstruir su state_dict "
         "-- hace falta añadir su caso en _construir(), igual que tiny-roma"
@@ -82,7 +154,11 @@ def _cargar(verificador):
     # "'collections.OrderedDict' object has no attribute 'eval'".
     pesos = torch.load(ruta, map_location=DISPOSITIVO, weights_only=True)
     m = _construir(verificador, pesos)
-    m.eval()
+    # lightglue-aliked devuelve (extractor, matcher) en vez de un solo
+    # módulo -- cada uno ya sale de _construir en modo eval, así que aquí
+    # basta con no llamar .eval() sobre la tupla misma.
+    if not isinstance(m, tuple):
+        m.eval()
     _cargados[verificador] = m
     _decir({"tipo": "listo", "dispositivo": DISPOSITIVO, "modelo": verificador})
     return m
@@ -159,6 +235,39 @@ def _inliers(matcher, consulta, candidato):
     return int(np.sum(mascara)) if mascara is not None else 0
 
 
+def _inliers_disperso(envoltorio, consulta, candidato):
+    """LightGlue+ALIKED es disperso, no denso: no hay `warp`+`certainty` que
+    muestrear (esa API es exclusiva de RoMa/tiny-roma). Se extraen keypoints
+    de cada imagen por separado con ALIKED y se emparejan con LightGlue --
+    `match_pair()` (el propio helper de `lightglue.utils`) hace ambos pasos
+    y ya filtra por `filter_threshold` antes de devolver las correspondencias.
+    Los puntos emparejados van al mismo `cv2.findFundamentalMat` con el
+    mismo umbral/confianza/iteraciones que `_inliers` calibró para RoMa --
+    RANSAC no tiene por qué discriminar distinto según de dónde vinieron las
+    correspondencias."""
+    import cv2
+    import numpy as np
+    import torch
+    from lightglue.utils import match_pair, numpy_image_to_torch
+
+    extractor, matcher = envoltorio
+    img_a, img_b = _redimensionar(consulta), _redimensionar(candidato)
+    tensor_a = numpy_image_to_torch(np.array(img_a))
+    tensor_b = numpy_image_to_torch(np.array(img_b))
+
+    with torch.inference_mode():
+        feats_a, feats_b, matches01 = match_pair(extractor, matcher, tensor_a, tensor_b, device=DISPOSITIVO)
+        parejas = matches01["matches"]
+        if len(parejas) < 8:
+            return 0
+        kpts_a = feats_a["keypoints"][parejas[:, 0]].cpu().numpy()
+        kpts_b = feats_b["keypoints"][parejas[:, 1]].cpu().numpy()
+    _, mascara = cv2.findFundamentalMat(
+        kpts_a, kpts_b, method=cv2.USAC_MAGSAC, ransacReprojThreshold=0.2, confidence=0.999999, maxIters=10000,
+    )
+    return int(np.sum(mascara)) if mascara is not None else 0
+
+
 def _verificar(job):
     fuera = []
     consulta = job["consulta"]
@@ -166,7 +275,13 @@ def _verificar(job):
         for verificador in job["verificadores"]:
             try:
                 m = _cargar(verificador)
-                n = _inliers(m, consulta, cand["ruta"])
+                # _construir devuelve una tupla (extractor, matcher) solo
+                # para el caso disperso (lightglue-aliked) -- ningún otro
+                # verificador hoy o en el futuro cercano necesita dos redes,
+                # así que el tipo de `m` ya basta como señal, sin una tabla
+                # de despacho aparte.
+                n = _inliers_disperso(m, consulta, cand["ruta"]) if isinstance(m, tuple) \
+                    else _inliers(m, consulta, cand["ruta"])
             except Exception as e:
                 _log("verificador %s sobre %s: %s" % (verificador, cand["id"], e))
                 continue

@@ -11,6 +11,12 @@ YA entrenado entero, asi que los pesos base de Meta no aportan nada al
 resultado final; solo hace falta la arquitectura para que `load_state_dict`
 tenga donde encajar los valores reales.
 
+`trust_repo=True` explicito por la misma razon que en `lumi_verify._construir`
+para XFeat: sin el, `torch.hub.load` pregunta "¿confias en este repo?" por
+stdin, y stdin ya viene cerrado cuando esto corre -- revienta con
+`EOFError` al instante, antes de tocar una sola imagen, en vez de fallar por
+lo que de verdad faltara.
+
 cliquemining reusa esta misma clase: es SALAD afinado sobre el mismo
 backbone y la misma agregacion, solo cambia el checkpoint.
 """
@@ -33,7 +39,7 @@ class DINOv2Backbone(nn.Module):
 
     def __init__(self, model_name="dinov2_vitb14", num_trainable_blocks=4, norm_layer=True, return_token=True):
         super().__init__()
-        self.model = torch.hub.load("facebookresearch/dinov2", model_name, pretrained=False)
+        self.model = torch.hub.load("facebookresearch/dinov2", model_name, pretrained=False, trust_repo=True)
         self.num_channels = DINOV2_CANALES[model_name]
         self.num_trainable_blocks = num_trainable_blocks
         self.norm_layer = norm_layer

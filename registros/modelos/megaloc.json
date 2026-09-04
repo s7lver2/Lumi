@@ -1,7 +1,7 @@
 {
   "id": "lumi-preview",
   "nombre": "MegaLoc",
-  "base": "DINOv2-B + SALAD (congelado)",
+  "base": "ViT-B/14 propio (compatible DINOv2) + variante de SALAD, entrenado end-to-end",
   "version": "1.0",
   "dims": 8448,
   "familia": "foundation",

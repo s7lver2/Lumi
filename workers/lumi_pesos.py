@@ -87,6 +87,15 @@ def _reconstruir(modelo_id, dims):
         # arquitectura que hay que reconstruir para cargarlo.
         import salad_network
         return salad_network.VPRModel("dinov2_vitb14", num_channels=768, num_clusters=64, cluster_dim=128, token_dim=256)
+    if modelo_id == "lumi-2":
+        import boq_network
+        return boq_network.crear_dinov2_12288()
+    if modelo_id == "mixvpr":
+        import mixvpr_network
+        return mixvpr_network.crear_4096()
+    if modelo_id == "lumi-preview":
+        import megaloc_network
+        return megaloc_network.MegaLoc()
     raise ValueError(
         f"{modelo_id} trae un state_dict crudo y no se sabe reconstruir su arquitectura "
         "-- hace falta añadir su definición de red, igual que cosplace_network.py"
@@ -104,18 +113,28 @@ class Embebedor(object):
         ruta = os.path.join(directorio, "pesos.pth")
         _licencia(directorio)
         _verificar(ruta, ficha.get("sha256", ""))
-        # weights_only=True restringe qué clases puede reconstruir el pickle
-        # de PyTorch (tensores y contenedores básicos, nada arbitrario) y es
-        # lo que hay que usar siempre que el fichero sea un state_dict — que
-        # es el caso normal. Algunos .pth antiguos guardan el módulo entero
-        # en vez de solo sus pesos, y para esos no hay forma de evitar el
-        # unpickling completo sin dejar de poder cargarlos: se intenta el
-        # camino seguro primero y solo se cae al inseguro si de verdad hace
-        # falta, nunca al revés.
-        try:
-            crudo = torch.load(ruta, map_location=dispositivo, weights_only=True)
-        except Exception:
-            crudo = torch.load(ruta, map_location=dispositivo, weights_only=False)
+        if self.id == "lumi-preview":
+            # MegaLoc se publica en .safetensors, no en el pickle que lee
+            # torch.load -- lee distinto, pero de aqui en adelante es el
+            # mismo camino generico (state_dict crudo + _reconstruir) que
+            # cualquier otro modelo, así que no hace falta una clase aparte
+            # como la de anyloc (que sí necesita todo su propio forward).
+            from safetensors.torch import load_file
+            crudo = load_file(ruta)
+        else:
+            # weights_only=True restringe qué clases puede reconstruir el
+            # pickle de PyTorch (tensores y contenedores básicos, nada
+            # arbitrario) y es lo que hay que usar siempre que el fichero
+            # sea un state_dict — que es el caso normal. Algunos .pth
+            # antiguos guardan el módulo entero en vez de solo sus pesos, y
+            # para esos no hay forma de evitar el unpickling completo sin
+            # dejar de poder cargarlos: se intenta el camino seguro primero
+            # y solo se cae al inseguro si de verdad hace falta, nunca al
+            # revés.
+            try:
+                crudo = torch.load(ruta, map_location=dispositivo, weights_only=True)
+            except Exception:
+                crudo = torch.load(ruta, map_location=dispositivo, weights_only=False)
         if isinstance(crudo, dict):
             # Un .ckpt de PyTorch Lightning no es el state_dict en si: es un
             # sobre con el state_dict metido bajo la clave "state_dict",
