@@ -115,11 +115,19 @@ pub async fn afinar(
             tracing::warn!("verificación geométrica: {}", errores.trim());
         }
     }
+    let max_inliers = por_candidato
+        .values()
+        .flatten()
+        .map(|v| v.inliers)
+        .max()
+        .unwrap_or(0);
     tracing::info!(
-        "verificación geométrica: {} candidatos, {} verificadores, {} veredictos, salida {:?}",
+        "verificación geométrica: {} candidatos, {} verificadores, {} veredictos, máximo {} inliers (umbral {}), salida {:?}",
         candidatos.len(),
         nivel.geometricos.len(),
         por_candidato.values().map(|v| v.len()).sum::<usize>(),
+        max_inliers,
+        lumi_index::arbitro::UMBRAL_INLIERS,
         salida.as_ref().map(|s| s.code()),
     );
 
