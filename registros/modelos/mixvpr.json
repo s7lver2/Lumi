@@ -5,7 +5,11 @@
   "version": "1.0",
   "dims": 4096,
   "familia": "cnn",
-  "licencia": "MIT",
+  "licencia": "sin licencia declarada -- el repo no trae LICENSE ni la menciona en el README, revisar antes de distribuir",
   "pesos_url": "https://github.com/amaralibey/MixVPR",
-  "sha256": ""
+  "sha256": "",
+  "fichero_url": "https://drive.google.com/file/d/1vuz3PvnR7vxnDDLQrdHJaOA04SQrtk5L/view?usp=share_link",
+  "licencia_url": "",
+  "licencia_texto": "",
+  "puerta": null
 }
