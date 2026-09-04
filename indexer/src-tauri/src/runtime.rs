@@ -27,19 +27,25 @@ pub fn python_del_venv(dir: &Path) -> PathBuf {
     if cfg!(windows) { v.join("Scripts").join("python.exe") } else { v.join("bin").join("python3") }
 }
 
-pub fn esta_instalado(dir: &Path) -> bool {
+/// `safetensors` se añadió después de que algunos venvs ya tuvieran
+/// torch/torchvision instalados (lo necesita MegaLoc, uno de los
+/// recuperadores de Lumi Pro) — igual que pasó antes con torchvision:
+/// comprobar solo los paquetes viejos decía "ya instalado, nada que hacer"
+/// y dejaba el venv a medias para siempre en esos casos, sin volver a
+/// intentar completarlo.
+fn importa(dir: &Path, modulos: &str) -> bool {
     let py = python_del_venv(dir);
     py.exists()
         && crate::proceso::cmd(&py)
-            // torchvision se añadió después de que algunos venvs ya
-            // tuvieran torch instalado — comprobar solo torch decía "ya
-            // instalado, nada que hacer" y dejaba el venv a medias para
-            // siempre en esos casos, sin volver a intentar completarlo.
-            .args(["-c", "import torch, torchvision"])
+            .args(["-c", &format!("import {modulos}")])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
             .is_ok_and(|s| s.success())
+}
+
+pub fn esta_instalado(dir: &Path) -> bool {
+    importa(dir, "torch, torchvision") && importa(dir, "safetensors")
 }
 
 async fn correr(log: &Arc<Log>, etiqueta: &'static str, exe: &Path, args: &[&str]) -> Result<()> {
@@ -114,17 +120,32 @@ pub async fn instalar(dir: &Path, log: Arc<Log>) -> Result<()> {
         correr(&log, "venv", Path::new(py), &["-m", "venv", "--clear", &destino]).await?;
     }
     correr(&log, "pip", &vpy, &["-m", "pip", "install", "--upgrade", "pip"]).await?;
-    correr(
-        &log,
-        "pip",
-        &vpy,
-        &[
-            "-m", "pip", "install", "--retries", "5", "--timeout", "60",
-            "torch", "torchvision", "--index-url", "https://download.pytorch.org/whl/cu126",
-        ],
-    )
-    .await?;
+    // Cada paquete se comprueba por su cuenta antes de instalarlo, no solo
+    // al principio de `instalar()`: un venv que ya tenía torch/torchvision
+    // de una version anterior de este runtime, pero todavia no
+    // safetensors, tiene que completar SOLO lo que le falta -- igual que ya
+    // se resolvio este mismo problema en el lado de Station
+    // (crates/lumid/src/tasks.rs) para romatch.
+    if importa(dir, "torch, torchvision") {
+        log.apuntar("pip: torch/torchvision ya instalados, nada que hacer".into());
+    } else {
+        correr(
+            &log,
+            "pip",
+            &vpy,
+            &[
+                "-m", "pip", "install", "--retries", "5", "--timeout", "60",
+                "torch", "torchvision", "--index-url", "https://download.pytorch.org/whl/cu126",
+            ],
+        )
+        .await?;
+    }
     correr(&log, "pip", &vpy, &["-m", "pip", "install", "pillow", "numpy"]).await?;
+    if importa(dir, "safetensors") {
+        log.apuntar("pip: safetensors ya instalado, nada que hacer".into());
+    } else {
+        correr(&log, "pip", &vpy, &["-m", "pip", "install", "safetensors"]).await?;
+    }
     log.apuntar("runtime: instalado".into());
     Ok(())
 }
