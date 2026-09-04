@@ -96,23 +96,31 @@ def _inliers(matcher, consulta, candidato):
     (`warp`) más una `certainty` por pixel -- `sample()` es lo que reduce eso
     a un puñado de correspondencias, y `to_pixel_coordinates()` las pasa de
     coordenadas normalizadas [-1,1] a píxeles reales de cada imagen. Mismo
-    patrón que el propio `demo_fundamental.py` del proyecto."""
+    patrón que el propio `demo_fundamental.py` del proyecto.
+
+    `torch.inference_mode()` es obligatorio aquí: sin él, cada llamada monta
+    y RETIENE el grafo de autograd completo (XFeat + el refinador de
+    tiny-roma), y como este proceso verifica varios candidatos seguidos sin
+    liberar nada entre uno y otro, esa memoria se va acumulando hasta agotar
+    la VRAM -- que en paso por WSL2 no siempre da un OOM limpio: puede colgar
+    el driver entero y con él la máquina."""
     import cv2
     import numpy as np
+    import torch
     from PIL import Image
 
     ancho_a, alto_a = Image.open(consulta).size
     ancho_b, alto_b = Image.open(candidato).size
-    warp, certeza = matcher.match(consulta, candidato)
-    parejas, _ = matcher.sample(warp, certeza)
-    if len(parejas) < 8:
-        # Por debajo de ocho puntos la matriz fundamental no se puede estimar:
-        # no es «pocas correspondencias», es «ninguna respuesta».
-        return 0
-    kpts_a, kpts_b = matcher.to_pixel_coordinates(parejas, alto_a, ancho_a, alto_b, ancho_b)
-    _, mascara = cv2.findFundamentalMat(
-        kpts_a.cpu().numpy(), kpts_b.cpu().numpy(), cv2.FM_RANSAC, 3.0, 0.99
-    )
+    with torch.inference_mode():
+        warp, certeza = matcher.match(consulta, candidato)
+        parejas, _ = matcher.sample(warp, certeza)
+        if len(parejas) < 8:
+            # Por debajo de ocho puntos la matriz fundamental no se puede
+            # estimar: no es «pocas correspondencias», es «ninguna respuesta».
+            return 0
+        kpts_a, kpts_b = matcher.to_pixel_coordinates(parejas, alto_a, ancho_a, alto_b, ancho_b)
+        kpts_a, kpts_b = kpts_a.cpu().numpy(), kpts_b.cpu().numpy()
+    _, mascara = cv2.findFundamentalMat(kpts_a, kpts_b, cv2.FM_RANSAC, 3.0, 0.99)
     return int(np.sum(mascara)) if mascara is not None else 0
 
 
@@ -127,6 +135,18 @@ def _verificar(job):
             except Exception as e:
                 _log("verificador %s sobre %s: %s" % (verificador, cand["id"], e))
                 continue
+            finally:
+                # Con `inference_mode` cada tensor se libera solo al salir de
+                # `_inliers`, pero en una tanda de una docena de candidatos
+                # seguidos la fragmentación de VRAM se acumula igual -- esto
+                # la devuelve al asignador de CUDA entre uno y otro, no solo
+                # al final del proceso.
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                except ImportError:
+                    pass
             fuera.append({"tipo": "verificado", "id": job["id"], "candidato": cand["id"],
                           "verificador": verificador, "inliers": n,
                           "lat": cand["lat"], "lng": cand["lng"]})
