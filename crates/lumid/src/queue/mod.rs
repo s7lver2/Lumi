@@ -684,8 +684,25 @@ impl Queue {
                         // equivocado no puede matar un candidato antes de que
                         // RANSAC tenga ocasión de confirmarlo.
                         let agentes_del_nivel = self.agentes_de(&nivel);
+                        // Mismo criterio que `lanzar_uno` para este mismo
+                        // directorio — ver el comentario ahí.
+                        let pesos = self
+                            .store
+                            .get_meta("models_dir")
+                            .map(PathBuf::from)
+                            .unwrap_or_else(|| self.dir.join("runtime"));
+                        let registro_verif = crate::assets::ruta("registros/verificadores");
                         let (afinados, dictamen) = tokio::join!(
-                            crate::verificar::afinar(&nivel, &consulta, c.clone(), &rutas),
+                            crate::verificar::afinar(
+                                &nivel,
+                                &consulta,
+                                c.clone(),
+                                &rutas,
+                                &self.python,
+                                &dispositivo,
+                                &registro_verif,
+                                &pesos,
+                            ),
                             crate::agentar::preguntar(&agentes_del_nivel, &consulta),
                         );
                         let afinados = afinados.unwrap_or_default();
