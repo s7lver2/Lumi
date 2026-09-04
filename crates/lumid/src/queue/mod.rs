@@ -42,6 +42,23 @@ const RELANZAR_MAX_S: u64 = 60;
 /// búsqueda, un sistema donde el binario se llama distinto deja al daemon sin
 /// lanzar un solo trabajador, para siempre, sin ni un error que lo delate más
 /// allá del log.
+/// Igual que `pesos` en `lanzar_uno`/`afinar`: se recalcula en cada uso, no se
+/// fija una vez al arrancar. El runtime (torch/romatch) puede instalarse DESDE
+/// el panel bien después de que el daemon ya esté corriendo — una instalación
+/// desde cero, en particular, arranca sin venv todavía — y fijar el intérprete
+/// una sola vez al inicio dejaba la cola atada para siempre al Python del
+/// sistema (sin torch) aunque "Reinstalar runtime" hubiera terminado bien.
+fn interprete_python(store: &Store) -> PathBuf {
+    store
+        .get_meta("models_dir")
+        .map(|m| PathBuf::from(m).join("venv/bin/python3"))
+        .filter(|p| p.exists())
+        // Sin runtime instalado cae al intérprete del sistema: el trabajador
+        // de referencia no necesita nada más, y así el entorno de desarrollo
+        // funciona sin haber pasado por el asistente.
+        .unwrap_or_else(find_python)
+}
+
 fn find_python() -> PathBuf {
     for candidato in ["python3", "python"] {
         let responde = std::process::Command::new(candidato)
@@ -131,7 +148,6 @@ pub struct Queue {
     /// Con qué relanzar. Se calcula una vez al arrancar porque no cambia
     /// mientras el daemon vive, y el vigilante lo necesita a cada rato.
     dispositivos: Vec<String>,
-    python: PathBuf,
     script: PathBuf,
     dir: PathBuf,
     eventos: mpsc::UnboundedSender<Evento>,
@@ -187,16 +203,8 @@ impl Queue {
         let (difusion, _) = broadcast::channel(256);
         let (tx_ev, rx_ev) = mpsc::unbounded_channel();
 
-        let python = store
-            .get_meta("models_dir")
-            .map(|m| PathBuf::from(m).join("venv/bin/python3"))
-            .filter(|p| p.exists())
-            // Sin runtime instalado cae al intérprete del sistema: el trabajador
-            // de referencia no necesita nada más, y así el entorno de desarrollo
-            // funciona sin haber pasado por el asistente.
-            .unwrap_or_else(find_python);
         let script = find_script(&dir);
-        tracing::info!("cola: intérprete {}, script {}", python.display(), script.display());
+        tracing::info!("cola: intérprete {}, script {}", interprete_python(&store).display(), script.display());
 
         let mut dispositivos: Vec<String> =
             gpus.iter().map(|g| format!("cuda:{}", g.index)).collect();
@@ -219,7 +227,6 @@ impl Queue {
             difusion,
             admin_eventos,
             dispositivos,
-            python,
             script,
             dir,
             eventos: tx_ev,
@@ -431,7 +438,7 @@ impl Queue {
             .unwrap_or_else(|| self.dir.join("runtime"));
         match worker::spawn(
             dispositivo.to_string(),
-            &self.python,
+            &interprete_python(&self.store),
             &self.script,
             log,
             self.eventos.clone(),
@@ -692,13 +699,14 @@ impl Queue {
                             .map(PathBuf::from)
                             .unwrap_or_else(|| self.dir.join("runtime"));
                         let registro_verif = crate::assets::ruta("registros/verificadores");
+                        let python = interprete_python(&self.store);
                         let (afinados, dictamen) = tokio::join!(
                             crate::verificar::afinar(
                                 &nivel,
                                 &consulta,
                                 c.clone(),
                                 &rutas,
-                                &self.python,
+                                &python,
                                 &dispositivo,
                                 &registro_verif,
                                 &pesos,
