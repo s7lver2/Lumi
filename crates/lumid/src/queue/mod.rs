@@ -782,12 +782,19 @@ impl Queue {
                                 Some((clave(c.lat, c.lng), a.motivo.clone()?))
                             })
                             .collect();
+                        let antes_de_agentes = usar.len();
                         let usar: Vec<_> = usar
                             .iter()
                             .zip(veredicto_final.ajustes.iter())
                             .filter(|(_, a)| a.factor > 0.0)
                             .map(|(c, _)| c.clone())
                             .collect();
+                        tracing::info!(
+                            "agentes: {} candidatos antes, {} después, motivos {:?}",
+                            antes_de_agentes,
+                            usar.len(),
+                            veredicto_final.ajustes.iter().map(|a| (a.factor, a.motivo.clone())).collect::<Vec<_>>(),
+                        );
 
                         self.guardar_agentes(id, &dictamen);
                         let h = crate::recuperar::hipotesis(&usar);
