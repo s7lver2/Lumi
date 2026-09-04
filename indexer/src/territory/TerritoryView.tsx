@@ -234,28 +234,37 @@ export function TerritoryView({
       return;
     }
     setConfirmandoDescarga(true);
-    const activas = soloGratis
-      ? new Set(estimacion.lineas.filter((l) => l.coste_eur === 0).map((l) => l.fuente))
-      : new Set(estimacion.lineas.map((l) => l.fuente));
-    const nuevas = Object.fromEntries(
-      Object.entries(nuevasPorOrigen).filter(([f]) => activas.has(f)),
-    );
-    // El presupuesto que viaja con la descarga es LO ESTIMADO, no lo que queda
-    // del mes: así un origen que se desmadre se queda sin saldo en su propio
-    // trabajo en vez de comerse el tope entero.
-    const presupuesto = soloGratis ? 0 : estimacion.total_eur;
-    // Lo único que se sabe de antemano sobre cuántas imágenes van a caer: la
-    // estimación del sondeo, sumada solo entre los orígenes que de verdad
-    // entran en esta descarga. Sin esto, el ETA de la descarga no tiene con
-    // qué medir "cuánto falta" mientras una sola tesela tarda minutos.
-    const imagenesEstimadas = estimacion.lineas
-      .filter((l) => activas.has(l.fuente))
-      .reduce((s, l) => s + l.unidades, 0);
-    await api.descargaArrancar(indiceId, nuevas, presupuesto, imagenesEstimadas);
-    // Sin `setConfirmandoDescarga(false)`: `reiniciar()` desmonta el diálogo
-    // entero, así que dejarlo en `true` no se llega a ver.
-    reiniciar();
-    onDescargando?.(imagenesEstimadas);
+    try {
+      const activas = soloGratis
+        ? new Set(estimacion.lineas.filter((l) => l.coste_eur === 0).map((l) => l.fuente))
+        : new Set(estimacion.lineas.map((l) => l.fuente));
+      const nuevas = Object.fromEntries(
+        Object.entries(nuevasPorOrigen).filter(([f]) => activas.has(f)),
+      );
+      // El presupuesto que viaja con la descarga es LO ESTIMADO, no lo que queda
+      // del mes: así un origen que se desmadre se queda sin saldo en su propio
+      // trabajo en vez de comerse el tope entero.
+      const presupuesto = soloGratis ? 0 : estimacion.total_eur;
+      // Lo único que se sabe de antemano sobre cuántas imágenes van a caer: la
+      // estimación del sondeo, sumada solo entre los orígenes que de verdad
+      // entran en esta descarga. Sin esto, el ETA de la descarga no tiene con
+      // qué medir "cuánto falta" mientras una sola tesela tarda minutos.
+      const imagenesEstimadas = estimacion.lineas
+        .filter((l) => activas.has(l.fuente))
+        .reduce((s, l) => s + l.unidades, 0);
+      await api.descargaArrancar(indiceId, nuevas, presupuesto, imagenesEstimadas);
+      // Sin `setConfirmandoDescarga(false)`: `reiniciar()` desmonta el diálogo
+      // entero, así que dejarlo en `true` no se llega a ver.
+      reiniciar();
+      onDescargando?.(imagenesEstimadas);
+    } catch (e) {
+      // Antes esto no se capturaba: un fallo del backend (o de la propia
+      // llamada IPC) dejaba `confirmandoDescarga` en `true` para siempre —
+      // el diálogo nunca se desmontaba, así que "Arrancando…" se quedaba
+      // pintado sin ningún indicio de que algo había fallado.
+      setConfirmandoDescarga(false);
+      throw e;
+    }
   }
 
   return (
