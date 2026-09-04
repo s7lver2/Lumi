@@ -11,11 +11,13 @@ const eur = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
 export function EstimateDialog({
   e,
   cargando,
+  error,
   onCancelar,
   onConfirmar,
 }: {
   e: Estimacion;
   cargando: boolean;
+  error?: string | null;
   onCancelar: () => void;
   onConfirmar: (soloGratis: boolean) => void;
 }) {
@@ -109,6 +111,13 @@ export function EstimateDialog({
         una petición que falla y no devuelve imagen no se cobra ni se cuenta. Y el presupuesto va
         con la descarga como contador vivo, no como una cifra que se mira al empezar.
       </p>
+
+      {error && (
+        <p className="mt-3 flex items-start gap-2 text-[11px] leading-relaxed text-danger-fg">
+          <Icon name="alert" size={13} className="mt-px shrink-0" />
+          {error}
+        </p>
+      )}
 
       <div className="mt-[18px] flex justify-end gap-2.5">
         <button onClick={onCancelar} disabled={cargando}

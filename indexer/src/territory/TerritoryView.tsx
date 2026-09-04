@@ -67,6 +67,11 @@ export function TerritoryView({
   const [nuevasPorOrigen, setNuevasPorOrigen] = useState<Record<string, string[]>>({});
   const [confirmandoPlan, setConfirmandoPlan] = useState(false);
   const [confirmandoDescarga, setConfirmandoDescarga] = useState(false);
+  // Antes un rechazo del backend (p. ej. "este índice está sellado") se
+  // tragaba en silencio: el botón volvía a la normalidad sin decir por qué
+  // no arrancó nada — mismo patrón de error visible que ya usan SealDialog
+  // y LegacyImportDialog.
+  const [errorDescarga, setErrorDescarga] = useState<string | null>(null);
   // Si hay un lugar buscado seleccionado en el mapa, su panel de info ocupa
   // el mismo sitio que el de disponibilidad — mutuamente excluyentes (#61).
   const [hayLugarBuscado, setHayLugarBuscado] = useState(false);
@@ -234,6 +239,7 @@ export function TerritoryView({
       return;
     }
     setConfirmandoDescarga(true);
+    setErrorDescarga(null);
     try {
       const activas = soloGratis
         ? new Set(estimacion.lineas.filter((l) => l.coste_eur === 0).map((l) => l.fuente))
@@ -258,12 +264,15 @@ export function TerritoryView({
       reiniciar();
       onDescargando?.(imagenesEstimadas);
     } catch (e) {
-      // Antes esto no se capturaba: un fallo del backend (o de la propia
-      // llamada IPC) dejaba `confirmandoDescarga` en `true` para siempre —
-      // el diálogo nunca se desmontaba, así que "Arrancando…" se quedaba
-      // pintado sin ningún indicio de que algo había fallado.
+      // Antes esto no se capturaba: un fallo del backend (p. ej. intentar
+      // seguir metiendo territorio a un índice ya sellado) dejaba
+      // `confirmandoDescarga` en `true` para siempre y el motivo real
+      // desaparecía como un promise rejection sin capturar — el botón
+      // "no hacía nada" sin ninguna pista de por qué. `invoke` rechaza con
+      // el `String` de error que ya devuelve el comando de Tauri, así que
+      // mostrarlo tal cual ya es un mensaje legible, no un stack técnico.
       setConfirmandoDescarga(false);
-      throw e;
+      setErrorDescarga(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -340,7 +349,8 @@ export function TerritoryView({
           <EstimateDialog
             e={estimacion}
             cargando={confirmandoDescarga}
-            onCancelar={() => setEstimacion(null)}
+            error={errorDescarga}
+            onCancelar={() => { setEstimacion(null); setErrorDescarga(null); }}
             onConfirmar={(soloGratis) => void confirmarDescarga(soloGratis)}
           />
         </Overlay>
