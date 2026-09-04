@@ -420,6 +420,15 @@ impl Queue {
             .dir
             .join("workers")
             .join(format!("{}.log", dispositivo.replace(':', "-")));
+        // Mismo criterio que `routes::models::instalados_dir` y el runner de
+        // `tasks.rs` para este mismo directorio: `models_dir` en `meta` manda
+        // si `lumi install` lo fijó (disco grande aparte), y si no, el sitio
+        // de siempre junto a los datos del daemon.
+        let pesos = self
+            .store
+            .get_meta("models_dir")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| self.dir.join("runtime"));
         match worker::spawn(
             dispositivo.to_string(),
             &self.python,
@@ -427,6 +436,7 @@ impl Queue {
             log,
             self.eventos.clone(),
             &crate::assets::ruta("registros/modelos"),
+            &pesos,
         ) {
             Ok(l) => {
                 if let Ok(mut e) = self.estado.lock() {

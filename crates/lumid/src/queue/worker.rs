@@ -101,6 +101,7 @@ pub fn spawn(
     log: PathBuf,
     eventos: UnboundedSender<Evento>,
     registro: &Path,
+    pesos: &Path,
 ) -> Result<Lanzado> {
     let mut hijo = Command::new(python)
         // `-u` no es opcional: sin él Python almacena su salida y el daemon no
@@ -115,6 +116,15 @@ pub fn spawn(
         // resuelve a nada real. Sin este env, todo análisis fallaba con
         // "[Errno 2] No such file or directory: 'registros/modelos'".
         .env("LUMI_REGISTRO", registro)
+        // Mismo problema, mismo arreglo, pero para los PESOS: `lumi_geo.py`
+        // cae a la ruta relativa "pesos" si esto falta, que bajo systemd
+        // tampoco resuelve a nada. Faltaba aquí aunque ya se había arreglado
+        // para `LUMI_REGISTRO` — el síntoma no era "no such file" sino algo
+        // más confuso: la carga fallaba con "faltan los términos de licencia
+        // en pesos/<modelo>/LICENCIA.txt" porque _licencia() sí encuentra el
+        // directorio (relativo, vacío) y sigue el camino de error normal en
+        // vez de romperse con una ruta que no existe.
+        .env("LUMI_PESOS", pesos)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
