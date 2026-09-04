@@ -122,7 +122,18 @@ def _inliers(matcher, consulta, candidato):
 
     Verifica sobre las imágenes YA reescaladas (`_redimensionar`), no las
     originales: el conteo de inliers no depende de en qué escala se midió,
-    solo de cuántas correspondencias sobreviven a RANSAC."""
+    solo de cuántas correspondencias sobreviven a RANSAC.
+
+    `cv2.FM_RANSAC` con umbral 3.0px y confianza 0.99 (lo que había antes) NO
+    discrimina nada aquí: comprobado contra los propios pares de control de
+    `Parskatt/RoMa` (misma escena Sacre Coeur A/B → 3394 inliers) frente a
+    pares de escenas DISTINTAS del mismo repo (Sacre Coeur vs Toronto → 586)
+    -- de sobra por encima de cualquier umbral razonable, porque un flujo
+    denso es localmente suave incluso entre fotos que no se corresponden, y
+    con miles de puntos muestreados RANSAC casi siempre encuentra una F que
+    "explica" la mayoría. `USAC_MAGSAC` con el umbral/confianza/iteraciones
+    que usa el propio `demo_fundamental.py` del proyecto separa mucho mejor
+    (mismos pares: 652 y 139 en positivos, 84-123 en negativos)."""
     import cv2
     import numpy as np
     import torch
@@ -139,7 +150,9 @@ def _inliers(matcher, consulta, candidato):
             return 0
         kpts_a, kpts_b = matcher.to_pixel_coordinates(parejas, alto_a, ancho_a, alto_b, ancho_b)
         kpts_a, kpts_b = kpts_a.cpu().numpy(), kpts_b.cpu().numpy()
-    _, mascara = cv2.findFundamentalMat(kpts_a, kpts_b, cv2.FM_RANSAC, 3.0, 0.99)
+    _, mascara = cv2.findFundamentalMat(
+        kpts_a, kpts_b, method=cv2.USAC_MAGSAC, ransacReprojThreshold=0.2, confidence=0.999999, maxIters=10000,
+    )
     return int(np.sum(mascara)) if mascara is not None else 0
 
 

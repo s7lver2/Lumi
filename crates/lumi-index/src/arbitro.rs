@@ -26,12 +26,17 @@ pub struct Ganador {
     pub lng: f64,
 }
 
-/// Puesto a ojo, y hay que decirlo: todavía no hay conjunto de validación. Va
+/// Calibrado contra un puñado de pares de control de `Parskatt/RoMa`
+/// (verificados con `USAC_MAGSAC`, ver `workers/lumi_verify.py::_inliers`):
+/// la misma escena da 139-652 inliers, escenas distintas dan 84-123 -- 25
+/// (el valor anterior, puesto a ojo antes de medir nada) dejaba pasar
+/// CUALQUIER par, coincidiera o no. Sigue siendo pocos pares, no un
+/// conjunto de validación real: el 5c lo revisará con métricas delante. Va
 /// como constante con nombre y NO como ajuste de configuración — un ajuste
 /// invita a que cada instalación tenga el suyo y a que dos servidores den
 /// respuestas distintas al mismo caso, que en una herramienta forense es lo
-/// último que se quiere. El 5c lo revisará con métricas delante.
-pub const UMBRAL_INLIERS: u32 = 25;
+/// último que se quiere.
+pub const UMBRAL_INLIERS: u32 = 130;
 
 /// `None` significa «este candidato se cae»: ninguno llegó al umbral.
 pub fn arbitrar(veredictos: &[Veredicto]) -> Option<Ganador> {
@@ -90,8 +95,8 @@ mod tests {
 
     #[test]
     fn el_empate_se_rompe_por_nombre_y_no_al_azar() {
-        let a = arbitrar(&[v("roma", 100, 1.0), v("efficient-loftr", 100, 2.0)]).unwrap();
-        let b = arbitrar(&[v("efficient-loftr", 100, 2.0), v("roma", 100, 1.0)]).unwrap();
+        let a = arbitrar(&[v("roma", UMBRAL_INLIERS, 1.0), v("efficient-loftr", UMBRAL_INLIERS, 2.0)]).unwrap();
+        let b = arbitrar(&[v("efficient-loftr", UMBRAL_INLIERS, 2.0), v("roma", UMBRAL_INLIERS, 1.0)]).unwrap();
         assert_eq!(a.verificador, b.verificador, "el orden de entrada no puede decidir");
     }
 }
