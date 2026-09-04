@@ -10,7 +10,7 @@ import { RailShell } from "./Drawer";
  *  llenaba entero en cuanto había unos pocos intentos, empujando el
  *  resultado de verdad fuera de la vista. */
 export function AttemptsRail({
-  open, shiftedBy, analyses, selected, onSelect, onAnalyze, onMenu,
+  open, shiftedBy, analyses, selected, onSelect, onAnalyze, onEliminar, onLimpiar, onMenu,
 }: {
   open: boolean;
   shiftedBy: number;
@@ -18,10 +18,16 @@ export function AttemptsRail({
   selected: number | null;
   onSelect: (id: number) => void;
   onAnalyze: () => void;
+  onEliminar: (id: number) => void;
+  onLimpiar: () => void;
   onMenu: (s: MenuState) => void;
 }) {
   const menuDe = (a: Analysis): MenuEntry[] => {
     const hecho = a.state === "hecho";
+    // Igual que el DELETE que ya arbitra el backend: lo que está corriendo
+    // ahora mismo no se cancela a mitad, todo lo demás (pendiente, hecho,
+    // error) sí se puede borrar.
+    const corriendo = a.state === "en_curso";
     return [
       { label: "Repetir con otro modelo…", onClick: onAnalyze },
       hecho
@@ -31,14 +37,22 @@ export function AttemptsRail({
               `${a.result_lat!.toFixed(6)}, ${a.result_lng!.toFixed(6)}`),
           }
         : null,
+      null,
+      { label: "Borrar", danger: true, disabled: corriendo, onClick: () => onEliminar(a.id) },
     ];
   };
 
   return (
     <RailShell open={open} shiftedBy={shiftedBy}>
-      <p className="mb-1 text-center text-[7.5px] uppercase tracking-[.1em] text-subtle">
-        Intentos
-      </p>
+      <div className="mb-1 flex items-center justify-between gap-1 px-0.5">
+        <p className="text-[7.5px] uppercase tracking-[.1em] text-subtle">Intentos</p>
+        {analyses.length > 0 && (
+          <button onClick={onLimpiar} title="Borrar todos los intentos de esta imagen"
+            className="text-subtle transition-colors duration-200 hover:text-danger-fg">
+            <Icon name="trash" size={10} />
+          </button>
+        )}
+      </div>
       {analyses.map((a, i) => {
         const on = a.id === selected;
         const icon = a.state === "hecho" ? "check" : a.state === "error" ? "x" : "spinner";

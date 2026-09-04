@@ -199,6 +199,37 @@ export function CaseView({
     }
   }
 
+  /** Borra un intento suelto. El backend (`analyses::remove`) ya rechaza el
+   *  que está corriendo ahora mismo con 409 — aquí solo se refleja el éxito
+   *  quitándolo de la lista local, sin recargar el caso entero. */
+  async function eliminarIntento(id: number) {
+    try {
+      await api.del(`/v1/analyses/${id}`, token);
+      setAnalyses((a) => a.filter((x) => x.id !== id));
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  /** Borra todos los intentos de la imagen seleccionada de golpe.
+   *  `allSettled` y no `all`: si uno se puso a correr justo entre que se
+   *  pintó el botón y el clic, ESE fallo no debe impedir que los demás sí se
+   *  borren — se quitan de la lista local solo los que de verdad se
+   *  borraron, y el que falló se queda donde estaba, con su motivo. */
+  async function limpiarIntentos() {
+    const borrables = mine.filter((a) => a.state !== "en_curso");
+    if (borrables.length === 0) return;
+    const resultados = await Promise.allSettled(
+      borrables.map((a) => api.del(`/v1/analyses/${a.id}`, token)),
+    );
+    const borrados = new Set(
+      borrables.filter((_, i) => resultados[i].status === "fulfilled").map((a) => a.id),
+    );
+    if (borrados.size > 0) setAnalyses((a) => a.filter((x) => !borrados.has(x.id)));
+    const fallo = resultados.find((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (fallo) setError(String(fallo.reason));
+  }
+
   const image = list.find((i) => i.id === sel) ?? null;
   const mine = useMemo(
     () => (sel === null ? [] : analyses.filter((a) => a.image_ids.includes(sel))),
@@ -353,6 +384,8 @@ export function CaseView({
           <AttemptsRail open={railMostrado} shiftedBy={detailInset} analyses={mine}
             selected={shown?.id ?? null} onSelect={setSelAnalysis}
             onAnalyze={() => (sel !== null ? setStaged([sel]) : void pick())}
+            onEliminar={(id) => void eliminarIntento(id)}
+            onLimpiar={() => void limpiarIntentos()}
             onMenu={setMenu} />
           <ResultsDrawer open={drawerId === "results"} image={image} analysis={shown}
             busy={busy}
