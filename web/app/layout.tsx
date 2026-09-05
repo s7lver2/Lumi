@@ -5,7 +5,7 @@ import { TransicionPagina } from "../components/TransicionPagina";
 import { IndicadorSecciones } from "../components/IndicadorSecciones";
 
 export const metadata = {
-  title: "Lumi Station · geolocalización de imágenes por inferencia",
+  title: "meet lumi",
   description:
     "Herramienta de geolocalización de imágenes por inferencia, de código abierto y autoalojada. Tus imágenes y tus GPUs no salen de tu servidor.",
 };
