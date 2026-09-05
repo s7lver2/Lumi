@@ -7,6 +7,7 @@ import { WaitingScreen } from "./WaitingScreen";
 import { ResolvedScreen } from "./ResolvedScreen";
 import { ChangePasswordForm } from "./ChangePasswordForm";
 import { WavesBackground } from "./WavesBackground";
+import { AsciiWavesBackground } from "./AsciiWavesBackground";
 import type { AccessStatus } from "../lib/api";
 import { AjustesView } from "../settings/AjustesView";
 import { Icon } from "../ui/Icon";
@@ -43,6 +44,10 @@ export function EntryScreen({ onSignedIn, onOwnerKey }: {
   // Excepción: con un ticket guardado se aterriza en la espera, porque es lo
   // que el usuario estaba haciendo y sobrevive a cerrar la app.
   const [view, setView] = useState<EntryView>(loadSession()?.ticket ? "waiting" : "login");
+  // #120: dos fondos posibles para variar, elegido una vez por apertura de
+  // la app (no en cada render: `EntryScreen` no se remonta al cambiar de
+  // vista, y recalcularlo entonces cambiaría el fondo a mitad de sesión).
+  const [ascii] = useState(() => Math.random() < 0.5);
   const [resolved, setResolved] = useState<AccessStatus | null>(null);
 
   if (view === "ajustes") {
@@ -108,7 +113,7 @@ export function EntryScreen({ onSignedIn, onOwnerKey }: {
   // sin reiniciarse cada vez que pasas de login a "añadir servidor" y vuelta.
   return (
     <>
-      <WavesBackground />
+      {ascii ? <AsciiWavesBackground /> : <WavesBackground />}
       {pane}
       {/* Esquinita pegada al borde, no un punto flotando en medio de la nada:
           mismo color y desenfoque que la barra de título (bg-[rgba(13,15,17,.92)],

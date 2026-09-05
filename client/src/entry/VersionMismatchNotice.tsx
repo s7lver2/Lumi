@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, versionMayor } from "../lib/api";
-import { dispararActualizacionAVersion } from "../lib/actualizaciones";
+import { dispararActualizacionAVersion, historialActualizaciones } from "../lib/actualizaciones";
 
 /** Popup — bloquea de verdad hasta que el investigador elige un camino, en
  *  vez de perderse entre el resto de la pantalla de login. Mismo lenguaje
@@ -33,6 +33,24 @@ export function VersionMismatchModal({ propia, servidor, onClose, onForzar }: {
   const [mostrarForzar, setMostrarForzar] = useState(false);
   const [textoConfirmar, setTextoConfirmar] = useState("");
   const confirmado = textoConfirmar.trim() === "CONTINUAR";
+
+  // #122: antes se ofrecía "Actualizar cliente" con solo comparar números de
+  // versión — si la del servidor no es en realidad una versión publicada de
+  // verdad (typo, campo mal leído, servidor que anuncia una versión que
+  // nunca salió), el botón disparaba una actualización a un destino que no
+  // existe. Ahora se comprueba contra el historial real antes de ofrecerlo;
+  // mientras tanto o si la comprobación falla, se avisa en vez de asumir.
+  const [comprobando, setComprobando] = useState(!clienteEsMasNuevo);
+  const [versionPublicada, setVersionPublicada] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (clienteEsMasNuevo) return;
+    let vivo = true;
+    historialActualizaciones()
+      .then((vs) => { if (vivo) setVersionPublicada(vs.some((v) => v.version === servidor && !v.retirada)); })
+      .catch(() => { if (vivo) setVersionPublicada(null); })
+      .finally(() => { if (vivo) setComprobando(false); });
+    return () => { vivo = false; };
+  }, [clienteEsMasNuevo, servidor]);
 
   async function forzar() {
     setForzando(true);
@@ -107,11 +125,26 @@ export function VersionMismatchModal({ propia, servidor, onClose, onForzar }: {
               className="jg-press rounded-lg px-3.5 py-1.5 text-[11px] text-subtle">
               Cerrar
             </button>
-            <button onClick={() => void actualizar()} disabled={aplicando}
+            <button onClick={() => void actualizar()}
+              disabled={aplicando || (!clienteEsMasNuevo && (comprobando || versionPublicada === false))}
+              title={!clienteEsMasNuevo && versionPublicada === false
+                ? `El servidor dice usar la versión ${servidor}, pero no está entre las publicadas — puede ser un falso positivo`
+                : undefined}
               className="jg-press rounded-lg bg-accent px-3.5 py-1.5 text-[11px] font-medium text-black disabled:opacity-40">
-              {aplicando ? "Aplicando…" : clienteEsMasNuevo ? "Descargar versión del servidor" : "Actualizar cliente"}
+              {aplicando ? "Aplicando…"
+                : clienteEsMasNuevo ? "Descargar versión del servidor"
+                : comprobando ? "Comprobando…" : "Actualizar cliente"}
             </button>
           </div>
+          {/* Capability matrix pattern (ARCHITECTURE.md): si el botón de
+              arriba está deshabilitado, la razón real se ve aquí, no se
+              esconde — nunca "no pasa nada" al pulsarlo. */}
+          {!clienteEsMasNuevo && versionPublicada === false && (
+            <p className="mt-2 text-right text-[10.5px] text-danger-fg">
+              La versión {servidor} no está entre las publicadas del cliente — puede ser un falso
+              positivo; revisa la versión del servidor antes de forzar una actualización.
+            </p>
+          )}
 
           {/* Salida de emergencia, deliberadamente discreta y separada del
               resto: es la única forma de que un admin entre a su propio
