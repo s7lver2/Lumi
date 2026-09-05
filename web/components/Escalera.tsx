@@ -85,9 +85,11 @@ function TarjetaNivel({
     >
       <div className="flex items-center gap-2">
         <span
-          className="h-2.5 w-2.5 rounded-full transition-transform duration-300"
-          style={{ background: color, transitionTimingFunction: "cubic-bezier(.22,1,.36,1)" }}
-        />
+          className="text-[13px] transition-transform duration-300"
+          style={{ color, transitionTimingFunction: "cubic-bezier(.22,1,.36,1)" }}
+        >
+          ✦
+        </span>
         <h3 className="text-[17px] font-semibold" style={{ color }}>{n.nombre}</h3>
       </div>
 
@@ -111,8 +113,8 @@ function TarjetaNivel({
           </dd>
         </div>
         <div className="flex items-baseline justify-between" style={filaEstilo(0.48 + i * 0.08)}>
-          <dt className="text-subtle">si faltan capas</dt>
-          <dd className="text-fg">{n.cae_a ? `→ ${NOMBRE_CAIDA[n.cae_a] ?? n.cae_a}` : "no cae"}</dd>
+          <dt className="text-subtle">sin recursos para esto</dt>
+          <dd className="text-fg">{n.cae_a ? `usa ${NOMBRE_CAIDA[n.cae_a] ?? n.cae_a}` : "es la base, no delega"}</dd>
         </div>
       </dl>
 
