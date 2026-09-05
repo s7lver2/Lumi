@@ -184,19 +184,23 @@ pub fn dependencias_de(
         return Ok(Vec::new());
     }
 
+    // `reclamos` da una fila por (quadkey, fuente) — una tesela cubierta por
+    // el mismo paquete vía dos procedencias (p. ej. kartaview Y mapillary)
+    // aparece dos veces, y sin comprobar duplicados aquí acababa dos veces en
+    // `quadkeys`, como si la dependencia cubriera el doble de teselas de las
+    // que cubre de verdad.
     let mut por_paquete: BTreeMap<String, lumi_index::ficha::Dependencia> = BTreeMap::new();
     for r in crate::catalogo::reclamos(almacen, &ajenas)? {
-        por_paquete
-            .entry(r.paquete.clone())
-            .or_insert(lumi_index::ficha::Dependencia {
-                quadkeys: Vec::new(),
-                paquete: r.paquete,
-                autor: r.autor,
-                url: r.url,
-                sha256: r.sha256,
-            })
-            .quadkeys
-            .push(r.quadkey);
+        let d = por_paquete.entry(r.paquete.clone()).or_insert(lumi_index::ficha::Dependencia {
+            quadkeys: Vec::new(),
+            paquete: r.paquete,
+            autor: r.autor,
+            url: r.url,
+            sha256: r.sha256,
+        });
+        if !d.quadkeys.contains(&r.quadkey) {
+            d.quadkeys.push(r.quadkey);
+        }
     }
     Ok(por_paquete.into_values().collect())
 }
@@ -651,16 +655,22 @@ pub async fn publicar(
 
     let numero_version = almacen.genealogia(indice_id)?;
 
-    // Cuáles quadkeys y qué capas (modelo, version) ya se publicaron en el
-    // corte anterior — lo que NO está aquí es lo único que entra en el cuerpo
-    // de esta publicación. Ninguna si esta es la primera vez.
+    // Qué capas (modelo, version) ya se publicaron en el corte anterior — esas
+    // no vuelven a entrar en el cuerpo de esta publicación. Ninguna si esta es
+    // la primera vez.
+    //
+    // Los CUERPOS de imagen (`pesos_por_quadkey` más abajo) nunca se filtran
+    // así por quadkey ya publicada — cada corte es autocontenido, un cliente
+    // que instala solo la ficha más reciente nunca vuelve a pedir la de una
+    // versión anterior. `fuentes_por_quadkey` (procedencia/licencia por
+    // quadkey) tiene que ser igual de autocontenida por la misma razón: antes
+    // se filtraba igual que si fuera incremental, y una versión nueva sin
+    // imágenes nuevas —solo con una dependencia añadida, p. ej.— publicaba
+    // `fuentes_por_quadkey: []` con `cuerpos` llenos de datos reales sin
+    // ninguna procedencia declarada para ellos.
     let anterior: Option<(u32, lumi_index::ficha::Ficha)> = almacen
         .ultima_ficha_propia(indice_id)?
         .and_then(|(v, json)| serde_json::from_str(&json).ok().map(|f| (v, f)));
-    let quadkeys_ya_publicadas: std::collections::HashSet<String> = anterior
-        .as_ref()
-        .map(|(_, f)| f.fuentes_por_quadkey.iter().map(|(qk, _)| qk.clone()).collect())
-        .unwrap_or_default();
     let capas_ya_publicadas: std::collections::HashSet<(String, String)> = anterior
         .as_ref()
         .map(|(_, f)| f.capas.iter().map(|c| (c.modelo.clone(), c.version.clone())).collect())
@@ -716,7 +726,7 @@ pub async fn publicar(
     let mut por_qk: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut fuentes_por_quadkey: Vec<(String, Vec<String>)> = Vec::new();
     for (id, r, qk) in almacen.imagenes_de_indice(indice_id)? {
-        if !viajan.contains(&id) || quadkeys_ya_publicadas.contains(&qk) {
+        if !viajan.contains(&id) {
             continue;
         }
         if let Some(n) = Path::new(&r).file_name() {
