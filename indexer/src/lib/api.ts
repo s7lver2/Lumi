@@ -313,7 +313,9 @@ export const api = {
     invoke<void>("tesela_liberar", { indiceId, quadkey }),
   territorioClasificar: (poligonos: Punto[][], fuentes: string[]) =>
     invoke<Clasificacion>("territorio_clasificar", { poligonos, fuentes }),
-  territorioHeredar: (indiceId: number, heredadas: [string, string, string][]) =>
+  // (quadkey, trabajo, indice_fuente, sha256) — `trabajo` es "local" o
+  // "catalogo", ver el comando en Rust.
+  territorioHeredar: (indiceId: number, heredadas: [string, string, string, string][]) =>
     invoke<void>("territorio_heredar", { indiceId, heredadas }),
   territorioRecientesLeer: () => invoke<LugarReciente[]>("territorio_recientes_leer"),
   territorioRecientesAnadir: (nombre: string, lat: number, lng: number) =>

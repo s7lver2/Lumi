@@ -879,17 +879,25 @@ fn territorio_recientes_anadir(
 /// Anota como heredadas las teselas que el plan confirmó adjuntar. Se llama al
 /// confirmar, no al clasificar: clasificar es mirar, y mirar no cambia de quién
 /// es el trabajo.
+///
+/// `trabajo` viaja desde el propio front (antes venía fijo a `"local"`): una
+/// tesela `estado: "catalogo"` (cubierta por el paquete de OTRA persona) es
+/// heredada igual que una `"local"` (de otro índice tuyo), pero con un
+/// `trabajo` distinto — y `dependencias_de` (publicar.rs), que lee esta misma
+/// tabla para declarar la ficha, solo encuentra como dependencia lo que aquí
+/// quedó anotado. Fijarlo siempre a `"local"` hacía que ninguna tesela de
+/// catálogo se declarara nunca como dependencia real.
 #[tauri::command]
 fn territorio_heredar(
     estado: tauri::State<'_, Estado>,
     indice_id: i64,
-    heredadas: Vec<(String, String, String)>,
+    heredadas: Vec<(String, String, String, String)>,
 ) -> Result<(), String> {
     exige_abierto(&estado, indice_id)?;
-    for (qk, indice_fuente, sha256) in &heredadas {
+    for (qk, trabajo, indice_fuente, sha256) in &heredadas {
         estado
             .almacen
-            .anotar_tesela(indice_id, qk, "local", Some(indice_fuente), Some(sha256))
+            .anotar_tesela(indice_id, qk, trabajo, Some(indice_fuente), Some(sha256))
             .map_err(|e| e.to_string())?;
     }
     Ok(())

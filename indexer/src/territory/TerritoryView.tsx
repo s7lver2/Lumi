@@ -227,9 +227,17 @@ export function TerritoryView({
       //
       // `flatMap` y no `filter`+`map`: TypeScript no estrecha la unión de
       // `EstadoTesela` a través de un `filter`, así que `e.indice` no compilaría.
+      //
+      // "catalogo", no solo "local": una tesela cubierta por el paquete de
+      // OTRA persona también es trabajo heredado, y es precisamente la que
+      // `dependencias_de` (publicar.rs) necesita ver aquí para declarar la
+      // dependencia real en la ficha — omitirla no perdía cobertura, pero sí
+      // dejaba la ficha publicada sin decir de quién es ese territorio.
       if (indiceId !== undefined) {
         const heredadas = clasificacion.teselas.flatMap(([qk, e]) =>
-          e.estado === "local" ? [[qk, e.indice, e.sha256] as [string, string, string]] : [],
+          e.estado === "local" || e.estado === "catalogo"
+            ? [[qk, e.estado, e.indice, e.sha256] as [string, string, string, string]]
+            : [],
         );
         if (heredadas.length > 0) await api.territorioHeredar(indiceId, heredadas);
       }
