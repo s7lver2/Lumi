@@ -47,9 +47,17 @@ type Pintura = {
   indiceFloat: number; // posición continua dentro de PANTALLAS durante la fase C
   offsetX: number; // desplazamiento horizontal de la ventana, fase C — llega casi al borde
   giroY: number; // grados de rotateY durante el salto: la ventana "mira" hacia donde viaja
+  entrada: number; // 0→1: cuánto ha entrado el showcase (texto, puntos) — una rampa, no un interruptor
 };
 
 function pintar(p: number): Pintura {
+  // Antes esto era un interruptor binario (fase==="showcase"?1:0): el texto
+  // y los puntos de progreso aparecían de golpe en el instante exacto en que
+  // p cruzaba FIN_LEVANTAMIENTO — un teletransporte, no una entrada. Ahora
+  // es una rampa de 5 puntos de scroll justo antes del cruce, así que para
+  // cuando el showcase "oficialmente" empieza, ya está a opacidad 1.
+  const entrada = Math.max(0, Math.min(1, (p - (FIN_LEVANTAMIENTO - 0.05)) / 0.05));
+
   if (p < FIN_LEVANTAMIENTO) {
     // El viaje (y) y el alzamiento (alza/rot) ya no son dos tramos
     // secuenciales con un corte seco en FIN_VUELO: el alzamiento arranca en
@@ -69,7 +77,11 @@ function pintar(p: number): Pintura {
       opSombra: Math.min(1, vCurva * 3) * (1 - s),
       opSuelo: 1 - s * 0.85,
       deriva: Math.sin(vCurva * Math.PI) * 26,
-      fase: p < FIN_VUELO ? "vuelo" : "levantamiento", indiceFloat: 0, offsetX: 0, giroY: 0,
+      fase: p < FIN_VUELO ? "vuelo" : "levantamiento", indiceFloat: 0,
+      // OFFSET_INICIAL, no 0: es el mismo offsetX que el cálculo de fase C
+      // da para la primera pantalla (tramo 0, frac 0) — si aquí fuera 0 la
+      // ventana saltaría en seco esa distancia en el instante del cruce.
+      offsetX: OFFSET_INICIAL, giroY: 0, entrada,
     };
   }
   // Fase C: la pieza ya está plana (s=1 fijo) y ahora salta de parada en
@@ -77,25 +89,16 @@ function pintar(p: number): Pintura {
   // aceleración/frenado por tramo — no un mapeo 1:1 del scroll a la
   // posición horizontal.
   const u = Math.max(0, Math.min(1, (p - FIN_LEVANTAMIENTO) / (1 - FIN_LEVANTAMIENTO)));
-  const N = PANTALLAS.length;
-  const indiceFloat = u * (N - 1);
-  const tramo = Math.min(N - 2, Math.floor(indiceFloat));
+  const indiceFloat = u * (N_PANTALLAS - 1);
+  const tramo = Math.min(N_PANTALLAS - 2, Math.floor(indiceFloat));
   const frac = indiceFloat - tramo;
   const fracSuave = easeInOutCubic(frac);
-  const ANCHO_TRAMO = 640; // px de salto por parada — prácticamente al borde del encuadre
-  // Salto alterno: cada pantalla nueva entra desde el lado contrario a la
-  // anterior (derecha, izquierda, derecha…) en vez de un barrido monótono
-  // en una sola dirección — se siente como hojear pestañas, no como una
-  // cinta transportadora.
-  const posiciones = [0];
-  for (let i = 1; i < N; i++) posiciones.push(posiciones[i - 1] + (i % 2 === 1 ? -1 : 1) * ANCHO_TRAMO);
-  const centro = posiciones.reduce((a, b) => a + b, 0) / N;
-  const offsetX = posiciones[tramo] + (posiciones[tramo + 1] - posiciones[tramo]) * fracSuave - centro;
+  const offsetX = POSICIONES[tramo] + (POSICIONES[tramo + 1] - POSICIONES[tramo]) * fracSuave - CENTRO_PANTALLAS;
   // giroY: durante el salto la ventana gira levemente hacia el lado al que
   // viaja (perspectiva jugando con el ángulo) y vuelve a quedar de frente
   // en cuanto se asienta en la parada — nunca rotateZ (trampa 2), esto es
   // un rotateY sobre la propia pieza, no sobre la cámara.
-  const direccionTramo = Math.sign(posiciones[tramo + 1] - posiciones[tramo]) || 1;
+  const direccionTramo = Math.sign(POSICIONES[tramo + 1] - POSICIONES[tramo]) || 1;
   const giroY = direccionTramo * Math.sin(fracSuave * Math.PI) * 9; // menos giro que antes (16°) — se sentía caótico
   return {
     // opSuelo en 0, no 0.15: en el showcase la mirada está en la interfaz,
@@ -103,7 +106,7 @@ function pintar(p: number): Pintura {
     // (en vez de dejarlo asomar tenue) descarta también cualquier resto de
     // la costura diagonal que seguía viniendo de ese plano.
     y: HASTA, alza: 26, rot: -TUMBE, opSombra: 0, opSuelo: 0, deriva: 0,
-    fase: "showcase", indiceFloat, offsetX, giroY,
+    fase: "showcase", indiceFloat, offsetX, giroY, entrada,
   };
 }
 
@@ -145,6 +148,17 @@ const PANTALLAS: {
     zoom: { escala: 1.24, origen: "50% 82%" }, // se acerca a la carga de GPU
   },
 ];
+
+// Posiciones del salto alterno (derecha, izquierda, derecha…) y su centro,
+// calculados una sola vez — `pintar` las usa tanto en fase C (el salto en
+// sí) como en fase A/B (para arrancar ya en el offsetX de la primera parada,
+// ver OFFSET_INICIAL más abajo).
+const ANCHO_TRAMO = 640; // px de salto por parada — prácticamente al borde del encuadre
+const N_PANTALLAS = PANTALLAS.length;
+const POSICIONES: number[] = [0];
+for (let i = 1; i < N_PANTALLAS; i++) POSICIONES.push(POSICIONES[i - 1] + (i % 2 === 1 ? -1 : 1) * ANCHO_TRAMO);
+const CENTRO_PANTALLAS = POSICIONES.reduce((a, b) => a + b, 0) / N_PANTALLAS;
+const OFFSET_INICIAL = POSICIONES[0] - CENTRO_PANTALLAS;
 
 export function Sobrevuelo() {
   const seccionRef = useRef<HTMLElement>(null);
@@ -228,10 +242,12 @@ export function Sobrevuelo() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viva, movil]);
 
-  const { y, alza, rot, opSombra, opSuelo, deriva, fase, indiceFloat, offsetX, giroY } = movil ? pintar(1) : pintura;
+  const { y, alza, rot, opSombra, opSuelo, deriva, indiceFloat, offsetX, giroY, entrada } = movil ? pintar(1) : pintura;
 
   const idxCercano = Math.max(0, Math.min(PANTALLAS.length - 1, Math.round(indiceFloat)));
-  const opacidadTexto = fase === "showcase" ? 1 - Math.min(1, Math.abs(indiceFloat - idxCercano) * 2.4) : 0;
+  // `entrada` (rampa 0→1, no el interruptor `fase` de antes) — el texto se
+  // funde in junto con los puntos de progreso, ver comentario en `pintar`.
+  const opacidadTexto = entrada * (1 - Math.min(1, Math.abs(indiceFloat - idxCercano) * 2.4));
   const pantallaTexto = PANTALLAS[idxCercano];
   // El zoom es de TODA la ventana, no de la captura interior: cuando una
   // pantalla con `zoom` queda centrada, el marco entero se acerca sobre su
@@ -273,7 +289,7 @@ export function Sobrevuelo() {
                 dos cosas se mueven, no solo la ventana. */}
             <TextoPantalla pantalla={pantallaTexto} lado="izquierda" opacidad={idxCercano % 2 === 0 ? opacidadTexto : 0} />
             <TextoPantalla pantalla={pantallaTexto} lado="derecha" opacidad={idxCercano % 2 === 1 ? opacidadTexto : 0} />
-            <PuntosProgreso total={PANTALLAS.length} idx={idxCercano} opacidad={fase === "showcase" ? 1 : 0} />
+            <PuntosProgreso total={PANTALLAS.length} idx={idxCercano} opacidad={entrada} />
           </>
         )}
 
@@ -410,7 +426,7 @@ function TextoPantalla({
   return (
     <div
       className={`pointer-events-none absolute top-1/2 z-10 max-w-[400px] -translate-y-1/2 ${
-        derecha ? "right-8 text-right" : "left-8 text-left"
+        derecha ? "right-10 text-right lg:right-16" : "left-10 text-left lg:left-16"
       }`}
       style={{ opacity: opacidad, transition: "opacity .16s linear" }}
     >
