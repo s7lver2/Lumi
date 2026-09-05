@@ -3,6 +3,7 @@ import type { Topology, GeometryCollection } from "topojson-specification";
 import type { MultiPolygon } from "geojson";
 import landTopo from "world-atlas/land-110m.json";
 import { cobertura } from "../lib/catalogo";
+import { CifraIndexada } from "./CifraIndexada";
 import { RevelaSeccion } from "./RevelaSeccion";
 
 /** Mapa de cobertura, alimentado por el catálogo real publicado en GitHub
@@ -49,7 +50,7 @@ const W = 960, H = 460;
  *  toda la tierra firme del planeta) — mostrarlo con 1-2 decimales fijos
  *  lo redondearía a "0.00%", que se lee como "no hay nada" en vez de "hay
  *  poco todavía". Más decimales cuanto más pequeño es el número. */
-function formatoPorcentaje(p: number): string {
+export function formatoPorcentaje(p: number): string {
   if (p === 0) return "0%";
   if (p < 0.001) return "< 0.001%";
   if (p < 1) return `${p.toFixed(3)}%`;
@@ -211,13 +212,21 @@ export async function Cobertura() {
           </svg>
         </div>
 
+        {/* La cifra es el punto de la sección entera — antes vivía como una
+            línea mono de 11px, del mismo tamaño que "zonas" o "paquetes",
+            que son detalle, no el titular. Junto a la barra que ya la
+            representaba, pero con el peso que le corresponde: es lo primero
+            que se lee de todo el bloque. Mono porque es un dato calculado,
+            no prosa (misma regla que IPs/puertos/logs). */}
         {resumen && (
-          <div className="mt-5">
-            <div className="flex items-baseline justify-between font-mono text-[11px] text-subtle">
-              <span>tierra firme indexada</span>
-              <span className="text-fg tabular-nums">{formatoPorcentaje(porcentajeIndexado)}</span>
+          <div className="mt-8">
+            <div className="flex items-baseline gap-4">
+              <span className="font-mono text-[clamp(30px,4vw,48px)] leading-none tracking-tight text-fg">
+                <CifraIndexada porcentaje={porcentajeIndexado} />
+              </span>
+              <span className="font-mono text-[12px] text-subtle">tierra firme indexada</span>
             </div>
-            <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-elevated">
+            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-elevated">
               <div
                 className="h-full rounded-full bg-fg"
                 style={{ width: `${Math.max(porcentajeIndexado, porcentajeIndexado > 0 ? 0.4 : 0)}%` }}
