@@ -146,8 +146,15 @@ class VPRModel(nn.Module):
 
     def forward(self, x):
         x = self.backbone(x)
-        x, _attns = self.aggregator(x)
-        return x
+        # `BoQ.forward` ya normaliza y aplana a un solo tensor -- no una
+        # tupla (vector, attns) -- así que aquí no hay nada que desempaquetar.
+        # Desempaquetarlo (`x, _attns = ...`) funcionaba "por accidente" con
+        # lotes de exactamente 2 imágenes (2 filas del tensor se reparten en
+        # 2 variables sin error, pero cada una se queda con el vector de UNA
+        # sola imagen, no con las dos) y reventaba con "too many values to
+        # unpack" en cualquier otro tamaño de lote -- que es como se
+        # descubrió, al embeber lotes reales de 32.
+        return self.aggregator(x)
 
 
 def crear_dinov2_12288():

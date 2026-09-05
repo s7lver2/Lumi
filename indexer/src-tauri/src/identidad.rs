@@ -100,9 +100,23 @@ pub fn crear_clave(claves: &Claves<'_>) -> Result<Vec<String>> {
 
 /// El respaldo guardado, si lo hay. Sin clave todavía, crea una: pedir el
 /// respaldo es el momento en que la identidad de firma empieza a existir.
+///
+/// El mismo cuidado que ya se tomó en el flujo de sondeo de GitHub (bug
+/// bounty #8, ver `hay_clave_local`) hacía falta aquí también: antes, si la
+/// fila de RESPALDO estaba vacía o ausente por cualquier motivo mientras la
+/// de SECRETA seguía teniendo la clave real, este `match` caía igual en
+/// `crear_clave` y regeneraba una clave de firma nueva encima de la buena —
+/// perdiendo en silencio la que ya tenía huella y publicaciones detrás. Ahora
+/// solo se crea una clave nueva si de verdad no hay ninguna secreta guardada;
+/// si la hay pero su respaldo no se puede leer, el error sube tal cual en vez
+/// de "arreglarse" borrando la clave existente.
 pub fn respaldo(claves: &Claves<'_>) -> Result<Vec<String>> {
     match claves.leer(AJUSTE_RESPALDO)? {
         Some(s) if !s.is_empty() => Ok(s.split(' ').map(|w| w.to_string()).collect()),
+        _ if hay_clave_local(claves)? => Err(anyhow!(
+            "ya hay una clave de firma guardada pero su frase de respaldo no está disponible; \
+             no se genera una clave nueva para no perder la que ya existe"
+        )),
         _ => crear_clave(claves),
     }
 }

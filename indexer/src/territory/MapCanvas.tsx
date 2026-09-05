@@ -132,6 +132,7 @@ const HERRAMIENTAS: { id: Herramienta; icon: "mano" | "poligono" | "rectangulo" 
 export function MapCanvas({
   dibujo,
   clasificacion,
+  teselasYaIndexadas,
   onPoligonoListo,
   onVerticeEditado,
   combineMode,
@@ -143,6 +144,9 @@ export function MapCanvas({
 }: {
   dibujo: Punto[][];
   clasificacion: Clasificacion | null;
+  /** #109: quadkeys z14 que este índice ya tiene trabajadas — se pintan
+   *  siempre, sin esperar a que se dibuje o clasifique un área. */
+  teselasYaIndexadas?: string[];
   onPoligonoListo: (p: Punto[]) => void;
   onVerticeEditado?: (anillo: Punto[]) => void;
   combineMode: "sustituir" | "sumar" | "restar";
@@ -228,6 +232,20 @@ export function MapCanvas({
           paint: { "fill-color": "rgba(55,138,221,.07)" } });
         m.addLayer({ id: "dibujo-borde", type: "line", source: "dibujo",
           paint: { "line-color": "#85b7eb", "line-width": 1.6 } });
+
+        // #109: lo que este índice ya tiene trabajado, pintado desde que se
+        // entra a Territorio — antes de "teselas" para quedar DEBAJO de la
+        // clasificación de un área recién dibujada, que es la que manda en
+        // cuanto existe.
+        m.addSource("ya-indexado", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        m.addLayer({
+          id: "ya-indexado-relleno", type: "fill", source: "ya-indexado",
+          paint: { "fill-color": "rgba(232,232,230,.13)" },
+        });
+        m.addLayer({
+          id: "ya-indexado-borde", type: "line", source: "ya-indexado",
+          paint: { "line-color": "rgba(255,255,255,.2)" },
+        });
 
         m.addSource("teselas", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         m.addLayer({
@@ -515,6 +533,15 @@ export function MapCanvas({
     if (m.isStyleLoaded()) anadir(); else m.once("load", anadir);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tokenMapillary]);
+
+  useEffect(() => {
+    const src = mapa.current?.getSource("ya-indexado") as mapboxgl.GeoJSONSource | undefined;
+    if (!src) return;
+    src.setData({
+      type: "FeatureCollection",
+      features: (teselasYaIndexadas ?? []).map((qk) => teselaAPoligono(qk)),
+    });
+  }, [teselasYaIndexadas]);
 
   useEffect(() => {
     const src = mapa.current?.getSource("teselas") as mapboxgl.GeoJSONSource | undefined;

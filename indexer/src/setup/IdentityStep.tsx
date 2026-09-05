@@ -93,7 +93,7 @@ export function IdentityStep({ onHecho, onSaltar }: { onHecho: () => void; onSal
               {codigo.url}
             </span>
             <button
-              onClick={() => { setCopiado(true); void navigator.clipboard.writeText(codigo.codigo); }}
+              onClick={() => { setCopiado(true); void navigator.clipboard.writeText(codigo.url); }}
               className="jg-press shrink-0 rounded-lg border border-border px-2.5 py-1.5 text-[10.5px] text-fg"
             >
               {copiado ? "Copiado" : "Copiar"}

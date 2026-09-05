@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
+import { api } from "../lib/api";
+import { Overlay } from "./Overlay";
 import { PerfPill } from "./PerfPill";
 
 /** Botones de ventana propios. La ventana va sin decoración del sistema
@@ -9,7 +11,7 @@ import { PerfPill } from "./PerfPill";
  *
  *  44×38 y al ras de la esquina, como los del sistema. El rojo solo en el
  *  hover de cerrar: un botón permanentemente rojo pide que lo pulses. */
-export function WindowControls() {
+export function WindowControls({ onPedirCierre }: { onPedirCierre: () => void }) {
   const [max, setMax] = useState(false);
   const win = getCurrentWindow();
 
@@ -36,10 +38,56 @@ export function WindowControls() {
           <rect x="1" y="1" width="8" height="8" rx="1" />
         )}
       </Btn>
-      <Btn label="Cerrar" danger onClick={() => void win.close()}>
+      <Btn label="Cerrar" danger onClick={onPedirCierre}>
         <path d="M1 1l8 8M9 1L1 9" />
       </Btn>
     </div>
+  );
+}
+
+/** #107: antes este botón cerraba directo (`win.close()`) y el gancho de
+ *  `RunEvent::Exit` en Rust paraba Redis/Qdrant siempre, sin preguntar. Si
+ *  ninguno de los dos es un proceso PROPIO (nada que parar de verdad), se
+ *  cierra directo — el diálogo solo tiene sentido cuando hay algo que
+ *  decidir. */
+function CerrarDialog({ onCerrado }: { onCerrado: () => void }) {
+  const [enCurso, setEnCurso] = useState(false);
+
+  async function elegir(accion: "wsl" | "servicios" | "segundo-plano") {
+    setEnCurso(true);
+    try {
+      if (accion === "wsl") await api.serviciosApagarWsl();
+      else if (accion === "servicios") await api.serviciosParar();
+      else await api.serviciosDejarEnSegundoPlano();
+    } finally {
+      onCerrado();
+    }
+  }
+
+  return (
+    <Overlay>
+      <div className="w-[380px] rounded-card border border-white/[.13] bg-[rgba(16,19,25,.92)] p-[20px_22px] backdrop-blur-xl">
+        <p className="text-sm text-fg">¿Qué hacemos con Redis y Qdrant?</p>
+        <p className="mt-1.5 text-[10.5px] leading-relaxed text-subtle">
+          Siguen corriendo en WSL. Puedes apagar la distribución entera, parar solo estos dos
+          servicios, o dejarlos como están para que el próximo arranque sea instantáneo.
+        </p>
+        <div className="mt-4 flex flex-col gap-1.5">
+          <button onClick={() => void elegir("segundo-plano")} disabled={enCurso}
+            className="jg-press rounded-lg border border-border bg-[#0b0d0f] px-3.5 py-2 text-left text-[11.5px] text-fg disabled:opacity-40">
+            Dejarlos en segundo plano
+          </button>
+          <button onClick={() => void elegir("servicios")} disabled={enCurso}
+            className="jg-press rounded-lg border border-border bg-[#0b0d0f] px-3.5 py-2 text-left text-[11.5px] text-fg disabled:opacity-40">
+            Parar Redis y Qdrant
+          </button>
+          <button onClick={() => void elegir("wsl")} disabled={enCurso}
+            className="jg-press rounded-lg border border-border bg-[#0b0d0f] px-3.5 py-2 text-left text-[11.5px] text-fg disabled:opacity-40">
+            Apagar WSL del todo
+          </button>
+        </div>
+      </div>
+    </Overlay>
   );
 }
 
@@ -99,6 +147,18 @@ export function ResizeHandles() {
 // la salida es esta barra mínima propia, con la misma altura (38 px), el mismo
 // arrastre de ventana y los mismos controles, sin nada del cliente.
 export function WindowFrame({ children }: { children: React.ReactNode }) {
+  const [preguntando, setPreguntando] = useState(false);
+  const win = getCurrentWindow();
+
+  async function pedirCierre() {
+    // Solo preguntar si hay algo propio que parar — un Redis/Qdrant ya
+    // muertos, o adoptados de un proceso que no es el nuestro, no dejan nada
+    // que decidir y cerrar directo es lo que ya pasaba antes de #107.
+    const estado = await api.serviciosEstado().catch(() => []);
+    if (estado.some((s) => s.vivo && s.propio)) setPreguntando(true);
+    else void win.close();
+  }
+
   return (
     // `h-full w-full` y NUNCA `h-screen w-screen`: `#root` se encoge a
     // `100% / --ui-scale` y luego se estira con `transform: scale()`. Un hijo
@@ -119,10 +179,11 @@ export function WindowFrame({ children }: { children: React.ReactNode }) {
         <span data-tauri-drag-region className="text-[11.5px] text-fg">Lumi Indexer</span>
         <span data-tauri-drag-region className="h-full flex-1" />
         <PerfPill />
-        <WindowControls />
+        <WindowControls onPedirCierre={() => void pedirCierre()} />
       </header>
       <div className="relative min-h-0 flex-1">{children}</div>
       <ResizeHandles />
+      {preguntando && <CerrarDialog onCerrado={() => void win.close()} />}
     </div>
   );
 }

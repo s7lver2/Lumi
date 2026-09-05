@@ -24,6 +24,14 @@ import sys
 import urllib.parse
 import urllib.request
 
+#: HuggingFace limita bastante el ancho de banda de descargas anonimas (el
+#: propio hub avisa de ello: "You are sending unauthenticated requests").
+#: Un token gratuito de solo lectura lo evita -- se lee del entorno, nunca
+#: del registro (registros/*.json va a git, un token no). El proceso que
+#: lanza esto (`lumid::tasks` o el `pesos.rs` del Indexer) es quien decide
+#: si lo pasa o no; aqui solo se consume si esta.
+HF_TOKEN = os.environ.get("HF_TOKEN", "")
+
 
 def progreso(item_id, hechos, total):
     linea = json.dumps({"item": item_id, "mib": hechos // (1 << 20), "total_mib": total // (1 << 20),
@@ -44,7 +52,14 @@ def _abrir(url):
     misma URL (el truco clasico de gdown): trae un <form> que apunta a OTRO
     host (drive.usercontent.google.com) con un `uuid` de un solo uso, y hay
     que enviar exactamente los campos de ese formulario. Cualquier otro host
-    se abre tal cual, sin este rodeo."""
+    se abre tal cual, sin este rodeo.
+
+    `huggingface.co` es el otro caso especial: con `HF_TOKEN` presente se
+    manda como `Authorization: Bearer`, que es lo que saca la descarga del
+    limite de las peticiones anonimas -- ver el propio aviso del hub."""
+    if HF_TOKEN and "huggingface.co" in url:
+        return urllib.request.urlopen(
+            urllib.request.Request(url, headers={"Authorization": f"Bearer {HF_TOKEN}"}))
     file_id = _id_de_drive(url)
     if not file_id or "drive.google.com" not in url:
         return urllib.request.urlopen(url)
@@ -76,7 +91,7 @@ def _snapshot(repo_id, destino, item_id):
 
     os.makedirs(destino, exist_ok=True)
     print(f"      descargando repositorio de huggingface {repo_id}…", flush=True)
-    snapshot_download(repo_id=repo_id, local_dir=destino)
+    snapshot_download(repo_id=repo_id, local_dir=destino, token=HF_TOKEN or None)
 
 
 def descargar(url, destino, item_id):

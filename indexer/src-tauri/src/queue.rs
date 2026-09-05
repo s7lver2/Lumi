@@ -474,6 +474,15 @@ impl Cola {
                 if let Some(motivo) = licencia_faltante(&dir, &modelo) {
                     self.log.apuntar(format!("cola ({modelo}): {motivo} — se pausa la cola"));
                     if let Some(p) = self.progreso.lock().unwrap().get_mut(&modelo) {
+                        // `indice_actual` también, no solo `ultimo_fallo`: sin
+                        // esto, `indice_progreso_embebido` (lib.rs) nunca
+                        // marca `activo` a este índice para este modelo —
+                        // ahí es donde vive la condición que reenvía
+                        // `ultimo_fallo` al frontend — y el botón "Descargar
+                        // pesos" no aparecía nunca, aunque la cola sí
+                        // estuviera fallando y pausándose de verdad en este
+                        // mismo índice, tick tras tick.
+                        p.indice_actual = Some(indice_id);
                         p.ultimo_fallo = Some(motivo);
                     }
                     self.pausar(true);

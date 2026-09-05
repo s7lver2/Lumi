@@ -75,6 +75,16 @@ export function TerritoryView({
   // Si hay un lugar buscado seleccionado en el mapa, su panel de info ocupa
   // el mismo sitio que el de disponibilidad — mutuamente excluyentes (#61).
   const [hayLugarBuscado, setHayLugarBuscado] = useState(false);
+  // #109: las teselas que este índice ya tiene trabajadas se pintan en el
+  // mapa desde que se entra a Territorio, sin esperar a que el operador
+  // dibuje o clasifique nada — antes solo se veían dentro de `clasificacion`,
+  // que solo existe una vez que hay un área dibujada.
+  const [teselasYaIndexadas, setTeselasYaIndexadas] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (indiceId === undefined) { setTeselasYaIndexadas([]); return; }
+    void api.indiceTeselas(indiceId).then((filas) => setTeselasYaIndexadas(filas.map(([qk]) => qk)));
+  }, [indiceId]);
 
   useEffect(() => { void api.origenesLista().then(setFichas); }, []);
   useEffect(() => { void api.claveLeer("mapillary").then(setTokenMapillary); }, []);
@@ -282,6 +292,7 @@ export function TerritoryView({
         <MapCanvas
           dibujo={dibujo}
           clasificacion={clasificacion}
+          teselasYaIndexadas={teselasYaIndexadas}
           onPoligonoListo={(p) => void alTerminarDibujo(p)}
           onVerticeEditado={(a) => void alEditarVertice(a)}
           combineMode={combineMode}

@@ -13,6 +13,15 @@ import hashlib
 import json
 import os
 
+#: Lado del redimensionado antes del forward, por modelo -- 322 de defecto
+#: (23*14, encaja con el patch size 14 de los backbones DINOv2/ViT). MixVPR
+#: es la excepcion: su `FeatureMixerLayer` fija `in_h=in_w=20` al construirse
+#: (un `nn.LayerNorm(400)`, no una capa que se adapte a otro tamano), y esos
+#: 20x20 solo salen de un ResNet50-menos-layer4 (downsample x16) con entrada
+#: de 320x320 EXACTOS -- con 322 sale 21x21=441 y `LayerNorm(400)` revienta
+#: con "Given normalized_shape=[400] ... but got input of size[N, 1024, 441]".
+LADO = {"mixvpr": 320}
+
 
 def _ficha(modelo_id, registro_dir):
     """Busca la entrada del registro por id, no por nombre de fichero: el
@@ -160,7 +169,7 @@ class Embebedor(object):
     def _prep(self):
         from torchvision import transforms
         return transforms.Compose([
-            transforms.Resize((322, 322)),
+            transforms.Resize((LADO.get(self.id, 322),) * 2),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])

@@ -39,7 +39,7 @@ pub fn destino_de(dir: &std::path::Path, modelo_id: &str) -> PathBuf {
 /// Arranca la descarga en segundo plano y vuelve enseguida. Solo una a la
 /// vez: dos `lumi_bajar.py` sobre el mismo fichero se pisarían igual que dos
 /// `pip install` sobre el mismo venv.
-pub fn arrancar(dir: PathBuf, en_curso: EnCurso, modelo: Modelo) -> Result<()> {
+pub fn arrancar(dir: PathBuf, en_curso: EnCurso, modelo: Modelo, hf_token: Option<String>) -> Result<()> {
     if en_curso.lock().unwrap().as_ref().is_some_and(|p| !p.terminado) {
         bail!("ya hay una descarga de pesos en curso");
     }
@@ -53,7 +53,7 @@ pub fn arrancar(dir: PathBuf, en_curso: EnCurso, modelo: Modelo) -> Result<()> {
     *en_curso.lock().unwrap() = Some(ProgresoPesos { modelo_id: modelo.id.clone(), ..Default::default() });
 
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = correr(&dir, &en_curso, &modelo).await {
+        if let Err(e) = correr(&dir, &en_curso, &modelo, hf_token.as_deref()).await {
             let mut g = en_curso.lock().unwrap();
             let p = g.get_or_insert_with(ProgresoPesos::default);
             p.terminado = true;
@@ -63,7 +63,7 @@ pub fn arrancar(dir: PathBuf, en_curso: EnCurso, modelo: Modelo) -> Result<()> {
     Ok(())
 }
 
-async fn correr(dir: &std::path::Path, en_curso: &EnCurso, modelo: &Modelo) -> Result<()> {
+async fn correr(dir: &std::path::Path, en_curso: &EnCurso, modelo: &Modelo, hf_token: Option<&str>) -> Result<()> {
     let destino = destino_de(dir, &modelo.id);
     let item = serde_json::json!([{
         "id": modelo.id,
@@ -84,14 +84,15 @@ async fn correr(dir: &std::path::Path, en_curso: &EnCurso, modelo: &Modelo) -> R
     // por ejemplo) mide decenas de KB, y Windows corta la línea de comandos
     // completa en unos 32K caracteres — pasado ese tope el proceso ni
     // siquiera llega a arrancar.
-    let mut hijo = crate::proceso::cmd_async(&py, false)
-        .arg("-u")
-        .arg(&script)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()?;
+    let mut cmd = crate::proceso::cmd_async(&py, false);
+    cmd.arg("-u").arg(&script).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+    // Ajustes → Rendimiento guarda el token, no el registro (que va a git):
+    // sin él, HuggingFace limita bastante la velocidad de descargas anónimas
+    // (megaloc/lumi-preview es el caso real que lo hizo evidente).
+    if let Some(token) = hf_token {
+        cmd.env("HF_TOKEN", token);
+    }
+    let mut hijo = cmd.spawn()?;
 
     let mut entrada = hijo.stdin.take().expect("stdin pedido");
     entrada.write_all(item.to_string().as_bytes()).await?;

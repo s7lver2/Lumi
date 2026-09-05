@@ -89,6 +89,11 @@ pub struct Estado {
     /// La migración de carpeta de datos en curso, si hay alguna. Mismo
     /// patrón que `descarga`/`ingesta`/`sellado`.
     pub migracion: std::sync::Mutex<Option<Arc<ubicacion::Migracion>>>,
+    /// Qué hacer con Redis/Qdrant al cerrar la ventana, elegido por el
+    /// operador en el diálogo de cierre (#107): por defecto se paran, como
+    /// siempre — este flag solo lo pone a `true` la opción "dejar en segundo
+    /// plano" del diálogo, justo antes de `win.close()`.
+    pub dejar_servicios_al_cerrar: std::sync::atomic::AtomicBool,
 }
 
 /// Dónde vive todo. Delegado en `ubicacion`, que además sabe leer el
@@ -201,6 +206,31 @@ async fn servicios_parar(estado: tauri::State<'_, Estado>) -> Result<(), String>
     estado.servicios.parar().await.map_err(|e| e.to_string())
 }
 
+/// Opción "apagar WSL del todo" del diálogo de cierre (#107): para lo nuestro
+/// primero (mismo camino que `servicios_parar`) y luego apaga la distribución
+/// entera con `wsl --shutdown`, que también se lleva por delante un Redis o
+/// Qdrant ADOPTADOS que `parar()` no puede tocar por no ser procesos nuestros.
+#[tauri::command]
+async fn servicios_apagar_wsl(estado: tauri::State<'_, Estado>) -> Result<(), String> {
+    let _ = estado.servicios.parar().await;
+    if cfg!(windows) {
+        proceso::cmd_async("wsl", false)
+            .arg("--shutdown")
+            .status()
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Opción "dejarlos en segundo plano" del diálogo de cierre (#107): no para
+/// nada ahora, y marca el flag que el gancho de `RunEvent::Exit` consulta
+/// antes de llamar a `servicios.parar()` para que tampoco lo haga entonces.
+#[tauri::command]
+fn servicios_dejar_en_segundo_plano(estado: tauri::State<'_, Estado>) {
+    estado.dejar_servicios_al_cerrar.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
 #[tauri::command]
 async fn servicios_estado(
     estado: tauri::State<'_, Estado>,
@@ -266,6 +296,30 @@ fn modelos_lista(estado: tauri::State<'_, Estado>) -> Vec<models::Modelo> {
     estado.modelos.clone()
 }
 
+/// Clave en `ajustes`, en claro: no es un secreto de la app, es un token del
+/// propio operador para SU cuenta de HuggingFace — igual de "en claro" que
+/// `concurrencia_gpu`, no algo que este proyecto deba poder leer o rotar.
+const CLAVE_HF_TOKEN: &str = "hf_token";
+
+/// Nunca se devuelve el valor real de vuelta a la interfaz — ya está en su
+/// campo de texto porque lo acaba de escribir el propio operador; devolverlo
+/// tras leerlo desde disco es la única razón por la que un token pediría
+/// viajar de vuelta, y no la hay. Solo dice si hay uno guardado, para poder
+/// pintar el campo como "configurado" sin mostrar el valor cada vez que se
+/// abre Ajustes.
+#[tauri::command]
+fn hf_token_hay(estado: tauri::State<'_, Estado>) -> bool {
+    estado.almacen.leer_ajuste(CLAVE_HF_TOKEN).ok().flatten().is_some_and(|v| !v.is_empty())
+}
+
+#[tauri::command]
+fn hf_token_guardar(estado: tauri::State<'_, Estado>, token: String) -> Result<(), String> {
+    if token.is_empty() {
+        return estado.almacen.borrar_ajuste(CLAVE_HF_TOKEN).map_err(|e| e.to_string());
+    }
+    estado.almacen.guardar_ajuste(CLAVE_HF_TOKEN, &token).map_err(|e| e.to_string())
+}
+
 /// Arranca la descarga de los pesos de un modelo — lo que falta para que
 /// `lumi_pesos._licencia`/`_verificar` dejen de rechazarlo al embeber.
 #[tauri::command]
@@ -276,7 +330,8 @@ fn modelo_pesos_descargar(estado: tauri::State<'_, Estado>, modelo_id: String) -
         .find(|m| m.id == modelo_id)
         .cloned()
         .ok_or_else(|| format!("«{modelo_id}» no está en el registro"))?;
-    pesos::arrancar(estado.dir.clone(), estado.pesos.clone(), modelo).map_err(|e| e.to_string())
+    let hf_token = estado.almacen.leer_ajuste(CLAVE_HF_TOKEN).ok().flatten().filter(|v| !v.is_empty());
+    pesos::arrancar(estado.dir.clone(), estado.pesos.clone(), modelo, hf_token).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1812,6 +1867,7 @@ pub fn run() {
             publicacion: std::sync::Mutex::new(None),
             pesos: Arc::new(std::sync::Mutex::new(None)),
             migracion: std::sync::Mutex::new(None),
+            dejar_servicios_al_cerrar: std::sync::atomic::AtomicBool::new(false),
         })
         .invoke_handler(tauri::generate_handler![
             saludo,
@@ -1828,6 +1884,8 @@ pub fn run() {
             servicios_arrancar,
             servicios_arrancar_wsl,
             servicios_parar,
+            servicios_apagar_wsl,
+            servicios_dejar_en_segundo_plano,
             servicios_estado,
             servicios_log,
             servicios_diagnostico,
@@ -1856,6 +1914,8 @@ pub fn run() {
             niveles_lista,
             modelo_pesos_descargar,
             modelo_pesos_progreso,
+            hf_token_hay,
+            hf_token_guardar,
             indices_lista,
             indices_lista_de_proyecto,
             proyectos_lista,
@@ -1930,11 +1990,18 @@ pub fn run() {
                 let estado = app.state::<Estado>();
                 let servicios = estado.servicios.clone();
                 let cola = estado.cola.clone();
+                // Si el diálogo de cierre (#107) ya resolvió "dejar en segundo
+                // plano" o "apagar WSL", este flag o la propia acción ya
+                // dejaron los servicios como el operador pidió — pararlos
+                // aquí otra vez desharía justo la elección que acaba de hacer.
+                let dejar = estado.dejar_servicios_al_cerrar.load(std::sync::atomic::Ordering::SeqCst);
                 tauri::async_runtime::block_on(async move {
                     // Los trabajadores de embebido en curso primero: no
                     // dependen solo de `kill_on_drop` (ver `matar_trabajadores`).
                     cola.matar_trabajadores().await;
-                    let _ = servicios.parar().await;
+                    if !dejar {
+                        let _ = servicios.parar().await;
+                    }
                 });
             }
         });

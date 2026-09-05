@@ -1,11 +1,15 @@
 {
-  "id": "lumi-preview",
-  "nombre": "Lumi Preview",
   "base": "MegaLoc (congelado)",
-  "version": "1.0",
   "dims": 8448,
   "familia": "foundation",
+  "fichero_url": "https://huggingface.co/gberton/MegaLoc/resolve/main/model.safetensors",
+  "id": "lumi-preview",
   "licencia": "MIT",
+  "licencia_texto": "MIT License\n\nCopyright (c) 2024 Gabriele Berton, Carlo Masone\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+  "licencia_url": "https://raw.githubusercontent.com/gmberton/MegaLoc/main/LICENSE",
+  "nombre": "Lumi Preview",
   "pesos_url": "https://huggingface.co/gmberton/MegaLoc/resolve/main/megaloc.pth",
-  "sha256": ""
+  "puerta": null,
+  "sha256": "d4f9f2bcb60018f91eb6a8e061ed054fd55654e10c2569cf13841ea986ffb4f8",
+  "version": "1.0"
 }

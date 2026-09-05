@@ -269,6 +269,8 @@ export const api = {
   serviciosArrancar: () => invoke<void>("servicios_arrancar"),
   serviciosArrancarWsl: () => invoke<void>("servicios_arrancar_wsl"),
   serviciosParar: () => invoke<void>("servicios_parar"),
+  serviciosApagarWsl: () => invoke<void>("servicios_apagar_wsl"),
+  serviciosDejarEnSegundoPlano: () => invoke<void>("servicios_dejar_en_segundo_plano"),
   serviciosEstado: () => invoke<EstadoServicio[]>("servicios_estado"),
   serviciosLog: (desde: number) => invoke<string[]>("servicios_log", { desde }),
   serviciosDiagnostico: () => invoke<Diagnostico>("servicios_diagnostico"),
@@ -350,6 +352,8 @@ export const api = {
   colaConsumoFijar: (bajo: boolean) => invoke<void>("cola_consumo_fijar", { bajo }),
   autoarranqueLeer: () => invoke<boolean>("autoarranque_leer"),
   autoarranqueFijar: (activo: boolean) => invoke<void>("autoarranque_fijar", { activo }),
+  hfTokenHay: () => invoke<boolean>("hf_token_hay"),
+  hfTokenGuardar: (token: string) => invoke<void>("hf_token_guardar", { token }),
   indiceProgresoEmbebido: (id: number) => invoke<ProgresoIndiceEmbed[]>("indice_progreso_embebido", { id }),
 
   claveGuardar: (proveedor: string, clave: string) =>

@@ -1,11 +1,15 @@
 {
-  "id": "mixvpr",
-  "nombre": "MixVPR",
   "base": "CNN + feature mixing (congelado)",
-  "version": "1.0",
   "dims": 4096,
   "familia": "cnn",
-  "licencia": "MIT",
+  "fichero_url": "https://drive.google.com/file/d/1vuz3PvnR7vxnDDLQrdHJaOA04SQrtk5L/view?usp=share_link",
+  "id": "mixvpr",
+  "licencia": "sin licencia declarada -- el repo no trae LICENSE ni la menciona en el README, revisar antes de distribuir",
+  "licencia_texto": "",
+  "licencia_url": "",
+  "nombre": "MixVPR",
   "pesos_url": "https://github.com/amaralibey/MixVPR",
-  "sha256": ""
+  "puerta": null,
+  "sha256": "97528606773e9920e93ca4d211daeabf1c7312480f38b45379ee5551a1b4dd24",
+  "version": "1.0"
 }

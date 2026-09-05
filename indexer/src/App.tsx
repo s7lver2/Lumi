@@ -92,6 +92,22 @@ export function App() {
     return () => clearInterval(t);
   }, [dentro]);
 
+  // #108: el punto naranja de "Embebido" en el carril ya avisaba de que algo
+  // seguía corriendo detrás desde cualquier pantalla, pero pulsar el propio
+  // botón no llevaba a ningún sitio si no estabas ya sobre ESE índice —
+  // `descargaIndiceId` solo se rellena al arrancar la descarga desde
+  // Territorio, en esta misma sesión de la ventana. Aquí se resuelve desde la
+  // cola (fuente de verdad, sobrevive a cerrar y reabrir la app) qué índice
+  // tiene trabajo activo, y se abre ese en cuanto entras a "Descarga" sin
+  // tener ya uno elegido.
+  useEffect(() => {
+    if (destino !== "descarga" || descargaIndiceId !== null || indiceAbierto !== null) return;
+    void api.colaProgreso().then((filas) => {
+      const activa = filas.find((f) => f.trabajando && f.indice_actual !== null);
+      if (activa?.indice_actual != null) setIndiceAbierto(activa.indice_actual);
+    });
+  }, [destino, descargaIndiceId, indiceAbierto]);
+
   async function traspasarServicios() {
     const sesion = await api.identidadLeer().catch(() => null);
     if (sesion) setDentro(true);

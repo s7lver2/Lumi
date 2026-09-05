@@ -14,7 +14,11 @@ export function PortearNivelDialog({ indiceId, onCancelar, onPorteado }: {
   onPorteado: (modelosNuevos: string[]) => void;
 }) {
   const [niveles, setNiveles] = useState<Nivel[]>([]);
-  const [elegido, setElegido] = useState<string | null>(null);
+  // Varios a la vez, no uno solo: el backend ya difea y encola solo lo que
+  // falta de la unión (`indice_portear_nivel` recibe `Vec<String>`) — antes
+  // esta pantalla solo dejaba elegir uno y envolvía en `[elegido]`, así que
+  // portear a "mini y pro" a la vez exigía dos viajes por esta pantalla.
+  const [elegidos, setElegidos] = useState<string[]>([]);
   const [porteando, setPorteando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // La respuesta del comando, no un booleano mudo: se enseña antes de
@@ -24,12 +28,16 @@ export function PortearNivelDialog({ indiceId, onCancelar, onPorteado }: {
 
   useEffect(() => { void api.nivelesLista().then(setNiveles); }, []);
 
+  function alternar(id: string) {
+    setElegidos((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  }
+
   async function confirmar() {
-    if (!elegido) return;
+    if (elegidos.length === 0) return;
     setPorteando(true);
     setError(null);
     try {
-      setResultado(await api.indicePortearNivel(indiceId, [elegido]));
+      setResultado(await api.indicePortearNivel(indiceId, elegidos));
     } catch (e) {
       setError(String(e));
     } finally {
@@ -41,17 +49,19 @@ export function PortearNivelDialog({ indiceId, onCancelar, onPorteado }: {
     <div className="w-[400px] rounded-card border border-white/[.13] bg-[rgba(16,19,25,.66)] p-[20px_22px] backdrop-blur-xl">
       <p className="text-sm text-fg">Portear a otro nivel</p>
       <p className="mt-1 text-[10.5px] leading-relaxed text-subtle">
-        Subir de nivel encola solo los modelos que faltan — lo ya embebido bajo el nivel actual
-        no se pierde. Bajar no borra vectores ya calculados, solo dejan de exigirse.
+        Puedes elegir varios a la vez — solo se encolan los modelos que falten de la unión de
+        todos. Subir de nivel no pierde lo ya embebido; bajar no borra vectores ya calculados,
+        solo dejan de exigirse.
       </p>
 
       {resultado === null && (
         <>
           <div className="mt-3.5 grid grid-cols-3 gap-1.5">
             {niveles.map((n) => (
-              <button key={n.id} type="button" onClick={() => setElegido(n.id)}
+              <button key={n.id} type="button" onClick={() => alternar(n.id)}
+                aria-pressed={elegidos.includes(n.id)}
                 className={`rounded-lg border px-3 py-2 text-left transition-colors
-                  ${elegido === n.id ? "border-draw bg-draw/[.08]" : "border-border bg-[#0b0d0f] hover:border-white/25"}`}>
+                  ${elegidos.includes(n.id) ? "border-draw bg-draw/[.08]" : "border-border bg-[#0b0d0f] hover:border-white/25"}`}>
                 <span className="block text-[11.5px] text-fg">{n.nombre}</span>
                 <span className="font-mono text-[9.5px] text-subtle">
                   {n.recuperacion.length} {n.recuperacion.length === 1 ? "modelo" : "modelos"}
@@ -66,7 +76,7 @@ export function PortearNivelDialog({ indiceId, onCancelar, onPorteado }: {
               className="jg-press rounded-lg border border-border px-4 py-2 text-[11.5px] text-fg">
               Cancelar
             </button>
-            <button onClick={() => void confirmar()} disabled={!elegido || porteando}
+            <button onClick={() => void confirmar()} disabled={elegidos.length === 0 || porteando}
               className="jg-press rounded-lg bg-accent px-4 py-2 text-[11.5px] font-medium text-black disabled:opacity-40">
               {porteando ? "Porteando…" : "Portear"}
             </button>

@@ -2,12 +2,16 @@ import { useState } from "react";
 
 import type { Saludo } from "../lib/api";
 import { IdentityStep } from "./IdentityStep";
-import { ModelsStep } from "./ModelsStep";
 import { RuntimeStep } from "./RuntimeStep";
 import { ServicesStep } from "./ServicesStep";
 import { Stepper } from "./Stepper";
 
-const PASOS = ["Carpeta", "Servicios", "Runtime", "Modelos", "Identidad"];
+// #111: el paso "Modelos" solo listaba nombres y dimensiones sin permitir
+// descargar nada — la descarga real de pesos, con progreso y reintento, vive
+// en Ajustes → Rendimiento / la pantalla de Descarga y embebido
+// (`DescargaYEmbebidoView`), así que este paso era una lista de solo lectura
+// duplicada y sin acción propia («Entrar» era su único botón).
+const PASOS = ["Carpeta", "Servicios", "Runtime", "Identidad"];
 
 /** Misma composición que el wizard del subsistema 1: 552 px, brandline ✦,
  *  stepper de burbujas, tarjeta de cristal. No es un componente nuevo. */
@@ -26,8 +30,7 @@ export function SetupWizard({ saludo, onListo }: { saludo: Saludo; onListo: () =
       <Stepper pasos={PASOS} actual={paso} />
       {paso === 1 && <ServicesStep saludo={saludo} onListo={() => setPaso(2)} />}
       {paso === 2 && <RuntimeStep onListo={() => setPaso(3)} />}
-      {paso === 3 && <ModelsStep onListo={() => setPaso(4)} />}
-      {paso === 4 && <IdentityStep onHecho={onListo} onSaltar={onListo} />}
+      {paso === 3 && <IdentityStep onHecho={onListo} onSaltar={onListo} />}
     </div>
   );
 }
