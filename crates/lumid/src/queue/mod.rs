@@ -862,6 +862,14 @@ impl Queue {
                 if !self.es_suyo(&dispositivo, id) {
                     return;
                 }
+                // Sin esto el dispositivo se queda con `trabajo = Some(id)`
+                // para siempre: `repartir_ahora()` solo mira los libres, así
+                // que un solo fallo (una ficha que falta en el registro, por
+                // ejemplo) dejaba el worker bloqueado y cada análisis
+                // siguiente en ese dispositivo se quedaba en cola sin
+                // arrancar nunca — el mismo camino que ya seguían
+                // `Vectores`/`Resultado`.
+                self.soltar(&dispositivo, id);
                 self.fallar(id, &motivo);
             }
             Evento::Muerto { dispositivo } => self.enterrar(&dispositivo),
