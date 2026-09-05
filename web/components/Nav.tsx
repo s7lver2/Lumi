@@ -65,30 +65,21 @@ export function Nav() {
           {abierto && (
             <div className="absolute left-0 top-full mt-3 w-[280px] rounded-card border border-border bg-panel p-1.5 shadow-xl">
               <a className="jg-micro flex items-center gap-3 rounded-[8px] px-3 py-2.5 hover:bg-elevated" href="/meetmini">
-                <svg className="h-[26px] w-[26px] shrink-0" viewBox="0 0 26 26">
-                  <circle cx="13" cy="13" r="10.5" fill="none" stroke="rgb(55,138,221)" strokeWidth="1.6" />
-                </svg>
+                <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center text-[15px] text-accent">✦</span>
                 <div className="flex-1">
                   <div className="text-[13px] text-fg">Lumi Mini</div>
                   <div className="text-[11px] text-subtle">un verificador · coste bajo</div>
                 </div>
               </a>
               <a className="jg-micro flex items-center gap-3 rounded-[8px] px-3 py-2.5 hover:bg-elevated" href="/meetpro">
-                <svg className="h-[26px] w-[26px] shrink-0" viewBox="0 0 26 26">
-                  <circle cx="13" cy="13" r="10.5" fill="none" stroke="rgb(239,185,104)" strokeWidth="1.6" />
-                  <circle cx="13" cy="13" r="7" fill="none" stroke="rgb(239,185,104)" strokeWidth="1.2" opacity=".55" />
-                </svg>
+                <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center text-[15px] text-accent">✦</span>
                 <div className="flex-1">
                   <div className="text-[13px] text-fg">Lumi Pro</div>
                   <div className="text-[11px] text-subtle">varios en cadena · coste medio</div>
                 </div>
               </a>
               <a className="jg-micro flex items-center gap-3 rounded-[8px] px-3 py-2.5 hover:bg-elevated" href="/meetvision">
-                <svg className="h-[26px] w-[26px] shrink-0" viewBox="0 0 26 26">
-                  <circle cx="13" cy="13" r="10.5" fill="none" stroke="rgb(242,243,245)" strokeWidth="1.6" />
-                  <circle cx="13" cy="13" r="7" fill="none" stroke="rgb(242,243,245)" strokeWidth="1.2" opacity=".55" />
-                  <circle cx="13" cy="13" r="3.5" fill="none" stroke="rgb(242,243,245)" strokeWidth="1" opacity=".4" />
-                </svg>
+                <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center text-[15px] text-accent">✦</span>
                 <div className="flex-1">
                   <div className="text-[13px] text-fg">Lumi Vision</div>
                   <div className="text-[11px] text-subtle">competencia entre varios · coste alto</div>
