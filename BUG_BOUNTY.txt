@@ -104,3 +104,19 @@
 - [x] cuando un indice ya esta publicado, no deberia de permitirte volver a publicarlo (el boton "Publicar" se deshabilita cuando no hay contenido nuevo desde la ultima publicacion; sigue disponible si agregaste mas imagenes/modelos, para publicar como nueva version — confirmado que era el comportamiento que querías)
 - [x] el historial de versiones del servidor se ha comido la version 2.0.15, no aparece en el historial de versiones (investigado: no es un bug — 2.0.15 solo se publico para cliente+indexer, no para lumid, así que el historial DEL SERVIDOR (lumid) correctamente no la muestra; sí está en web/releases/versiones.json bajo cliente e indexer)
 - [x] el popup de perfil podria adaptarse en cuanto a tamaño dependiendo de la resolucion de la ventana? (ancho ahora responsive con min(600px,92vw), alto con tope de 88vh y scroll si hace falta)
+- [x] en el indexer, el tema de los servicios locales, al ser posible quisiera que al cerrarlo te preguntase si quieres para completamente wsl, parar redis y qdrant, o dejarlos en segundo plano
+- [x] si ya hay una tarea de embedido o de descarga corriendo, deberia de dejarte volver a ella en cualquier momento tan solo dandole al boton de la barra lateral de descarga y embed, sin necesidad de estar en ese mismo indice
+- [x] en el indexer, si hay una tesela ya indexada, quisiera que ya se mostrara sin siqueira necesidad de seleccionarla, en el propio mapa ya dibujada
+- [x] en el indexer, el coso con info al hacer hover en teselas ya indexadas se ve blanco y no se puede distinguir nada
+- [x] en el indexer, el ultimo paso del setup, el boton de copiar copia el codigo, no la url, y el paso de modelos creo que sobra un poco, habria que cambiarlo
+- creo que me ha vuelto a regenerar OTRA vez la clave de firma, estas no eran las mias, y deberian estar vinculadas a mi cuenta de github
+- en la web, quisiera mejorar el mapa que sale con lo que lumi ya conoce, agregale que los puntos parpadeen un poco o algo asi
+- en la web, la segunda seccion, la de la ui, hay varias partes en las que en vez de moverse de forma normal, se teletransporta
+- en la web, la seccion de la ui, el texto explicativo esta demasiado hacia los lados, que no este tan pegado al borde
+- en la web, en la seccion de modelos, lo de si faltan capas fuera, y remplaza el circulito de arriba en la esquina por el logo de lumi
+- en la web, quiero una pagina 404 custom
+- en la web, quiero que cambies el texto de arriba que aparece como titulo de ventana por: meet lumi
+- en la web, en la barra superior, en el desplegable de modelos, remplaza los circulos esos de colores por el logo de lumi
+- [x] en el cliente, en el panel de login, quisiera añadir mas fondos, para variar un poco ese de lineas, se me habian ocurrido tal vez algunas olas hechas de caracteres ascii, estilo midjourney
+- [x] en el cliente, quiero convertir el popup de version incompatible en un popup real, mucho mejor hecho, y con la estetica de lumi
+- [x] en el cliente, quiero que el popup de version incompatible, primero compruebe que hay una version disponible del cliente para actualizar, porque si no puede ser un falso positivo
