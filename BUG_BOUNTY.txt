@@ -109,7 +109,7 @@
 - [x] en el indexer, si hay una tesela ya indexada, quisiera que ya se mostrara sin siqueira necesidad de seleccionarla, en el propio mapa ya dibujada
 - [x] en el indexer, el coso con info al hacer hover en teselas ya indexadas se ve blanco y no se puede distinguir nada
 - [x] en el indexer, el ultimo paso del setup, el boton de copiar copia el codigo, no la url, y el paso de modelos creo que sobra un poco, habria que cambiarlo
-- creo que me ha vuelto a regenerar OTRA vez la clave de firma, estas no eran las mias, y deberian estar vinculadas a mi cuenta de github
+- [x] creo que me ha vuelto a regenerar OTRA vez la clave de firma, estas no eran las mias, y deberian estar vinculadas a mi cuenta de github
 - [x] en la web, quisiera mejorar el mapa que sale con lo que lumi ya conoce, agregale que los puntos parpadeen un poco o algo asi
 - [x] en la web, la segunda seccion, la de la ui, hay varias partes en las que en vez de moverse de forma normal, se teletransporta
 - [x] en la web, la seccion de la ui, el texto explicativo esta demasiado hacia los lados, que no este tan pegado al borde
@@ -120,3 +120,7 @@
 - [x] en el cliente, en el panel de login, quisiera añadir mas fondos, para variar un poco ese de lineas, se me habian ocurrido tal vez algunas olas hechas de caracteres ascii, estilo midjourney
 - [x] en el cliente, quiero convertir el popup de version incompatible en un popup real, mucho mejor hecho, y con la estetica de lumi
 - [x] en el cliente, quiero que el popup de version incompatible, primero compruebe que hay una version disponible del cliente para actualizar, porque si no puede ser un falso positivo
+- durante el proceso de instalar un indice en el cliente, al darle a ver progreso, no pasa nada
+- en el cliente, los numeros de las zonas se solapan los unos con los otros, esto deberia de ser llevado de otra manera, o incluso solo mostrar la zona del intento seleccionado, si no hay intentos ahi si las mostramos todas
+- sigo sin poder eliminar intentos en el cliente
+- en el cliente, quisera agregar opciones para que cada usuario pueda personalizar en el mapa el movimiento de la camara, cosas como sensibilidad o invertir movimiento

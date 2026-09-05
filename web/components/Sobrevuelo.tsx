@@ -138,28 +138,32 @@ const PANTALLAS: {
   zoom?: { escala: number; origen: string };
 }[] = [
   {
-    n: "01", etiqueta: "proyectos",
-    t: "Tus proyectos, siempre a mano",
-    d: "Cada investigación es un espacio propio: imágenes, casos y análisis anteriores, exactamente donde los dejaste.",
-    zoom: { escala: 1.16, origen: "24% 46%" }, // se acerca a la lista de proyectos
-  },
-  {
-    n: "02", etiqueta: "análisis",
+    n: "01", etiqueta: "análisis",
     t: "El análisis, no una cola",
     d: "Cada imagen se enfrenta a varios verificadores geométricos a la vez — gana quien se acerque más al punto real, no un modelo único.",
-    zoom: { escala: 1.16, origen: "78% 50%" }, // se acerca al panel de verificadores
+    src: "/sobrevuelo/02-analisis.png",
+    zoom: { escala: 1.1, origen: "45% 40%" }, // se acerca al globo y al panel de estado
+  },
+  {
+    n: "02", etiqueta: "proyectos",
+    t: "Tus proyectos, siempre a mano",
+    d: "Cada investigación es un espacio propio: imágenes, casos y análisis anteriores, exactamente donde los dejaste.",
+    src: "/sobrevuelo/01-proyectos.png",
+    zoom: { escala: 1.15, origen: "14% 14%" }, // se acerca a la tarjeta del proyecto
   },
   {
     n: "03", etiqueta: "resultado",
     t: "La sección de resultado, tal cual",
     d: "Cada hipótesis lista los verificadores que compitieron y su distancia entre sí, anclada sobre el terreno con el radio de confianza real.",
-    zoom: { escala: 1.32, origen: "68% 50%" }, // se acerca al mapa y su marcador
+    src: "/sobrevuelo/03-resultado.png",
+    zoom: { escala: 1.15, origen: "40% 42%" }, // se acerca al marcador y su radio de confianza
   },
   {
     n: "04", etiqueta: "administración",
     t: "Control total del servidor",
     d: "Modelos, GPUs y usuarios, gestionados desde el mismo cliente — nunca desde un panel de terceros.",
-    zoom: { escala: 1.24, origen: "50% 82%" }, // se acerca a la carga de GPU
+    src: "/sobrevuelo/04-administracion.png",
+    zoom: { escala: 1.15, origen: "68% 58%" }, // se acerca a la tarjeta de hardware/GPU
   },
 ];
 
