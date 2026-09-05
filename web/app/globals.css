@@ -14,6 +14,11 @@
   .sin-perspectiva-origen { perspective-origin: 50% 42%; }
 }
 
+/* Baliza del mapa de cobertura: un parpadeo apenas perceptible, no una luz
+   de emergencia — la opacidad nunca cae de todo, solo respira. */
+@keyframes jg-baliza-pulse { 0%,100% { opacity:.85 } 50% { opacity:.4 } }
+.jg-baliza { animation: jg-baliza-pulse 2.8s ease-in-out infinite; }
+
 @keyframes jg-fade-rise { from { opacity:0; transform: translateY(18px) } to { opacity:1; transform:none } }
 @keyframes jg-core-pulse { 0%,100% { opacity:.45 } 50% { opacity:1 } }
 @keyframes jg-mark-spin { to { transform: rotate(360deg) } }

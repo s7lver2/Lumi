@@ -188,11 +188,25 @@ export async function Cobertura() {
             {Array.from({ length: 6 }).map((_, i) => (
               <line key={`p${i}`} x1={0} y1={(i / 6) * H} x2={W} y2={(i / 6) * H} stroke="rgba(232,232,230,.06)" />
             ))}
-            {resumen?.quadkeys.map((qk) => {
+            {resumen?.quadkeys.map((qk, i) => {
               const t = quadkeyATile(qk);
               const { lon, lat } = tileACentro(t.x, t.y, t.z);
               const { x, y } = proyectar(lon, lat, W, H);
-              return <circle key={qk} cx={x} cy={y} r={2.4} fill="#f2f3f5" opacity={0.85} />;
+              // Parpadeo sutil y desfasado por baliza — nunca a la vez, o se
+              // lee como un parpadeo de pantalla en vez de actividad viva.
+              // El desfase sale del índice, no de Math.random(): server
+              // component, tiene que dar el mismo marcado en cada render.
+              return (
+                <circle
+                  key={qk}
+                  cx={x}
+                  cy={y}
+                  r={2.4}
+                  fill="#f2f3f5"
+                  className="jg-baliza"
+                  style={{ animationDelay: `${(i % 11) * 0.27}s` }}
+                />
+              );
             })}
           </svg>
         </div>
