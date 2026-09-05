@@ -112,10 +112,6 @@ function TarjetaNivel({
                 : 0}
           </dd>
         </div>
-        <div className="flex items-baseline justify-between" style={filaEstilo(0.48 + i * 0.08)}>
-          <dt className="text-subtle">sin recursos para esto</dt>
-          <dd className="text-fg">{n.cae_a ? `usa ${NOMBRE_CAIDA[n.cae_a] ?? n.cae_a}` : "es la base, no delega"}</dd>
-        </div>
       </dl>
 
       <div className="mt-5 grid grid-cols-3 gap-2 border-t border-border pt-4">

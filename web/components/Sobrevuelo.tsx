@@ -26,6 +26,16 @@ import { usarEscenaViva } from "./usarEscenaViva";
  *     equivale a subir casi lo mismo en pantalla.
  */
 
+// Antes 92: con el título fijo ("meet lumi" + h2) ocupando los primeros
+// ~150px de la sección, un plano "centrado" en toda la altura del viewport
+// dejaba el borde superior de la ventana clavado justo en el título (cero
+// margen incluso perfectamente centrado, y el HASTA de antes lo empeoraba
+// otros ~30px más arriba). Subir este valor desplaza el plano suelo+carril
+// hacia abajo en espacio de pantalla PURO, antes de cualquier rotación — a
+// diferencia de HASTA (que además mueve la ventana en Z y cambia cuánto la
+// agranda la perspectiva), este es un desplazamiento sin ese efecto
+// secundario, por eso es el que se toca para dejar hueco bajo el título.
+const CAIDA_PLANO = 355;
 const TUMBE = 75;
 const DESDE = 830; // sigue fuera de campo en scroll=0, pero el tramo vacío antes de asomar es más corto que el original 980, no cero
 const HASTA = -355; // centra la ventana por geometría: 92 + Y·cos75° ≈ 0
@@ -78,10 +88,14 @@ function pintar(p: number): Pintura {
       opSuelo: 1 - s * 0.85,
       deriva: Math.sin(vCurva * Math.PI) * 26,
       fase: p < FIN_VUELO ? "vuelo" : "levantamiento", indiceFloat: 0,
-      // OFFSET_INICIAL, no 0: es el mismo offsetX que el cálculo de fase C
-      // da para la primera pantalla (tramo 0, frac 0) — si aquí fuera 0 la
-      // ventana saltaría en seco esa distancia en el instante del cruce.
-      offsetX: OFFSET_INICIAL, giroY: 0, entrada,
+      // Antes esto era la constante OFFSET_INICIAL fija desde el principio
+      // del alzamiento: la ventana emergía ya desplazada del centro en vez
+      // de asomar centrada, que es justo lo que se pedía ver. Con `s` (el
+      // mismo progreso 0→1 que ya gobiernan alza/rot) de por medio, arranca
+      // centrada (0) y desliza hasta OFFSET_INICIAL exactamente para cuando
+      // `s` llega a 1 — que es también cuando arranca la fase C, así que el
+      // empalme sigue sin salto seco, pero el asomo ya no lo hace.
+      offsetX: OFFSET_INICIAL * s, giroY: 0, entrada,
     };
   }
   // Fase C: la pieza ya está plana (s=1 fijo) y ahora salta de parada en
@@ -312,7 +326,7 @@ export function Sobrevuelo() {
               className="absolute"
               style={{
                 inset: "-60%",
-                transform: "translateY(92px) rotateX(75deg)",
+                transform: `translateY(${CAIDA_PLANO}px) rotateX(75deg)`,
                 transformOrigin: "50% 50%",
                 background: "rgba(232,232,230,.035)",
                 maskImage: "radial-gradient(900px 460px at 50% 50%, black 0%, black 35%, transparent 62%)",
@@ -331,7 +345,7 @@ export function Sobrevuelo() {
             <div
               className="preserva-3d absolute inset-0"
               style={{
-                transform: "translateY(92px) rotateX(75deg)",
+                transform: `translateY(${CAIDA_PLANO}px) rotateX(75deg)`,
                 transformOrigin: "50% 50%",
                 backfaceVisibility: "hidden",
                 WebkitBackfaceVisibility: "hidden",
