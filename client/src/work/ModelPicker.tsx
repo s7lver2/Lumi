@@ -13,11 +13,11 @@ const CONOCIDOS: Record<string, { name: string; note: string }> = {
   },
   pro: {
     name: "Lumi Pro",
-    note: "4 recuperadores · 2 verificadores · dos familias mezcladas, coste medio",
+    note: "3 recuperadores · 2 verificadores · dos familias mezcladas, coste medio",
   },
   vision: {
     name: "Lumi Vision",
-    note: "8 recuperadores · 4 verificadores · lo más preciso, y lo más caro de correr",
+    note: "7 recuperadores · 4 verificadores · lo más preciso, y lo más caro de correr",
   },
 };
 

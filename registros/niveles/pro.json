@@ -1,7 +1,7 @@
 {
   "id": "pro",
   "nombre": "Lumi Pro",
-  "recuperacion": ["lumi-preview", "lumi-2", "eigenplaces", "mixvpr"],
+  "recuperacion": ["lumi-preview", "lumi-2", "eigenplaces"],
   "geometricos": ["roma", "dinov2-vitl14", "lightglue-aliked", "aliked-n16"],
   "agentes": ["idioma", "lado-conduccion", "clima-aparente", "hora-sombras", "toponimos", "estacion", "escena", "senalizacion", "matricula", "dimensiones"],
   "cae_a": "mini"
