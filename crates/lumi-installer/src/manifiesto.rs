@@ -9,6 +9,24 @@ use crate::error::InstaladorError;
 
 const VERSIONES_URL: &str = "https://lumi.s7lver.xyz/api/versiones";
 
+/// `reqwest::Error::to_string()` a secas se queda con el mensaje de fuera
+/// ("error sending request for url (...)") y esconde la causa real (DNS,
+/// TLS, conexión rechazada, timeout) en su cadena de `source()` — que es
+/// justo lo que hacía falta ver para diagnosticar el fallo de red de WSL2
+/// que llevó a añadir `local_address` más arriba y que resultó no ser eso.
+/// Encadena todos los niveles con " ← " para que el mensaje final los
+/// traiga todos, no solo el primero.
+fn detalle(e: &reqwest::Error) -> String {
+    use std::error::Error;
+    let mut partes = vec![e.to_string()];
+    let mut actual: Option<&(dyn Error + 'static)> = e.source();
+    while let Some(err) = actual {
+        partes.push(err.to_string());
+        actual = err.source();
+    }
+    partes.join(" ← ")
+}
+
 pub fn obtener_verificado() -> Result<Manifiesto, InstaladorError> {
     // Sin tope, una red lenta o caída a medias podía dejar esta llamada
     // colgada indefinidamente — 5s es de sobra para una respuesta JSON de
@@ -28,13 +46,13 @@ pub fn obtener_verificado() -> Result<Manifiesto, InstaladorError> {
         .timeout(std::time::Duration::from_secs(5))
         .local_address(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED))
         .build()
-        .map_err(|e| InstaladorError::Red(e.to_string()))?;
+        .map_err(|e| InstaladorError::Red(detalle(&e)))?;
     let manifiesto: Manifiesto = cliente
         .get(VERSIONES_URL)
         .send()
-        .map_err(|e| InstaladorError::Red(e.to_string()))?
+        .map_err(|e| InstaladorError::Red(detalle(&e)))?
         .json()
-        .map_err(|e| InstaladorError::Red(e.to_string()))?;
+        .map_err(|e| InstaladorError::Red(detalle(&e)))?;
     manifiesto
         .comprobar()
         .map_err(|e| InstaladorError::Manifiesto(e.to_string()))?;
