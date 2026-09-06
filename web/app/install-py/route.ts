@@ -334,6 +334,31 @@ def _local_ip():
     return None
 
 
+def _servidor_realmente_virgen(data_dir):
+    """La MISMA condición que bootstrap.rs (crates/lumid/src/routes/bootstrap.rs):
+    sin usuarios y sin ninguna clave de vinculación jamás emitida. No basta con
+    mirar si el certificado ya existía -- eso solo dice si esto es una
+    reinstalación, no si alguien llegó a crear una cuenta de verdad. Un
+    certificado puede sobrevivir a una instalación que nunca se llegó a
+    reclamar (por ejemplo, si el paso de la clave de vinculación se saltó por
+    error, como pasó aquí)."""
+    db_path = f"{data_dir}/lumi.db"
+    if not os.path.exists(db_path):
+        return True
+    try:
+        db = sqlite3.connect(db_path, timeout=5)
+        try:
+            usuarios = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            claves = db.execute("SELECT COUNT(*) FROM pair_key").fetchone()[0]
+            return usuarios == 0 and claves == 0
+        except sqlite3.OperationalError:
+            return True  # tablas aún no creadas -- lumid las crea en su primer arranque
+        finally:
+            db.close()
+    except Exception:
+        return True
+
+
 def _puerto_libre(puerto):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
@@ -570,8 +595,8 @@ def instalar(auto: bool, version: str) -> str:
 
     cert_der = f"{DATA}/cert.der"
     key_pem = f"{DATA}/key.pem"
-    servidor_virgen = not os.path.exists(cert_der)
-    if servidor_virgen:
+    servidor_virgen = _servidor_realmente_virgen(DATA)
+    if not os.path.exists(cert_der):
         _generar_certificado(cert_der, key_pem)
         ok("certificado EC P-256 · 10 años (nuevo)")
     else:
@@ -618,12 +643,11 @@ def instalar(auto: bool, version: str) -> str:
             time.sleep(0.5)
 
     if not servidor_virgen:
-        # Ya hay cert + clave maestra de antes -- este servidor ya tiene
-        # dueño (o al menos ya emitió una clave alguna vez), así que
-        # bootstrap.rs rechazaría la autoemisión con 403 (ver su propio
-        # comentario: solo emite si users/pair_key están vacíos). Pedir
-        # aquí una clave nueva no tiene sentido en una actualización -- solo
-        # haría esperar 10s para acabar fallando.
+        # Ya hay usuarios o una clave emitida de antes -- este servidor ya
+        # tiene dueño, así que bootstrap.rs rechazaría la autoemisión con 403
+        # (ver su propio comentario: solo emite si users/pair_key están
+        # vacíos). Pedir aquí una clave nueva no tiene sentido en una
+        # actualización -- solo haría esperar 10s para acabar fallando.
         return None
     return _pedir_clave_de_vinculacion()
 
