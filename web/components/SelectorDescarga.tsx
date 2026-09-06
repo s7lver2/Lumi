@@ -127,6 +127,7 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
   const [plataforma, setPlataforma] = useState<string | null>(null);
   const [producto, setProducto] = useState<string | null>(null);
   const [montado, setMontado] = useState(false);
+  const [copiado, setCopiado] = useState(false);
 
   useEffect(() => {
     setMontado(true);
@@ -144,6 +145,7 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
   function reiniciar() {
     setPlataforma(null);
     setProducto(null);
+    setCopiado(false);
   }
 
   function cerrar() {
@@ -169,12 +171,26 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
   const instaladorEntry = productos.find((p) => p.producto === "instalador") ?? null;
 
   const productoElegido = producto ? productos.find((p) => p.producto === producto) ?? null : null;
+  // lumid no se descarga suelto: no es un binario para correr a mano, es el
+  // daemon que instala y gestiona `lumi install` (systemd, permisos, todo lo
+  // que ya hace ese comando). Lo que hay que darle a quien elige "lumid" es
+  // el mismo oneliner de `/install` que instala el CLI `lumi`, no el binario
+  // del daemon — por eso ni siquiera se le pregunta la plataforma.
+  const esLumid = productoElegido?.producto === "lumid";
   const viaInstalador = productoElegido != null && PRODUCTOS_VIA_INSTALADOR.has(productoElegido.producto) && instaladorEntry != null;
   const fuenteDescarga = viaInstalador ? instaladorEntry : productoElegido;
   const plataformasDelProducto = fuenteDescarga
     ? Array.from(new Set(fuenteDescarga.artefactos.map((a) => a.plataforma)))
     : [];
   const artefactoFinal = fuenteDescarga?.artefactos.find((a) => a.plataforma === plataforma) ?? null;
+  const oneliner = `curl -fsSL ${montado ? window.location.origin : ""}/install | sh`;
+
+  function copiarOneliner() {
+    navigator.clipboard.writeText(oneliner).then(() => {
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 1600);
+    });
+  }
 
   return (
     <>
@@ -199,7 +215,7 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
             >
               <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
                 <span className="text-[14px] font-medium">
-                  {!producto ? "¿Qué quieres descargar?" : !plataforma ? "¿Qué sistema usas?" : "Listo"}
+                  {!producto ? "¿Qué quieres descargar?" : esLumid || plataforma ? "Listo" : "¿Qué sistema usas?"}
                 </span>
                 <button
                   type="button"
@@ -227,7 +243,38 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
                   </div>
                 )}
 
-                {producto && !plataforma && (
+                {producto && productoElegido && esLumid && (
+                  <div className="flex flex-col items-center gap-4 py-4 text-center">
+                    {ICONOS_PRODUCTO.lumid}
+                    <div>
+                      <div className="text-[14px] font-medium">lumid</div>
+                      <div className="mt-1 max-w-[36ch] text-[11px] leading-relaxed text-subtle">
+                        lumid no se descarga suelto: se instala con el CLI. Copia esto en la
+                        terminal de tu servidor.
+                      </div>
+                    </div>
+                    <div className="flex w-full items-center gap-2 rounded-card border border-border bg-elevated px-3.5 py-2.5">
+                      <code className="flex-1 overflow-x-auto whitespace-nowrap font-mono text-[11.5px] text-fg">
+                        {oneliner}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={copiarOneliner}
+                        className="jg-micro shrink-0 rounded-[6px] px-2 py-1 text-[11px] text-subtle hover:bg-panel hover:text-fg"
+                      >
+                        {copiado ? "copiado" : "copiar"}
+                      </button>
+                    </div>
+                    <div className="text-[11px] text-subtle">
+                      luego, para instalar el servidor: <code className="font-mono">sudo lumi install --version latest</code>
+                    </div>
+                    <button type="button" className="jg-micro text-[12px] text-subtle hover:text-fg" onClick={reiniciar}>
+                      elegir otra vez
+                    </button>
+                  </div>
+                )}
+
+                {producto && !plataforma && !esLumid && (
                   <div className="flex justify-center gap-1">
                     {plataformasDelProducto.map((plat) => (
                       <IconoOpcion
@@ -240,7 +287,7 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
                   </div>
                 )}
 
-                {producto && productoElegido && plataforma && fuenteDescarga && artefactoFinal && (
+                {producto && productoElegido && !esLumid && plataforma && fuenteDescarga && artefactoFinal && (
                   <div className="flex flex-col items-center gap-4 py-4 text-center">
                     {ICONOS_PRODUCTO[productoElegido.producto]}
                     <div>
