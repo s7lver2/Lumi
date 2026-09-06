@@ -249,8 +249,8 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
                     <div>
                       <div className="text-[14px] font-medium">lumid</div>
                       <div className="mt-1 max-w-[36ch] text-[11px] leading-relaxed text-subtle">
-                        lumid no se descarga suelto: se instala con el CLI. Copia esto en la
-                        terminal de tu servidor.
+                        lumid no se descarga suelto: este comando instala el CLI y arranca su
+                        asistente en el mismo paso. Cópialo en la terminal de tu servidor.
                       </div>
                     </div>
                     <div className="flex w-full items-center gap-2 rounded-card border border-border bg-elevated px-3.5 py-2.5">
@@ -266,7 +266,7 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
                       </button>
                     </div>
                     <div className="text-[11px] text-subtle">
-                      luego, para instalar el servidor: <code className="font-mono">sudo lumi install --version latest</code>
+                      sin preguntas: añade <code className="font-mono">-- --version latest -y</code> tras <code className="font-mono">sh</code>
                     </div>
                     <button type="button" className="jg-micro text-[12px] text-subtle hover:text-fg" onClick={reiniciar}>
                       elegir otra vez
