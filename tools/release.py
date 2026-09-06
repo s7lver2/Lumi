@@ -46,11 +46,13 @@ def main():
         sys.exit(1)
 
     borrador_path = Path(sys.argv[1])
-    borrador = json.loads(borrador_path.read_text())
+    borrador = json.loads(borrador_path.read_text(encoding="utf-8"))
     resuelto = resolver_artefactos(borrador)
 
     resuelto_path = borrador_path.with_name(borrador_path.stem + ".resuelto.json")
-    resuelto_path.write_text(json.dumps(resuelto, indent=2))
+    resuelto_path.write_text(
+        json.dumps(resuelto, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
 
     subprocess.run(
         [

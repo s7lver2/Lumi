@@ -69,16 +69,16 @@ def escribir_version(root: Path, nueva: str) -> None:
         ruta = root / rel
         step(f"versión → {rel}")
         if tipo == "cargo":
-            texto = ruta.read_text()
+            texto = ruta.read_text(encoding="utf-8")
             nuevo_texto, n = re.subn(r'(?m)^version = "[^"]*"', f'version = "{nueva}"', texto, count=1)
             if n == 0:
                 fail(f"{rel}: no se encontró una línea 'version = \"...\"'")
                 raise SystemExit(1)
-            ruta.write_text(nuevo_texto)
+            ruta.write_text(nuevo_texto, encoding="utf-8")
         else:
-            datos = json.loads(ruta.read_text())
+            datos = json.loads(ruta.read_text(encoding="utf-8"))
             datos["version"] = nueva
-            ruta.write_text(json.dumps(datos, indent=2) + "\n")
+            ruta.write_text(json.dumps(datos, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         success(f"{rel} → {nueva}")
 
 
@@ -86,7 +86,7 @@ def leer_ultimas_publicadas(root: Path) -> dict[str, dict | None]:
     """La publicación más reciente (por `publicado`) de cada producto en
     web/releases/versiones.json — `None` si el producto nunca se publicó."""
     ruta = root / "web" / "releases" / "versiones.json"
-    manifiesto = json.loads(ruta.read_text())
+    manifiesto = json.loads(ruta.read_text(encoding="utf-8"))
     ultimas: dict[str, dict | None] = {p: None for p in PRODUCTOS}
     invertido = {v: k for k, v in PRODUCTO_MANIFIESTO.items()}
     for p in manifiesto.get("publicaciones", []):
@@ -280,7 +280,7 @@ def armar_borrador(
     artefactos: dict[str, Path], urls: dict[str, str],
 ) -> Path:
     section("Firmando el manifiesto")
-    manifiesto_actual = json.loads((root / "web" / "releases" / "versiones.json").read_text())
+    manifiesto_actual = json.loads((root / "web" / "releases" / "versiones.json").read_text(encoding="utf-8"))
     publicaciones = list(manifiesto_actual.get("publicaciones", []))
 
     ahora = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -312,7 +312,10 @@ def armar_borrador(
     tmp = root / ".release-tmp"
     tmp.mkdir(exist_ok=True)
     borrador_path = tmp / "borrador.json"
-    borrador_path.write_text(json.dumps({"version": 1, "publicaciones": publicaciones}, indent=2))
+    borrador_path.write_text(
+        json.dumps({"version": 1, "publicaciones": publicaciones}, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
     return borrador_path
 
 
