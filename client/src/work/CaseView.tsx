@@ -289,11 +289,18 @@ export function CaseView({
 
   const markers: Marker[] = useMemo(() => {
     const out: Marker[] = [];
+    // Con más de un intento se pinta solo el que se está mirando: antes se
+    // pintaban todos los intentos de la imagen a la vez y sus números se
+    // solapaban en el mapa en cuanto dos caían cerca. El número que lleva
+    // cada uno (i+1) se sigue calculando sobre TODOS los intentos, no solo
+    // el visible, para que coincida con el que ya enseña el carril.
+    const soloElMostrado = mine.length > 1;
     mine.forEach((a, i) => {
       // Sin candidatos NO se pinta nada: un marcador donde no hay respuesta
       // se lee como que la hay.
       if (a.result_lat == null || a.result_lng == null) return;
       const esElMostrado = a.id === shown?.id;
+      if (soloElMostrado && !esElMostrado) return;
       out.push({
         id: `a${a.id}`, lat: a.result_lat, lng: a.result_lng, label: String(i + 1),
         kind: esElMostrado ? "top" : "alt", radiusM: a.result_radius_m ?? undefined,

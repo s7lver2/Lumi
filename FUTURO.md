@@ -49,23 +49,6 @@ resolvió el subsistema 4: **no falla a medias**. El análisis es la unidad de t
 imágenes van juntas al mismo trabajador en la misma línea y vuelve un resultado o un fallo.
 Cuando la interfaz lo ofrezca, la cola no cambia.
 
-### Alternativas cuando el motor duda de verdad
-
-Un análisis devuelve **una** ubicación con su radio y su confianza. La v1 en cambio listaba
-siempre todas las candidatas ordenadas por similitud
-(`CandidateComparisonCard`, `OtherCandidatesList`), y sesenta y cuatro candidatos «sin
-verificar» no ayudan a decidir nada: la lista se vuelve ruido.
-
-La dirección acordada es intermedia y ya está en el spec: el motor **podrá** añadir
-alternativas, pero solo cuando genuinamente no pueda discriminar entre dos o tres hipótesis.
-No se rellena la lista con lo siguiente mejor puntuado, y un falso positivo evidente no es
-una alternativa.
-
-Lo que queda pendiente es construirlo, y es trabajo del subsistema 5: definir qué cuenta
-como duda real —un umbral de separación entre hipótesis, no un top-N— y crear
-`analysis_candidates` el día que el motor reporte la primera. Hasta entonces los cuatro
-campos `result_*` de `analyses` bastan y no hay nada que migrar.
-
 ### Geocodificación inversa
 
 La barra inferior tiene un campo *Identificado* que quiere un nombre de lugar, no unas
@@ -232,21 +215,9 @@ de que exista la web; no tiene sentido diseñarlo en detalle antes de eso.
 
 ## Motor de inferencia (subsistema 5)
 
-El 5 se partió en tres (ver la spec `2026-08-10-motor-inferencia-design.md` §1): 5-0 y 5a están
-terminados, y esto es lo que queda aparcado a propósito para el 5b y para después.
-
-### Los modelos reales
-
-El embebedor sigue siendo el de juguete de `lumi_embed.py`/`lumi_geo.py`: vectores
-deterministas por hash de la ruta, no una red entrenada. Lo que el 5-0/5a cerraron es que el
-camino entero exista, sea reanudable y sea comprobable — no que acierte. **Las coordenadas
-serán malas hasta el 5b**, que es su propio ciclo spec → plan cuando haya modelos elegidos.
-
-### Los verificadores geométricos
-
-La idea original del subsistema («ensemble de verificadores geométricos») no se tocó: sigue
-esperando al 5b, por la misma razón que los modelos — es investigación, no fontanería, y
-necesita corpus y métrica delante antes de empezar.
+El 5 se partió en tres (ver la spec `2026-08-10-motor-inferencia-design.md` §1): 5-0, 5a, 5b
+y 5c están terminados (modelos reales, ensemble de recuperación, verificadores geométricos en
+competencia, y los agentes). Esto es lo que queda aparcado a propósito para después.
 
 ### Elegir el corpus por caso
 
@@ -265,29 +236,11 @@ nadie ha tenido todavía.
 
 ## Transversales
 
-### Sistema de actualización (cliente, `lumid`, Indexer)
-
-Ninguno de los tres se actualiza solo hoy: `lumi install` reinstala desde un checkout, el
-cliente y el Indexer son binarios de Tauri sin canal de release. Pedido explícitamente para
-más adelante, sin alcance decidido todavía — falta cubrir al menos: dónde vive el canal de
-versiones (¿el propio catálogo del subsistema 8, o uno aparte?), si `lumid` se actualiza solo o
-solo avisa y el owner decide, cómo migran los datos de SQLite entre versiones del esquema, y si
-el cliente/Indexer usan el actualizador nativo de Tauri o uno propio dado que ya hay un esquema
-de firma Ed25519 en `lumi-proto` que podría reusarse para firmar releases.
-
 ### Panel de administración real
 
 Es el subsistema 3 y está planificado, no aparcado. Se anota aquí solo lo que se le ha ido
 prometiendo por el camino: rediseñar desde cero las vistas provisionales de solicitudes y
 usuarios del subsistema 2, la fila de configuración del mapa del subsistema 6.
-
-### Pestaña de Logs en el panel de administración
-
-Falta una vista que enseñe el log del propio `lumid` (y, si tiene sentido, el del trabajador
-de inferencia) desde dentro del panel — hoy la única forma de verlo es `journalctl -u lumid`
-a mano en la máquina del servidor. Ninguna spec la ha cubierto todavía: falta decidir si es
-solo lectura de lo que ya escribe `tracing` (¿a un fichero rotado, o leyendo `journalctl` si
-existe?), cuánto se retiene, y si hace falta filtrar por nivel/módulo.
 
 ### Hardware: control de ventilador de CPU (PWM de placa base)
 
@@ -370,12 +323,6 @@ repartir: un cambio dentro de `plan.rs`.
   si la web no responde.
 
 ## Motor de inferencia (subsistema 5b)
-
-### El fichero `LICENSE` que falta
-
-**El repositorio no tiene fichero `LICENSE`**, aunque `PRODUCT.md` dice «de código abierto». Con
-dependencias de licencia mixta dentro (MIT, Apache-2.0, BSD-3, y la licencia propia de DINOv3 vía
-RoMa v2) esto deja de ser un descuido menor. **Bloqueante antes de publicar la web del 9.**
 
 ### «Built with DINOv3»
 

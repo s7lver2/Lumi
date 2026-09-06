@@ -121,6 +121,6 @@
 - [x] en el cliente, quiero convertir el popup de version incompatible en un popup real, mucho mejor hecho, y con la estetica de lumi
 - [x] en el cliente, quiero que el popup de version incompatible, primero compruebe que hay una version disponible del cliente para actualizar, porque si no puede ser un falso positivo
 - durante el proceso de instalar un indice en el cliente, al darle a ver progreso, no pasa nada
-- en el cliente, los numeros de las zonas se solapan los unos con los otros, esto deberia de ser llevado de otra manera, o incluso solo mostrar la zona del intento seleccionado, si no hay intentos ahi si las mostramos todas
-- sigo sin poder eliminar intentos en el cliente
-- en el cliente, quisera agregar opciones para que cada usuario pueda personalizar en el mapa el movimiento de la camara, cosas como sensibilidad o invertir movimiento
+- [x] en el cliente, los numeros de las zonas se solapan los unos con los otros, esto deberia de ser llevado de otra manera, o incluso solo mostrar la zona del intento seleccionado, si no hay intentos ahi si las mostramos todas (con más de un intento, el mapa ya solo pinta la zona del que se está mirando en el carril, no todos a la vez — `CaseView.tsx::markers`)
+- [x] sigo sin poder eliminar intentos en el cliente (ya está: clic derecho sobre un intento → "Borrar", y el icono de papelera del carril borra todos los de esa imagen — `AttemptsRail.tsx`/`CaseView.tsx::eliminarIntento` contra `DELETE /v1/analyses/:id`)
+- [x] en el cliente, quisera agregar opciones para que cada usuario pueda personalizar en el mapa el movimiento de la camara, cosas como sensibilidad o invertir movimiento (nueva sección Ajustes → Mapa: sensibilidad de la rueda 50-200% e invertir zoom — arrastre/rotación de cámara no tocados, el motor no expone una tasa configurable para esos)
