@@ -1,8 +1,17 @@
 const REPO = "s7lver2/Lumi";
 
-/** Script de instalación del CLI `lumi`. Se sirve como texto plano para que
- *  `curl … | sh` funcione. No instala el daemon: eso lo hace después
- *  `sudo lumi install --version latest`, que ya existe. */
+/** Script de instalación del CLI `lumi` — y del propio daemon, en el mismo
+ *  comando. Se sirve como texto plano para que `curl … | sh` funcione.
+ *
+ *  El asistente de `lumi install` es interactivo (modo nativo/WSL, clave
+ *  maestra, dónde guardar los datos), pero este script LLEGA por un pipe:
+ *  su stdin ya es ese pipe, no la terminal de quien lo ejecuta, así que
+ *  cualquier `read` del asistente encontraría el pipe agotado, no una
+ *  respuesta de verdad. El arreglo es el mismo que usan otros instaladores
+ *  de una línea (rustup, por ejemplo): reenganchar stdin a `/dev/tty` justo
+ *  antes de lanzar el asistente, y solo si de verdad hay una terminal
+ *  delante — si no la hay (un CI, por ejemplo), se imprime el paso
+ *  siguiente en vez de colgarse esperando una respuesta que nunca llega. */
 const SCRIPT = `#!/bin/sh
 set -eu
 
@@ -24,8 +33,18 @@ fi
 
 echo "Listo: \$(\$DESTINO/lumi --version)"
 echo
-echo "Ahora, para instalar el servidor:"
-echo "  sudo lumi install --version latest -y"
+
+# "\$@" pasa tal cual a "lumi install" — para un one-liner sin preguntas usa:
+#   curl -fsSL .../install | sh -s -- --version latest -y
+if [ -t 1 ] && [ -r /dev/tty ]; then
+  echo "Arrancando el asistente de instalación…"
+  echo
+  "\$DESTINO/lumi" install "\$@" < /dev/tty
+else
+  echo "No hay terminal delante (¿esto corre en un script o un CI?), así que no se"
+  echo "lanza el asistente interactivo. Para instalar el servidor:"
+  echo "  sudo lumi install --version latest -y"
+fi
 `;
 
 export async function GET() {
