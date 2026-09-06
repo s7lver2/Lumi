@@ -33,6 +33,7 @@ import urllib.error
 import urllib.request
 import base64
 import sqlite3
+import ssl
 
 DATA = "/var/lib/lumi"
 BIN = "/usr/local/bin/lumid"
@@ -525,14 +526,23 @@ def _pedir_clave_de_vinculacion():
     """lumid acaba de arrancar: se le pide que se autoemita su propia clave
     (toda la parte Argon2id vive en su código Rust, ya probado -- ver
     crates/lumid/src/routes/bootstrap.rs). Se sondea porque el arranque
-    (migraciones, detección de hardware) no es instantáneo."""
-    url = f"http://127.0.0.1:{PORT}/v1/bootstrap/pair-key"
+    (migraciones, detección de hardware) no es instantáneo.
+
+    lumid solo habla HTTPS, incluso en localhost -- no hay puerto en texto
+    plano. El certificado es autofirmado (el cliente real pinea su huella),
+    pero aquí no hace falta reimplementar ese pineo: esto es una llamada a
+    127.0.0.1 desde un proceso que corre como root en la MISMA máquina que
+    acaba de escribir ese certificado -- no hay red de por medio que un
+    atacante pueda interponer. Se desactiva solo la verificación del
+    certificado, no TLS en sí."""
+    ctx = ssl._create_unverified_context()
+    url = f"https://127.0.0.1:{PORT}/v1/bootstrap/pair-key"
     ultimo_error = None
     for _ in range(20):
         time.sleep(0.5)
         try:
             req = urllib.request.Request(url, method="POST", data=b"")
-            with urllib.request.urlopen(req, timeout=5) as r:
+            with urllib.request.urlopen(req, timeout=5, context=ctx) as r:
                 return json.loads(r.read())["key"]
         except Exception as e:
             ultimo_error = _detalle_error(e)
