@@ -518,7 +518,15 @@ def instalar(auto: bool, version: str) -> str:
         if _es_wsl():
             warn("WSL2 detectado: el driver se instala en Windows, no aquí (developer.nvidia.com/cuda/wsl)")
     if not _puerto_libre(PORT):
-        raise SystemExit(f"el puerto {PORT} ya está ocupado")
+        if not _run_quiet_status(["systemctl", "is-active", "--quiet", "lumid.service"]):
+            raise SystemExit(f"el puerto {PORT} ya está ocupado por otro proceso (no es lumid.service)")
+        if auto:
+            warn(f"puerto {PORT} ocupado por lumid.service -- se detiene para reinstalar")
+        else:
+            r = input(f"  el puerto {PORT} ya está ocupado por lumid.service -- ¿pararlo y reinstalar? [S/n] ").strip().lower()
+            if r not in ("", "s", "si", "sí", "y", "yes"):
+                raise SystemExit("instalación cancelada")
+        _run_ok(["systemctl", "stop", "lumid.service"])
     if shutil.which("ufw"):
         estado = subprocess.run(["ufw", "status"], capture_output=True, text=True).stdout.strip().lower()
         if estado.startswith("status: active"):
