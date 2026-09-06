@@ -273,6 +273,11 @@ pub async fn aplicar(app: &App, version_objetivo: Option<&str>) -> Result<(), Ap
         .find(|a| a.plataforma == "linux-x86_64")
         .ok_or(AplicarError::SinDisponible)?
         .clone();
+    // Segundo artefacto opcional de la MISMA publicación: `registros/` +
+    // `workers/` empaquetados (ver `tools/release_flow.py::_empaquetar_assets`).
+    // Opcional de verdad — un release viejo, o uno que no tocó datos, no lo
+    // trae, y no pasa nada: se sigue con lo que ya hay en disco.
+    let artefacto_assets = publicacion.artefactos.iter().find(|a| a.plataforma == "assets").cloned();
 
     // 120s, no 10s: aquí se descarga el binario completo de lumid, no solo
     // el manifiesto JSON — mismo criterio que el resto de este proyecto.
@@ -297,6 +302,32 @@ pub async fn aplicar(app: &App, version_objetivo: Option<&str>) -> Result<(), Ap
     };
     if recibido != artefacto.sha256 {
         return Err(AplicarError::HashNoCoincide { esperado: artefacto.sha256.clone(), recibido });
+    }
+
+    // Mismo criterio para el paquete de assets, si lo hay: se descarga y se
+    // verifica AQUÍ, junto con el binario, para que un fallo de red o de
+    // hash pare la actualización entera antes de tocar nada — no a mitad,
+    // con el binario ya cambiado y el paquete a medio bajar.
+    let mut bytes_assets: Option<Vec<u8>> = None;
+    if let Some(a) = &artefacto_assets {
+        let b = cliente_descarga
+            .get(&a.url)
+            .send()
+            .await
+            .map_err(|e| AplicarError::Descarga(e.to_string()))?
+            .bytes()
+            .await
+            .map_err(|e| AplicarError::Descarga(e.to_string()))?;
+        let recibido = {
+            use sha2::{Digest, Sha256};
+            let mut h = Sha256::new();
+            h.update(&b);
+            format!("{:x}", h.finalize())
+        };
+        if recibido != a.sha256 {
+            return Err(AplicarError::HashNoCoincide { esperado: a.sha256.clone(), recibido });
+        }
+        bytes_assets = Some(b.to_vec());
     }
 
     // 2. Mantenimiento: rechaza trabajo nuevo, no cancela el que corre.
@@ -362,10 +393,65 @@ pub async fn aplicar(app: &App, version_objetivo: Option<&str>) -> Result<(), Ap
         let _ = std::fs::set_permissions(BIN_ACTUAL, std::fs::Permissions::from_mode(0o755));
     }
 
+    // 5b. Resincronizar registros/ y workers/ si el release trae el paquete
+    //     de assets — lo mismo que `lumi install` ya hacía desde un checkout,
+    //     pero disponible ahora también para quien solo tiene el binario. Un
+    //     fallo aquí no aborta la actualización entera (el binario nuevo ya
+    //     está en su sitio): se registra y lumid arranca con el binario
+    //     nuevo sobre los datos que ya tenía, que es justo el estado en el
+    //     que ha vivido este proyecto hasta hoy.
+    if let Some(bytes_a) = bytes_assets {
+        match aplicar_paquete_assets(&app.dir, &bytes_a) {
+            Ok(()) => tracing::info!("registros/ y workers/ resincronizados desde el release"),
+            Err(e) => tracing::error!("no se pudo resincronizar registros/workers: {e} — lumid sigue con los que ya tenía"),
+        }
+    }
+
     // 6. Reiniciar. El nuevo proceso corre `store::migrate()` al arrancar,
     //    como en cualquier arranque normal — no hace falta nada especial
     //    aquí para eso. Este proceso muere aquí.
     let _ = std::process::Command::new("systemctl").args(["restart", "lumid"]).status();
 
+    Ok(())
+}
+
+/// Extrae `bytes` (el .tar.gz de `registros/`+`workers/`) a una carpeta de
+/// verdad — pero a un directorio TEMPORAL primero, y solo se sustituye lo
+/// que ya había si la extracción entera salió bien y trae los dos
+/// directorios esperados. Un tar a medias, corrupto o vacío no debe dejar
+/// a `lumid` sin ningún registro: es preferible seguir con datos viejos que
+/// quedarse sin ninguno.
+fn aplicar_paquete_assets(dir_datos: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+    let tmp_tar = dir_datos.join("actualizacion-assets.tar.gz");
+    let tmp_dir = dir_datos.join("actualizacion-assets-tmp");
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+    std::fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
+    std::fs::write(&tmp_tar, bytes).map_err(|e| e.to_string())?;
+
+    let estado = std::process::Command::new("tar")
+        .arg("-xzf")
+        .arg(&tmp_tar)
+        .arg("-C")
+        .arg(&tmp_dir)
+        .status()
+        .map_err(|e| e.to_string())?;
+    let _ = std::fs::remove_file(&tmp_tar);
+    if !estado.success() {
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        return Err(format!("tar terminó con {estado}"));
+    }
+
+    for nombre in ["registros", "workers"] {
+        if !tmp_dir.join(nombre).is_dir() {
+            let _ = std::fs::remove_dir_all(&tmp_dir);
+            return Err(format!("el paquete no trae {nombre}/"));
+        }
+    }
+    for nombre in ["registros", "workers"] {
+        let destino = dir_datos.join(nombre);
+        let _ = std::fs::remove_dir_all(&destino);
+        std::fs::rename(tmp_dir.join(nombre), &destino).map_err(|e| e.to_string())?;
+    }
+    let _ = std::fs::remove_dir_all(&tmp_dir);
     Ok(())
 }

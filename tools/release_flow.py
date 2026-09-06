@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -169,6 +170,23 @@ def _construir_wsl_lumid(root: Path) -> Path:
     return destino
 
 
+def _empaquetar_assets(root: Path) -> Path:
+    """`registros/` y `workers/` como un solo asset descargable — lo que
+    `actualizacion::aplicar` (lumid) resincroniza junto con el binario en
+    cada auto-actualización real. Sin esto, un usuario que solo pulsa
+    "actualizar" en el panel (sin un checkout de git propio, que es el caso
+    normal fuera de este equipo de desarrollo) nunca recibiría cambios de
+    registro como el de hoy — `lumi install` resincroniza desde un checkout,
+    pero el canal de actualizaciones no tenía ningún equivalente."""
+    destino_dir = root / ".release-tmp"
+    destino_dir.mkdir(exist_ok=True)
+    destino = destino_dir / "lumid-assets.tar.gz"
+    with tarfile.open(destino, "w:gz") as tar:
+        for nombre in ("registros", "workers"):
+            tar.add(root / nombre, arcname=nombre)
+    return destino
+
+
 def _forzar_reembebido_icono(root: Path, proyecto: str) -> None:
     """`tauri-build` solo re-empaqueta `icon.ico` cuando `build.rs` se
     re-ejecuta. Un build incremental (sin `cargo clean`) puede seguir
@@ -193,6 +211,9 @@ def construir(root: Path, productos: list[str]) -> dict[str, Path]:
         artefactos["indexer"] = root / RUTA_BINARIO["indexer"]
     if "lumid" in productos:
         artefactos["lumid"] = _construir_wsl_lumid(root)
+        # No es un producto propio (no aparece en PRODUCTOS): es un segundo
+        # artefacto de la MISMA publicación de lumid, ver `armar_borrador`.
+        artefactos["lumid-assets"] = _empaquetar_assets(root)
 
     # El instalador se construye SIEMPRE, esté o no en `productos` — todo
     # release necesita su .exe como asset (es lo que instala cliente/indexer
@@ -238,15 +259,20 @@ def subir_github(version: str, productos: list[str], artefactos: dict[str, Path]
     assets = [str(artefactos[p]) for p in productos]
     if "installer" not in productos:
         assets.append(str(artefactos["installer"]))
+    if "lumid-assets" in artefactos:
+        assets.append(str(artefactos["lumid-assets"]))
     run(
         ["gh", "release", "create", tag, *assets,
          "--repo", REPO_GITHUB, "--title", tag, "--notes", notas or "(sin notas)"],
         label="gh release create",
     )
-    return {
+    urls = {
         p: f"https://github.com/{REPO_GITHUB}/releases/download/{tag}/{artefactos[p].name}"
         for p in productos
     }
+    if "lumid-assets" in artefactos:
+        urls["lumid-assets"] = f"https://github.com/{REPO_GITHUB}/releases/download/{tag}/{artefactos['lumid-assets'].name}"
+    return urls
 
 
 def armar_borrador(
@@ -259,17 +285,28 @@ def armar_borrador(
 
     ahora = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     for p in productos:
+        artefactos_p = [{
+            "plataforma": PLATAFORMA[p],
+            "archivo": str(artefactos[p]),
+            "url": urls[p],
+        }]
+        # El paquete de registros/workers viaja como un segundo artefacto de
+        # la MISMA publicación de lumid (misma versión, mismo ciclo) — no
+        # como un producto propio. `actualizacion::aplicar` lo busca por esta
+        # `plataforma` exacta.
+        if p == "lumid" and "lumid-assets" in artefactos:
+            artefactos_p.append({
+                "plataforma": "assets",
+                "archivo": str(artefactos["lumid-assets"]),
+                "url": urls["lumid-assets"],
+            })
         publicaciones.append({
             "producto": PRODUCTO_MANIFIESTO[p],
             "version": version,
             "publicado": ahora,
             "notas": notas,
             "retirada": False,
-            "artefactos": [{
-                "plataforma": PLATAFORMA[p],
-                "archivo": str(artefactos[p]),
-                "url": urls[p],
-            }],
+            "artefactos": artefactos_p,
         })
 
     tmp = root / ".release-tmp"
