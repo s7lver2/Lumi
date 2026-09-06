@@ -20,7 +20,11 @@ import os
 #: 20x20 solo salen de un ResNet50-menos-layer4 (downsample x16) con entrada
 #: de 320x320 EXACTOS -- con 322 sale 21x21=441 y `LayerNorm(400)` revienta
 #: con "Given normalized_shape=[400] ... but got input of size[N, 1024, 441]".
-LADO = {"mixvpr": 320}
+#: dino-mix es el mismo caso con otra cuenta: su mezclador fija `in_h=in_w=16`
+#: (un ViT-B/14 -- patch size 14 -- solo da 16x16 parches con 224x224 EXACTOS,
+#: 224/14=16; con 322 salen 23x23=529 y revienta igual que MixVPR con su
+#: `LayerNorm`, aqui de tamano 256 en vez de 400).
+LADO = {"mixvpr": 320, "dino-mix": 224}
 
 
 def _ficha(modelo_id, registro_dir):
@@ -105,6 +109,9 @@ def _reconstruir(modelo_id, dims):
     if modelo_id == "lumi-preview":
         import megaloc_network
         return megaloc_network.MegaLoc()
+    if modelo_id == "dino-mix":
+        import dino_mix_network
+        return dino_mix_network.crear_vitb14_mix()
     raise ValueError(
         f"{modelo_id} trae un state_dict crudo y no se sabe reconstruir su arquitectura "
         "-- hace falta añadir su definición de red, igual que cosplace_network.py"
