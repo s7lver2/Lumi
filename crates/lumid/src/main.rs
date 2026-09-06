@@ -228,7 +228,10 @@ async fn main() -> anyhow::Result<()> {
         )
         .route("/v1/users/:id/avatar", get(routes::perfil::ver_avatar_usuario))
         .route("/v1/sessions/:public_id", axum::routing::delete(routes::auth::revoke_session))
-        .route("/v1/admin/access-requests", get(routes::admin::list_requests))
+        .route(
+            "/v1/admin/access-requests",
+            get(routes::admin::list_requests).patch(routes::admin::patch_accept_requests),
+        )
         .route("/v1/admin/access-requests/:id/resolve", post(routes::admin::resolve_request))
         .route("/v1/me/credit-requests", post(routes::credit_requests::create))
         .route("/v1/admin/credit-requests", get(routes::credit_requests::list_all))
@@ -239,6 +242,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/events", get(routes::admin::events))
         .route("/v1/admin/users", get(routes::admin::list_users))
         .route("/v1/admin/users/:id", get(routes::admin::get_user).patch(routes::admin::patch_user))
+        .route("/v1/admin/users/:id/reset-password", post(routes::admin::reset_password))
         .route("/v1/admin/limits", get(routes::admin::get_limits).patch(routes::admin::patch_limits))
         .route("/v1/admin/resumen", get(routes::admin::resumen))
         .route("/v1/admin/actividad", get(routes::actividad::get))

@@ -27,3 +27,5 @@ bs58.workspace = true
 sha2.workspace = true
 ed25519-dalek.workspace = true
 base64.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls-manual-roots"] }
+rustls = "0.23"

@@ -628,6 +628,21 @@ pub struct PatchLimitsReq {
     pub limits: std::collections::HashMap<String, serde_json::Value>,
 }
 
+/// La contraseña temporal, en texto — se manda UNA vez, por HTTPS, a quien ya
+/// demostró ser administrador; el servidor solo guarda su hash a partir de
+/// aquí. `POST /v1/admin/users/:id/reset-password`.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResetPasswordRes {
+    pub temp: String,
+}
+
+/// `PATCH /v1/admin/access-requests`: abre o cierra la aceptación de
+/// solicitudes nuevas.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PatchAcceptRequestsReq {
+    pub on: bool,
+}
+
 /// Lo que el panel enseña nada más entrar. Va en una sola respuesta y no en
 /// cuatro peticiones: pintar la pantalla a trozos daría cuatro estados de
 /// carga y cuatro de error para una sola pregunta.

@@ -302,6 +302,40 @@ contra la inanición: quien tiene prioridad alta ocupa su cupo y ni un sitio má
 cientos de usuarios reales eso resulta insuficiente, la salida es un reparto por turnos entre
 usuarios, y cabe entero dentro de `queue/plan.rs` sin tocar el contrato ni la cola.
 
+### Rediseño de `lumi-cli`: autenticación de verdad y uso remoto (EN CIMIENTOS, pausado)
+
+`lumi admin reset-password/unblock/accept-requests` tocaba el SQLite directamente —
+"tener shell en la máquina ya es prueba de propiedad", pero sin sesión, sin rol
+comprobado y sin ningún rastro de quién lo usó. Se empezó a rediseñar para que esas tres
+acciones pasen a ser peticiones autenticadas contra las rutas que `lumid` ya expone para
+el panel web (mismo login que el cliente), lo que de paso permite correr `lumi admin`
+desde otra máquina (p. ej. el `lumi.exe` de Windows contra un `lumid` en WSL) — y se
+mantiene aparte una escotilla de verdad (`lumi rescue ...`) que solo funciona con `lumid`
+parado y deja rastro en `rescate.log`.
+
+**Lo que ya existe y compila:**
+- `crates/lumid/src/routes/admin.rs`: rutas nuevas `POST /v1/admin/users/:id/reset-password`
+  y `PATCH /v1/admin/access-requests` (antes solo tenía `GET`), ambas autenticadas con
+  `require_admin` como el resto del panel.
+- `crates/lumi-proto/src/api.rs`: `ResetPasswordRes`, `PatchAcceptRequestsReq`.
+- `crates/lumi-cli/src/red.rs`: cliente HTTPS con la huella anclada (mismo patrón que
+  `PinnedVerifier` del cliente de escritorio), resolución de servidor (local por defecto,
+  `--card` para uno remoto), login con caché de sesión de 15 min en `~/.lumi/session`.
+- `crates/lumi-cli/src/admin.rs`: reescrito para hablar por red en vez de tocar el SQLite.
+- `crates/lumi-cli/src/rescate.rs`: la escotilla aparte (exige `lumid` parado, confirmación
+  reescribiendo el nombre de usuario, registro en `/var/lib/lumi/rescate.log`).
+- `main.rs`: `lumi admin --card <tarjeta> ...` ya no pide `sudo` (solo habla por HTTPS);
+  `lumi rescue ...` sigue pidiéndolo.
+
+**Lo que falta, y por qué se paró aquí:** nada de esto se ha probado de verdad contra un
+`lumid` real (ni el flujo de login, ni el caso remoto con `--card`, ni la escotilla). El
+asistente de `lumi install` y los mensajes de error/salida del CLI —las otras dos quejas
+del pedido original— tampoco se tocaron. Se aparcó a mitad para priorizar el oneliner de
+instalación (ver más abajo). Antes de dar esto por terminado hace falta: probarlo en un
+servidor de verdad, decidir si `card()` (que sigue siendo lectura local, sin red) necesita
+también moverse, y revisar si `Cmd::Rescue` debería compartir más código con `Cmd::Admin`
+en vez de duplicar el `match` de acciones en `main.rs`.
+
 ### Cambio de modelo en bucle con una sola GPU
 
 Con un único dispositivo y dos personas alternando modelos, cargar pesos puede dominar el

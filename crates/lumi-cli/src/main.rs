@@ -2,6 +2,8 @@ mod admin;
 mod detect;
 mod firmar;
 mod install;
+mod red;
+mod rescate;
 mod ui;
 
 #[cfg(unix)]
@@ -55,8 +57,21 @@ enum Cmd {
     },
     /// Imprime la tarjeta pública del servidor: lo que se reparte al equipo
     Card,
-    /// Escotilla de emergencia sobre cuentas, desde el host
+    /// Acciones de cuenta, autenticadas contra lumid por red (mismo login
+    /// que el cliente/panel). Sin --card asume que lumid corre en esta
+    /// misma máquina y lee su certificado local.
     Admin {
+        /// Tarjeta pública del servidor (`lumi card`), para administrar uno
+        /// remoto en vez del que corre en esta máquina.
+        #[arg(long)]
+        card: Option<String>,
+        #[command(subcommand)]
+        action: AdminAction,
+    },
+    /// Escotilla de emergencia: toca el SQLite directo, SOLO si lumid está
+    /// parado. Deja rastro en /var/lib/lumi/rescate.log. Para el uso normal
+    /// (lumid corriendo), usa 'lumi admin'.
+    Rescue {
         #[command(subcommand)]
         action: AdminAction,
     },
@@ -180,26 +195,62 @@ fn main() -> anyhow::Result<()> {
             println!("  cualquiera conecte verificado y pida acceso.");
             println!("  ────────────────────────────────────────────────────────");
         }
-        Cmd::Admin { action } => {
+        Cmd::Admin { card, action } => {
+            // Sin sudo a propósito: esto ya no toca ningún fichero de root,
+            // solo habla por HTTPS con lumid y se autentica con usuario y
+            // contraseña de verdad — pedir sudo aquí sería justo la
+            // confusión de raíz que se estaba arreglando (por qué hace
+            // falta ser root de la máquina para una acción de cuenta).
+            let servidor = red::resolver(card.as_deref())?;
+            let resultado = (|| -> anyhow::Result<()> {
+                match action {
+                    AdminAction::ResetPassword { username } => {
+                        let temp = admin::reset_password(&servidor, &username)?;
+                        println!("\n  contraseña temporal de {username}: {temp}");
+                        println!("  Se pedirá cambiarla al entrar. Solo se muestra ahora.\n");
+                    }
+                    AdminAction::Unblock { username } => {
+                        admin::unblock(&servidor, &username)?;
+                        println!("\n  {username} desbloqueado\n");
+                    }
+                    AdminAction::Requests => admin::requests(&servidor)?,
+                    AdminAction::AcceptRequests { on } => {
+                        let on = match on.as_str() {
+                            "on" => true,
+                            "off" => false,
+                            _ => anyhow::bail!("usa 'on' o 'off'"),
+                        };
+                        admin::accept(&servidor, on)?;
+                        println!("\n  solicitudes de acceso: {}\n", if on { "abiertas" } else { "cerradas" });
+                    }
+                }
+                Ok(())
+            })();
+            if let Err(e) = &resultado {
+                admin::sugerir_rescate_si_aplica(e);
+            }
+            resultado?
+        }
+        Cmd::Rescue { action } => {
             asegurar_root()?;
             match action {
             AdminAction::ResetPassword { username } => {
-                let temp = admin::reset_password(&username)?;
+                let temp = rescate::reset_password(&username)?;
                 println!("\n  contraseña temporal de {username}: {temp}");
                 println!("  Se pedirá cambiarla al entrar. Solo se muestra ahora.\n");
             }
             AdminAction::Unblock { username } => {
-                admin::unblock(&username)?;
+                rescate::unblock(&username)?;
                 println!("\n  {username} desbloqueado\n");
             }
-            AdminAction::Requests => admin::requests()?,
+            AdminAction::Requests => anyhow::bail!("'requests' no es parte de la escotilla — usa 'lumi admin requests'"),
             AdminAction::AcceptRequests { on } => {
                 let on = match on.as_str() {
                     "on" => true,
                     "off" => false,
                     _ => anyhow::bail!("usa 'on' o 'off'"),
                 };
-                admin::accept(on)?;
+                rescate::accept(on)?;
                 println!("\n  solicitudes de acceso: {}\n", if on { "abiertas" } else { "cerradas" });
             }
             }

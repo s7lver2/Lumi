@@ -6,7 +6,9 @@ use crate::routes::auth::{bearer, require_admin};
 use crate::App;
 use axum::extract::{Path, State};
 use axum::{http::HeaderMap, http::StatusCode, Json};
-use lumi_proto::api::{AdminRequest, ResolveReq};
+use lumi_proto::api::{AdminRequest, PatchAcceptRequestsReq, ResetPasswordRes, ResolveReq};
+use lumi_proto::crypto::hash_password;
+use rand::RngCore;
 use futures;
 
 /// ¿La dirección está fuera del rango privado? Un aviso, no un bloqueo: puede
@@ -267,6 +269,58 @@ pub async fn patch_user(
     get_user(State(app), Path(id), headers)
         .await
         .map_err(|c| (c, "no se pudo releer el usuario".to_string()))
+}
+
+/// Genera una contraseña temporal y la fuerza en la próxima entrada — lo
+/// mismo que hacía `lumi admin reset-password` tocando el SQLite a mano,
+/// ahora autenticado (`require_admin`) y auditado (`tracing::info!`) como
+/// cualquier otra acción administrativa. La contraseña solo se devuelve
+/// aquí, una vez: el servidor guarda su hash, nunca el texto.
+pub async fn reset_password(
+    State(app): State<App>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+) -> Result<Json<ResetPasswordRes>, (StatusCode, String)> {
+    let admin = require_admin(&app, &bearer(&headers))
+        .map_err(|c| (c, "hace falta ser administrador".to_string()))?;
+    let mut b = [0u8; 12];
+    rand::thread_rng().fill_bytes(&mut b);
+    let temp = bs58::encode(b).into_string();
+    let phc = hash_password(&temp).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let c = app.store.conn();
+    let filas = c
+        .execute(
+            "UPDATE users SET password_phc = ?1, must_change_password = 1, blocked = 0 WHERE id = ?2",
+            rusqlite::params![phc, id],
+        )
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    if filas == 0 {
+        return Err((StatusCode::NOT_FOUND, "no existe ese usuario".to_string()));
+    }
+    let _ = c.execute("DELETE FROM sessions WHERE user_id = ?1", [id]);
+    tracing::info!("contraseña de {id} reiniciada por el administrador {admin}");
+    Ok(Json(ResetPasswordRes { temp }))
+}
+
+/// Abre o cierra la aceptación de nuevas solicitudes de acceso
+/// (`access::create` ya la comprueba). Antes solo se podía tocar con
+/// `lumi admin accept-requests` directo al SQLite; esta es la misma
+/// palanca, autenticada.
+pub async fn patch_accept_requests(
+    State(app): State<App>,
+    headers: HeaderMap,
+    Json(req): Json<PatchAcceptRequestsReq>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let admin = require_admin(&app, &bearer(&headers))
+        .map_err(|c| (c, "hace falta ser administrador".to_string()))?;
+    app.store
+        .set_meta("accept_requests", if req.on { "1" } else { "0" })
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    tracing::info!(
+        "solicitudes de acceso {} por el administrador {admin}",
+        if req.on { "abiertas" } else { "cerradas" }
+    );
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn get_limits(
