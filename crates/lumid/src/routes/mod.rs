@@ -6,6 +6,7 @@ pub mod api_keys;
 pub mod analyses;
 pub mod auth;
 pub mod avisos;
+pub mod bootstrap;
 pub mod cases;
 pub mod catalogo;
 pub mod claim;

@@ -207,6 +207,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/indices/eventos", get(routes::indices::eventos))
         .route("/v1/indices/:paquete", axum::routing::delete(routes::indices::desinstalar))
         .route("/v1/claim", post(routes::claim::claim))
+        .route("/v1/bootstrap/pair-key", post(routes::bootstrap::emitir_clave))
         .route("/v1/admin", post(routes::claim::create_admin))
         .route("/v1/auth/login", post(routes::auth::login))
         .route("/v1/auth/me", get(routes::auth::me))

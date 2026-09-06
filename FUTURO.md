@@ -331,10 +331,43 @@ parado y deja rastro en `rescate.log`.
 `lumid` real (ni el flujo de login, ni el caso remoto con `--card`, ni la escotilla). El
 asistente de `lumi install` y los mensajes de error/salida del CLI —las otras dos quejas
 del pedido original— tampoco se tocaron. Se aparcó a mitad para priorizar el oneliner de
-instalación (ver más abajo). Antes de dar esto por terminado hace falta: probarlo en un
-servidor de verdad, decidir si `card()` (que sigue siendo lectura local, sin red) necesita
-también moverse, y revisar si `Cmd::Rescue` debería compartir más código con `Cmd::Admin`
-en vez de duplicar el `match` de acciones en `main.rs`.
+instalación (ver la entrada siguiente). Antes de dar esto por terminado hace falta:
+probarlo en un servidor de verdad, decidir si `card()` (que sigue siendo lectura local,
+sin red) necesita también moverse, y revisar si `Cmd::Rescue` debería compartir más
+código con `Cmd::Admin` en vez de duplicar el `match` de acciones en `main.rs`.
+
+### Instalador en Python para el oneliner (nuevo, sin probar en un servidor real)
+
+`lumi install` (Rust) nunca se publicaba como binario — `release_flow.py` solo construía
+`cliente`/`indexer`/`lumid`/`installer`, nunca `lumi-cli` — así que el oneliner de
+`/install` llevaba tiempo roto (404 al pedir `releases/latest/download/lumi`). En vez de
+arreglar el pipeline de release para publicar también ese binario, se decidió reescribir
+el instalador en Python puro: **el propio script de texto es el artefacto**, sin ningún
+binario compilado que publicar ni versionar aparte.
+
+La pieza delicada era la clave de vinculación (Argon2id) — no reimplementada en Python,
+sino delegada de vuelta a `lumid`: `POST /v1/bootstrap/pair-key` (nueva ruta,
+`crates/lumid/src/routes/bootstrap.rs`) se autoemite la clave usando su propio código Rust
+ya probado, y solo responde si la petición viene de localhost y el servidor está
+genuinamente virgen (sin usuarios, sin clave ya emitida). El script sí reimplementa la
+verificación Ed25519 del manifiesto de versiones (referencia pura Python, sin
+dependencias) — **probada a mano contra el manifiesto real firmado del proyecto**: acepta
+el original, rechaza una copia manipulada de un solo bit.
+
+- `web/app/install-py/route.ts`: el instalador entero, servido como texto plano.
+- `web/app/install/route.ts`: envoltorio de una línea que descarga ese script y lo
+  ejecuta como root, reenganchando stdin a `/dev/tty` para que el asistente interactivo
+  funcione a pesar de llegar por un pipe.
+
+**Lo que falta:** no se ha ejecutado ni una vez contra un servidor real — solo se
+validó offline (sintaxis, la firma Ed25519 contra datos reales, la búsqueda de
+publicaciones/artefactos en el manifiesto). Además, **la publicación v2.0.24 es anterior
+a que `registros/`+`workers/` empezaran a viajar como un segundo artefacto de lumid
+(plataforma "assets", añadido en el mismo cambio que hizo que la auto-actualización de
+`lumid` resincronizara esos dos directorios)** — hasta que se publique una versión nueva
+con ese artefacto, instalar "latest" hoy mismo dejaría `lumid` sin ningún registro (el
+script avisa y sigue en vez de fallar, pero el servidor quedaría inservible igual). Hace
+falta un release nuevo antes de que este instalador funcione de punta a punta.
 
 ### Cambio de modelo en bucle con una sola GPU
 

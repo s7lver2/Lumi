@@ -1,54 +1,49 @@
-const REPO = "s7lver2/Lumi";
-
-/** Script de instalación del CLI `lumi` — y del propio daemon, en el mismo
- *  comando. Se sirve como texto plano para que `curl … | sh` funcione.
+/** Envoltorio de una línea: descarga el instalador real (Python, en
+ *  /install-py) y lo ejecuta como root. No hay ningún binario compilado
+ *  de por medio -- ver FUTURO.md sobre por qué se abandonó publicar un
+ *  `lumi` compilado (el pipeline de release nunca lo construía, y
+ *  arreglar eso significaba tocar el cruce a WSL de cada release).
  *
- *  El asistente de `lumi install` es interactivo (modo nativo/WSL, clave
- *  maestra, dónde guardar los datos), pero este script LLEGA por un pipe:
- *  su stdin ya es ese pipe, no la terminal de quien lo ejecuta, así que
- *  cualquier `read` del asistente encontraría el pipe agotado, no una
- *  respuesta de verdad. El arreglo es el mismo que usan otros instaladores
- *  de una línea (rustup, por ejemplo): reenganchar stdin a `/dev/tty` justo
- *  antes de lanzar el asistente, y solo si de verdad hay una terminal
- *  delante — si no la hay (un CI, por ejemplo), se imprime el paso
- *  siguiente en vez de colgarse esperando una respuesta que nunca llega. */
-const SCRIPT = `#!/bin/sh
+ *  Este script llega por un pipe (`curl … | sh`): su stdin ya es ese pipe,
+ *  no la terminal de quien lo ejecuta, así que las preguntas interactivas
+ *  del instalador (modo, clave maestra, almacenamiento) se encontrarían con
+ *  un stdin agotado. Se reengancha a /dev/tty justo antes de lanzarlo, y
+ *  solo si hay terminal de verdad delante -- si no la hay (un CI, por
+ *  ejemplo), se imprime el paso siguiente en vez de colgarse. */
+function script(base: string) {
+  return `#!/bin/sh
 set -eu
 
-REPO="${REPO}"
-DESTINO="\${DESTINO:-/usr/local/bin}"
-
-echo "Descargando el CLI de Lumi…"
-URL="https://github.com/\${REPO}/releases/latest/download/lumi"
-TMP="$(mktemp)"
-curl -fsSL "\$URL" -o "\$TMP"
-chmod +x "\$TMP"
-
-if [ -w "\$DESTINO" ]; then
-  mv "\$TMP" "\$DESTINO/lumi"
-else
-  echo "Hace falta sudo para escribir en \$DESTINO"
-  sudo mv "\$TMP" "\$DESTINO/lumi"
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "Hace falta python3 en este sistema para instalar Lumi." >&2
+  exit 1
 fi
 
-echo "Listo: \$(\$DESTINO/lumi --version)"
-echo
+TMP="$(mktemp)"
+trap 'rm -f "$TMP"' EXIT
 
-# "\$@" pasa tal cual a "lumi install" — para un one-liner sin preguntas usa:
+echo "Descargando el instalador…"
+curl -fsSL "${base}/install-py" -o "$TMP"
+
+# "$@" pasa tal cual al instalador -- para un one-liner sin preguntas usa:
 #   curl -fsSL .../install | sh -s -- --version latest -y
 if [ -t 1 ] && [ -r /dev/tty ]; then
-  echo "Arrancando el asistente de instalación…"
-  echo
-  "\$DESTINO/lumi" install "\$@" < /dev/tty
+  sudo python3 "$TMP" "$@" < /dev/tty
 else
   echo "No hay terminal delante (¿esto corre en un script o un CI?), así que no se"
   echo "lanza el asistente interactivo. Para instalar el servidor:"
-  echo "  sudo lumi install --version latest -y"
+  echo "  curl -fsSL ${base}/install-py -o install.py"
+  echo "  sudo python3 install.py --version latest -y"
 fi
 `;
+}
 
-export async function GET() {
-  return new Response(SCRIPT, {
+export async function GET(request: Request) {
+  // Se calcula del propio request en vez de dejarlo fijo: así el script
+  // sigue funcionando igual si el dominio cambia algún día, sin tener que
+  // recordar venir a actualizar esta ruta a mano.
+  const base = new URL(request.url).origin;
+  return new Response(script(base), {
     headers: {
       "content-type": "text/plain; charset=utf-8",
       "cache-control": "public, max-age=300, s-maxage=300",
