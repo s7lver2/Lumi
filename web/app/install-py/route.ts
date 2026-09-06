@@ -508,6 +508,19 @@ def _instalar_qdrant():
     return False
 
 
+def _detalle_error(e):
+    """str(e) a secas puede ser inútil o directamente engañoso -- un
+    OSError(2) sin mensaje se queda en solo '2'. Para HTTPError, el cuerpo
+    trae el motivo real que puso bootstrap.rs (ej. "ya no está virgen")."""
+    if isinstance(e, urllib.error.HTTPError):
+        try:
+            cuerpo = e.read().decode("utf-8", "replace").strip()
+        except Exception:
+            cuerpo = ""
+        return f"HTTP {e.code} {e.reason}" + (f": {cuerpo}" if cuerpo else "")
+    return f"{type(e).__name__}: {e}"
+
+
 def _pedir_clave_de_vinculacion():
     """lumid acaba de arrancar: se le pide que se autoemita su propia clave
     (toda la parte Argon2id vive en su código Rust, ya probado -- ver
@@ -522,7 +535,7 @@ def _pedir_clave_de_vinculacion():
             with urllib.request.urlopen(req, timeout=5) as r:
                 return json.loads(r.read())["key"]
         except Exception as e:
-            ultimo_error = e
+            ultimo_error = _detalle_error(e)
     raise SystemExit(f"lumid no respondió a tiempo pidiendo la clave de vinculación: {ultimo_error}")
 
 
