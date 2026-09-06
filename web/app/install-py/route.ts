@@ -612,8 +612,8 @@ def instalar(auto: bool, version: str) -> str:
     if not servidor_virgen:
         # Ya hay cert + clave maestra de antes -- este servidor ya tiene
         # dueño (o al menos ya emitió una clave alguna vez), así que
-        # `bootstrap.rs` rechazaría la autoemisión con 403 (ver su propio
-        # comentario: solo emite si `users`+`pair_key` están vacíos). Pedir
+        # bootstrap.rs rechazaría la autoemisión con 403 (ver su propio
+        # comentario: solo emite si users/pair_key están vacíos). Pedir
         # aquí una clave nueva no tiene sentido en una actualización -- solo
         # haría esperar 10s para acabar fallando.
         return None
