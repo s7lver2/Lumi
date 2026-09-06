@@ -78,6 +78,13 @@ def _embeber(job):
             e = _cargar(modelo)
             v = e.vector(ruta)
         except Exception as err:
+            # `motivo` (lo que ve el investigador) se queda en una linea, pero
+            # la traza completa va al log — sin esto un fallo de carga solo
+            # dejaba "modelo X: <mensaje>", nunca la linea de verdad, y
+            # depurar cualquier cosa que no fuera el propio mensaje de la
+            # excepcion era imposible.
+            import traceback
+            _log("fallo cargando/embebiendo %s:\n%s" % (modelo, traceback.format_exc()))
             fuera.append({"tipo": "fallo", "id": job["id"],
                           "motivo": "modelo %s: %s" % (modelo, err)})
             continue

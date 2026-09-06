@@ -125,6 +125,12 @@ def main():
             # No poder cargar el modelo es un fallo DE ESTE LOTE, no una averia
             # del trabajador: se contesta y se sigue vivo esperando el
             # siguiente, que puede pedir un modelo que si esta.
+            #
+            # La traza completa va al log, no solo `str(e)`: sin esto un fallo
+            # de carga era indepurable en cuanto el mensaje de la excepcion no
+            # bastaba por si solo para saber la linea real.
+            import traceback
+            _log("fallo cargando %s:\n%s" % (job["modelo"], traceback.format_exc()))
             _decir({"tipo": "fallo", "id": job["id"],
                     "motivo": "no se pudo cargar el modelo %s: %s" % (job["modelo"], e)})
             continue
@@ -136,6 +142,8 @@ def main():
                 _decir({"tipo": "fallo", "id": job["id"],
                         "motivo": "ninguna imagen del lote era utilizable"})
         except Exception as e:
+            import traceback
+            _log("fallo embebiendo el lote:\n%s" % traceback.format_exc())
             _decir({"tipo": "fallo", "id": job["id"], "motivo": str(e)})
 
 
