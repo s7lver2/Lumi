@@ -172,10 +172,10 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
 
   const productoElegido = producto ? productos.find((p) => p.producto === producto) ?? null : null;
   // lumid no se descarga suelto: no es un binario para correr a mano, es el
-  // daemon que instala y gestiona `lumi install` (systemd, permisos, todo lo
-  // que ya hace ese comando). Lo que hay que darle a quien elige "lumid" es
-  // el mismo oneliner de `/install` que instala el CLI `lumi`, no el binario
-  // del daemon — por eso ni siquiera se le pregunta la plataforma.
+  // daemon que el instalador en Python de `/install` deja instalado y
+  // gestionado por systemd. Lo que hay que darle a quien elige "lumid" es
+  // ese mismo oneliner, no el binario del daemon — por eso ni siquiera se
+  // le pregunta la plataforma.
   const esLumid = productoElegido?.producto === "lumid";
   const viaInstalador = productoElegido != null && PRODUCTOS_VIA_INSTALADOR.has(productoElegido.producto) && instaladorEntry != null;
   const fuenteDescarga = viaInstalador ? instaladorEntry : productoElegido;
@@ -249,8 +249,9 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
                     <div>
                       <div className="text-[14px] font-medium">lumid</div>
                       <div className="mt-1 max-w-[36ch] text-[11px] leading-relaxed text-subtle">
-                        lumid no se descarga suelto: este comando instala el CLI y arranca su
-                        asistente en el mismo paso. Cópialo en la terminal de tu servidor.
+                        lumid no se descarga suelto: este comando descarga el instalador (sin
+                        binario compilado de por medio) y arranca su asistente en el mismo paso.
+                        Cópialo en la terminal de tu servidor.
                       </div>
                     </div>
                     <div className="flex w-full items-center gap-2 rounded-card border border-border bg-elevated px-3.5 py-2.5">
