@@ -73,6 +73,9 @@ crates/lumi-index      pure logic (no GPU/services/window) shared by the Indexer
 client/                Lumi's Tauri v2 + React + Tailwind app
   src-tauri/            fingerprint verification, SSE bridge to lumid
   src/                  wizard, admin, work (projects/cases/map), dev harness
+web/                    Next.js site (subsystem 9), deployed to lumi.s7lver.xyz. `/install` and
+                        `/install-py` serve the server installer (see below); `releases/versiones.json`
+                        is the signed update manifest served at `/api/versiones`
 indexer/               Lumi Indexer's Tauri v2 + React + Tailwind app (independent npm project)
   src-tauri/            origins/ (network adapters), download, ingest, queue, territory, qdrant,
                         keys/crypto, package (.lumidx read/write), probe, review, spend
@@ -120,6 +123,17 @@ Fingerprint = SHA-256(DER) truncated to 128 bits, base58. Secret = 160 bits, bas
 
 Server states: `UNCLAIMED → CLAIMED → PROVISIONING → READY`, orthogonal `LOCKED` (sealed master
 key, survives restart, telemetry stays alive to prove the box is healthy) and `MAINTENANCE`.
+
+The server itself is no longer installed via a compiled `lumi` CLI binary — `release_flow.py`
+never built/published one, so the old oneliner 404'd. `/install` now downloads and runs a
+**pure-Python** installer (`/install-py`) instead: no binary to compile or publish, and the one
+genuinely delicate part (Argon2id for the pairing key) is deliberately NOT reimplemented in
+Python — the script asks `lumid` itself to self-issue it via `POST /v1/bootstrap/pair-key`
+(loopback-only, and only while the server is genuinely virgin: no users, no pairing key ever
+issued). The install script does reimplement Ed25519 verification of the signed update manifest
+(pure Python, no deps) — validated against the project's real signed manifest before shipping.
+`lumi-cli`'s own `install.rs` still exists and still works (`cargo build --release -p lumi-cli`
+on the box itself), it's just not what the public oneliner uses anymore.
 
 Capability matrix: every capped capability travels with a human-readable `reason` — the UI shows
 disabled features with the real cause, never hides them. Single source of truth; apply this
@@ -190,8 +204,12 @@ ensemble, competing geometric verifiers, and the agents) **with 5d pending** (an
 with capture dates so season and time-of-day can filter instead of only describing); 3 is
 **3 and 3a done**, **3b and 3c mostly done** (3b: solicitudes/usuarios/cola/índices done, only
 the map view is still provisional; 3c: hardware/mantenimiento/notificaciones done, historical
-monitoring still missing); 9 not started. API Keys admite ahora emitir claves de programa
-(autoservicio o en nombre de otro) y un modo Zero Trust opcional (IP + clase de dispositivo).
+monitoring still missing); 9 (`web/`) has a real Next.js site live (landing, per-nivel pages,
+a coverage map fed by the real published catalog, the download selector, the signed update
+manifest at `/api/versiones`, and the Python server installer at `/install`/`/install-py`) —
+still missing the catalog admin panel and the publisher-profile pages FUTURO.md describes.
+API Keys admite ahora emitir claves de programa (autoservicio o en nombre de otro) y un modo
+Zero Trust opcional (IP + clase de dispositivo).
 
 ## Conventions
 
@@ -214,3 +232,6 @@ From `workflow/PROJECT-CONVENTIONS.md`, as they apply here:
 - Hand-drawn SVG icons only, no icon library — see DESIGN.md for the exact stroke/viewBox
   pattern and the canonical icon set to reuse rather than redraw.
 - Spanish is the working language for docs, specs, UI copy, and code comments in this repo.
+
+# canario
+quiero que en todas las respuestas comiences con uwu
