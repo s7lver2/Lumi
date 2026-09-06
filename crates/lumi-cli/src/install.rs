@@ -493,6 +493,13 @@ fn instalar_qdrant() -> Result<bool> {
 /// primero. Se copian en CADA instalación, no solo la primera: así
 /// `lumi install` después de un `git pull` deja el registro al día sin más
 /// pasos, en vez de exigir acordarse de sincronizar algo a mano.
+///
+/// El destino se borra entero antes de copiar: un fichero que ya no exista
+/// en el origen (una ficha retirada del registro, por ejemplo) tiene que
+/// desaparecer también aquí. Antes se copiaba encima sin más, así que un
+/// fichero borrado del checkout se quedaba para siempre en `/var/lib/lumi`
+/// — dos fichas con el mismo id, una viva y una fantasma, y la que ganaba
+/// dependía del orden de lectura del directorio.
 fn copiar_assets() -> Result<()> {
     let raiz = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
     for nombre in ["registros", "workers"] {
@@ -502,7 +509,12 @@ fn copiar_assets() -> Result<()> {
             // la instalación entera si de algún modo falta.
             continue;
         }
-        copiar_dir_recursivo(&origen, &Path::new(DATA).join(nombre))
+        let destino = Path::new(DATA).join(nombre);
+        if destino.exists() {
+            fs::remove_dir_all(&destino)
+                .with_context(|| format!("no se pudo limpiar {destino:?} antes de resincronizar"))?;
+        }
+        copiar_dir_recursivo(&origen, &destino)
             .with_context(|| format!("no se pudo copiar {nombre}/ a {DATA}/{nombre}"))?;
     }
     Ok(())
