@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type MapConfig } from "../lib/api";
-import { leerInvertirZoom, leerSensibilidadCamara } from "../lib/camara";
 import { useServer } from "../lib/store";
 import { Icon } from "../ui/Icon";
 import { addBuildings } from "./buildings";
@@ -280,37 +279,6 @@ export function MapCanvas({
       return marker;
     });
   }, [markers, onMarker]);
-
-  // Sensibilidad e inversión de la rueda del ratón sobre el mapa: el motor no
-  // trae ninguna de las dos configurable. Con los valores por defecto se deja
-  // la rueda nativa tal cual — no hay motivo para reimplementarla si nadie
-  // tocó nada. En cuanto alguna se aparta de su valor por defecto, se apaga
-  // `scrollZoom` y se sustituye por una rueda propia con el mismo zoom
-  // centrado en el cursor, pero con el signo y la tasa que pidió el usuario.
-  useEffect(() => {
-    const m = map.current;
-    if (!m || !ready) return;
-    const invertir = leerInvertirZoom();
-    const sensibilidad = leerSensibilidadCamara() / 100;
-    if (!invertir && sensibilidad === 1) return;
-
-    m.scrollZoom.disable();
-    const TASA = 1 / 450; // misma tasa que usa `ScrollZoomHandler` por defecto
-    const canvas = m.getCanvas();
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const signo = invertir ? 1 : -1;
-      const delta = signo * e.deltaY * TASA * sensibilidad;
-      const rect = canvas.getBoundingClientRect();
-      const punto: [number, number] = [e.clientX - rect.left, e.clientY - rect.top];
-      m.easeTo({ zoom: m.getZoom() + delta, around: m.unproject(punto), duration: 120 });
-    };
-    canvas.addEventListener("wheel", onWheel, { passive: false });
-    return () => {
-      canvas.removeEventListener("wheel", onWheel);
-      m.scrollZoom.enable();
-    };
-  }, [ready]);
 
   // Cambiar de proyección sin rehacer el mapa: reconstruirlo tiraría el estilo,
   // las teselas ya descargadas y la posición de la cámara.

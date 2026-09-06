@@ -4,9 +4,6 @@ import { api } from "../lib/api";
 import {
   ESCALAS_INTERFAZ, leerEscalaInterfaz, leerReducirMovimiento, setEscalaInterfaz, setReducirMovimiento,
 } from "../lib/apariencia";
-import {
-  SENSIBILIDADES_CAMARA, leerInvertirZoom, leerSensibilidadCamara, setInvertirZoom, setSensibilidadCamara,
-} from "../lib/camara";
 import { AjustesSidebar, type AjustesSeccion } from "./AjustesSidebar";
 import { ActualizacionesSeccion } from "./ActualizacionesSeccion";
 
@@ -30,8 +27,6 @@ export function AjustesView({ onBack }: { onBack: () => void }) {
               <ActualizacionesSeccion />
             </div>
           </Seccion>
-        ) : seccion === "mapa" ? (
-          <MapaPanel />
         ) : (
           <AparienciaPanel />
         )}
@@ -111,44 +106,6 @@ function AparienciaPanel() {
           ))}
         </div>
       </div>
-    </Seccion>
-  );
-}
-
-function MapaPanel() {
-  const [sensibilidad, setSensibilidad] = useState(leerSensibilidadCamara());
-  const [invertir, setInvertir] = useState(leerInvertirZoom());
-
-  return (
-    <Seccion titulo="Mapa" grupo="Ajustes">
-      <div className="rounded-card border border-border bg-panel p-[13px_16px]">
-        <span className="text-[11.5px] text-fg">
-          Sensibilidad de la rueda
-          <small className="mt-0.5 block text-[10px] text-subtle">Qué tan rápido acerca o aleja el zoom del mapa.</small>
-        </span>
-        <div className="mt-3 flex items-center gap-1.5">
-          {SENSIBILIDADES_CAMARA.map((pct) => (
-            <button key={pct} onClick={() => { setSensibilidad(pct); setSensibilidadCamara(pct); }}
-              className={`rounded-lg border px-2.5 py-1 text-[10.5px] transition-colors duration-300 ease-expo ${
-                sensibilidad === pct ? "border-accent bg-accent text-black" : "border-border text-muted hover:text-fg"
-              }`}>
-              {pct}%
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <label className="mt-3 flex items-center justify-between gap-3 rounded-card border border-border bg-panel p-[13px_16px]">
-        <span className="text-[11.5px] text-fg">
-          Invertir zoom
-          <small className="mt-0.5 block text-[10px] text-subtle">Subir la rueda aleja en vez de acercar.</small>
-        </span>
-        <button role="switch" aria-checked={invertir}
-          onClick={() => { const v = !invertir; setInvertir(v); setInvertirZoom(v); }}
-          className={`relative h-5 w-10 shrink-0 rounded-full border transition-colors duration-300 ease-expo ${invertir ? "border-accent bg-accent" : "border-white/15 bg-white/10"}`}>
-          <span className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-fg ring-1 ring-black/20 transition-transform duration-300 ease-expo ${invertir ? "translate-x-[18px]" : "translate-x-0.5"}`} />
-        </button>
-      </label>
     </Seccion>
   );
 }
