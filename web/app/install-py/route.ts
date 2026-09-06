@@ -562,11 +562,12 @@ def instalar(auto: bool, version: str) -> str:
 
     cert_der = f"{DATA}/cert.der"
     key_pem = f"{DATA}/key.pem"
-    if os.path.exists(cert_der):
-        ok("certificado existente conservado (no se reemparejan los clientes ya emparejados)")
-    else:
+    servidor_virgen = not os.path.exists(cert_der)
+    if servidor_virgen:
         _generar_certificado(cert_der, key_pem)
         ok("certificado EC P-256 · 10 años (nuevo)")
+    else:
+        ok("certificado existente conservado (no se reemparejan los clientes ya emparejados)")
 
     if os.path.exists(f"{DATA}/master.cred") or os.path.exists(f"{DATA}/master.salt"):
         ok("clave maestra existente conservada (los datos sellados con ella siguen siendo legibles)")
@@ -608,8 +609,15 @@ def instalar(auto: bool, version: str) -> str:
             db.close()
             time.sleep(0.5)
 
-    clave = _pedir_clave_de_vinculacion()
-    return clave
+    if not servidor_virgen:
+        # Ya hay cert + clave maestra de antes -- este servidor ya tiene
+        # dueño (o al menos ya emitió una clave alguna vez), así que
+        # `bootstrap.rs` rechazaría la autoemisión con 403 (ver su propio
+        # comentario: solo emite si `users`+`pair_key` están vacíos). Pedir
+        # aquí una clave nueva no tiene sentido en una actualización -- solo
+        # haría esperar 10s para acabar fallando.
+        return None
+    return _pedir_clave_de_vinculacion()
 
 
 def main():
@@ -619,6 +627,11 @@ def main():
     args = ap.parse_args()
 
     clave = instalar(args.yes, args.version)
+    if clave is None:
+        print()
+        print("  Servidor actualizado. Ya tenía dueño -- no se emite clave de vinculación nueva.")
+        print("  (¿hace falta una? 'lumi key reissue' en el propio host.)")
+        return
     print()
     print("  ────────────────────────────────────────────────────────")
     print("  Clave de vinculación · un solo uso · caduca en 24 h")
