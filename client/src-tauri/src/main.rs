@@ -56,6 +56,12 @@ struct Conn {
     /// El token de sesión vive aquí y no en las URLs del esquema `lumi://`:
     /// es un secreto, y las rutas acaban en logs y trazas de error.
     token: Option<String>,
+    /// La tarea del SSE de logs en curso, si hay una. `start_logs_stream` no
+    /// tiene con qué parar la anterior por sí sola — cada montaje del panel
+    /// Doctor > Logs (o cada remonte de React, p.ej. StrictMode) lanzaba OTRO
+    /// `journalctl -u lumid -f` en el servidor sin cerrar el que ya corría,
+    /// duplicando cada línea que llegaba al panel indefinidamente.
+    logs_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 /// Lo llama el lado TS cada vez que cambia la sesión. Sin esto, el esquema
@@ -753,10 +759,13 @@ async fn start_logs_stream(
     use futures_util::StreamExt;
     use tauri::Emitter;
     let (base, client) = {
-        let c = state.lock().unwrap();
+        let mut c = state.lock().unwrap();
+        if let Some(anterior) = c.logs_task.take() {
+            anterior.abort();
+        }
         (c.base.clone().ok_or("sin servidor")?, c.flujo.clone().ok_or("sin cliente")?)
     };
-    tokio::spawn(async move {
+    let manejador = tokio::spawn(async move {
         let Ok(res) = client.get(format!("{base}/v1/admin/logs/stream")).bearer_auth(&token).send().await else {
             let _ = app.emit("logs-down", ());
             return;
@@ -782,6 +791,7 @@ async fn start_logs_stream(
         }
         let _ = app.emit("logs-down", ());
     });
+    state.lock().unwrap().logs_task = Some(manejador);
     Ok(())
 }
 
