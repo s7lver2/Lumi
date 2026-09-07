@@ -1132,7 +1132,37 @@
           "sha256": "91edfa7a7b69a3bc570c24eb34564e60754160e1176c9b2eba52e451aea70571"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.31",
+      "publicado": "2026-09-07T19:04:56Z",
+      "notas": "Arreglos de logs de Doctor, cobertura del catalogo publicado y boton para copiar la URL de un indice desde el Indexer.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.31/app.exe",
+          "bytes": 15857664,
+          "sha256": "01a7dbebdbf68ffd016adcb230a0a9e6c71c85bb624a7b5dab269eb39687a6c2"
+        }
+      ]
+    },
+    {
+      "producto": "indexer",
+      "version": "2.0.31",
+      "publicado": "2026-09-07T19:04:56Z",
+      "notas": "Arreglos de logs de Doctor, cobertura del catalogo publicado y boton para copiar la URL de un indice desde el Indexer.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.31/indexer-app.exe",
+          "bytes": 22361600,
+          "sha256": "6923bf7e992233dbf4fd3056057e989c5fe25fd32e029fa6b68415a8d2879e2c"
+        }
+      ]
     }
   ],
-  "firma": "Syp0bebdaF/PZH7JYnHCT6JbUDDVR2xgv0aqPX6t7YIZUUVWMcg1I78WlbURbzd7MBxZZJBxsrv9N/nEMOlfDg=="
+  "firma": "JhSvwU/VKimHbCN0JY8yCXvgxNYOIBqoXgus4lyzRdvP9XKX1C5H5ayTOaR11WL+8zvNMs5oCc9AjeG6kr93BQ=="
 }
