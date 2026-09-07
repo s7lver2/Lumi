@@ -20,7 +20,7 @@ pub const CATEGORIAS: &[Categoria] = &[
         label: "Solicitudes, usuarios y crédito",
         objetivos: &["lumid::routes::access", "lumid::routes::admin", "lumid::routes::credit_requests"],
     },
-    Categoria { id: "cola", label: "Cola de análisis", objetivos: &["lumid::queue"] },
+    Categoria { id: "cola", label: "Cola de análisis", objetivos: &["lumid::queue", "lumid::agentar"] },
     Categoria { id: "hardware", label: "Hardware", objetivos: &["lumid::hardware", "lumid::hardware_cpu"] },
     Categoria {
         id: "seguridad",

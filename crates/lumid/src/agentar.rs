@@ -75,6 +75,20 @@ async fn correr(
         stdin.shutdown().await?;
     }
 
+    // Sin drenar esto, un motor que no carga (falta LICENCIA.txt, falta una
+    // dependencia del venv...) se traga su propio motivo: `lumi_agentes.py`
+    // lo escribe a stderr y aquí se descartaba sin que nadie lo leyera nunca
+    // -- "0 agentes" sin una sola pista de por qué. Tarea aparte para que no
+    // compita con el bucle de stdout por el mismo await.
+    let stderr_task = hijo.stderr.take().map(|stderr| {
+        tokio::spawn(async move {
+            let mut lineas = BufReader::new(stderr).lines();
+            while let Ok(Some(linea)) = lineas.next_line().await {
+                tracing::warn!(target: "lumid::agentar", "lumi_agentes.py: {linea}");
+            }
+        })
+    });
+
     let mut fuera = Vec::new();
     if let Some(stdout) = hijo.stdout.take() {
         let mut lineas = BufReader::new(stdout).lines();
@@ -89,5 +103,8 @@ async fn correr(
         }
     }
     let _ = hijo.wait().await;
+    if let Some(t) = stderr_task {
+        let _ = t.await;
+    }
     Ok(fuera)
 }
