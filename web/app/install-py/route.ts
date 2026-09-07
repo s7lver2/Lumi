@@ -347,7 +347,7 @@ def _b58encode(data: bytes) -> str:
     while n > 0:
         n, resto = divmod(n, 58)
         out = _B58_ALFABETO[resto] + out
-    ceros = len(data) - len(data.lstrip(b"\x00"))
+    ceros = len(data) - len(data.lstrip(b"\\x00"))
     return _B58_ALFABETO[0] * ceros + out
 
 
