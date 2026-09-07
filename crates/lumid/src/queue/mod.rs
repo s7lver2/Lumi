@@ -429,15 +429,7 @@ impl Queue {
             .dir
             .join("workers")
             .join(format!("{}.log", dispositivo.replace(':', "-")));
-        // Mismo criterio que `routes::models::instalados_dir` y el runner de
-        // `tasks.rs` para este mismo directorio: `models_dir` en `meta` manda
-        // si `lumi install` lo fijó (disco grande aparte), y si no, el sitio
-        // de siempre junto a los datos del daemon.
-        let pesos = self
-            .store
-            .get_meta("models_dir")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| self.dir.join("runtime"));
+        let pesos = crate::assets::pesos_dir(&self.store, &self.dir);
         match worker::spawn(
             dispositivo.to_string(),
             &interprete_python(&self.store),
@@ -693,13 +685,7 @@ impl Queue {
                         // equivocado no puede matar un candidato antes de que
                         // RANSAC tenga ocasión de confirmarlo.
                         let agentes_del_nivel = self.agentes_de(&nivel);
-                        // Mismo criterio que `lanzar_uno` para este mismo
-                        // directorio — ver el comentario ahí.
-                        let pesos = self
-                            .store
-                            .get_meta("models_dir")
-                            .map(PathBuf::from)
-                            .unwrap_or_else(|| self.dir.join("runtime"));
+                        let pesos = crate::assets::pesos_dir(&self.store, &self.dir);
                         let registro_verif = crate::assets::ruta("registros/verificadores");
                         let python = interprete_python(&self.store);
                         let (afinados, dictamen) = tokio::join!(

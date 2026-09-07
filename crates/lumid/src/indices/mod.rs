@@ -8,6 +8,7 @@ pub mod volcar;
 use anyhow::{anyhow, Result};
 use lumi_index::ficha::Ficha;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -133,13 +134,14 @@ pub async fn instalar(app: crate::App, url: String) -> Result<()> {
             continue;
         }
         let Some(ficha) = ficha_de(&nodo.paquete) else { continue };
-        if ya_instalado(&app, &ficha.paquete) {
+        let huella = huella_de(&ficha);
+        if ya_instalado_igual(&app, &ficha.paquete, &huella) {
             anotar(&app, format!("{} ya estaba instalado", ficha.paquete));
             avanzar(&app, assets_de(&ficha));
             continue;
         }
         let ficha_url = urls.get(&ficha.paquete).cloned().unwrap_or_default();
-        instalar_uno(&app, &http, &ficha, &ficha_url).await?;
+        instalar_uno(&app, &http, &ficha, &ficha_url, &huella).await?;
     }
 
     if let Some(p) = app.indices_en_curso.lock().unwrap().as_mut() {
@@ -200,16 +202,39 @@ fn url_de(ficha_url: &str, asset: &str) -> String {
     }
 }
 
-fn ya_instalado(app: &crate::App, paquete: &str) -> bool {
-    app.store
-        .conn()
-        .query_row(
-            "SELECT completo FROM installed_indices WHERE paquete = ?1",
-            [paquete],
-            |r| r.get::<_, i64>(0),
-        )
+/// La huella de una ficha: sha256 de su forma canónica (la misma que se
+/// firma, sin la firma en sí). Cambia si y solo si cambió algo del
+/// contenido — capas nuevas incluidas — así que sirve para distinguir "esta
+/// ficha ya se procesó" de "hay una ficha nueva con el mismo `paquete`".
+fn huella_de(ficha: &Ficha) -> String {
+    let mut h = Sha256::new();
+    h.update(ficha.canonico());
+    format!("{:x}", h.finalize())
+}
+
+/// Antes esto solo miraba `completo`: un índice ya instalado se daba por
+/// bueno para siempre, así que resellar el mismo paquete con capas nuevas
+/// (por ejemplo, añadir los modelos que pro necesita a un índice que solo
+/// traía los de mini) y reinstalarlo no volvía a tocar
+/// `installed_index_layers` nunca — la ficha nueva se descartaba entera con
+/// "ya estaba instalado" y sus capas no llegaban a existir en la base,
+/// aunque la descarga hubiera ido bien. Comparar también la huella de la
+/// ficha es lo que distingue "nada cambió" de "hay una versión nueva de
+/// este mismo paquete".
+fn ya_instalado_igual(app: &crate::App, paquete: &str, huella: &str) -> bool {
+    let conn = app.store.conn();
+    let completo = conn
+        .query_row("SELECT completo FROM installed_indices WHERE paquete = ?1", [paquete], |r| {
+            r.get::<_, i64>(0)
+        })
         .map(|v| v == 1)
-        .unwrap_or(false)
+        .unwrap_or(false);
+    let huella_instalada: Option<String> = conn
+        .query_row("SELECT ficha_sha256 FROM installed_indices WHERE paquete = ?1", [paquete], |r| {
+            r.get::<_, String>(0)
+        })
+        .ok();
+    completo && huella_instalada.as_deref() == Some(huella)
 }
 
 fn anotar(app: &crate::App, linea: String) {
@@ -327,22 +352,38 @@ async fn bajar_con_vigilante(
     }
 }
 
-async fn instalar_uno(app: &crate::App, http: &reqwest::Client, ficha: &Ficha, ficha_url: &str) -> Result<()> {
+async fn instalar_uno(
+    app: &crate::App, http: &reqwest::Client, ficha: &Ficha, ficha_url: &str, huella: &str,
+) -> Result<()> {
     let clave = paquete::clave_de(&ficha.cifrado)?;
     let raiz = app.dir.join("indices").join(&ficha.paquete);
     let assets: Vec<_> = ficha.cuerpos.iter().chain(ficha.capas.iter().flat_map(|c| &c.assets)).collect();
 
     // Fila de reserva ANTES de bajar nada: es donde `hechos` va a ir anotando
-    // qué asset ha caído. `completo` nace en 0, y solo pasa a 1 al terminar.
+    // qué asset ha caído. `completo` nace en 0 (o vuelve a 0 si el paquete ya
+    // existía con otra huella) y solo pasa a 1 al terminar. `ON CONFLICT`
+    // porque este mismo paquete puede ya estar instalado con una ficha más
+    // vieja: no crear una fila nueva, actualizar la que hay para que la
+    // huella y la URL queden al día y las capas que faltan se puedan añadir
+    // más abajo.
     app.store.conn().execute(
-        "INSERT OR IGNORE INTO installed_indices
+        "INSERT INTO installed_indices
            (paquete, nombre, autor, url, ficha_sha256, modelo, version, teselas, bytes, hechos, completo, installed_at)
-         VALUES (?1,?2,?3,?4,'', ?5, ?6, 0, 0, '', 0, ?7)",
+         VALUES (?1,?2,?3,?4,?5,?6,?7, 0, 0, '', 0, ?8)
+         ON CONFLICT(paquete) DO UPDATE SET
+           nombre = excluded.nombre,
+           autor = excluded.autor,
+           url = excluded.url,
+           ficha_sha256 = excluded.ficha_sha256,
+           modelo = excluded.modelo,
+           version = excluded.version,
+           completo = 0",
         rusqlite::params![
             &ficha.paquete,
             &ficha.nombre,
             &ficha.autor,
             ficha_url,
+            huella,
             ficha.capas.first().map(|c| c.modelo.clone()).unwrap_or_default(),
             ficha.capas.first().map(|c| c.version.clone()).unwrap_or_default(),
             crate::routes::access::now(),

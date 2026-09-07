@@ -53,7 +53,7 @@ fn resolver_items(app: &App, ids: &[String]) -> Vec<ItemDescarga> {
     let verificadores = app.queue.verificadores.lock().unwrap().clone();
     let motores = app.queue.motores.lock().unwrap().clone();
     let recursos_geo = app.queue.recursos_geo.lock().unwrap().clone();
-    let models_dir = app.store.get_meta("models_dir").unwrap_or_else(|| "runtime/pesos".to_string());
+    let models_dir = crate::assets::pesos_dir(&app.store, &app.dir).to_string_lossy().into_owned();
 
     let mut fuera = Vec::new();
     for id in ids {
@@ -184,7 +184,7 @@ pub struct NivelEstado {
 // (necesita el conjunto entero, por nivel) y `hay_alguno_instalado` (solo
 // necesita saber si hay algo, para el Resumen).
 fn instalados_dir(app: &App) -> std::collections::HashSet<String> {
-    let modelos_dir = app.store.get_meta("models_dir").unwrap_or_else(|| "runtime/pesos".to_string());
+    let modelos_dir = crate::assets::pesos_dir(&app.store, &app.dir);
     std::fs::read_dir(&modelos_dir)
         .map(|rd| {
             rd.flatten()

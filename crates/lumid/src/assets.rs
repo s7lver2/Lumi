@@ -33,3 +33,17 @@ pub fn ruta(relativo: &str) -> PathBuf {
     }
     PathBuf::from(relativo)
 }
+
+/// Dónde viven los pesos de modelos/verificadores/motores: `models_dir` en
+/// `meta` manda si `lumi install` fijó un disco aparte, y si no, `runtime/pesos`
+/// junto a los datos del daemon. Único sitio que decide esto -- antes lo
+/// repetían por separado la descarga y el check de "instalado" de
+/// `routes::models` (fallback `"runtime/pesos"`) y los lanzadores de
+/// trabajador/verificador en `queue::mod` (fallback `dir.join("runtime")`,
+/// SIN el `pesos` final): un modelo descargado y marcado "listo" en la
+/// pantalla de Modelos no se encontraba nunca al lanzar un análisis real,
+/// porque el trabajador miraba en `runtime/` y los pesos estaban en
+/// `runtime/pesos/`.
+pub fn pesos_dir(store: &crate::store::Store, dir: &Path) -> PathBuf {
+    store.get_meta("models_dir").map(PathBuf::from).unwrap_or_else(|| dir.join("runtime").join("pesos"))
+}
