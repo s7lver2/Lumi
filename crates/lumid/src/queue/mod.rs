@@ -699,7 +699,7 @@ impl Queue {
                                 &registro_verif,
                                 &pesos,
                             ),
-                            crate::agentar::preguntar(&agentes_del_nivel, &consulta),
+                            crate::agentar::preguntar(&agentes_del_nivel, &consulta, &python, &pesos),
                         );
                         let afinados = afinados.unwrap_or_default();
                         // Los que ningún verificador respaldó se caen. Si se

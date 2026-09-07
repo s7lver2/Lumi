@@ -9,6 +9,7 @@
 //! que muere o que se pasa de tiempo se traduce en «sin agentes», y el cliente
 //! lo dice.
 
+use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -22,11 +23,22 @@ pub const LIMITE: Duration = Duration::from_secs(120);
 
 /// Un veredicto por agente, con su detalle. Vacío significa «no hubo agentes»,
 /// que es un estado legítimo y no un fallo.
-pub async fn preguntar(agentes: &[String], consulta: &str) -> Vec<(Veredicto, String)> {
+///
+/// `python`/`pesos` son los mismos que recibe `verificar::afinar` para la
+/// misma llamada — antes esto lanzaba un `python3` del sistema a secas, sin
+/// `LUMI_PESOS` ni `LUMI_REGISTRO_AGENTES`: nunca era el intérprete del venv
+/// (sin torch/transformers/paddleocr instalados) y `lumi_agentes.py` caía a
+/// las rutas relativas por defecto, que bajo systemd no resuelven a nada.
+/// Los agentes podían tener sus motores descargados y perfectamente
+/// instalados y aun así no correr nunca, sin ningún error visible más allá
+/// del log — el mismo síntoma exacto que el de `queue::lanzar_uno` antes de
+/// unificar en `assets::pesos_dir`, solo que en un tercer sitio que ese
+/// arreglo no tocaba.
+pub async fn preguntar(agentes: &[String], consulta: &str, python: &Path, pesos: &Path) -> Vec<(Veredicto, String)> {
     if agentes.is_empty() || consulta.is_empty() {
         return Vec::new();
     }
-    match tokio::time::timeout(LIMITE, correr(agentes, consulta)).await {
+    match tokio::time::timeout(LIMITE, correr(agentes, consulta, python, pesos)).await {
         Ok(Ok(v)) => v,
         Ok(Err(e)) => {
             tracing::warn!("los agentes no contestaron: {e}");
@@ -39,9 +51,13 @@ pub async fn preguntar(agentes: &[String], consulta: &str) -> Vec<(Veredicto, St
     }
 }
 
-async fn correr(agentes: &[String], consulta: &str) -> anyhow::Result<Vec<(Veredicto, String)>> {
-    let mut hijo = tokio::process::Command::new("python3")
+async fn correr(
+    agentes: &[String], consulta: &str, python: &Path, pesos: &Path,
+) -> anyhow::Result<Vec<(Veredicto, String)>> {
+    let mut hijo = tokio::process::Command::new(python)
         .arg(crate::assets::ruta("workers/lumi_agentes.py"))
+        .env("LUMI_REGISTRO_AGENTES", crate::assets::ruta("registros/agentes"))
+        .env("LUMI_PESOS", pesos)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
