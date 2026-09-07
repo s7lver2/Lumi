@@ -32,18 +32,25 @@ pub async fn emitir_clave(
     if !peer.ip().is_loopback() {
         return Err((StatusCode::FORBIDDEN, "esta ruta solo responde a localhost".to_string()));
     }
-    let c = app.store.conn();
-    let hay_usuarios: i64 = c
-        .query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0))
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let hay_clave: i64 = c
-        .query_row("SELECT COUNT(*) FROM pair_key", [], |r| r.get(0))
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    if hay_usuarios > 0 || hay_clave > 0 {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "este servidor ya no está virgen — usa 'lumi key reissue' en el host".to_string(),
-        ));
+    {
+        // Escopado a propósito, igual que en auth.rs::login: el guard de la
+        // conexión no puede seguir vivo cruzando el `.await` de más abajo
+        // (spawn_blocking) -- ni por Send ni por el mismo motivo de fondo:
+        // no tiene sentido tener la única conexión del daemon agarrada
+        // mientras se gasta tiempo de CPU en Argon2id.
+        let c = app.store.conn();
+        let hay_usuarios: i64 = c
+            .query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0))
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let hay_clave: i64 = c
+            .query_row("SELECT COUNT(*) FROM pair_key", [], |r| r.get(0))
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        if hay_usuarios > 0 || hay_clave > 0 {
+            return Err((
+                StatusCode::FORBIDDEN,
+                "este servidor ya no está virgen — usa 'lumi key reissue' en el host".to_string(),
+            ));
+        }
     }
 
     let addr = crate::red::direccion_publica(&app.store);
@@ -60,15 +67,25 @@ pub async fn emitir_clave(
     } else {
         Some(crate::routes::access::now() + 24 * 3600)
     };
-    c.execute(
-        "INSERT INTO pair_key (id, secret_phc, expires_at, consumed) VALUES (1, ?1, ?2, 0)",
-        rusqlite::params![
-            lumi_proto::crypto::hash_password(&key.secret)
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
-            expires
-        ],
-    )
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    // Argon2id es deliberadamente lento (cientos de ms de CPU). Igual que en
+    // auth.rs::login: hacerlo inline en la tarea async se come uno de los
+    // pocos hilos del runtime (2 en producción) durante todo ese rato -- con
+    // unas pocas conexiones a la vez basta para dejar sin hilos libres al
+    // bucle de accept() entero, un cuelgue total del servidor (visto en
+    // producción: backlog de conexiones aceptadas por el kernel y nunca
+    // recogidas por la app). `spawn_blocking` lo manda al pool dedicado.
+    let secreto_para_hash = key.secret.clone();
+    let secret_phc = tokio::task::spawn_blocking(move || lumi_proto::crypto::hash_password(&secreto_para_hash))
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    app.store
+        .conn()
+        .execute(
+            "INSERT INTO pair_key (id, secret_phc, expires_at, consumed) VALUES (1, ?1, ?2, 0)",
+            rusqlite::params![secret_phc, expires],
+        )
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     tracing::info!("clave de vinculación autoemitida por el instalador (localhost, servidor virgen)");
     Ok(Json(BootstrapKeyRes { key: key.to_string() }))
