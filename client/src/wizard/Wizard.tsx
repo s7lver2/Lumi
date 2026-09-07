@@ -47,8 +47,13 @@ export function Wizard({ step, title, subtitle, children, onBack, onNext, nextLa
       </div>
 
       <div className="mt-4 flex items-center justify-between gap-3">
+        {/* disabled:invisible, no disabled:opacity-40: este botón no está
+            "todavía no listo" (eso es nextDisabled, que sí atenúa) -- en el
+            paso 0 simplemente no hay paso anterior al que volver, nunca lo
+            habrá, y un botón atenuado pero clicable invitaba a pulsarlo sin
+            dar ninguna señal de por qué no pasaba nada. */}
         <button onClick={onBack} disabled={!onBack}
-          className="rounded-lg border border-white/15 px-4 py-2 text-xs text-fg transition-transform duration-300 ease-expo active:translate-y-px disabled:opacity-40">
+          className="rounded-lg border border-white/15 px-4 py-2 text-xs text-fg transition-transform duration-300 ease-expo active:translate-y-px disabled:invisible">
           Atrás
         </button>
         {onNext && (
