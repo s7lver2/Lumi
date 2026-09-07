@@ -1054,7 +1054,28 @@
           "sha256": "1864f5ddb95c8f47174d5fb2be89423bd46352e86689ecc962256a8491621d93"
         }
       ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.28",
+      "publicado": "2026-09-07T11:09:02Z",
+      "notas": "Arregla dos bugs de servidor: agentes/verificador no encontraban pesos ya descargados por un fallback de ruta distinto al de la UI, y resellar un indice con capas de vectores nuevas no las anadia si el paquete ya estaba instalado.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.28/lumid",
+          "bytes": 20773448,
+          "sha256": "681f522a1c98ff1344b7e3a108e1cf210a179ada5fdee1e3a108cb1201c1e45a"
+        },
+        {
+          "plataforma": "assets",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.28/lumid-assets.tar.gz",
+          "bytes": 127642,
+          "sha256": "3717d27a43e392429effd2a7a2c8f7d040cc7a2858fb3ec2fd7a94e169c46723"
+        }
+      ]
     }
   ],
-  "firma": "P5pPJ3zo0ICz/csKyHxhoiR+NTxbaHAEoqGfkeC3zpSESRVKaXFnSuBqA8sD4Qik3OoyL+0jL79UwTBZNTWSAg=="
+  "firma": "WZYpAv+jY9/u62EfIbYsAnn8p3oZ7Lk7Z6PX+oCQ/4c4JHFfr8egCLivxSeCZ+jc41gQX0Kc3oHtaoZx0HLwBQ=="
 }
