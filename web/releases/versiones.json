@@ -967,7 +967,28 @@
           "sha256": "be892980b10df2b82682fb46c5a805425e614c9cca6e07b80ad158834d0496a7"
         }
       ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.26",
+      "publicado": "2026-09-07T00:04:50Z",
+      "notas": "fix critico: la autoemision de la clave de vinculacion (POST /v1/bootstrap/pair-key) hacia el Argon2id en la propia tarea async en vez de spawn_blocking, igual que ya evitaba auth.rs::login -- con pocas conexiones bastaba para dejar sin hilos libres a todo el runtime (solo 2 workers), colgando el accept() del servidor entero.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.26/lumid",
+          "bytes": 20781424,
+          "sha256": "981108ebcba299d5ec822125d840548b275f20b5811ceb0a645500e69de2a3ed"
+        },
+        {
+          "plataforma": "assets",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.26/lumid-assets.tar.gz",
+          "bytes": 127543,
+          "sha256": "00a9f030b722f2a869032194921eb7689bbcdf97f426019663c0f57d46fe802e"
+        }
+      ]
     }
   ],
-  "firma": "4pbsKv00/14K3oIHWW4WKQ3GglkxR6Eg7kYQRdb/SWgmbts7xOSL775h3wYx/yyyXAZq3/Hj2/7EO7e8uXLVAQ=="
+  "firma": "NcOoGn+tSE7RmKyF/p4b1ML7avuKEhfr2Z746A2bA96bvFo8lVXquFavTQwP24HDSMgR1Wx2AUibunINeIxRAA=="
 }
