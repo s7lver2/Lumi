@@ -737,14 +737,22 @@ fn indice_portear_nivel(
     if niveles.is_empty() {
         return Err("elige al menos un nivel".into());
     }
-    let modelos_antes: std::collections::HashSet<String> =
-        modelos_para(&estado, indice_id).into_iter().collect();
     estado.almacen.fijar_niveles_elegidos(indice_id, &niveles).map_err(|e| e.to_string())?;
-    let modelos_despues: std::collections::HashSet<String> =
-        modelos_para(&estado, indice_id).into_iter().collect();
-    let nuevos: Vec<String> = modelos_despues.difference(&modelos_antes).cloned().collect();
-    for m in &nuevos {
-        crate::reembeber::encolar(&estado.almacen, indice_id, m).map_err(|e| e.to_string())?;
+    // Antes esto difeaba "modelos antes de fijar" contra "modelos después":
+    // detectaba un nivel recién añadido, pero no un nivel que YA estaba
+    // elegido cuyo registro (registros/niveles/*.json) cambió mientras tanto
+    // -- un modelo nuevo añadido a un nivel ya elegido nunca se encolaba,
+    // porque "antes" y "después" se recalculaban los dos en caliente contra
+    // el registro actual y salían idénticos. `encolar_capa` ya es idempotente
+    // (INSERT OR IGNORE contra `vectores`), así que basta con intentarlo para
+    // cada modelo que el nivel elegido exige AHORA y quedarse solo con los
+    // que de verdad insertaron alguna fila nueva.
+    let mut nuevos = Vec::new();
+    for m in modelos_para(&estado, indice_id) {
+        let n = crate::reembeber::encolar(&estado.almacen, indice_id, &m).map_err(|e| e.to_string())?;
+        if n > 0 {
+            nuevos.push(m);
+        }
     }
     Ok(nuevos)
 }
