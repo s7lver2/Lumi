@@ -180,7 +180,11 @@ async fn main() -> anyhow::Result<()> {
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
             let ahora = std::time::Instant::now();
             let retraso = ahora.duration_since(anterior).as_secs_f64() - 2.0;
-            tracing::info!("latido #{tick} (retraso frente a los 2s esperados: {retraso:.3}s)");
+            // `target` propio (no el genérico `lumid` del resto de este
+            // archivo) para que Doctor pueda silenciar solo este latido de
+            // diagnóstico sin tocar los avisos de arranque que comparten
+            // módulo — ver `logging::CATEGORIAS`.
+            tracing::info!(target: "lumid::latido", "latido #{tick} (retraso frente a los 2s esperados: {retraso:.3}s)");
             anterior = ahora;
             tick += 1;
         }

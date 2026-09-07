@@ -35,6 +35,11 @@ pub const CATEGORIAS: &[Categoria] = &[
         objetivos: &["lumid::routes::projects", "lumid::routes::api_keys", "lumid::routes::cases", "lumid::routes::tasks"],
     },
     Categoria { id: "doctor", label: "Doctor", objetivos: &["lumid::routes::doctor"] },
+    // El latido de 2s en `main.rs` es diagnóstico temporal (para cazar un
+    // runtime que deja de repartir tiempo a toda tarea) y por defecto es
+    // puro ruido en un servidor sano — categoría propia para poder bajarlo
+    // sin tocar el resto de `INFO y superior`.
+    Categoria { id: "latido", label: "Latido de diagnóstico", objetivos: &["lumid::latido"] },
     Categoria {
         id: "otros",
         label: "Avisos, perfil y políticas",
