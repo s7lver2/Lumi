@@ -568,6 +568,14 @@ fn publicacion_hay_novedades(estado: tauri::State<'_, Estado>, id: i64) -> Resul
     publicar::hay_novedades_desde_ultima_publicacion(&estado.almacen, id).map_err(|e| e.to_string())
 }
 
+/// La URL de la ficha del último corte publicado de este índice, para
+/// copiarla desde el detalle sin tener que ir a buscarla a GitHub a mano.
+/// `None` si este índice nunca se ha publicado con éxito.
+#[tauri::command]
+fn indice_url_publicada(estado: tauri::State<'_, Estado>, id: i64) -> Result<Option<String>, String> {
+    estado.almacen.publicacion_ficha_url(id).map_err(|e| e.to_string())
+}
+
 /// Las teselas de un índice, con quién hizo el trabajo de cada una — mismo
 /// dato que alimenta la tabla de "Procedencia del trabajo", pero sin agregar:
 /// es lo que necesita el botón "Liberar" por tesela.
@@ -1938,6 +1946,7 @@ pub fn run() {
             proyecto_crear,
             indice_detalle,
             publicacion_hay_novedades,
+            indice_url_publicada,
             indice_lotes,
             lote_cancelar,
             indice_borrar,

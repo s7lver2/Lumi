@@ -304,6 +304,7 @@ export const api = {
     invoke<ResumenIndice[]>("indices_lista_de_proyecto", { proyecto }),
   indiceDetalle: (id: number) => invoke<DetalleIndice>("indice_detalle", { id }),
   publicacionHayNovedades: (id: number) => invoke<boolean>("publicacion_hay_novedades", { id }),
+  indiceUrlPublicada: (id: number) => invoke<string | null>("indice_url_publicada", { id }),
   indiceLotes: (id: number) => invoke<LoteResumen[]>("indice_lotes", { id }),
   loteCancelar: (id: number) => invoke<boolean>("lote_cancelar", { id }),
   indiceBorrar: (id: number) => invoke<void>("indice_borrar", { id }),

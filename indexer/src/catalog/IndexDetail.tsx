@@ -44,6 +44,10 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
   // botón parpadee deshabilitado — solo se apaga cuando de verdad se
   // confirma que no hay nada nuevo desde la última publicación (#104).
   const [hayNovedades, setHayNovedades] = useState(true);
+  // URL de la ficha del último corte publicado — `null` hasta que
+  // `refrescar()` resuelva, o si este índice nunca se ha publicado.
+  const [urlPublicada, setUrlPublicada] = useState<string | null>(null);
+  const [urlCopiada, setUrlCopiada] = useState(false);
   // Escape a esa misma comprobación (#104): compara CONTENIDO (quadkeys,
   // modelos), no el formato en que se empaqueta. Un arreglo del empaquetado
   // — la razón real por la que esto existe hoy: los paquetes publicados
@@ -62,6 +66,7 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
     void api.indiceDetalle(id).then(setDetalle);
     void api.indiceLotes(id).then(setLotes);
     void api.publicacionHayNovedades(id).then(setHayNovedades);
+    void api.indiceUrlPublicada(id).then(setUrlPublicada);
   };
 
   useEffect(() => {
@@ -207,6 +212,18 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
             <span className="rounded-full border border-border px-2 py-px font-mono text-[9px] text-subtle">
               v{detalle.numero_version}
             </span>
+          )}
+          {urlPublicada && (
+            <button
+              onClick={() => {
+                void navigator.clipboard.writeText(urlPublicada);
+                setUrlCopiada(true);
+                setTimeout(() => setUrlCopiada(false), 1400);
+              }}
+              className="jg-press rounded-full border border-border px-2 py-px text-[9px] text-subtle hover:text-fg"
+            >
+              {urlCopiada ? "URL copiada" : "Copiar URL"}
+            </button>
           )}
           {/* La señal de que el embebido de fondo terminó: antes la única
               pista era una barra de progreso al 100 % indistinguible, de un

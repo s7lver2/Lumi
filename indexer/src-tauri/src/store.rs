@@ -1530,6 +1530,19 @@ impl Almacen {
         Ok(filas)
     }
 
+    /// La URL pública de la ficha del último corte subido de este índice, si
+    /// hay alguna — es lo que devuelve GitHub al subir `ficha.json`, ya
+    /// guardado por `publicacion_marcar_subido`. `None` antes de la primera
+    /// publicación con éxito.
+    pub fn publicacion_ficha_url(&self, indice_id: i64) -> Result<Option<String>> {
+        Ok(self.0.lock().unwrap().query_row(
+            "SELECT url FROM publicaciones
+              WHERE indice_id = ?1 AND asset = 'ficha.json' AND subido = 1",
+            [indice_id],
+            |r| r.get(0),
+        ).optional()?)
+    }
+
     pub fn descarga_sumar_reintento(&self, indice_id: i64, fuente: &str, quadkey: &str) -> Result<u32> {
         let c = self.0.lock().unwrap();
         c.execute(
