@@ -655,26 +655,26 @@ pub async fn publicar(
 
     let numero_version = almacen.genealogia(indice_id)?;
 
-    // Qué capas (modelo, version) ya se publicaron en el corte anterior — esas
-    // no vuelven a entrar en el cuerpo de esta publicación. Ninguna si esta es
-    // la primera vez.
+    // Las capas son tan autocontenidas como los CUERPOS de imagen y
+    // `fuentes_por_quadkey`: cada corte declara TODAS las que tiene el
+    // paquete sellado, nunca solo las que cambiaron desde el corte anterior.
     //
-    // Los CUERPOS de imagen (`pesos_por_quadkey` más abajo) nunca se filtran
-    // así por quadkey ya publicada — cada corte es autocontenido, un cliente
-    // que instala solo la ficha más reciente nunca vuelve a pedir la de una
-    // versión anterior. `fuentes_por_quadkey` (procedencia/licencia por
-    // quadkey) tiene que ser igual de autocontenida por la misma razón: antes
-    // se filtraba igual que si fuera incremental, y una versión nueva sin
-    // imágenes nuevas —solo con una dependencia añadida, p. ej.— publicaba
+    // Esto ya se rompió una vez con `fuentes_por_quadkey` -- una versión
+    // nueva sin imágenes nuevas, solo con una dependencia añadida, publicaba
     // `fuentes_por_quadkey: []` con `cuerpos` llenos de datos reales sin
-    // ninguna procedencia declarada para ellos.
+    // ninguna procedencia declarada para ellos -- y `capas` tenía exactamente
+    // el mismo fallo: si un modelo ya salía en la ficha del corte anterior,
+    // esta ficha lo omitía dando por hecho que ese release anterior seguiría
+    // ahí para siempre. Nada en la instalación (`lumid::indices`) vuelve a
+    // mirar `version_anterior` para recuperar lo omitido -- es solo
+    // procedencia para la UI, no una cadena que el instalador camine -- así
+    // que en cuanto ese release anterior se borra (o simplemente no
+    // responde), la ficha nueva queda sin ninguna capa: el índice se instala
+    // "completo" pero sin un solo modelo de recuperación, y ningún nivel
+    // puede correr contra él.
     let anterior: Option<(u32, lumi_index::ficha::Ficha)> = almacen
         .ultima_ficha_propia(indice_id)?
         .and_then(|(v, json)| serde_json::from_str(&json).ok().map(|f| (v, f)));
-    let capas_ya_publicadas: std::collections::HashSet<(String, String)> = anterior
-        .as_ref()
-        .map(|(_, f)| f.capas.iter().map(|c| (c.modelo.clone(), c.version.clone())).collect())
-        .unwrap_or_default();
     let etiqueta_anterior: Option<String> =
         anterior.as_ref().map(|(v, _)| etiqueta_de(&paquete, *v));
 
@@ -763,11 +763,10 @@ pub async fn publicar(
     }
 
     // Las capas: un asset por modelo, con los fragmentos de todas las teselas.
+    // Todas las que tenga el paquete, autocontenidas -- ver el comentario de
+    // más arriba sobre por qué esto ya no se filtra por "ya publicada antes".
     let mut capas: Vec<Capa> = Vec::new();
     for (modelo, version, dims) in modelos_del_paquete(&raiz) {
-        if capas_ya_publicadas.contains(&(modelo.clone(), version.clone())) {
-            continue;
-        }
         let nombre = format!("capa-{modelo}-{version}.enc");
         prog.empezar_asset(&nombre);
         if let Some((sha, bytes)) = ya_subido(&almacen, indice_id, &nombre) {
