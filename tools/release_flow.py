@@ -139,8 +139,21 @@ def _ruta_montada_en_wsl(root: Path) -> str:
 def _construir_wsl_lumid(root: Path) -> Path:
     spinner = Spinner("Compilando lumid en WSL…")
     spinner.start()
+    # `escribir_version()` ya dejó la versión nueva en el Cargo.toml de ESTE
+    # checkout (Windows), pero todavía sin comitear -- `confirmar_y_comitear`
+    # es el último paso del flujo entero, después de construir y publicar.
+    # `git pull` en el checkout de WSL trae el código (ya comiteado y
+    # pusheado en un paso previo), pero NO el bump de versión: compilaba con
+    # el `CARGO_PKG_VERSION` de la publicación ANTERIOR, así que el binario
+    # que se subía como "vX.Y.Z" en realidad se identificaba a sí mismo como
+    # la versión de antes -- el panel de administración lo veía instalarse
+    # bien (era rápido, sin error) pero seguía anunciando la versión vieja
+    # para siempre. Copiar el Cargo.toml recién escrito ANTES de compilar es
+    # lo mínimo que hace falta: el resto del código ya llegó por `git pull`.
+    ruta_win_cargo = f"{_ruta_montada_en_wsl(root)}/Cargo.toml"
     r = subprocess.run(
-        ["wsl.exe", "--", "bash", "-lc", f"cd {WSL_RUTA_LUMI} && git pull && cargo build --release -p lumid"],
+        ["wsl.exe", "--", "bash", "-lc",
+         f"cd {WSL_RUTA_LUMI} && git pull && cp '{ruta_win_cargo}' Cargo.toml && cargo build --release -p lumid"],
         capture_output=True, text=True,
     )
     if r.returncode != 0:
