@@ -11,6 +11,13 @@ export function PairStep({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState(false);
 
   async function verify(forzar = false) {
+    // El montaje (auto-verify) y el onBlur del campo pueden dispararse casi
+    // a la vez cuando la clave llega ya rellena (AddServerForm) -- sin este
+    // guard, las dos llamadas a /v1/claim con el MISMO secreto competían: la
+    // primera lo canjeaba de verdad, la segunda pisaba el estado de éxito
+    // con "la clave ya se canjeó", dejando al usuario atascado con un error
+    // pese a que el canje real había funcionado.
+    if (busy) return;
     setBusy(true); setError(null);
     try {
       const h = await api.pair(key.trim(), forzar);
