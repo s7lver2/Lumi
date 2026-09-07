@@ -39,32 +39,38 @@ struct Theme {
     provider: &'static str,
     style: &'static str,
     needs_key: bool,
+    /// De qué color pintar por encima (marcadores, círculo de confianza): el
+    /// fondo del propio tema es de este lado del catálogo, así que el cliente
+    /// no tiene forma de adivinarlo por su cuenta. `true` en el único tema
+    /// realmente oscuro; el resto son de fondo claro y necesitan trazo oscuro
+    /// encima, no el blanco pensado para un fondo negro.
+    oscuro: bool,
 }
 
 const THEMES: &[Theme] = &[
     Theme {
         id: "osm-liberty", label: "OpenStreetMap · Liberty", provider: "osm",
-        style: "https://tiles.openfreemap.org/styles/liberty", needs_key: false,
+        style: "https://tiles.openfreemap.org/styles/liberty", needs_key: false, oscuro: false,
     },
     Theme {
         id: "osm-bright", label: "OpenStreetMap · Bright", provider: "osm",
-        style: "https://tiles.openfreemap.org/styles/bright", needs_key: false,
+        style: "https://tiles.openfreemap.org/styles/bright", needs_key: false, oscuro: false,
     },
     Theme {
         id: "osm-positron", label: "OpenStreetMap · Positron", provider: "osm",
-        style: "https://tiles.openfreemap.org/styles/positron", needs_key: false,
+        style: "https://tiles.openfreemap.org/styles/positron", needs_key: false, oscuro: false,
     },
     Theme {
         id: "mapbox-streets", label: "Mapbox · Calles", provider: "mapbox",
-        style: "mapbox://styles/mapbox/streets-v12", needs_key: true,
+        style: "mapbox://styles/mapbox/streets-v12", needs_key: true, oscuro: false,
     },
     Theme {
         id: "mapbox-dark", label: "Mapbox · Oscuro", provider: "mapbox",
-        style: "mapbox://styles/mapbox/dark-v11", needs_key: true,
+        style: "mapbox://styles/mapbox/dark-v11", needs_key: true, oscuro: true,
     },
     Theme {
         id: "mapbox-satellite", label: "Mapbox · Satélite", provider: "mapbox",
-        style: "mapbox://styles/mapbox/satellite-streets-v12", needs_key: true,
+        style: "mapbox://styles/mapbox/satellite-streets-v12", needs_key: true, oscuro: true,
     },
 ];
 
@@ -165,7 +171,10 @@ fn outbound() -> Result<reqwest::Client, Fail> {
 pub async fn themes(headers: HeaderMap, State(app): State<App>) -> Result<Json<Vec<MapTheme>>, Fail> {
     require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
     Ok(Json(
-        THEMES.iter().map(|t| MapTheme { id: t.id.into(), label: t.label.into(), needs_key: t.needs_key }).collect(),
+        THEMES
+            .iter()
+            .map(|t| MapTheme { id: t.id.into(), label: t.label.into(), needs_key: t.needs_key, oscuro: t.oscuro })
+            .collect(),
     ))
 }
 
@@ -217,6 +226,9 @@ pub async fn config(State(app): State<App>, headers: HeaderMap) -> Result<Json<M
         engine,
         key: sirve.then(|| key.clone()),
         style: sirve.then(|| theme.map(|t| t.style.to_string())).flatten(),
+        // Sin tema elegido, `true`: es el mismo fondo oscuro con el que este
+        // catálogo se pensó, y el que ya llevan los marcadores por defecto.
+        oscuro: theme.map(|t| t.oscuro).unwrap_or(true),
     }))
 }
 

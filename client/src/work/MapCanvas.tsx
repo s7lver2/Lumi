@@ -16,13 +16,24 @@ export interface Marker {
   radiusM?: number;
 }
 
-const COLOR = {
+// Dos paletas, no una: un marcador claro sobre un tema de mapa claro
+// (Positron, Bright, Calles...) se lee tan mal como uno oscuro sobre
+// Mapbox Oscuro. `oscuro` en `MapConfig` dice cuál usar — viene del
+// catálogo del servidor porque el propio estilo no declara su color de
+// fondo en ningún sitio que el cliente pueda leer.
+const COLOR_OSCURO = {
   top: { bg: "#f2f3f5", fg: "#000", border: "#f2f3f5" },
   // Perfilado y no relleno: la jerarquía entre la hipótesis principal y sus
   // alternativas se dice con relleno + opacidad, nunca con un color nuevo.
   alt: { bg: "transparent", fg: "#e8e8e6", border: "rgba(255,255,255,.5)" },
   exif: { bg: "#101215", fg: "#efb968", border: "#efb968" },
   off: { bg: "#101215", fg: "#6a6c70", border: "#3a3e44" },
+} as const;
+const COLOR_CLARO = {
+  top: { bg: "#101215", fg: "#fff", border: "#101215" },
+  alt: { bg: "transparent", fg: "#1c1e22", border: "rgba(0,0,0,.45)" },
+  exif: { bg: "#101215", fg: "#efb968", border: "#efb968" },
+  off: { bg: "#e4e4e0", fg: "#6a6c70", border: "#9a9ca0" },
 } as const;
 
 /** Anillo de 64 puntos que aproxima un círculo de `radiusM` metros. La
@@ -65,8 +76,8 @@ function useUiScale(): number {
   return scale;
 }
 
-function el(m: Marker): HTMLElement {
-  const c = COLOR[m.kind];
+function el(m: Marker, oscuro: boolean): HTMLElement {
+  const c = (oscuro ? COLOR_OSCURO : COLOR_CLARO)[m.kind];
   const d = document.createElement("div");
   d.textContent = m.label;
   d.title = m.kind === "exif" ? "GPS declarado por la cámara" : m.label;
@@ -102,6 +113,10 @@ export function MapCanvas({
    *  que sí ha cargado se sigue viendo. */
   const [warn, setWarn] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  // `true` hasta que llegue `MapConfig`: es el mismo fondo oscuro con el que
+  // este mapa se pensó, así que no cambia nada para quien no ha tocado el
+  // tema por defecto.
+  const [oscuro, setOscuro] = useState(true);
   /** Globo o plano. Es una preferencia de quien mira, no del proyecto: se
    *  recuerda en este equipo. El globo es la verdad geográfica; el plano es
    *  más cómodo para comparar dos puntos lejanos de un vistazo. */
@@ -128,6 +143,7 @@ export function MapCanvas({
       // se dice quién tiene que arreglarlo.
       if (cfg.reason) { setReason(cfg.reason); return; }
       setReason(null);
+      setOscuro(cfg.oscuro);
 
       // El estilo se pide a mano ANTES de dárselo al motor (ver `mapEngine`):
       // si se le pasa como URL y el daemon contesta un error, lo único que
@@ -245,25 +261,26 @@ export function MapCanvas({
       const src = m.getSource("conf") as { setData?: (d: unknown) => void } | undefined;
       if (src?.setData) { src.setData(data); return; }
       m.addSource("conf", { type: "geojson", data });
+      const trazo = oscuro ? "#ffffff" : "#101215";
       m.addLayer({
         id: "conf-fill", type: "fill", source: "conf",
-        paint: { "fill-color": "#ffffff", "fill-opacity": 0.055 },
+        paint: { "fill-color": trazo, "fill-opacity": 0.055 },
       });
       m.addLayer({
         id: "conf-line", type: "line", source: "conf",
-        paint: { "line-color": "#ffffff", "line-opacity": 0.5, "line-width": 1 },
+        paint: { "line-color": trazo, "line-opacity": 0.5, "line-width": 1 },
       });
     };
     if (m.isStyleLoaded()) draw();
     else m.once("load", draw);
-  }, [markers]);
+  }, [markers, oscuro]);
 
   useEffect(() => {
     const m = map.current;
     if (!m) return;
     placed.current.forEach((p) => p.remove());
     placed.current = markers.map((mk) => {
-      const marker = new gl.current!.Marker({ element: el(mk) })
+      const marker = new gl.current!.Marker({ element: el(mk, oscuro) })
         .setLngLat([mk.lng, mk.lat])
         .addTo(m);
       marker.getElement().addEventListener("click", () => {
@@ -278,7 +295,7 @@ export function MapCanvas({
       });
       return marker;
     });
-  }, [markers, onMarker]);
+  }, [markers, onMarker, oscuro]);
 
   // Cambiar de proyección sin rehacer el mapa: reconstruirlo tiraría el estilo,
   // las teselas ya descargadas y la posición de la cámara.

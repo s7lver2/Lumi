@@ -390,8 +390,13 @@ export interface MapConfig {
   key: string | null;
   /** El estilo sin reescribir, solo con `engine: "mapbox"`. */
   style: string | null;
+  /** Si el fondo del tema activo es oscuro — de qué color pintar por encima
+   *  (marcadores, círculo de confianza). El estilo es un documento de capas,
+   *  no un color de fondo declarado, así que esto no se puede adivinar del
+   *  lado del cliente. */
+  oscuro: boolean;
 }
-export interface MapTheme { id: string; label: string; needs_key: boolean }
+export interface MapTheme { id: string; label: string; needs_key: boolean; oscuro: boolean }
 export interface WorkerView {
   dispositivo: string;
   /** El modelo cargado ahora mismo. `null` mientras arranca o entre cambios. */

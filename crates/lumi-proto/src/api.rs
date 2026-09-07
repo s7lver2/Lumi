@@ -885,6 +885,12 @@ pub struct MapConfig {
     /// "mapbox"`. Su SDK entiende el esquema `mapbox://` y no pasa por
     /// nuestro proxy, así que no hay nada que reescribir.
     pub style: Option<String>,
+    /// Si el fondo del tema activo es oscuro. El cliente no puede adivinarlo
+    /// del propio estilo (es un documento de capas, no un color de fondo
+    /// declarado) y lo necesita para pintar marcadores y el círculo de
+    /// confianza en el trazo correcto — blanco sobre un tema oscuro, oscuro
+    /// sobre uno claro.
+    pub oscuro: bool,
 }
 
 /// Un tema del catálogo cerrado que ofrece `GET /v1/map/themes`. Ya no se
@@ -895,6 +901,7 @@ pub struct MapTheme {
     pub id: String,
     pub label: String,
     pub needs_key: bool,
+    pub oscuro: bool,
 }
 
 #[derive(Serialize, Deserialize)]
