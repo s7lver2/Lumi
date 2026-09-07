@@ -53,12 +53,12 @@ export async function cobertura(): Promise<Resumen | null> {
     }
 
     // Una dependencia declarada en una ficha no tiene por qué vivir en un
-    // repo con el topic `lumi-index` propio: puede ser OTRO release del
-    // MISMO repo (`.../releases/download/<otra-tag>/ficha.json`), que
-    // `/releases/latest` nunca ve porque solo hay un "latest" por repo. Se
-    // sigue la URL declarada directamente, igual que `lumid::instalar()`
-    // camina `Ficha.dependencias[].url` en vez de asumir que todo paquete
-    // tiene su propio repo buscable.
+    // repo con el topic `lumi-index` propio (ese caso ya lo cubre el bucle
+    // de arriba, que recorre TODOS los releases del repo, no solo el
+    // último). Esto es para el caso restante: un release en OTRO repo que
+    // ni siquiera tiene el topic. Se sigue la URL declarada directamente,
+    // igual que `lumid::instalar()` camina `Ficha.dependencias[].url` en
+    // vez de asumir que todo paquete tiene su propio repo buscable.
     const porVer: string[] = [];
     async function seguirDependencia(url: string) {
       try {
@@ -75,21 +75,35 @@ export async function cobertura(): Promise<Resumen | null> {
     }
 
     for (const repo of repos) {
-      // La ficha viaja en claro como asset del release más reciente.
-      const rel = await fetch(
-        `https://api.github.com/repos/${repo.full_name}/releases/latest`,
+      // Un mismo repo publica un release por paquete, no uno solo — usar
+      // `/releases/latest` se quedaba con el paquete más reciente y perdía
+      // todos los anteriores en cuanto dejaban de ser "el último" (o en
+      // cuanto un release de prueba pasaba a ser el más nuevo). La ficha
+      // viaja en claro como asset de CADA release del repo.
+      const lista = await fetch(
+        `https://api.github.com/repos/${repo.full_name}/releases?per_page=100`,
         { headers: cabeceras, next: { revalidate: 3600 } },
       );
-      if (!rel.ok) continue;
-      const assets = ((await rel.json()).assets ?? []) as { name: string; browser_download_url: string }[];
-      const ficha = assets.find((a) => a.name === "ficha.json");
-      if (!ficha) continue;
+      if (!lista.ok) continue;
+      const releases = (await lista.json()) as {
+        draft: boolean; prerelease: boolean;
+        assets: { name: string; browser_download_url: string }[];
+      }[];
 
-      const fr = await fetch(ficha.browser_download_url, { next: { revalidate: 3600 } });
-      if (!fr.ok) continue;
-      const f = (await fr.json()) as Ficha;
-      anotar(f);
-      for (const d of f.dependencias ?? []) if (!paquetesVistos.has(d.paquete)) porVer.push(d.url);
+      for (const release of releases) {
+        // Borrador o pre-release: forma sancionada de sacar un release de
+        // prueba (p.ej. "removeme-v3") de la cobertura sin tener que
+        // borrarlo del repo.
+        if (release.draft || release.prerelease) continue;
+        const ficha = release.assets.find((a) => a.name === "ficha.json");
+        if (!ficha) continue;
+
+        const fr = await fetch(ficha.browser_download_url, { next: { revalidate: 3600 } });
+        if (!fr.ok) continue;
+        const f = (await fr.json()) as Ficha;
+        anotar(f);
+        for (const d of f.dependencias ?? []) if (!paquetesVistos.has(d.paquete)) porVer.push(d.url);
+      }
     }
 
     // BFS igual que `lumid::instalar()`: las dependencias de una dependencia
