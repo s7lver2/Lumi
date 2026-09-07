@@ -335,6 +335,33 @@ def _local_ip():
     return None
 
 
+_B58_ALFABETO = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+
+def _b58encode(data: bytes) -> str:
+    """Mismo alfabeto y manejo de ceros a la izquierda que la crate bs58
+    (crates/lumi-proto/src/key.rs) -- no hace falta la dependencia, es
+    aritmética de enteros grandes con la stdlib."""
+    n = int.from_bytes(data, "big")
+    out = ""
+    while n > 0:
+        n, resto = divmod(n, 58)
+        out = _B58_ALFABETO[resto] + out
+    ceros = len(data) - len(data.lstrip(b"\x00"))
+    return _B58_ALFABETO[0] * ceros + out
+
+
+def _tarjeta_servidor(cert_der_path: str, addr: str) -> str:
+    """lumi1s_<host:puerto>_<huella> -- misma huella que calcula lumid
+    (SHA-256 del cert.der, truncada a 16 bytes, en base58). A diferencia de
+    la clave de vinculación, la tarjeta no lleva secreto: es información
+    pública, segura de calcular aquí sin pedirle nada a lumid."""
+    import hashlib
+    der = open(cert_der_path, "rb").read()
+    fp = hashlib.sha256(der).digest()[:16]
+    return f"lumi1s_{addr}_{_b58encode(fp)}"
+
+
 def _servidor_realmente_virgen(data_dir):
     """La MISMA condición que bootstrap.rs (crates/lumid/src/routes/bootstrap.rs):
     sin usuarios y sin ninguna clave de vinculación jamás emitida. No basta con
@@ -670,9 +697,12 @@ def instalar(auto: bool, version: str) -> str:
         # tiene dueño, así que bootstrap.rs rechazaría la autoemisión con 403
         # (ver su propio comentario: solo emite si users/pair_key están
         # vacíos). Pedir aquí una clave nueva no tiene sentido en una
-        # actualización -- solo haría esperar 10s para acabar fallando.
-        return None
-    return _pedir_clave_de_vinculacion()
+        # actualización, pero dejar al usuario sin nada tampoco -- la
+        # tarjeta pública (sin secreto, no se consume) le sirve para volver
+        # a añadir este servidor en el cliente y entrar con su cuenta.
+        addr = f"{_local_ip() or '127.0.0.1'}:{PORT}"
+        return ("card", _tarjeta_servidor(cert_der, addr))
+    return ("key", _pedir_clave_de_vinculacion())
 
 
 def main():
@@ -681,17 +711,24 @@ def main():
     ap.add_argument("--version", default="latest", help="versión exacta de lumid a instalar, o 'latest'")
     args = ap.parse_args()
 
-    clave = instalar(args.yes, args.version)
-    if clave is None:
-        print()
-        print("  Servidor actualizado. Ya tenía dueño -- no se emite clave de vinculación nueva.")
-        print("  (¿hace falta una? 'lumi key reissue' en el propio host.)")
-        return
+    tipo, valor = instalar(args.yes, args.version)
     print()
+    if tipo == "card":
+        print("  ────────────────────────────────────────────────────────")
+        print("  Servidor actualizado -- ya tenía dueño, no se emite clave nueva")
+        print("  Tarjeta de servidor · sin secreto, no caduca, no se consume")
+        print()
+        print(f"  {valor}")
+        print()
+        print("  Añade este servidor en el cliente con esta tarjeta y entra")
+        print("  con tu cuenta. (¿hace falta una clave nueva de verdad? 'lumi")
+        print("  key reissue' en el propio host.)")
+        print("  ────────────────────────────────────────────────────────")
+        return
     print("  ────────────────────────────────────────────────────────")
     print("  Clave de vinculación · un solo uso · caduca en 24 h")
     print()
-    print(f"  {clave}")
+    print(f"  {valor}")
     print()
     print("  Solo se muestra ahora. El servidor guarda su hash.")
     print("  ────────────────────────────────────────────────────────")
