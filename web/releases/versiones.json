@@ -1075,7 +1075,43 @@
           "sha256": "3717d27a43e392429effd2a7a2c8f7d040cc7a2858fb3ec2fd7a94e169c46723"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.29",
+      "publicado": "2026-09-07T12:33:37Z",
+      "notas": "Los agentes seguian sin correr por un tercer lanzador (agentar.rs) que nunca recibia el interprete del venv ni las variables de entorno correctas. Los marcadores del mapa ahora cambian de color segun el tema (claro/oscuro) del catalogo.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.29/app.exe",
+          "bytes": 15857152,
+          "sha256": "36a4f8f4688e5bd8d9382252d779ca05f74b16c0bf7aac9709669596e170a8f8"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.29",
+      "publicado": "2026-09-07T12:33:37Z",
+      "notas": "Los agentes seguian sin correr por un tercer lanzador (agentar.rs) que nunca recibia el interprete del venv ni las variables de entorno correctas. Los marcadores del mapa ahora cambian de color segun el tema (claro/oscuro) del catalogo.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.29/lumid",
+          "bytes": 20739920,
+          "sha256": "8635add1f274d9526b5f43ea3a22c795158d4ba86a4409a028c1a8f5ffa548c8"
+        },
+        {
+          "plataforma": "assets",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.29/lumid-assets.tar.gz",
+          "bytes": 127642,
+          "sha256": "7f77bf16efc20032d74f5d3bd940485449a94123cdbdd91c079ad33fc8005f09"
+        }
+      ]
     }
   ],
-  "firma": "WZYpAv+jY9/u62EfIbYsAnn8p3oZ7Lk7Z6PX+oCQ/4c4JHFfr8egCLivxSeCZ+jc41gQX0Kc3oHtaoZx0HLwBQ=="
+  "firma": "Ejb+wkQ5Qx9ezC1xG+IUDniOlFeTv21SHZXrjP3ByYblW0NB58gC/5C7wkzBKLB0PWBsnkK9Ski7aA0zuSa/BQ=="
 }
