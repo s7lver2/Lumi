@@ -988,7 +988,73 @@
           "sha256": "00a9f030b722f2a869032194921eb7689bbcdf97f426019663c0f57d46fe802e"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.27",
+      "publicado": "2026-09-07T09:10:15Z",
+      "notas": "Indexer: portear a un nivel ya elegido ahora si encola los modelos nuevos que el registro haya anadido (arregla que dino-mix no se embebiera en indices ya porteados a pro/vision antes de existir). Cliente: PairStep ya no canjea la clave de vinculacion dos veces por una carrera montaje/blur, y el boton Atras del paso de vincular ya no invita a pulsarlo cuando no hay paso anterior.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.27/app.exe",
+          "bytes": 15856128,
+          "sha256": "f51729daee55d25ea324eecfe095947bf8409a853d7c2fcedacf1d3d8d9d21b9"
+        }
+      ]
+    },
+    {
+      "producto": "indexer",
+      "version": "2.0.27",
+      "publicado": "2026-09-07T09:10:15Z",
+      "notas": "Indexer: portear a un nivel ya elegido ahora si encola los modelos nuevos que el registro haya anadido (arregla que dino-mix no se embebiera en indices ya porteados a pro/vision antes de existir). Cliente: PairStep ya no canjea la clave de vinculacion dos veces por una carrera montaje/blur, y el boton Atras del paso de vincular ya no invita a pulsarlo cuando no hay paso anterior.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.27/indexer-app.exe",
+          "bytes": 22367232,
+          "sha256": "a917c1cb72b677d17564abee35fb1750de973fa54e36b4c3237f9010035d1153"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.27",
+      "publicado": "2026-09-07T09:10:15Z",
+      "notas": "Indexer: portear a un nivel ya elegido ahora si encola los modelos nuevos que el registro haya anadido (arregla que dino-mix no se embebiera en indices ya porteados a pro/vision antes de existir). Cliente: PairStep ya no canjea la clave de vinculacion dos veces por una carrera montaje/blur, y el boton Atras del paso de vincular ya no invita a pulsarlo cuando no hay paso anterior.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.27/lumid",
+          "bytes": 20784496,
+          "sha256": "ee725bd1459d6ba4b4944c4639a29ec672f7f5a982e9312d2f75aed4ccb342c1"
+        },
+        {
+          "plataforma": "assets",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.27/lumid-assets.tar.gz",
+          "bytes": 127642,
+          "sha256": "25e7b6a24e2cf1f25c2b20a1d5a1678d75d98e2aa094e7e83027bf6cd596d451"
+        }
+      ]
+    },
+    {
+      "producto": "instalador",
+      "version": "2.0.27",
+      "publicado": "2026-09-07T09:10:15Z",
+      "notas": "Indexer: portear a un nivel ya elegido ahora si encola los modelos nuevos que el registro haya anadido (arregla que dino-mix no se embebiera en indices ya porteados a pro/vision antes de existir). Cliente: PairStep ya no canjea la clave de vinculacion dos veces por una carrera montaje/blur, y el boton Atras del paso de vincular ya no invita a pulsarlo cuando no hay paso anterior.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.27/installer.exe",
+          "bytes": 12871680,
+          "sha256": "1864f5ddb95c8f47174d5fb2be89423bd46352e86689ecc962256a8491621d93"
+        }
+      ]
     }
   ],
-  "firma": "NcOoGn+tSE7RmKyF/p4b1ML7avuKEhfr2Z746A2bA96bvFo8lVXquFavTQwP24HDSMgR1Wx2AUibunINeIxRAA=="
+  "firma": "P5pPJ3zo0ICz/csKyHxhoiR+NTxbaHAEoqGfkeC3zpSESRVKaXFnSuBqA8sD4Qik3OoyL+0jL79UwTBZNTWSAg=="
 }
