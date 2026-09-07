@@ -1111,7 +1111,28 @@
           "sha256": "7f77bf16efc20032d74f5d3bd940485449a94123cdbdd91c079ad33fc8005f09"
         }
       ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.30",
+      "publicado": "2026-09-07T13:36:47Z",
+      "notas": "Corrige el propio flujo de release: el binario de lumid se autoidentificaba con la version anterior (2.0.28) por un problema de orden en tools/release_flow.py. Sin cambios de codigo en lumid respecto a la 2.0.29 real.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.30/lumid",
+          "bytes": 20740584,
+          "sha256": "045be72b542de5507697b2fea5e830696221c617b8b75699e20d3291dc259c38"
+        },
+        {
+          "plataforma": "assets",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.30/lumid-assets.tar.gz",
+          "bytes": 127642,
+          "sha256": "91edfa7a7b69a3bc570c24eb34564e60754160e1176c9b2eba52e451aea70571"
+        }
+      ]
     }
   ],
-  "firma": "Ejb+wkQ5Qx9ezC1xG+IUDniOlFeTv21SHZXrjP3ByYblW0NB58gC/5C7wkzBKLB0PWBsnkK9Ski7aA0zuSa/BQ=="
+  "firma": "Syp0bebdaF/PZH7JYnHCT6JbUDDVR2xgv0aqPX6t7YIZUUVWMcg1I78WlbURbzd7MBxZZJBxsrv9N/nEMOlfDg=="
 }
