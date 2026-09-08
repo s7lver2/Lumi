@@ -1162,7 +1162,43 @@
           "sha256": "6923bf7e992233dbf4fd3056057e989c5fe25fd32e029fa6b68415a8d2879e2c"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.32",
+      "publicado": "2026-09-08T20:50:49Z",
+      "notas": "Los anÃ¡lisis pedidos por clave de API ya se procesan aunque el usuario estÃ© desconectado. El mapa se aleja y orbita mientras un anÃ¡lisis estÃ¡ en curso. Arreglos reales del verificador geomÃ©trico y los agentes de OCR de Pro.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.32/app.exe",
+          "bytes": 15861248,
+          "sha256": "7b9f821e2e318f0523ec959290e81a61bac61d91b27db5016aba4e3abe4b898b"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.32",
+      "publicado": "2026-09-08T20:50:49Z",
+      "notas": "Los anÃ¡lisis pedidos por clave de API ya se procesan aunque el usuario estÃ© desconectado. El mapa se aleja y orbita mientras un anÃ¡lisis estÃ¡ en curso. Arreglos reales del verificador geomÃ©trico y los agentes de OCR de Pro.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.32/lumid",
+          "bytes": 21126848,
+          "sha256": "27605a6b6d5916355c90447946a7062c7f70ff2629e1fc8c82a9e82f22ec484a"
+        },
+        {
+          "plataforma": "assets",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.32/lumid-assets.tar.gz",
+          "bytes": 136747,
+          "sha256": "b82f2bb591b529ddbe79caf1dd25cf283a906eca0d3ebd565263ede44cba5fc9"
+        }
+      ]
     }
   ],
-  "firma": "JhSvwU/VKimHbCN0JY8yCXvgxNYOIBqoXgus4lyzRdvP9XKX1C5H5ayTOaR11WL+8zvNMs5oCc9AjeG6kr93BQ=="
+  "firma": "62pmPQUUuftg8amqZcSb8GSDi6ZCtmLIaGuuQ908SOIlfP1i/bJjbYsyKbnzsQspyEuWZbp+PmRFuzIQ2H0VCQ=="
 }
