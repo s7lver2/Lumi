@@ -4,7 +4,7 @@
   "motor": "ocr",
   "pregunta": "",
   "etiquetas": ["latino", "cirilico", "griego", "arabe", "hebreo", "devanagari", "tailandes", "cjk", "hangul", "kana", "sin texto"],
-  "tipo": "filtra",
+  "tipo": "describe",
   "restriccion": "pais",
   "mapa": {
     "griego": ["GRC", "CYP"],

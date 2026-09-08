@@ -326,6 +326,9 @@ export const api = {
   paqueteSellarArrancar: (indiceId: number, destino: string) =>
     invoke<void>("paquete_sellar_arrancar", { indiceId, destino }),
   paqueteSellarProgreso: () => invoke<ProgresoSellado>("paquete_sellar_progreso"),
+  paqueteCapasPendientes: (indiceId: number) => invoke<string[]>("paquete_capas_pendientes", { indiceId }),
+  paqueteAgregarCapa: (indiceId: number, modeloId: string) =>
+    invoke<void>("paquete_agregar_capa", { indiceId, modeloId }),
   paqueteQueViaja: (indiceId: number) => invoke<Publicable[]>("paquete_que_viaja", { indiceId }),
   paqueteAbrir: (ruta: string) => invoke<void>("paquete_abrir", { ruta }),
 

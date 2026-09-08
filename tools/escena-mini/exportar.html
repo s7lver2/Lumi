@@ -1,0 +1,69 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>exportar unidad</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "/node_modules/three/build/three.module.js",
+    "three/addons/": "/node_modules/three/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
+import { extraerUnidad } from "/escena.mjs";
+
+const cargador = new GLTFLoader();
+const cargar = (r) => new Promise((ok, mal) => cargador.load(r, ok, undefined, mal));
+
+// Se exporta la unidad TAL CUAL viene, con sus materiales y texturas
+// originales: quien la importe en Spline va a rehacer los materiales allí de
+// todos modos, y darle la versión ya neutralizada solo le quitaría
+// información (el relieve se conserva, pero el color base ya no se podría
+// recuperar).
+/** Centra en el origen y apoya el objeto en y=0. */
+function asentar(objeto) {
+  const caja = new THREE.Box3().setFromObject(objeto);
+  const centro = caja.getCenter(new THREE.Vector3());
+  objeto.position.set(-centro.x, -caja.min.y, -centro.z);
+}
+
+async function aGlb(objeto, animaciones = []) {
+  const escena = new THREE.Scene();
+  escena.add(objeto);
+  const bin = await new GLTFExporter().parseAsync(escena, {
+    binary: true,
+    animations: animaciones,
+  });
+  const bytes = new Uint8Array(bin);
+  let s = "";
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
+}
+
+window.exportar = async () => {
+  const fuera = {};
+
+  const rack = await cargar("/modelos/server_racking_system/scene.gltf");
+  const unidad = extraerUnidad(rack.scene);
+  asentar(unidad);
+  fuera["unidad-servidor"] = await aGlb(unidad);
+
+  const mini = await cargar("/modelos/apple_mac_mini_m1/scene.gltf");
+  asentar(mini.scene);
+  fuera["mac-mini"] = await aGlb(mini.scene);
+
+  // El brazo viaja CON su esqueleto y su animación de fábrica: en una
+  // herramienta de animación el rig es justo lo que hace falta, y la animación
+  // del autor sirve de referencia de qué articula cada hueso aunque luego no
+  // se use.
+  const brazo = await cargar("/modelos-ligeros/robotic_prosthetic_arm/scene.gltf");
+  asentar(brazo.scene);
+  fuera["brazo-robotico"] = await aGlb(brazo.scene, brazo.animations);
+
+  return fuera;
+};
+window.listo = true;
+</script>

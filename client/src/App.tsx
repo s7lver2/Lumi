@@ -10,6 +10,7 @@ import { TitleBar } from "./ui/TitleBar";
 import { ResizeHandles } from "./ui/WindowFrame";
 import { ProfileView } from "./profile/ProfileView";
 import { StatusOverlay } from "./ui/StatusOverlay";
+import { LoadingScreen } from "./ui/LoadingScreen";
 import { EntryScreen } from "./entry/EntryScreen";
 import { AdminPanel } from "./admin/AdminPanel";
 import { AjustesView } from "./settings/AjustesView";
@@ -51,7 +52,11 @@ export default function App() {
   // Ajustes del cliente (#83): un overlay por encima del modo actual, no un
   // modo nuevo en el router de abajo — así no hace falta replicar la
   // lógica de "volver" de cada modo (picker/project/case/admin), y la
-  // conexión/sesión activa no se toca al abrirlo ni al cerrarlo.
+  // conexión/sesión activa no se toca al abrirlo ni al cerrarlo. Cada acción
+  // de navegación de la barra superior (Proyectos, Administración, Perfil,
+  // cerrar sesión) cierra el overlay de paso: antes cambiaban `mode` por
+  // debajo sin tocar esto, y Ajustes se quedaba tapándolo todo como si el
+  // clic no hubiera hecho nada.
   const [ajustesAbiertos, setAjustesAbiertos] = useState(false);
   // Una comprobación por arranque, silenciosa si falla (sin red, o el
   // manifiesto no verifica). El botón manual de Perfil sí muestra el error.
@@ -242,6 +247,7 @@ export default function App() {
    *  nativo puesto tras cerrar sesión sería dejar abierta la puerta de las
    *  imágenes. */
   function signOut() {
+    setAjustesAbiertos(false);
     leaveProject();
     updateSession({ token: undefined });
     useServer.getState().setToken(null);
@@ -258,6 +264,7 @@ export default function App() {
 
   /** Volver al selector: soltar el candado y olvidar el proyecto. */
   function toProjects() {
+    setAjustesAbiertos(false);
     leaveProject();
     useWorkspace.getState().clear();
     setDrawer(null);
@@ -275,15 +282,15 @@ export default function App() {
     mode === "entry" || mode === "wizard"
       ? [{ label: "Lumi" }]
       : mode === "admin"
-        ? [{ label: "Proyectos", onClick: () => setMode("picker") }, { label: "Administración" }]
+        ? [{ label: "Proyectos", onClick: () => { setAjustesAbiertos(false); setMode("picker"); } }, { label: "Administración" }]
         : mode === "profile"
-          ? [{ label: "Proyectos", onClick: () => setMode("picker") }, { label: "Perfil y sesiones" }]
+          ? [{ label: "Proyectos", onClick: () => { setAjustesAbiertos(false); setMode("picker"); } }, { label: "Perfil y sesiones" }]
         : mode === "picker" || !proyectoActual
           ? [{ label: "Proyectos" }]
           : mode === "case" && casoActual
             ? [
                 { label: "Proyectos", onClick: () => toProjects() },
-                { label: proyectoActual.name, onClick: () => { useWorkspace.getState().setCase(null); setMode("project"); } },
+                { label: proyectoActual.name, onClick: () => { setAjustesAbiertos(false); useWorkspace.getState().setCase(null); setMode("project"); } },
                 { label: casoActual.name },
               ]
             : [{ label: "Proyectos", onClick: () => toProjects() }, { label: proyectoActual.name }];
@@ -297,8 +304,8 @@ export default function App() {
       {/* Una sola franja arriba para todo: migas, estado del servidor,
           notificaciones, cuenta y los botones de la ventana. La telemetría ya
           no es una franja permanente de 70 px — vive en su píldora. */}
-      <TitleBar crumbs={crumbs} onOpenAdmin={() => { leaveProject(); setMode("admin"); }}
-        onProfile={() => { leaveProject(); setMode("profile"); }}
+      <TitleBar crumbs={crumbs} onOpenAdmin={() => { setAjustesAbiertos(false); leaveProject(); setMode("admin"); }}
+        onProfile={() => { setAjustesAbiertos(false); leaveProject(); setMode("profile"); }}
         onSettings={mode !== "entry" && mode !== "wizard" ? () => setAjustesAbiertos(true) : undefined}
         onSignOut={signOut} onProjectAccepted={() => setProjectsTick((t) => t + 1)} />
       {/* Para toda la app, no solo el panel de administración: quien esté
@@ -330,7 +337,7 @@ export default function App() {
         mode === "project" || mode === "case" || mode === "picker" || mode === "admin"
           ? "" : "items-center justify-center overflow-y-auto"
       } ${blockedByDisconnect ? "pointer-events-none opacity-50" : ""}`}>
-      {resuming ? null : status !== "ok" && !blockedByDisconnect && mode !== "entry" ? (
+      {resuming ? <LoadingScreen /> : status !== "ok" && !blockedByDisconnect && mode !== "entry" ? (
         // Sustituye al wizard en el mismo hueco: no es una capa flotante
         // encima ("popup"), es lo que se ve mientras dure el estado. La
         // franja de arriba es hermana de este bloque, por eso sigue visible.

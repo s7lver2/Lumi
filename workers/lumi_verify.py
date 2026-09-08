@@ -305,6 +305,11 @@ def _verificar(job):
 
 def main():
     _decir({"tipo": "listo", "dispositivo": DISPOSITIVO, "modelo": None})
+    # `fin` cierra los mensajes de ESTE trabajo -- en modo no persistente
+    # (una orden, stdin se cierra, el proceso muere) nadie la necesita porque
+    # el EOF ya lo dice; en modo persistente (`crate::persistente`, ver
+    # `lumid/src/agentar.rs`/`verificar.rs`) es la unica forma de saber donde
+    # termina un trabajo cuando el proceso sigue vivo para el siguiente.
     for linea in sys.stdin:
         linea = linea.strip()
         if not linea:
@@ -316,12 +321,14 @@ def main():
             continue
         if job.get("tipo") != "verificar":
             _log("orden desconocida, se ignora: %s" % job.get("tipo"))
+            _decir({"tipo": "fin", "id": job.get("id", 0)})
             continue
         try:
             for msg in _verificar(job):
                 _decir(msg)
         except Exception as e:
             _decir({"tipo": "fallo", "id": job["id"], "motivo": str(e)})
+        _decir({"tipo": "fin", "id": job["id"]})
 
 
 if __name__ == "__main__":

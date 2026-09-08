@@ -1182,6 +1182,136 @@ fn paquete_sellar_progreso(estado: tauri::State<'_, Estado>) -> package::Progres
     estado.sellado.lock().unwrap().as_ref().map(|s| s.progreso()).unwrap_or_default()
 }
 
+/// Añade una capa de modelo COMPLETA a un índice que YA está sellado, sin
+/// tocar imágenes ni cuerpos. `reembeber` deja embeber un modelo nuevo
+/// después de sellar, pero hasta ahora ese trabajo no tenía forma de llegar
+/// nunca al paquete en disco — sellar es de un solo uso ("un paquete sellado
+/// no se sigue llenando"), así que un modelo terminado después de esa foto
+/// se quedaba huérfano para siempre. Esto reconstruye `por_qk` con el MISMO
+/// criterio que `sellar()` (mismo orden, mismo filtro de `viajan`) para que
+/// el fragmento nuevo case con las filas ya escritas, y solo entonces
+/// escribe: si las cuentas no cuadran, no toca ni un byte del paquete.
+async fn agregar_capa_a_sellado(
+    almacen: &store::Almacen,
+    modelo: &models::Modelo,
+    indice_id: i64,
+    raiz: &std::path::Path,
+) -> Result<(), String> {
+    let esperadas = almacen.total_imagenes(indice_id).map_err(|e| e.to_string())?;
+    let hechos = almacen.vectores_hechos(indice_id, &modelo.id).map_err(|e| e.to_string())?;
+    if hechos != esperadas {
+        return Err(format!(
+            "«{}» todavía no está completo para este índice: {hechos} de {esperadas} imágenes",
+            modelo.nombre
+        ));
+    }
+
+    let imagenes = almacen.imagenes_de_indice(indice_id).map_err(|e| e.to_string())?;
+    let publicables = almacen.filas_publicables(indice_id).map_err(|e| e.to_string())?;
+    let viajan: std::collections::HashSet<i64> = publicables
+        .iter()
+        .filter(|f| package::redistribucion_de(&f.fuente).viaja(f.licencia.as_deref()))
+        .map(|f| f.id)
+        .collect();
+    let mut por_qk: std::collections::BTreeMap<String, Vec<i64>> = Default::default();
+    for (id, _, qk) in &imagenes {
+        if viajan.contains(id) {
+            por_qk.entry(qk.clone()).or_default().push(*id);
+        }
+    }
+
+    let qdrant = qdrant::Cliente::nuevo();
+    let coleccion = qdrant::coleccion_de(&modelo.id, &modelo.version);
+    for (qk, ids) in &por_qk {
+        let vectores = qdrant.leer(&coleccion, ids).await.map_err(|e| e.to_string())?;
+        let dir = raiz.join("fragmentos").join(qk);
+        package::escribir_fragmento(&dir, &modelo.id, &modelo.version, &vectores)
+            .map_err(|e| format!("no se pudo escribir el fragmento {}: {e}", dir.display()))?;
+    }
+
+    let manifiesto_path = raiz.join("manifiesto.json");
+    let mut manifiesto: lumi_index::manifest::Manifiesto =
+        serde_json::from_slice(&std::fs::read(&manifiesto_path).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+    if !manifiesto.modelos.iter().any(|(m, ..)| m == &modelo.id) {
+        manifiesto.modelos.push((modelo.id.clone(), modelo.version.clone(), modelo.dims));
+    }
+    std::fs::write(&manifiesto_path, serde_json::to_vec_pretty(&manifiesto).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+
+    // El hash y el tamaño de cada tesela cubren TODO su fragmento (ver
+    // `package::medir_fragmento`), así que cambian en cuanto ese fragmento
+    // gana un fichero más — se recalculan solo para las teselas tocadas.
+    let cobertura_path = raiz.join("cobertura.json");
+    let mut cobertura: lumi_index::coverage::Cobertura =
+        serde_json::from_slice(&std::fs::read(&cobertura_path).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+    for t in &mut cobertura.teselas {
+        if por_qk.contains_key(&t.quadkey) {
+            let dir = raiz.join("fragmentos").join(&t.quadkey);
+            let (bytes, sha256) = package::medir_fragmento(&dir).map_err(|e| e.to_string())?;
+            t.bytes = bytes;
+            t.sha256 = sha256;
+        }
+    }
+    std::fs::write(&cobertura_path, serde_json::to_vec_pretty(&cobertura).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+
+    package::firmar(raiz).map_err(|e| format!("no se pudo volver a firmar el paquete: {e}"))?;
+    Ok(())
+}
+
+/// Modelos ya completos para este índice (todas sus imágenes con vector) que
+/// el paquete sellado en disco todavía no lleva — candidatos para
+/// `paquete_agregar_capa`. Vacío si el índice no está sellado: sin sellar,
+/// esto no significa nada (`reembeber`/`paquete_sellar_arrancar` ya cubren
+/// ese caso).
+#[tauri::command]
+fn paquete_capas_pendientes(estado: tauri::State<'_, Estado>, indice_id: i64) -> Result<Vec<String>, String> {
+    let Some(ruta) = estado.almacen.ruta_de_indice(indice_id).map_err(|e| e.to_string())? else {
+        return Ok(Vec::new());
+    };
+    let manifiesto_path = std::path::Path::new(&ruta).join("manifiesto.json");
+    let manifiesto: lumi_index::manifest::Manifiesto =
+        serde_json::from_slice(&std::fs::read(&manifiesto_path).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+    let ya_sellados: std::collections::HashSet<&str> =
+        manifiesto.modelos.iter().map(|(m, ..)| m.as_str()).collect();
+    let esperadas = estado.almacen.total_imagenes(indice_id).map_err(|e| e.to_string())?;
+
+    let mut fuera = Vec::new();
+    for m in &estado.modelos {
+        if ya_sellados.contains(m.id.as_str()) {
+            continue;
+        }
+        let hechos = estado.almacen.vectores_hechos(indice_id, &m.id).map_err(|e| e.to_string())?;
+        if hechos > 0 && hechos == esperadas {
+            fuera.push(m.id.clone());
+        }
+    }
+    Ok(fuera)
+}
+
+#[tauri::command]
+async fn paquete_agregar_capa(
+    estado: tauri::State<'_, Estado>,
+    indice_id: i64,
+    modelo_id: String,
+) -> Result<(), String> {
+    let ruta = estado
+        .almacen
+        .ruta_de_indice(indice_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "este índice no está sellado todavía".to_string())?;
+    let modelo = estado
+        .modelos
+        .iter()
+        .find(|m| m.id == modelo_id)
+        .ok_or_else(|| format!("«{modelo_id}» no está en el registro"))?
+        .clone();
+    agregar_capa_a_sellado(&estado.almacen, &modelo, indice_id, std::path::Path::new(&ruta)).await
+}
+
 /// El sellado de verdad. El paquete resultante lleva binario e int8 de cada
 /// modelo, las imágenes, el manifiesto, la cobertura y SHA256SUMS.
 async fn sellar(
@@ -1979,6 +2109,8 @@ pub fn run() {
             territorio_recientes_anadir,
             paquete_sellar_arrancar,
             paquete_sellar_progreso,
+            paquete_capas_pendientes,
+            paquete_agregar_capa,
             paquete_que_viaja,
             paquete_abrir,
             identidad_arrancar,

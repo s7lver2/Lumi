@@ -4,7 +4,7 @@
   "motor": "vlm",
   "pregunta": "Por la vegetación, el suelo y la construcción, ¿en qué clima está tomada esta foto? Responde solo con una de las opciones.",
   "etiquetas": ["tropical", "arido", "templado", "continental", "polar o alta montaña", "no se puede decir"],
-  "tipo": "filtra",
+  "tipo": "describe",
   "restriccion": "clima_koppen",
   "mapa": {
     "tropical": ["A"],

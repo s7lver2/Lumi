@@ -410,9 +410,9 @@ revisa si el tamaño molesta con corpus grandes.
 ### Corpus anotado con fecha (subsistema 5d)
 
 `reference_images` guarda `lat/lng/quadkey/fuente` y nada más, así que **estación** y **hora
-aparente** solo pueden describir, no filtrar: para acotar haría falta saber en qué fecha se tomó
-cada foto de referencia. Anotarla es trabajo del Indexer, cambia el formato `.lumidx` e invalida
-lo ya sellado, así que va en su propio ciclo.
+aparente** no tienen con qué contradecir a un candidato: para pesar una contradicción haría falta
+saber en qué fecha se tomó cada foto de referencia. Anotarla es trabajo del Indexer, cambia el
+formato `.lumidx` e invalida lo ya sellado, así que va en su propio ciclo.
 
 ### Topónimos contra un gazetteer
 

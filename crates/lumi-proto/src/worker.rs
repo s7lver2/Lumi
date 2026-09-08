@@ -54,6 +54,12 @@ pub struct Hipotesis {
     pub peso: f64,
     pub indice: String,
     pub autor: String,
+    /// La foto de referencia que sostiene esta hipótesis: el mismo candidato
+    /// que decide `indice`/`autor` (ver `lumi_index::agrupar::Grupo::imagen_id`).
+    /// `None` en el camino de un motor que resuelve por su cuenta
+    /// (`Evento::Resultado`), que no tiene fotos de corpus que enseñar.
+    #[serde(default)]
+    pub imagen_id: Option<i64>,
     /// Cuántas correspondencias sostienen esta coordenada. `None` significa
     /// que no pasó por verificación geométrica, no que sacara cero.
     #[serde(default)]
@@ -137,6 +143,15 @@ pub enum Msg {
     /// El motor contestó «no puedo». Es un RESULTADO, no una avería: no se
     /// reintenta, porque reintentarlo solo quema GPU.
     Fallo { id: i64, motivo: String },
+    /// Cierra los mensajes de UN trabajo. Solo la usa `crate::persistente`
+    /// (verificación/agentes en modo persistente, subsistema de rendimiento
+    /// configurable): un proceso persistente no cierra `stdout` entre
+    /// trabajos como sí hace el modo de una sola orden de hoy —ahí el fin de
+    /// trabajo es el EOF del proceso—, así que hace falta una marca explícita
+    /// para saber cuándo dejar de esperar más líneas de ese mismo trabajo. El
+    /// modo no persistente la ignora sin más (ningún `if let` de ese camino
+    /// la reconoce), así que emitirla siempre no le cambia el comportamiento.
+    Fin { id: i64 },
 }
 
 impl Msg {

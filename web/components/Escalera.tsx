@@ -31,20 +31,19 @@ export function Escalera() {
         className="font-mono text-[11px] uppercase tracking-wide text-subtle"
         style={visible ? { animation: "jg-reveal-up .7s cubic-bezier(.16,1,.3,1) both" } : { opacity: 0 }}
       >
-        meet lumi
+        Meet Lumi
       </span>
       <h2
         className="mt-2 text-[clamp(24px,3.4vw,36px)] font-semibold tracking-tight"
         style={visible ? { animation: "jg-reveal-up .7s cubic-bezier(.16,1,.3,1) both .05s" } : { opacity: 0 }}
       >
-        Un mecanismo, tres temperamentos
+        Lumen, The full family
       </h2>
       <p
         className="mt-3 max-w-[70ch] leading-relaxed text-muted"
         style={visible ? { animation: "jg-reveal-up .7s cubic-bezier(.16,1,.3,1) both .1s" } : { opacity: 0 }}
       >
-        La diferencia entre los tres no está en la arquitectura, sino en cuántos recuperadores
-        y verificadores compiten dentro — y cuánto se ajusta el círculo antes de cerrar.
+        This three models are our second generation models, part of the Lumen Generation, each one designed for a type of hardware and situation
       </p>
 
       <div className="mt-12 grid gap-5 sm:grid-cols-3">
@@ -95,30 +94,30 @@ function TarjetaNivel({
 
       <dl className="mt-5 flex flex-col gap-3 font-mono text-[13px]">
         <div className="flex items-baseline justify-between" style={filaEstilo(0.3 + i * 0.08)}>
-          <dt className="text-subtle">recuperan</dt>
+          <dt className="text-subtle">Recuperation</dt>
           <dd className="text-fg tabular-nums">{recuperan}</dd>
         </div>
         <div className="flex items-baseline justify-between" style={filaEstilo(0.36 + i * 0.08)}>
-          <dt className="text-subtle">verifican</dt>
+          <dt className="text-subtle">Geometrical</dt>
           <dd className="text-fg tabular-nums">{verifican}</dd>
         </div>
         <div className="flex items-baseline justify-between" style={filaEstilo(0.42 + i * 0.08)}>
-          <dt className="text-subtle">agentes</dt>
+          <dt className="text-subtle">Agents</dt>
           <dd className="text-fg tabular-nums">
             {n.agentes.length > 0
               ? agentesNum
               : n.cae_a
-                ? `hereda los de ${NOMBRE_CAIDA[n.cae_a] ?? n.cae_a}`
+                ? `Same as ${NOMBRE_CAIDA[n.cae_a] ?? n.cae_a}`
                 : 0}
           </dd>
         </div>
       </dl>
 
       <div className="mt-5 grid grid-cols-3 gap-2 border-t border-border pt-4">
-        {["latencia", "radio", "carga gpu"].map((etiqueta, j) => (
+        {["Latency", "Radious", "Gpu Load"].map((etiqueta, j) => (
           <div key={etiqueta} style={filaEstilo(0.56 + i * 0.08 + j * 0.04)}>
             <div className="font-mono text-[11px] text-subtle">—</div>
-            <div className="mt-0.5 text-[9.5px] text-subtle">{etiqueta} · pendiente de medir</div>
+            <div className="mt-0.5 text-[9.5px] text-subtle">{etiqueta} · benchmakrs soon</div>
           </div>
         ))}
       </div>

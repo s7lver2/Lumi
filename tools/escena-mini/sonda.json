@@ -1,0 +1,704 @@
+{
+  "apple_mac_mini_m1": {
+    "global": {
+      "tam": [
+        0.879,
+        0.152,
+        0.879
+      ],
+      "centro": [
+        0,
+        -0.006,
+        0
+      ]
+    }
+  },
+  "robotic_prosthetic_arm": {
+    "global": {
+      "tam": [
+        15.291,
+        54.33,
+        10.487
+      ],
+      "centro": [
+        0.767,
+        1.154,
+        0
+      ]
+    },
+    "huesos": [
+      {
+        "nombre": "_rootJoint",
+        "padre": "Object_5",
+        "hijos": [
+          "Bone_00"
+        ],
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "nombre": "Bone_00",
+        "padre": "_rootJoint",
+        "hijos": [
+          "Bone001_01"
+        ],
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "nombre": "Bone001_01",
+        "padre": "Bone_00",
+        "hijos": [
+          "Bone002_02"
+        ],
+        "pos": [
+          0,
+          0.1533,
+          0
+        ]
+      },
+      {
+        "nombre": "Bone002_02",
+        "padre": "Bone001_01",
+        "hijos": [
+          "Bone003_03",
+          "Bone006_07",
+          "Bone009_010",
+          "Bone012_013",
+          "Bone016_016"
+        ],
+        "pos": [
+          0,
+          0.2314,
+          0
+        ]
+      },
+      {
+        "nombre": "Bone003_03",
+        "padre": "Bone002_02",
+        "hijos": [
+          "Bone015_04"
+        ],
+        "pos": [
+          0.0208,
+          0.0291,
+          -0.0048
+        ]
+      },
+      {
+        "nombre": "Bone015_04",
+        "padre": "Bone003_03",
+        "hijos": [
+          "Bone004_05"
+        ],
+        "pos": [
+          0,
+          0.0181,
+          0
+        ]
+      },
+      {
+        "nombre": "Bone004_05",
+        "padre": "Bone015_04",
+        "hijos": [
+          "Bone005_06"
+        ],
+        "pos": [
+          0,
+          0.0191,
+          0
+        ]
+      },
+      {
+        "nombre": "Bone005_06",
+        "padre": "Bone004_05",
+        "hijos": [],
+        "pos": [
+          0,
+          0.0307,
+          0
+        ]
+      },
+      {
+        "nombre": "Bone006_07",
+        "padre": "Bone002_02",
+        "hijos": [
+          "Bone007_08"
+        ],
+        "pos": [
+          0.0076,
+          0.0896,
+          0.0024
+        ]
+      },
+      {
+        "nombre": "Bone007_08",
+        "padre": "Bone006_07",
+        "hijos": [
+          "Bone008_09"
+        ],
+        "pos": [
+          0,
+          0.0373,
+          0
+        ]
+      },
+      {
+        "nombre": "Bone008_09",
+        "padre": "Bone007_08",
+        "hijos": [],
+        "pos": [
+          0,
+          0.03,
+          0
+        ]
+      },
+      {
+        "nombre": "Bone009_010",
+        "padre": "Bone002_02",
+        "hijos": [
+          "Bone010_011"
+        ],
+        "pos": [
+          -0.0118,
+          0.0875,
+          0.0024
+        ]
+      },
+      {
+        "nombre": "Bone010_011",
+        "padre": "Bone009_010",
+        "hijos": [
+          "Bone011_012"
+        ],
+        "pos": [
+          0,
+          0.0349,
+          0
+        ]
+      },
+      {
+        "nombre": "Bone011_012",
+        "padre": "Bone010_011",
+        "hijos": [],
+        "pos": [
+          0,
+          0.0281,
+          0
+        ]
+      },
+      {
+        "nombre": "Bone012_013",
+        "padre": "Bone002_02",
+        "hijos": [
+          "Bone013_014"
+        ],
+        "pos": [
+          -0.0292,
+          0.0794,
+          0.0024
+        ]
+      },
+      {
+        "nombre": "Bone013_014",
+        "padre": "Bone012_013",
+        "hijos": [
+          "Bone014_015"
+        ],
+        "pos": [
+          0,
+          0.0279,
+          0
+        ]
+      },
+      {
+        "nombre": "Bone014_015",
+        "padre": "Bone013_014",
+        "hijos": [],
+        "pos": [
+          0,
+          0.0225,
+          0
+        ]
+      },
+      {
+        "nombre": "Bone016_016",
+        "padre": "Bone002_02",
+        "hijos": [
+          "Bone017_017"
+        ],
+        "pos": [
+          0.0306,
+          0.0858,
+          0.0013
+        ]
+      },
+      {
+        "nombre": "Bone017_017",
+        "padre": "Bone016_016",
+        "hijos": [
+          "Bone018_018"
+        ],
+        "pos": [
+          0,
+          0.0365,
+          0
+        ]
+      },
+      {
+        "nombre": "Bone018_018",
+        "padre": "Bone017_017",
+        "hijos": [],
+        "pos": [
+          0,
+          0.0294,
+          0
+        ]
+      }
+    ]
+  },
+  "server_racking_system": {
+    "global": {
+      "tam": [
+        0.799,
+        2.066,
+        1.138
+      ],
+      "centro": [
+        0,
+        1.17,
+        0.002
+      ]
+    },
+    "piezasGrandes": [
+      {
+        "nombre": "Box040_Black_Metal_Plate_0",
+        "padre": "Box040",
+        "tam": [
+          0.799,
+          2.066,
+          1.08
+        ],
+        "centro": [
+          0,
+          1.17,
+          -0.027
+        ],
+        "vol": 1.78
+      },
+      {
+        "nombre": "RackMount_Server028_Metal_0",
+        "padre": "RackMount_Server028",
+        "tam": [
+          0.648,
+          0.216,
+          0.978
+        ],
+        "centro": [
+          -0.002,
+          1.622,
+          0.038
+        ],
+        "vol": 0.14
+      },
+      {
+        "nombre": "RackMount_Server029_Metal_0",
+        "padre": "RackMount_Server029",
+        "tam": [
+          0.648,
+          0.216,
+          0.978
+        ],
+        "centro": [
+          0,
+          0.51,
+          0.038
+        ],
+        "vol": 0.14
+      },
+      {
+        "nombre": "RackMount_Server030_Metal_0",
+        "padre": "RackMount_Server030",
+        "tam": [
+          0.648,
+          0.216,
+          0.978
+        ],
+        "centro": [
+          0,
+          2.066,
+          0.038
+        ],
+        "vol": 0.14
+      },
+      {
+        "nombre": "RackMount_Server031_Metal_0",
+        "padre": "RackMount_Server031",
+        "tam": [
+          0.648,
+          0.216,
+          0.978
+        ],
+        "centro": [
+          0,
+          1.177,
+          0.038
+        ],
+        "vol": 0.14
+      },
+      {
+        "nombre": "RackMount_Server032_Metal_0",
+        "padre": "RackMount_Server032",
+        "tam": [
+          0.648,
+          0.216,
+          0.978
+        ],
+        "centro": [
+          0,
+          1.842,
+          0.038
+        ],
+        "vol": 0.14
+      },
+      {
+        "nombre": "RackMount_Server033_Metal_0",
+        "padre": "RackMount_Server033",
+        "tam": [
+          0.648,
+          0.216,
+          0.978
+        ],
+        "centro": [
+          -0.002,
+          1.398,
+          0.038
+        ],
+        "vol": 0.14
+      },
+      {
+        "nombre": "RackMount_Server034_Metal_0",
+        "padre": "RackMount_Server034",
+        "tam": [
+          0.648,
+          0.216,
+          0.978
+        ],
+        "centro": [
+          0,
+          0.955,
+          0.038
+        ],
+        "vol": 0.14
+      },
+      {
+        "nombre": "RackMount_Server035_Metal_0",
+        "padre": "RackMount_Server035",
+        "tam": [
+          0.648,
+          0.216,
+          0.978
+        ],
+        "centro": [
+          0,
+          0.733,
+          0.038
+        ],
+        "vol": 0.14
+      },
+      {
+        "nombre": "RackMount_Server036_Metal_0",
+        "padre": "RackMount_Server036",
+        "tam": [
+          0.648,
+          0.216,
+          0.978
+        ],
+        "centro": [
+          0,
+          0.29,
+          0.038
+        ],
+        "vol": 0.14
+      },
+      {
+        "nombre": "RackMount_Server028_Black_Metal_Plate_0",
+        "padre": "RackMount_Server028",
+        "tam": [
+          0.735,
+          0.216,
+          0.259
+        ],
+        "centro": [
+          -0.002,
+          1.622,
+          0.397
+        ],
+        "vol": 0.04
+      },
+      {
+        "nombre": "RackMount_Server033_Black_Metal_Plate_0",
+        "padre": "RackMount_Server033",
+        "tam": [
+          0.735,
+          0.216,
+          0.259
+        ],
+        "centro": [
+          -0.002,
+          1.398,
+          0.397
+        ],
+        "vol": 0.04
+      },
+      {
+        "nombre": "Rack_handles053_Chrome_0",
+        "padre": "Rack_handles053",
+        "tam": [
+          0.009,
+          0.171,
+          0.046
+        ],
+        "centro": [
+          -0.346,
+          1.618,
+          0.548
+        ],
+        "vol": 0
+      },
+      {
+        "nombre": "Box041_Black_Metal_Plate_0",
+        "padre": "Box041",
+        "tam": [
+          0.329,
+          0.205,
+          0.005
+        ],
+        "centro": [
+          0.154,
+          1.622,
+          0.524
+        ],
+        "vol": 0
+      },
+      {
+        "nombre": "Screwheads_108_Screws_0",
+        "padre": "Screwheads_108",
+        "tam": [
+          0.01,
+          0.011,
+          0.005
+        ],
+        "centro": [
+          0.347,
+          1.679,
+          0.529
+        ],
+        "vol": 0
+      },
+      {
+        "nombre": "Rack_handles054_Chrome_0",
+        "padre": "Rack_handles054",
+        "tam": [
+          0.009,
+          0.171,
+          0.046
+        ],
+        "centro": [
+          0.347,
+          1.618,
+          0.548
+        ],
+        "vol": 0
+      },
+      {
+        "nombre": "Plane037_Ribbon_Cable_0",
+        "padre": "Plane037",
+        "tam": [
+          0.045,
+          0.201,
+          0.074
+        ],
+        "centro": [
+          0.126,
+          1.622,
+          0.476
+        ],
+        "vol": 0
+      },
+      {
+        "nombre": "Screwheads_109_Screws_0",
+        "padre": "Screwheads_109",
+        "tam": [
+          0.01,
+          0.011,
+          0.005
+        ],
+        "centro": [
+          0.347,
+          1.557,
+          0.529
+        ],
+        "vol": 0
+      },
+      {
+        "nombre": "Screwheads_110_Screws_0",
+        "padre": "Screwheads_110",
+        "tam": [
+          0.01,
+          0.011,
+          0.005
+        ],
+        "centro": [
+          -0.346,
+          1.557,
+          0.529
+        ],
+        "vol": 0
+      },
+      {
+        "nombre": "Screwheads_111_Screws_0",
+        "padre": "Screwheads_111",
+        "tam": [
+          0.011,
+          0.009,
+          0.005
+        ],
+        "centro": [
+          -0.346,
+          1.679,
+          0.529
+        ],
+        "vol": 0
+      },
+      {
+        "nombre": "Screwheads_112_Screws_0",
+        "padre": "Screwheads_112",
+        "tam": [
+          0.011,
+          0.009,
+          0.005
+        ],
+        "centro": [
+          -0.346,
+          0.566,
+          0.529
+        ],
+        "vol": 0
+      },
+      {
+        "nombre": "Screwheads_113_Screws_0",
+        "padre": "Screwheads_113",
+        "tam": [
+          0.01,
+          0.011,
+          0.005
+        ],
+        "centro": [
+          0.347,
+          0.566,
+          0.529
+        ],
+        "vol": 0
+      },
+      {
+        "nombre": "Box042_Black_Metal_Plate_0",
+        "padre": "Box042",
+        "tam": [
+          0.639,
+          0.205,
+          0.005
+        ],
+        "centro": [
+          0,
+          0.51,
+          0.524
+        ],
+        "vol": 0
+      },
+      {
+        "nombre": "Rack_handles055_Chrome_0",
+        "padre": "Rack_handles055",
+        "tam": [
+          0.009,
+          0.171,
+          0.046
+        ],
+        "centro": [
+          0.347,
+          0.505,
+          0.548
+        ],
+        "vol": 0
+      },
+      {
+        "nombre": "Rack_handles056_Chrome_0",
+        "padre": "Rack_handles056",
+        "tam": [
+          0.009,
+          0.171,
+          0.046
+        ],
+        "centro": [
+          -0.346,
+          0.505,
+          0.548
+        ],
+        "vol": 0
+      }
+    ],
+    "totalMallas": 459,
+    "prefijos": [
+      [
+        "Rectangle#_Black_Metal_Plate_#",
+        74
+      ],
+      [
+        "Rectangle#_#_-_Default_#",
+        72
+      ],
+      [
+        "Rectangle#_blue_light_#",
+        72
+      ],
+      [
+        "Line#_Black_Metal_Plate_#",
+        72
+      ],
+      [
+        "Line#_Blue_Plastic_#",
+        72
+      ],
+      [
+        "Screwheads_#_Screws_#",
+        36
+      ],
+      [
+        "Rack_handles#_Chrome_#",
+        18
+      ],
+      [
+        "Box#_Black_Metal_Plate_#",
+        13
+      ],
+      [
+        "Plane#_Ribbon_Cable_#",
+        12
+      ],
+      [
+        "RackMount_Server#_Metal_#",
+        9
+      ],
+      [
+        "RackMount_Server#_Black_Metal_Plate_#",
+        9
+      ]
+    ]
+  }
+}

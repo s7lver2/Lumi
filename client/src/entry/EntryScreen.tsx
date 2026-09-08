@@ -8,6 +8,7 @@ import { ResolvedScreen } from "./ResolvedScreen";
 import { ChangePasswordForm } from "./ChangePasswordForm";
 import { WavesBackground } from "./WavesBackground";
 import { AsciiWavesBackground } from "./AsciiWavesBackground";
+import { leerFondoEntrada } from "../lib/apariencia";
 import type { AccessStatus } from "../lib/api";
 import { AjustesView } from "../settings/AjustesView";
 import { Icon } from "../ui/Icon";
@@ -47,7 +48,12 @@ export function EntryScreen({ onSignedIn, onOwnerKey }: {
   // #120: dos fondos posibles para variar, elegido una vez por apertura de
   // la app (no en cada render: `EntryScreen` no se remonta al cambiar de
   // vista, y recalcularlo entonces cambiaría el fondo a mitad de sesión).
-  const [ascii] = useState(() => Math.random() < 0.5);
+  // El ajuste de Personalización puede fijar uno de los dos; "aleatorio"
+  // (el valor por defecto) conserva el sorteo original.
+  const [ascii] = useState(() => {
+    const pref = leerFondoEntrada();
+    return pref === "aleatorio" ? Math.random() < 0.5 : pref === "ascii";
+  });
   const [resolved, setResolved] = useState<AccessStatus | null>(null);
 
   if (view === "ajustes") {

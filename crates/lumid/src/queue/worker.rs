@@ -74,6 +74,15 @@ impl Evento {
                 id,
                 motivo: "un trabajador de embebido mandó un veredicto de agente".into(),
             },
+            // ponytail: mismo caso — `Msg::Fin` es la marca de cierre de
+            // trabajo de `crate::persistente` (verificación/agentes
+            // persistentes), no algo que un trabajador de embebido deba
+            // mandar nunca.
+            Msg::Fin { id } => Evento::Fallo {
+                dispositivo: d,
+                id,
+                motivo: "un trabajador de embebido mandó una marca de fin de trabajo".into(),
+            },
         }
     }
 }

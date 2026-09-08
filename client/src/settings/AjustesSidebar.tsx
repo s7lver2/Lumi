@@ -1,12 +1,13 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { Icon, type IconName } from "../ui/Icon";
 
-export type AjustesSeccion = "general" | "actualizaciones" | "apariencia";
+export type AjustesSeccion = "general" | "actualizaciones" | "apariencia" | "personalizacion";
 
 const ITEMS: { id: AjustesSeccion; label: string; icon: IconName }[] = [
   { id: "general", label: "General", icon: "device" },
   { id: "actualizaciones", label: "Actualizaciones", icon: "boxes" },
   { id: "apariencia", label: "Apariencia", icon: "image" },
+  { id: "personalizacion", label: "Personalización", icon: "layers" },
 ];
 
 /** Mismo patrón visual que `profile/ProfileSidebar.tsx` (marcador

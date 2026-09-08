@@ -1,0 +1,17 @@
+{
+  "name": "escena-mini",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Herramienta de render, no parte del sitio: produce la secuencia de fotogramas del hero de /meetmini.",
+  "scripts": {
+    "capturar": "node capturar.mjs"
+  },
+  "dependencies": {
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.50.0",
+    "sharp": "^0.34.0"
+  }
+}

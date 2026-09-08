@@ -49,7 +49,19 @@ pub async fn afinar(
     dispositivo: &str,
     registro: &Path,
     pesos: &Path,
+    store: &crate::store::Store,
+    persistente: &crate::persistente::Persistente,
 ) -> Result<Vec<Afinado>> {
+    // Ajuste `verificacion_persistente` (`routes::rendimiento`): por defecto
+    // ("0" o ausente) el comportamiento es exactamente el de siempre, abajo.
+    // Activado, se reutiliza un proceso ya vivo en vez de lanzar uno nuevo
+    // por análisis — mismo protocolo de entrada/salida, solo cambia quién
+    // lo lanza y cuándo muere.
+    if store.get_meta("verificacion_persistente").as_deref() == Some("1") {
+        return afinar_persistente(nivel, consulta, candidatos, rutas, python, dispositivo, registro, pesos, persistente)
+            .await;
+    }
+
     let mut hijo = tokio::process::Command::new(python)
         .arg(crate::assets::ruta("workers/lumi_verify.py"))
         .env("LUMI_DEVICE", dispositivo)
@@ -131,12 +143,79 @@ pub async fn afinar(
         salida.as_ref().map(|s| s.code()),
     );
 
-    Ok(candidatos
+    Ok(construir_afinados(candidatos, rutas, &por_candidato))
+}
+
+/// El mismo trámite de siempre (mandar la orden, recoger un veredicto por
+/// candidato, arbitrar) pero contra un proceso ya vivo en vez de lanzar uno
+/// nuevo — `crate::persistente::Persistente::pedir` se encarga de lanzarlo si
+/// hace falta y de relanzarlo si murió a mitad de una petición anterior.
+async fn afinar_persistente(
+    nivel: &Nivel,
+    consulta: &str,
+    candidatos: Vec<Candidato>,
+    rutas: &[(i64, String)],
+    python: &Path,
+    dispositivo: &str,
+    registro: &Path,
+    pesos: &Path,
+    persistente: &crate::persistente::Persistente,
+) -> Result<Vec<Afinado>> {
+    let script = crate::assets::ruta("workers/lumi_verify.py");
+    let lista: Vec<serde_json::Value> = candidatos
+        .iter()
+        .zip(rutas.iter())
+        .map(|(c, (id, ruta))| serde_json::json!({ "id": id, "ruta": ruta, "lat": c.lat, "lng": c.lng }))
+        .collect();
+    let orden = serde_json::json!({
+        "tipo": "verificar",
+        "id": 0,
+        "consulta": consulta,
+        "candidatos": lista,
+        "verificadores": nivel.geometricos,
+    });
+    let envs: [(&str, &Path); 3] = [("LUMI_DEVICE", Path::new(dispositivo)), ("LUMI_REGISTRO_VERIF", registro), ("LUMI_PESOS", pesos)];
+
+    let mut por_candidato: std::collections::HashMap<i64, Vec<Veredicto>> = Default::default();
+    match persistente.pedir(&orden, python, &script, &envs).await {
+        Ok(msgs) => {
+            for msg in msgs {
+                if let lumi_proto::worker::Msg::Verificado { candidato, verificador, inliers, lat, lng, .. } = msg {
+                    por_candidato.entry(candidato).or_default().push(Veredicto { verificador, inliers, lat, lng });
+                }
+            }
+        }
+        // Mismo trato que el modo no persistente: un trabajador que no
+        // contesta no tumba el análisis, solo se queda sin verificación
+        // geométrica — y se registra, para que no sea indistinguible de un
+        // verificador que de verdad miró la foto y no encontró nada.
+        Err(e) => tracing::warn!("verificación geométrica persistente: {e}"),
+    }
+
+    let max_inliers = por_candidato.values().flatten().map(|v| v.inliers).max().unwrap_or(0);
+    tracing::info!(
+        "verificación geométrica (persistente): {} candidatos, {} verificadores, {} veredictos, máximo {} inliers (umbral {})",
+        candidatos.len(),
+        nivel.geometricos.len(),
+        por_candidato.values().map(|v| v.len()).sum::<usize>(),
+        max_inliers,
+        lumi_index::arbitro::UMBRAL_INLIERS,
+    );
+
+    Ok(construir_afinados(candidatos, rutas, &por_candidato))
+}
+
+fn construir_afinados(
+    candidatos: Vec<Candidato>,
+    rutas: &[(i64, String)],
+    por_candidato: &std::collections::HashMap<i64, Vec<Veredicto>>,
+) -> Vec<Afinado> {
+    candidatos
         .into_iter()
         .zip(rutas.iter())
         .map(|(candidato, (id, _))| {
             let ganador = por_candidato.get(id).and_then(|v| arbitrar(v));
             Afinado { candidato, ganador }
         })
-        .collect())
+        .collect()
 }

@@ -97,6 +97,7 @@ pub async fn candidatos(
             rusqlite::params![p.id],
             |r| {
                 Ok(Candidato {
+                    id: p.id,
                     lat: r.get(0)?,
                     lng: r.get(1)?,
                     quadkey: r.get(2)?,
@@ -142,6 +143,7 @@ pub fn hipotesis(cands: &[Candidato]) -> Vec<(Hipotesis, Vec<(f64, f64)>)> {
                     peso: if i == 0 { conf } else { g.peso },
                     indice: g.indice,
                     autor: g.autor,
+                    imagen_id: Some(g.imagen_id),
                     // El respaldo se rellena aparte, en `queue::mod`, que es
                     // quien tiene los veredictos del verificador:
                     // `agrupar::Grupo` no los conoce.

@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { Seccion } from "../admin/AdminPanel";
 import { api } from "../lib/api";
 import {
-  ESCALAS_INTERFAZ, leerEscalaInterfaz, leerReducirMovimiento, setEscalaInterfaz, setReducirMovimiento,
+  ESCALAS_INTERFAZ, leerEscalaInterfaz, leerFondoEntrada, leerReducirMovimiento,
+  setEscalaInterfaz, setFondoEntrada, setReducirMovimiento, type FondoEntrada,
 } from "../lib/apariencia";
 import { AjustesSidebar, type AjustesSeccion } from "./AjustesSidebar";
 import { ActualizacionesSeccion } from "./ActualizacionesSeccion";
+import { Icon } from "../ui/Icon";
 
 /** Ajustes de la app, no de la cuenta — por eso vive fuera de
  *  `profile/ProfileView.tsx` y no exige sesión. Mismo esqueleto de grid que
@@ -27,8 +29,10 @@ export function AjustesView({ onBack }: { onBack: () => void }) {
               <ActualizacionesSeccion />
             </div>
           </Seccion>
-        ) : (
+        ) : seccion === "apariencia" ? (
           <AparienciaPanel />
+        ) : (
+          <PersonalizacionPanel />
         )}
       </div>
     </div>
@@ -104,6 +108,45 @@ function AparienciaPanel() {
               {pct}%
             </button>
           ))}
+        </div>
+      </div>
+    </Seccion>
+  );
+}
+
+const OPCIONES_FONDO: { id: FondoEntrada; label: string; hint: string }[] = [
+  { id: "aleatorio", label: "Aleatorio", hint: "Uno distinto cada vez que abres Lumi." },
+  { id: "ascii", label: "Trama ASCII", hint: "Olas hechas de caracteres, en movimiento." },
+  { id: "olas", label: "Olas", hint: "Líneas onduladas animadas." },
+];
+
+function PersonalizacionPanel() {
+  const [fondo, setFondo] = useState<FondoEntrada>(leerFondoEntrada());
+
+  return (
+    <Seccion titulo="Personalización" grupo="Ajustes">
+      <div className="rounded-card border border-border bg-panel p-[13px_16px]">
+        <span className="text-[11.5px] text-fg">
+          Fondo de la pantalla de entrada
+          <small className="mt-0.5 block text-[10px] text-subtle">Se aplica la próxima vez que abras Lumi.</small>
+        </span>
+        <div className="mt-3 flex flex-col gap-1.5">
+          {OPCIONES_FONDO.map((o) => {
+            const on = o.id === fondo;
+            return (
+              <button key={o.id} onClick={() => { setFondo(o.id); setFondoEntrada(o.id); }}
+                className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left
+                  transition-colors duration-300 ease-expo ${
+                    on ? "border-accent bg-accent/10" : "border-border hover:border-white/20"
+                  }`}>
+                <span className={`text-[11.5px] ${on ? "text-fg" : "text-muted"}`}>
+                  {o.label}
+                  <small className="mt-0.5 block text-[10px] text-subtle">{o.hint}</small>
+                </span>
+                {on && <Icon name="check" size={13} className="shrink-0 text-accent" />}
+              </button>
+            );
+          })}
         </div>
       </div>
     </Seccion>

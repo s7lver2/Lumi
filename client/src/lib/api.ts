@@ -328,6 +328,10 @@ export interface Hipotesis {
   /** No es una probabilidad: cuánto pesa este grupo frente a los demás. */
   peso: number;
   indice: string; autor: string;
+  /** La foto de referencia que sostiene esta hipótesis — `null` en el camino
+   *  de un motor que resuelve por su cuenta (sin candidatos de corpus).
+   *  `GET /v1/reference-images/{imagen_id}/thumb` la sirve. */
+  imagen_id: number | null;
   /** Cuántas correspondencias sostienen esta coordenada. `null` significa que
    *  no pasó por verificación geométrica, no que sacara cero. */
   inliers: number | null;
@@ -354,6 +358,8 @@ export interface Analysis {
    *  `Hipotesis.inliers`/`.verificador`: `null` significa que no pasó por
    *  verificación, no que sacara cero. */
   result_inliers: number | null; result_verificador: string | null;
+  /** La foto de referencia de la principal, ver `Hipotesis.imagen_id`. */
+  result_imagen_id: number | null;
   /** Las alternativas. La principal NO está aquí, sigue en result_*. */
   hypotheses: Hipotesis[];
   /** El nivel que realmente corrió si hubo descenso por capas que faltaban.

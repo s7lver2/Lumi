@@ -10,6 +10,7 @@ mod logging;
 mod mantenimiento;
 mod master;
 mod perfil;
+mod persistente;
 mod politicas;
 mod projects;
 mod qdrant;
@@ -275,6 +276,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/hardware", get(routes::hardware::listar))
         .route("/v1/admin/hardware/:index", axum::routing::patch(routes::hardware::aplicar))
         .route("/v1/admin/hardware/cpu", get(routes::hardware_cpu::leer).patch(routes::hardware_cpu::aplicar))
+        .route("/v1/admin/rendimiento", get(routes::rendimiento::get).patch(routes::rendimiento::patch))
         .route("/v1/admin/actualizacion", get(routes::actualizacion::get))
         .route("/v1/admin/actualizacion/comprobar", post(routes::actualizacion::comprobar_ahora))
         .route("/v1/admin/actualizacion/aplicar", post(routes::actualizacion::aplicar))
@@ -347,6 +349,7 @@ async fn main() -> anyhow::Result<()> {
             get(routes::images::serve_full).delete(routes::images::remove),
         )
         .route("/v1/images/:id/thumb", get(routes::images::serve_thumb))
+        .route("/v1/reference-images/:id/thumb", get(routes::reference_images::serve_thumb))
         .route("/v1/cases/:id/images/reuse", post(routes::images::reuse))
         .route("/v1/me/usage", get(routes::images::my_usage))
         .route(

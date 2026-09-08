@@ -15,7 +15,7 @@ use lumi_proto::api::{Analysis, AnalysisReq};
 
 const COLS: &str = "id, case_id, model, state, error, result_lat, result_lng,
                     result_radius_m, result_confidence, created_at, finished_at, nivel_efectivo,
-                    result_inliers, result_verificador";
+                    result_inliers, result_verificador, result_imagen_id";
 
 fn image_ids(c: &rusqlite::Connection, analysis_id: i64) -> Vec<i64> {
     let Ok(mut q) = c.prepare("SELECT image_id FROM analysis_images WHERE analysis_id = ?1") else {
@@ -45,6 +45,7 @@ fn row_to_analysis(r: &rusqlite::Row) -> rusqlite::Result<Analysis> {
         finished_at: r.get(10)?,
         result_inliers: r.get(12)?,
         result_verificador: r.get(13)?,
+        result_imagen_id: r.get(14)?,
     })
 }
 
@@ -52,7 +53,7 @@ fn row_to_analysis(r: &rusqlite::Row) -> rusqlite::Result<Analysis> {
 /// hay ninguna: el cliente no debería tener dos casos donde hay uno.
 fn hypotheses(c: &rusqlite::Connection, analysis_id: i64) -> Vec<lumi_proto::worker::Hipotesis> {
     let Ok(mut q) = c.prepare(
-        "SELECT lat, lng, radio_m, peso, indice, autor, inliers, verificador, motivo_agente
+        "SELECT lat, lng, radio_m, peso, indice, autor, inliers, verificador, motivo_agente, imagen_id
            FROM analysis_hypotheses WHERE analysis_id = ?1 ORDER BY orden",
     ) else {
         return vec![];
@@ -68,6 +69,7 @@ fn hypotheses(c: &rusqlite::Connection, analysis_id: i64) -> Vec<lumi_proto::wor
             inliers: r.get::<_, Option<i64>>(6)?.map(|n| n as u32),
             verificador: r.get(7)?,
             motivo_agente: r.get(8)?,
+            imagen_id: r.get(9)?,
         })
     })
     .map(|it| it.flatten().collect())
@@ -250,6 +252,7 @@ pub async fn create(
         result_confidence: None,
         result_inliers: None,
         result_verificador: None,
+        result_imagen_id: None,
         image_ids: req.image_ids,
         hypotheses: vec![],
         nivel_efectivo: None,

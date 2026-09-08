@@ -2,7 +2,7 @@ import { HeroOrbita } from "../components/HeroOrbita";
 import { Sobrevuelo } from "../components/Sobrevuelo";
 import { Escalera } from "../components/Escalera";
 import { VideoDemo } from "../components/VideoDemo";
-import { Agentes } from "../components/Agentes";
+import { AgentesVisual } from "../components/AgentesVisual";
 import { Confianza } from "../components/Confianza";
 import { Cobertura } from "../components/Cobertura";
 import { SeparadorSeccion } from "../components/SeparadorSeccion";
@@ -23,20 +23,20 @@ export default function Home() {
 
         <div className="relative z-10 mx-auto w-full max-w-[720px] px-7 text-center">
           <span className="jg-hero-in block font-mono text-[11px] uppercase tracking-[.14em] text-subtle">
-            geolocalización forense · autoalojada
+            The Next Gen Of Forensic Research · Completely Free
           </span>
           <h1
             className="jg-hero-in mt-4 text-[clamp(36px,6.6vw,66px)] font-semibold leading-[1.04] tracking-tight"
             style={{ animationDelay: ".07s" }}
           >
-            Lumi. <em className="italic text-muted">Give it a photo — it tells you <PalabraRotativa />.</em>
+            Lumi. <em className="italic text-muted">Give Me A Image We Find Out <PalabraRotativa />.</em>
           </h1>
           <p
             className="jg-hero-in mx-auto mt-6 max-w-[48ch] leading-relaxed text-muted"
             style={{ animationDelay: ".16s" }}
           >
-            Lumi es una herramienta forense pensada para la deteccion, reconocimiento
-            y extraccion de informacion de imagenes. Autohosteada y completamente gratis
+            Lumi is a forense toolkit designed for detection, recon, and extraction
+            of information from images, completely free and self-hosted
           </p>
 
           <div className="jg-hero-in mt-8 flex flex-wrap items-start justify-center gap-3" style={{ animationDelay: ".24s" }}>
@@ -45,18 +45,18 @@ export default function Home() {
               className="jg-micro jg-micro-scale rounded-card border border-border px-4 py-2 text-[13px] font-medium text-fg hover:border-subtle hover:bg-elevated"
               href="#modelos"
             >
-              Conocer los modelos
-            </a>
+              Meet The Family
+            </a>  
             <a
               className="jg-micro jg-micro-scale rounded-card border border-border px-4 py-2 text-[13px] font-medium text-fg hover:border-subtle hover:bg-elevated"
-              href="#cobertura"
+              href="/indexado#mapa"
             >
-              Ver el mapa de cobertura
+              Open Map
             </a>
           </div>
 
           <p className="jg-hero-in mt-6 font-mono text-[11px] text-subtle" style={{ animationDelay: ".32s" }}>
-            local hosted — sin cuentas
+            Free - Self hosted
           </p>
         </div>
       </section>
@@ -69,11 +69,11 @@ export default function Home() {
 
       <SeparadorSeccion />
 
-      <VideoDemo />
+      <AgentesVisual />
 
       <SeparadorSeccion />
 
-      <Agentes />
+      <VideoDemo />
 
       <SeparadorSeccion />
 

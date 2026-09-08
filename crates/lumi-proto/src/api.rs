@@ -491,6 +491,29 @@ pub struct ProviderTokenReq {
     pub token: Option<String>,
 }
 
+/// Los dos interruptores de "proceso persistente" para verificación
+/// geométrica y agentes — independientes entre sí porque su huella de
+/// RAM/VRAM es muy distinta (tiny-roma es ligero; el paquete de agentes con
+/// VLM+OCR+profundidad es pesado). `false` en ambos (el valor por defecto) es
+/// el comportamiento de siempre: un proceso nuevo por análisis, sin huella en
+/// reposo. La descripción humana de la contrapartida viaja en la propia
+/// respuesta — mismo principio que el `reason` de la matriz de capacidades —
+/// para que una UI que algún día lea esto no tenga que inventar el texto.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RendimientoSettings {
+    pub verificacion_persistente: bool,
+    pub verificacion_persistente_desc: String,
+    pub agentes_persistente: bool,
+    pub agentes_persistente_desc: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PatchRendimientoReq {
+    /// `None` no toca ese ajuste — mismo patrón que `PatchLogSettingsReq`.
+    pub verificacion_persistente: Option<bool>,
+    pub agentes_persistente: Option<bool>,
+}
+
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -815,6 +838,9 @@ pub struct Analysis {
     pub result_inliers: Option<u32>,
     #[serde(default)]
     pub result_verificador: Option<String>,
+    /// La foto de referencia de la principal, ver `Hipotesis::imagen_id`.
+    #[serde(default)]
+    pub result_imagen_id: Option<i64>,
     /// Siempre una imagen hoy. La lista existe desde el primer día para que la
     /// cola no haya que rehacerla cuando un análisis agrupe varias tomas.
     pub image_ids: Vec<i64>,

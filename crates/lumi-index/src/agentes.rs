@@ -1,16 +1,18 @@
 //! Un agente mira la foto de consulta y dice algo sobre ella. Este módulo es
 //! lo que se hace con lo que dijo.
 //!
-//! Dos reglas que no se negocian, y las dos dicen lo mismo —nunca cero
-//! resultados por culpa de una conjetura:
+//! Ningún agente descarta un candidato: todos describen, y punto. Una
+//! descripción que contradice a un candidato le baja la confianza en vez de
+//! tumbarlo — nunca cero resultados por culpa de una conjetura:
 //!
-//! 1. **Un candidato con `UMBRAL_INLIERS` correspondencias o más no lo tumba
+//! 1. **Un candidato con `UMBRAL_INLIERS` correspondencias o más no lo penaliza
 //!    ningún agente.** Cientos de puntos que RANSAC ha confirmado son mejor
 //!    prueba que lo que un modelo cree leer en un cartel. Sobre los que la
-//!    geometría NO confirmó, el agente sí decide: ahí es la única señal que hay.
-//! 2. **Si las restricciones vacían la lista, se devuelve sin filtrar y se
-//!    dice.** Es la postura que el 5b tomó cuando ningún verificador llegaba al
-//!    umbral.
+//!    geometría NO confirmó, el agente sí pesa: ahí es la única señal que hay.
+//! 2. **Cada agente que contradice multiplica el factor por `PENALIZACION`**,
+//!    así que dos contradicciones pesan más que una — con un suelo
+//!    (`FACTOR_MINIMO`) para que la compuesta nunca llegue a cero: nada
+//!    desaparece del todo por una conjetura, ni por redondeo.
 //!
 //! Y una tercera que es de la misma familia: el que no sabe no castiga. Un
 //! agente por debajo de su umbral de confianza, una etiqueta que no está en su
@@ -37,7 +39,9 @@ pub struct Agente {
     pub pregunta: String,
     /// El conjunto cerrado de respuestas válidas.
     pub etiquetas: Vec<String>,
-    /// `filtra` o `describe`.
+    /// Metadato informativo — hoy siempre `describe`, ningún agente filtra.
+    /// Se conserva el campo (JSON, proto, columna) porque quitarlo es una
+    /// migración que nadie pidió; el código ya no rama sobre él.
     pub tipo: String,
     /// `pais`, `lado_conduccion` o `clima_koppen`. Vacío en los descriptivos.
     #[serde(default)]
@@ -58,9 +62,20 @@ pub struct Veredicto {
     pub confianza: f64,
 }
 
-/// Qué le pasa a un candidato. `factor` es multiplicativo sobre su peso; `0.0`
-/// significa que se cae, y entonces `motivo` trae la frase que el investigador
-/// va a leer.
+/// Cuánto pesa un mismatch con un agente. Compuesto (mismatches múltiples se
+/// multiplican) nunca cae por debajo de `FACTOR_MINIMO`: es un castigo fuerte,
+/// no un borrado.
+const PENALIZACION: f64 = 0.1;
+
+/// Suelo del factor compuesto. Existe para que ningún candidato desaparezca
+/// funcionalmente por redondeo de punto flotante o por pantalla (un "0%" se
+/// lee como descartado aunque el candidato siga en la lista) — nada se filtra
+/// de verdad, así que nada debería parecer que se filtró.
+const FACTOR_MINIMO: f64 = 0.01;
+
+/// Qué le pasa a un candidato. `factor` es multiplicativo sobre su peso —
+/// nunca `0.0`, porque ningún agente descarta— y `motivo` trae la frase que
+/// el investigador va a leer cuando `factor < 1.0`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ajuste {
     pub factor: f64,
@@ -71,9 +86,6 @@ pub struct Ajuste {
 pub struct Resultado {
     /// Uno por candidato, en el mismo orden en que entraron.
     pub ajustes: Vec<Ajuste>,
-    /// Saltó la regla 2: todo se caía, así que no se filtró nada. El cliente
-    /// lo dice en la cabecera del panel.
-    pub sin_filtrar: bool,
 }
 
 /// Los motores que hacen falta para que estos agentes puedan correr de
@@ -119,9 +131,6 @@ pub fn aplicar(
 
         for v in veredictos {
             let Some(a) = agentes.iter().find(|a| a.id == v.agente) else { continue };
-            if a.tipo != "filtra" {
-                continue;
-            }
             if v.confianza < a.umbral_confianza {
                 continue; // se abstiene
             }
@@ -140,20 +149,14 @@ pub fn aplicar(
         if motivos.is_empty() || protegido {
             ajustes.push(Ajuste { factor: 1.0, motivo: None });
         } else {
-            ajustes.push(Ajuste { factor: 0.0, motivo: Some(motivos.join("; ")) });
+            // Compuesto: cada contradicción independiente multiplica, con
+            // suelo para que nunca llegue a "0%" aunque nada se descarte.
+            let factor = PENALIZACION.powi(motivos.len() as i32).max(FACTOR_MINIMO);
+            ajustes.push(Ajuste { factor, motivo: Some(motivos.join("; ")) });
         }
     }
 
-    // Regla 2.
-    let sin_filtrar = !ajustes.is_empty() && ajustes.iter().all(|a| a.factor == 0.0);
-    if sin_filtrar {
-        for a in &mut ajustes {
-            a.factor = 1.0;
-            a.motivo = None;
-        }
-    }
-
-    Resultado { ajustes, sin_filtrar }
+    Resultado { ajustes }
 }
 
 #[cfg(test)]
@@ -167,7 +170,7 @@ mod tests {
             motor: "ocr".into(),
             pregunta: String::new(),
             etiquetas: vec!["griego".into(), "latino".into()],
-            tipo: "filtra".into(),
+            tipo: "describe".into(),
             restriccion: "pais".into(),
             mapa: [("griego".to_string(), vec!["GRC".to_string(), "CYP".to_string()])]
                 .into_iter()
@@ -183,7 +186,7 @@ mod tests {
             motor: "vlm".into(),
             pregunta: "…".into(),
             etiquetas: vec!["banda azul UE".into()],
-            tipo: "filtra".into(),
+            tipo: "describe".into(),
             restriccion: "pais".into(),
             mapa: [("banda azul UE".to_string(), vec!["GRC".to_string(), "ESP".to_string()])]
                 .into_iter()
@@ -218,20 +221,18 @@ mod tests {
     fn sin_veredictos_no_se_toca_nada() {
         let r = aplicar(&[idioma()], &[], &[(en("NOR"), None), (en("GRC"), None)]);
         assert!(r.ajustes.iter().all(|a| a.factor == 1.0 && a.motivo.is_none()));
-        assert!(!r.sin_filtrar);
     }
 
     #[test]
-    fn el_que_incumple_y_no_tiene_geometria_se_cae() {
+    fn el_que_incumple_y_no_tiene_geometria_se_penaliza_sin_caerse() {
         let r = aplicar(
             &[idioma()],
             &[dice("idioma", "griego", 0.9)],
             &[(en("GRC"), None), (en("NOR"), None)],
         );
         assert_eq!(r.ajustes[0].factor, 1.0);
-        assert_eq!(r.ajustes[1].factor, 0.0);
+        assert_eq!(r.ajustes[1].factor, PENALIZACION);
         assert!(r.ajustes[1].motivo.as_deref().unwrap().contains("griego"));
-        assert!(!r.sin_filtrar);
     }
 
     #[test]
@@ -270,33 +271,51 @@ mod tests {
     }
 
     #[test]
-    fn un_agente_descriptivo_nunca_filtra() {
+    fn un_agente_sin_restriccion_nunca_penaliza() {
+        // "hora" describe pero no restringe nada (restriccion/mapa vacíos):
+        // no tiene con qué contradecir a un candidato.
         let r = aplicar(&[hora()], &[dice("hora", "mediodía", 1.0)], &[(en("NOR"), None)]);
         assert_eq!(r.ajustes[0].factor, 1.0);
     }
 
     #[test]
-    fn si_se_caen_todos_se_devuelve_sin_filtrar_y_se_dice() {
+    fn si_incumplen_todos_no_se_resetea_a_uno() {
+        // Ya no hay "regla 2": al no filtrarse nunca de verdad, no hace falta
+        // una vía de escape para cero resultados — cada uno se queda con su
+        // penalización.
         let r = aplicar(
             &[idioma()],
             &[dice("idioma", "griego", 0.9)],
             &[(en("NOR"), None), (en("SWE"), None)],
         );
-        assert!(r.sin_filtrar);
-        assert!(r.ajustes.iter().all(|a| a.factor == 1.0));
+        assert!(r.ajustes.iter().all(|a| a.factor == PENALIZACION));
     }
 
     #[test]
-    fn dos_restricciones_de_pais_se_intersecan_y_no_se_promedian() {
-        // Grecia cumple las dos; España cumple la matrícula y no el idioma, y
-        // eso basta para caerse: no hay media entre «sí» y «no».
+    fn dos_contradicciones_independientes_componen_multiplicativamente() {
+        // Grecia cumple las dos; España cumple la matrícula y no el idioma
+        // (una contradicción); Noruega no cumple ninguna (dos contradicciones
+        // independientes, que pesan más que una sola).
         let r = aplicar(
             &[idioma(), matricula()],
             &[dice("idioma", "griego", 0.9), dice("matricula", "banda azul UE", 0.9)],
-            &[(en("GRC"), None), (en("ESP"), None)],
+            &[(en("GRC"), None), (en("ESP"), None), (en("NOR"), None)],
         );
         assert_eq!(r.ajustes[0].factor, 1.0);
-        assert_eq!(r.ajustes[1].factor, 0.0);
+        assert_eq!(r.ajustes[1].factor, PENALIZACION);
+        assert_eq!(r.ajustes[2].factor, PENALIZACION * PENALIZACION);
+    }
+
+    #[test]
+    fn el_suelo_evita_que_muchas_contradicciones_lleguen_a_cero() {
+        let muchos: Vec<Agente> = (0..5)
+            .map(|i| Agente { id: format!("a{i}"), ..idioma() })
+            .collect();
+        let veredictos: Vec<Veredicto> =
+            muchos.iter().map(|a| dice(&a.id, "griego", 0.9)).collect();
+        let r = aplicar(&muchos, &veredictos, &[(en("NOR"), None)]);
+        assert_eq!(r.ajustes[0].factor, FACTOR_MINIMO);
+        assert!(r.ajustes[0].factor > 0.0);
     }
 
     #[test]
@@ -305,7 +324,6 @@ mod tests {
         let sin = Atributos::default();
         let r = aplicar(&[idioma()], &[dice("idioma", "griego", 0.9)], &[(sin, None)]);
         assert_eq!(r.ajustes[0].factor, 1.0);
-        assert!(!r.sin_filtrar);
     }
 
     #[test]

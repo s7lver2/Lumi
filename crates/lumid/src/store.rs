@@ -432,6 +432,13 @@ fn migrate(c: &Connection) {
         // verificación geométrica" no era honesto, era un hueco de esquema.
         ("analyses", "result_inliers", "INTEGER"),
         ("analyses", "result_verificador", "TEXT"),
+        // La foto de referencia de la principal y de cada alternativa: hasta
+        // ahora una hipótesis no llevaba forma de enseñar la foto que la
+        // sostiene, solo sus coordenadas. `NULL` en filas de antes de este
+        // cambio significa «no se guardó», no «no tenía» — un análisis viejo
+        // simplemente no ofrece foto de comparación.
+        ("analyses", "result_imagen_id", "INTEGER"),
+        ("analysis_hypotheses", "imagen_id", "INTEGER"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }

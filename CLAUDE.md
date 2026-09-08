@@ -83,9 +83,10 @@ indexer/               Lumi Indexer's Tauri v2 + React + Tailwind app (independe
 workers/               Python inference workers — the Rust↔Python boundary is explicit:
                        lumi_worker.py (reference geolocation stub), lumi_embed.py (embedding)
 registros/             modelos, verificadores, motores y agentes — datos, no código. `registros/geo/`
-                       trae además los datasets offline (países, Köppen) que los agentes que filtran
-                       necesitan; se publican ausentes y sin ellos el agente se abstiene. Rellenar
-                       fichero_url/licencia/sha256 sigue siendo manual, pero descargar, aceptar la
+                       trae además los datasets offline (países, Köppen) que los agentes con
+                       restricción geográfica necesitan para penalizar la confianza de un candidato
+                       que los contradice; se publican ausentes y sin ellos el agente se abstiene.
+                       Rellenar fichero_url/licencia/sha256 sigue siendo manual, pero descargar, aceptar la
                        licencia y verificar ya no lo es: es la pantalla de Modelos (3a)
 tools/build.py          dev orchestration (see Commands)
 tools/package.py        zips everything not excluded by .gitignore

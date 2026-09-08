@@ -11,7 +11,9 @@ export function Nav() {
   const [scrolled, setScrolled] = useState(false);
   const [progreso, setProgreso] = useState(0);
   const [abierto, setAbierto] = useState(false);
+  const [abiertoCapacidades, setAbiertoCapacidades] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const wrapCapacidadesRef = useRef<HTMLDivElement>(null);
   const version = ultimaVersion();
 
   useEffect(() => {
@@ -28,6 +30,7 @@ export function Nav() {
   useEffect(() => {
     function fuera(e: MouseEvent) {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setAbierto(false);
+      if (wrapCapacidadesRef.current && !wrapCapacidadesRef.current.contains(e.target as Node)) setAbiertoCapacidades(false);
     }
     document.addEventListener("click", fuera);
     return () => document.removeEventListener("click", fuera);
@@ -83,6 +86,47 @@ export function Nav() {
                 <div className="flex-1">
                   <div className="text-[13px] text-fg">Lumi Vision</div>
                   <div className="text-[11px] text-subtle">competencia entre varios · coste alto</div>
+                </div>
+              </a>
+            </div>
+          )}
+        </div>
+        <div ref={wrapCapacidadesRef} className="relative">
+          <button
+            type="button"
+            className="jg-micro flex items-center gap-1 hover:text-fg"
+            aria-expanded={abiertoCapacidades}
+            onClick={(e) => {
+              e.stopPropagation();
+              setAbiertoCapacidades((v) => !v);
+            }}
+          >
+            Capacidades
+            <svg className={`h-2 w-2 transition-transform duration-200 ${abiertoCapacidades ? "rotate-180" : ""}`} viewBox="0 0 8 8" fill="none">
+              <path d="M1.5 2.5L4 5.5L6.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          {abiertoCapacidades && (
+            <div className="absolute left-0 top-full mt-3 w-[280px] rounded-card border border-border bg-panel p-1.5 shadow-xl">
+              <a className="jg-micro flex items-center gap-3 rounded-[8px] px-3 py-2.5 hover:bg-elevated" href="/#agentes">
+                <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center text-[15px] text-accent">✦</span>
+                <div className="flex-1">
+                  <div className="text-[13px] text-fg">Geolocalización</div>
+                  <div className="text-[11px] text-subtle">idioma, señalética, contexto de calle</div>
+                </div>
+              </a>
+              <a className="jg-micro flex items-center gap-3 rounded-[8px] px-3 py-2.5 hover:bg-elevated" href="/#agentes">
+                <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center text-[15px] text-accent">✦</span>
+                <div className="flex-1">
+                  <div className="text-[13px] text-fg">Vehículos</div>
+                  <div className="text-[11px] text-subtle">matrícula, marca y modelo · v2.1</div>
+                </div>
+              </a>
+              <a className="jg-micro flex items-center gap-3 rounded-[8px] px-3 py-2.5 hover:bg-elevated" href="/#agentes">
+                <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center text-[15px] text-accent">✦</span>
+                <div className="flex-1">
+                  <div className="text-[13px] text-fg">Naturaleza</div>
+                  <div className="text-[11px] text-subtle">especie y hábitat probable · v2.1</div>
                 </div>
               </a>
             </div>

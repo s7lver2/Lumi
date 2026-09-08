@@ -1,0 +1,45 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>escena mini</title>
+<style>html,body{margin:0;background:#0e0f11;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "/node_modules/three/build/three.module.js",
+    "three/addons/": "/node_modules/three/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { montar } from "/escena.mjs";
+
+const params = new URLSearchParams(location.search);
+const ANCHO = +(params.get("w") ?? 1280);
+const ALTO = +(params.get("h") ?? 720);
+
+const lienzo = document.createElement("canvas");
+document.body.append(lienzo);
+
+// `preserveDrawingBuffer` para poder leer el fotograma con toDataURL después
+// de renderizar; sin esto el buffer llega vacío en la captura.
+const render = new THREE.WebGLRenderer({ canvas: lienzo, antialias: true, preserveDrawingBuffer: true });
+render.setPixelRatio(1);
+render.setSize(ANCHO, ALTO, false);
+render.shadowMap.enabled = true;
+render.shadowMap.type = THREE.PCFSoftShadowMap;
+render.toneMapping = THREE.ACESFilmicToneMapping;
+render.toneMappingExposure = 1.05;
+
+const { escena, camara, aplicarT } = await montar(ANCHO, ALTO);
+
+// La captura llama a esto y luego lee el lienzo. Nada de bucle de animación:
+// el tiempo lo manda quien captura, para que el fotograma N sea siempre
+// idéntico corrida tras corrida.
+window.pintar = (t) => {
+  aplicarT(t);
+  render.render(escena, camara);
+  return true;
+};
+window.listo = true;
+</script>

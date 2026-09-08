@@ -164,6 +164,17 @@ pub struct Queue {
     pub(crate) recursos_geo: Mutex<Vec<lumi_index::geo::RecursoGeo>>,
     /// No se persiste: si el daemon se cae, el análisis se rehace.
     vectores: Mutex<VectoresPorAnalisis>,
+    /// Proceso persistente de verificación geométrica — solo se usa si el
+    /// ajuste `verificacion_persistente` (`routes::rendimiento`) está
+    /// activado; si no, `verificar::afinar` sigue lanzando uno nuevo por
+    /// análisis como siempre. Arranque perezoso: no existe hasta el primer
+    /// `pedir`, así que activar el ajuste sin usarlo nunca no gasta VRAM.
+    verif_persistente: crate::persistente::Persistente,
+    /// Igual que `verif_persistente`, para agentes (`agentes_persistente`).
+    /// Aparte porque su huella de RAM/VRAM es muy distinta (VLM+OCR+
+    /// profundidad frente a tiny-roma) y el operador puede querer activar
+    /// solo uno de los dos según cuánta memoria tenga libre.
+    agentes_persistente: crate::persistente::Persistente,
 }
 
 /// Mientras esto viva, su dueño cuenta como conectado. Se suelta cuando el
@@ -240,6 +251,8 @@ impl Queue {
             motores: Mutex::new(lumi_index::registro::cargar_motores(&crate::assets::ruta("registros/motores"))),
             recursos_geo: Mutex::new(lumi_index::geo::cargar_recursos(&crate::assets::ruta("registros/geo"))),
             vectores: Mutex::new(HashMap::new()),
+            verif_persistente: crate::persistente::Persistente::nuevo("verificación"),
+            agentes_persistente: crate::persistente::Persistente::nuevo("agentes"),
         });
 
         // No se lanzan aquí: el vigilante del bucle ve que faltan todos y los
@@ -698,8 +711,17 @@ impl Queue {
                                 &dispositivo,
                                 &registro_verif,
                                 &pesos,
+                                &self.store,
+                                &self.verif_persistente,
                             ),
-                            crate::agentar::preguntar(&agentes_del_nivel, &consulta, &python, &pesos),
+                            crate::agentar::preguntar(
+                                &agentes_del_nivel,
+                                &consulta,
+                                &python,
+                                &pesos,
+                                &self.store,
+                                &self.agentes_persistente,
+                            ),
                         );
                         let afinados = afinados.unwrap_or_default();
                         // Los que ningún verificador respaldó se caen. Si se
@@ -770,16 +792,20 @@ impl Queue {
                                 Some((clave(c.lat, c.lng), a.motivo.clone()?))
                             })
                             .collect();
-                        let antes_de_agentes = usar.len();
+                        // Ningún agente descarta: el factor multiplica la
+                        // similitud del candidato (lo que pesa en el
+                        // agrupado y en la confianza final) en vez de
+                        // sacarlo de la lista.
                         let usar: Vec<_> = usar
                             .iter()
                             .zip(veredicto_final.ajustes.iter())
-                            .filter(|(_, a)| a.factor > 0.0)
-                            .map(|(c, _)| c.clone())
+                            .map(|(c, a)| lumi_index::agrupar::Candidato {
+                                similitud: c.similitud * a.factor,
+                                ..c.clone()
+                            })
                             .collect();
                         tracing::info!(
-                            "agentes: {} candidatos antes, {} después, motivos {:?}",
-                            antes_de_agentes,
+                            "agentes: {} candidatos, motivos {:?}",
                             usar.len(),
                             veredicto_final.ajustes.iter().map(|a| (a.factor, a.motivo.clone())).collect::<Vec<_>>(),
                         );
@@ -838,7 +864,7 @@ impl Queue {
                 // confianza; las alternativas, la suya, tal como las mandó.
                 let principal = lumi_proto::worker::Hipotesis {
                     lat, lng, radio_m, peso: confianza, indice: String::new(), autor: String::new(),
-                    inliers: None, verificador: None, motivo_agente: None,
+                    imagen_id: None, inliers: None, verificador: None, motivo_agente: None,
                 };
                 self.guardar_hipotesis(id, &principal, &alternativas, &[]);
                 self.soltar(&dispositivo, id);
@@ -936,11 +962,12 @@ impl Queue {
         let _ = tx.execute(
             "UPDATE analyses SET state = 'hecho', error = NULL, result_lat = ?2,
                     result_lng = ?3, result_radius_m = ?4, result_confidence = ?5,
-                    result_inliers = ?6, result_verificador = ?7, finished_at = ?8
+                    result_inliers = ?6, result_verificador = ?7, result_imagen_id = ?8,
+                    finished_at = ?9
              WHERE id = ?1",
             rusqlite::params![
                 id, principal.lat, principal.lng, principal.radio_m, principal.peso,
-                principal.inliers, principal.verificador, ahora()
+                principal.inliers, principal.verificador, principal.imagen_id, ahora()
             ],
         );
         let _ = tx.execute("DELETE FROM analysis_hypotheses WHERE analysis_id = ?1", [id]);
@@ -949,12 +976,12 @@ impl Queue {
                 respaldo.get(i).cloned().unwrap_or((None, None, None));
             let _ = tx.execute(
                 "INSERT INTO analysis_hypotheses
-                    (analysis_id, orden, lat, lng, radio_m, peso, indice, autor, inliers,
-                     verificador, motivo_agente)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    (analysis_id, orden, lat, lng, radio_m, peso, indice, autor, imagen_id,
+                     inliers, verificador, motivo_agente)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 rusqlite::params![
-                    id, i as i64, h.lat, h.lng, h.radio_m, h.peso, h.indice, h.autor, inliers,
-                    verificador, motivo
+                    id, i as i64, h.lat, h.lng, h.radio_m, h.peso, h.indice, h.autor, h.imagen_id,
+                    inliers, verificador, motivo
                 ],
             );
         }

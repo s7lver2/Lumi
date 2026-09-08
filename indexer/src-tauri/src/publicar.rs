@@ -505,19 +505,21 @@ async fn borrar_asset_si_existe(
 /// nombre del paquete es el que puso quien indexó (p. ej. «All Tokyo»), y esa
 /// cadena via directa a la API sin pasar por aquí es lo que devolvía 422.
 ///
-/// `numero_version` decide el release: la v1 de cualquier índice sigue
-/// publicándose en el tag de siempre —nadie que ya haya resuelto esa URL ve
-/// nada distinto—, y las versiones 2 en adelante van a su propio release
-/// (`paquete-v2`, `paquete-v3`…) para no pisar un asset que alguien ya pudo
-/// instalar apuntando al anterior.
-fn etiqueta_de(paquete: &str, numero_version: u32) -> String {
+/// Un solo release por paquete, siempre — antes cada publicación con éxito
+/// abría uno nuevo (`paquete-v2`, `paquete-v3`…) para no pisar un asset que
+/// alguien ya hubiera instalado apuntando al anterior, pero eso convertía
+/// hasta una corrección menor (declarar una capa que faltaba, sin tocar ni
+/// un byte de las demás) en un release entero más. Ahora esa protección la
+/// da `publicacion_igual_a` — comparar el contenido SIN cifrar antes de
+/// resubir nada — así que un asset que no cambió de verdad nunca pisa su
+/// propia URL, y ya no hace falta un release nuevo para evitarlo.
+fn etiqueta_de(paquete: &str) -> String {
     let cruda: String = paquete
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' { c.to_ascii_lowercase() } else { '-' })
         .collect();
     let recortada = cruda.trim_matches('-');
-    let base = if recortada.is_empty() { "indice".to_string() } else { recortada.to_string() };
-    if numero_version <= 1 { base } else { format!("{base}-v{numero_version}") }
+    if recortada.is_empty() { "indice".to_string() } else { recortada.to_string() }
 }
 
 /// El release donde van los assets. Si ya existe con esa etiqueta se reutiliza:
@@ -658,35 +660,11 @@ pub async fn publicar(
     // Las capas son tan autocontenidas como los CUERPOS de imagen y
     // `fuentes_por_quadkey`: cada corte declara TODAS las que tiene el
     // paquete sellado, nunca solo las que cambiaron desde el corte anterior.
-    //
-    // Esto ya se rompió una vez con `fuentes_por_quadkey` -- una versión
-    // nueva sin imágenes nuevas, solo con una dependencia añadida, publicaba
-    // `fuentes_por_quadkey: []` con `cuerpos` llenos de datos reales sin
-    // ninguna procedencia declarada para ellos -- y `capas` tenía exactamente
-    // el mismo fallo: si un modelo ya salía en la ficha del corte anterior,
-    // esta ficha lo omitía dando por hecho que ese release anterior seguiría
-    // ahí para siempre. Nada en la instalación (`lumid::indices`) vuelve a
-    // mirar `version_anterior` para recuperar lo omitido -- es solo
-    // procedencia para la UI, no una cadena que el instalador camine -- así
-    // que en cuanto ese release anterior se borra (o simplemente no
-    // responde), la ficha nueva queda sin ninguna capa: el índice se instala
-    // "completo" pero sin un solo modelo de recuperación, y ningún nivel
-    // puede correr contra él.
-    let anterior: Option<(u32, lumi_index::ficha::Ficha)> = almacen
-        .ultima_ficha_propia(indice_id)?
-        .and_then(|(v, json)| serde_json::from_str(&json).ok().map(|f| (v, f)));
-    let etiqueta_anterior: Option<String> =
-        anterior.as_ref().map(|(v, _)| etiqueta_de(&paquete, *v));
-
-    // Los nombres de asset de un corte anterior (`cuerpo-0.lumidx.enc`,
-    // `ficha.json`...) colisionan con los de este — sin limpiar, `ya_subido`
-    // (más abajo) los confundiría con trabajo ya hecho de ESTE corte.
-    if numero_version > 1 {
-        almacen.limpiar_publicaciones_en_curso(indice_id)?;
-    }
-
+    // Da igual que el asset en sí no haga falta resubirlo (ver
+    // `publicacion_igual_a` más abajo) — la ficha SIEMPRE las lista todas,
+    // apuntando a la URL que corresponda, vieja o nueva.
     let cliente = cliente_http();
-    let release = asegurar_release(&cliente, &testigo, &repo, &etiqueta_de(&paquete, numero_version)).await?;
+    let release = asegurar_release(&cliente, &testigo, &repo, &etiqueta_de(&paquete)).await?;
     etiquetar_repo(&cliente, &testigo, &repo).await?;
 
     // Una sola clave para todo el paquete: la ofuscación es del alojamiento,
@@ -744,17 +722,19 @@ pub async fn publicar(
     for t in &trozos {
         let nombre = format!("cuerpo-{}.lumidx.enc", if t.prefijo.is_empty() { "0" } else { &t.prefijo });
         prog.empezar_asset(&nombre);
-        if let Some((sha, bytes)) = ya_subido(&almacen, indice_id, &nombre) {
-            prog.anotar(format!("{nombre} ya estaba subido"));
+        let ficheros = ficheros_del_trozo(&raiz, t, &por_qk);
+        let claro = empaquetar_solo(prog.clone(), &nombre, raiz.clone(), ficheros).await?;
+        let identidad = sha256_hex(&claro);
+        if let Some((sha, bytes)) = almacen.publicacion_igual_a(indice_id, &nombre, &identidad)? {
+            prog.anotar(format!("{nombre} no cambió, se reutiliza lo ya subido"));
             prog.terminar_asset(bytes);
             cuerpos.push(Asset { nombre, sha256: sha, bytes, quadkeys: t.quadkeys.clone() });
             continue;
         }
-        let ficheros = ficheros_del_trozo(&raiz, t, &por_qk);
-        let sellado = empaquetar_y_cifrar(prog.clone(), &nombre, raiz.clone(), ficheros, clave).await?;
+        let sellado = cifrar_asset_async(prog.clone(), &nombre, claro, clave).await?;
         let sha = sha256_hex(&sellado);
         let bytes = sellado.len() as u64;
-        almacen.publicacion_apuntar(indice_id, &nombre, &sha, bytes)?;
+        almacen.publicacion_apuntar(indice_id, &nombre, Some(&identidad), &sha, bytes)?;
         prog.anotar(format!("subiendo {nombre}"));
         let url = subir_asset(&cliente, &testigo, &repo, release, &nombre, sellado, &prog).await?;
         almacen.publicacion_marcar_subido(indice_id, &nombre, &url)?;
@@ -769,8 +749,15 @@ pub async fn publicar(
     for (modelo, version, dims) in modelos_del_paquete(&raiz) {
         let nombre = format!("capa-{modelo}-{version}.enc");
         prog.empezar_asset(&nombre);
-        if let Some((sha, bytes)) = ya_subido(&almacen, indice_id, &nombre) {
-            prog.anotar(format!("{nombre} ya estaba subido"));
+        let ficheros = fragmentos_de_modelo(&raiz, &modelo, &version);
+        if ficheros.is_empty() {
+            prog.anotar(format!("{modelo} no tiene fragmentos en el paquete"));
+            continue;
+        }
+        let claro = empaquetar_solo(prog.clone(), &nombre, raiz.clone(), ficheros).await?;
+        let identidad = sha256_hex(&claro);
+        if let Some((sha, bytes)) = almacen.publicacion_igual_a(indice_id, &nombre, &identidad)? {
+            prog.anotar(format!("{nombre} no cambió, se reutiliza lo ya subido"));
             prog.terminar_asset(bytes);
             capas.push(Capa {
                 modelo,
@@ -781,15 +768,10 @@ pub async fn publicar(
             });
             continue;
         }
-        let ficheros = fragmentos_de_modelo(&raiz, &modelo, &version);
-        if ficheros.is_empty() {
-            prog.anotar(format!("{modelo} no tiene fragmentos en el paquete"));
-            continue;
-        }
-        let sellado = empaquetar_y_cifrar(prog.clone(), &nombre, raiz.clone(), ficheros, clave).await?;
+        let sellado = cifrar_asset_async(prog.clone(), &nombre, claro, clave).await?;
         let sha = sha256_hex(&sellado);
         let bytes = sellado.len() as u64;
-        almacen.publicacion_apuntar(indice_id, &nombre, &sha, bytes)?;
+        almacen.publicacion_apuntar(indice_id, &nombre, Some(&identidad), &sha, bytes)?;
         prog.anotar(format!("subiendo {nombre}"));
         let url = subir_asset(&cliente, &testigo, &repo, release, &nombre, sellado, &prog).await?;
         almacen.publicacion_marcar_subido(indice_id, &nombre, &url)?;
@@ -812,7 +794,7 @@ pub async fn publicar(
         paquete: paquete.clone(),
         nombre: nombre_indice,
         numero_version,
-        version_anterior: etiqueta_anterior,
+        version_anterior: None,
         autor,
         alojamiento: "github".into(),
         clave_publica: String::new(),
@@ -834,7 +816,7 @@ pub async fn publicar(
 
     let json = serde_json::to_vec_pretty(&ficha)?;
     prog.empezar_asset("ficha.json");
-    almacen.publicacion_apuntar(indice_id, "ficha.json", &sha256_hex(&json), json.len() as u64)?;
+    almacen.publicacion_apuntar(indice_id, "ficha.json", None, &sha256_hex(&json), json.len() as u64)?;
     borrar_asset_si_existe(&cliente, &testigo, &repo, release, "ficha.json").await?;
     let url = subir_asset(&cliente, &testigo, &repo, release, "ficha.json", json.clone(), &prog).await?;
     almacen.publicacion_marcar_subido(indice_id, "ficha.json", &url)?;
@@ -842,17 +824,6 @@ pub async fn publicar(
     almacen.guardar_ficha_propia(indice_id, numero_version, &String::from_utf8_lossy(&json), ahora)?;
     almacen.bumpear_numero_version(indice_id)?;
     Ok(())
-}
-
-/// Si este asset ya está subido, su URL. Es lo que hace que reanudar no
-/// vuelva a subir cientos de megas que ya están arriba.
-fn ya_subido(almacen: &Almacen, indice_id: i64, asset: &str) -> Option<(String, u64)> {
-    almacen
-        .publicacion_plan(indice_id)
-        .ok()?
-        .into_iter()
-        .find(|(a, subido, url, ..)| a == asset && *subido && url.is_some())
-        .map(|(_, _, _, sha, bytes)| (sha, bytes))
 }
 
 // --- Capas de modelo -------------------------------------------------------
@@ -944,7 +915,7 @@ pub async fn publicar_capa(
     let sellado = empaquetar_y_cifrar(prog.clone(), &nombre, raiz.clone(), ficheros, clave).await?;
     let sha = sha256_hex(&sellado);
     let bytes = sellado.len() as u64;
-    almacen.publicacion_apuntar(indice_id, &nombre, &sha, bytes)?;
+    almacen.publicacion_apuntar(indice_id, &nombre, None, &sha, bytes)?;
     prog.anotar(format!("subiendo {nombre}"));
     subir_asset(&cliente, &testigo, &repo, release, &nombre, sellado, &prog).await?;
     almacen.publicacion_marcar_subido(indice_id, &nombre, "")?;
@@ -1030,6 +1001,38 @@ fn cifrar_asset(claro: &[u8], clave: &[u8; 32]) -> Result<Vec<u8>> {
     cifrado::cifrar(claro, clave, nonce)
 }
 
+/// Solo empaqueta, sin cifrar. Hace falta el contenido EN CLARO para poder
+/// calcular su `identidad` (ver `Almacen::publicacion_igual_a`) antes de
+/// decidir si hace falta cifrar y subir algo de verdad, o si el asset de la
+/// publicación anterior ya vale tal cual — cifrar usa un nonce al azar, así
+/// que el resultado cifrado nunca sirve para esa comparación (ver el
+/// comentario de la migración de la columna `identidad`).
+async fn empaquetar_solo(
+    prog: Arc<Publicacion>, nombre: &str, raiz: PathBuf, ficheros: Vec<PathBuf>,
+) -> Result<Vec<u8>> {
+    prog.anotar(format!("empaquetando {nombre}"));
+    let etiqueta = nombre.to_string();
+    let prog2 = prog.clone();
+    tokio::task::spawn_blocking(move || {
+        empaquetar(&raiz, &ficheros, &|hechos, total| prog2.avance_empaquetado(hechos, total))
+    })
+    .await
+    .map_err(|e| anyhow!("empaquetando {etiqueta}: {e}"))?
+}
+
+/// Cifra ya en un hilo dedicado — un trozo de casi 2 GB no es instantáneo, y
+/// el mismo motivo de `empaquetar_y_cifrar` (no bloquear el worker de tokio)
+/// aplica aquí igual.
+async fn cifrar_asset_async(
+    prog: Arc<Publicacion>, nombre: &str, claro: Vec<u8>, clave: [u8; 32],
+) -> Result<Vec<u8>> {
+    prog.anotar(format!("cifrando {nombre}"));
+    let etiqueta = nombre.to_string();
+    tokio::task::spawn_blocking(move || cifrar_asset(&claro, &clave))
+        .await
+        .map_err(|e| anyhow!("cifrando {etiqueta}: {e}"))?
+}
+
 /// Los modelos que hay dentro del paquete sellado, leídos del manifiesto.
 fn modelos_del_paquete(raiz: &Path) -> Vec<(String, String, u32)> {
     let Ok(bytes) = std::fs::read(raiz.join("manifiesto.json")) else { return Vec::new() };
@@ -1078,16 +1081,11 @@ mod tests {
         assert!(!comprobar_capa(&[], &[]).casan);
     }
 
-    // La v1 de cualquier índice sigue publicándose en el tag de siempre:
-    // nadie que ya haya resuelto esa URL ve nada distinto al crear una v2.
+    // Un solo release por paquete, siempre — publicar otra vez no cambia de
+    // tag ni aunque haya de por medio muchas publicaciones sucesivas.
     #[test]
-    fn la_version_uno_no_cambia_de_tag() {
-        assert_eq!(etiqueta_de("All Tokyo", 1), "all-tokyo");
-    }
-
-    #[test]
-    fn las_versiones_siguientes_van_a_su_propio_tag() {
-        assert_eq!(etiqueta_de("All Tokyo", 2), "all-tokyo-v2");
-        assert_eq!(etiqueta_de("All Tokyo", 3), "all-tokyo-v3");
+    fn el_tag_no_depende_de_cuantas_veces_se_haya_publicado() {
+        assert_eq!(etiqueta_de("All Tokyo"), "all-tokyo");
+        assert_eq!(etiqueta_de("All Tokyo"), etiqueta_de("All Tokyo"));
     }
 }

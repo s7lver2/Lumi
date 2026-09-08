@@ -301,6 +301,15 @@ impl Almacen {
             // índice — spec de pestaña de Proyectos. NULL para cualquier índice creado
             // antes de esto: no hay ninguno en producción, no hace falta migrarlos.
             "ALTER TABLE indices ADD COLUMN proyecto TEXT",
+            // El hash del contenido SIN cifrar de un asset ya subido — el
+            // cifrado usa un nonce al azar en cada llamada, así que dos
+            // subidas del mismo contenido dan `sha256` DISTINTOS y ese campo
+            // nunca sirve para saber si hace falta volver a subir. `identidad`
+            // sí es estable: es lo que permite reutilizar un asset entre
+            // publicaciones sucesivas del mismo paquete en vez de recifrar y
+            // resubir todo cada vez que se corrige algo. NULL en filas de
+            // antes de esto — se tratan como "hay que resubir", nunca al revés.
+            "ALTER TABLE publicaciones ADD COLUMN identidad TEXT",
         ] {
             let _ = c.execute(alter, []);
         }
@@ -1412,20 +1421,24 @@ impl Almacen {
 
     /// Apunta un asset del plan de subida. Mismo `ON CONFLICT` que
     /// `descarga_marcar`: volver a previsualizar no pierde lo ya subido.
+    /// `identidad` es el hash del contenido SIN cifrar — `None` en el camino
+    /// de una capa suelta ajena (`publicar_capa`), que no reutiliza nada
+    /// entre publicaciones y no necesita esta comparación.
     pub fn publicacion_apuntar(
         &self,
         indice_id: i64,
         asset: &str,
+        identidad: Option<&str>,
         sha256: &str,
         bytes: u64,
     ) -> Result<()> {
         let c = self.0.lock().unwrap();
         c.execute(
-            "INSERT INTO publicaciones (indice_id, asset, sha256, bytes)
-             VALUES (?1, ?2, ?3, ?4)
+            "INSERT INTO publicaciones (indice_id, asset, identidad, sha256, bytes)
+             VALUES (?1, ?2, ?3, ?4, ?5)
              ON CONFLICT(indice_id, asset) DO UPDATE SET
-               sha256 = excluded.sha256, bytes = excluded.bytes",
-            params![indice_id, asset, sha256, bytes as i64],
+               identidad = excluded.identidad, sha256 = excluded.sha256, bytes = excluded.bytes",
+            params![indice_id, asset, identidad, sha256, bytes as i64],
         )?;
         Ok(())
     }
@@ -1438,6 +1451,26 @@ impl Almacen {
             params![indice_id, asset, url],
         )?;
         Ok(())
+    }
+
+    /// Si este asset ya se publicó con ESTE MISMO contenido (comparando la
+    /// `identidad` sin cifrar, no el `sha256` cifrado — ver el comentario de
+    /// la migración de esa columna), su `sha256`/`bytes` de la vez anterior:
+    /// reutilizarlos es lo que evita recifrar y resubir un asset que no
+    /// cambió solo porque se está corrigiendo otra cosa del paquete. No hace
+    /// falta devolver la URL — `Asset` no la guarda, porque el instalador la
+    /// deriva del propio release de la ficha (ver `url_de` en
+    /// `lumid::indices`), y con un solo release por paquete esa URL es
+    /// siempre la misma exista ya el asset o se acabe de subir ahora.
+    pub fn publicacion_igual_a(
+        &self, indice_id: i64, asset: &str, identidad: &str,
+    ) -> Result<Option<(String, u64)>> {
+        Ok(self.0.lock().unwrap().query_row(
+            "SELECT sha256, bytes FROM publicaciones
+              WHERE indice_id = ?1 AND asset = ?2 AND identidad = ?3 AND subido = 1 AND url IS NOT NULL",
+            params![indice_id, asset, identidad],
+            |r| Ok((r.get(0)?, r.get::<_, i64>(1)? as u64)),
+        ).optional()?)
     }
 
     /// Guarda la ficha completa de un corte publicado — la fuente de verdad
@@ -1465,18 +1498,6 @@ impl Almacen {
         ).optional()?)
     }
 
-    /// Antes de arrancar una publicación nueva (numero_version > 1): las filas
-    /// de `publicaciones` de un corte anterior tienen los mismos NOMBRES de
-    /// asset (`cuerpo-0.lumidx.enc`, `ficha.json`...) que va a usar este corte,
-    /// así que sin borrarlas `ya_subido` las confundiría con trabajo ya hecho
-    /// de ESTE corte y se saltaría la subida real.
-    pub fn limpiar_publicaciones_en_curso(&self, indice_id: i64) -> Result<()> {
-        self.0.lock().unwrap().execute(
-            "DELETE FROM publicaciones WHERE indice_id = ?1", [indice_id],
-        )?;
-        Ok(())
-    }
-
     /// `indices.numero_version` pasa de "la versión de esta fila" a "el número
     /// de la PRÓXIMA publicación" — se llama al terminar `publicar()` con
     /// éxito, nunca al crear el índice.
@@ -1499,32 +1520,6 @@ impl Almacen {
         let filas = q
             .query_map(params![indice_id], |r| {
                 Ok((r.get(0)?, r.get(1)?, r.get::<_, i64>(2)? as u64))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(filas)
-    }
-
-    /// Todo el plan, subido o no: es lo que dice si un paquete está
-    /// `publicado`, `subiendo n/m` o `incompleto`.
-    #[allow(clippy::type_complexity)]
-    pub fn publicacion_plan(
-        &self,
-        indice_id: i64,
-    ) -> Result<Vec<(String, bool, Option<String>, String, u64)>> {
-        let c = self.0.lock().unwrap();
-        let mut q = c.prepare(
-            "SELECT asset, subido, url, sha256, bytes FROM publicaciones
-              WHERE indice_id = ?1 ORDER BY asset",
-        )?;
-        let filas = q
-            .query_map(params![indice_id], |r| {
-                Ok((
-                    r.get(0)?,
-                    r.get::<_, i64>(1)? == 1,
-                    r.get(2)?,
-                    r.get(3)?,
-                    r.get::<_, i64>(4)? as u64,
-                ))
             })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(filas)

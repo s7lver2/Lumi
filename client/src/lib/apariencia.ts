@@ -1,5 +1,6 @@
 const KEY = "lumi.reducir-movimiento";
 const KEY_ESCALA = "lumi.escala-interfaz";
+const KEY_FONDO = "lumi.fondo-entrada";
 
 /** Porcentajes admitidos para el tamaño de la interfaz. Se probó `zoom` (no
  *  estándar, pero WebView2 lo soporta — es Chromium) primero, pero apilaba un
@@ -51,4 +52,23 @@ export function leerReducirMovimiento(): boolean {
 export function setReducirMovimiento(activo: boolean) {
   localStorage.setItem(KEY, activo ? "1" : "0");
   aplicarReducirMovimiento(activo);
+}
+
+/** Los dos fondos de las pantallas de entrada (#120). `EntryScreen` elige
+ *  entre ellos al montar; "aleatorio" preserva el comportamiento original
+ *  (uno distinto por apertura de la app). */
+export const FONDOS_ENTRADA = ["aleatorio", "ascii", "olas"] as const;
+export type FondoEntrada = (typeof FONDOS_ENTRADA)[number];
+
+export function leerFondoEntrada(): FondoEntrada {
+  try {
+    const v = localStorage.getItem(KEY_FONDO);
+    return (FONDOS_ENTRADA as readonly string[]).includes(v ?? "") ? (v as FondoEntrada) : "aleatorio";
+  } catch {
+    return "aleatorio";
+  }
+}
+
+export function setFondoEntrada(v: FondoEntrada) {
+  localStorage.setItem(KEY_FONDO, v);
 }

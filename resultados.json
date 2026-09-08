@@ -1,0 +1,151 @@
+{
+  "generado_en": "2026-09-08T20:06:50",
+  "manifiesto": "banco.jsonl",
+  "n_consultas": 16,
+  "precision": {
+    "mini": {
+      "filas": [
+        {
+          "archivo": "tools/banco-imagenes/mly-3687394728038983.jpg",
+          "error_km": 3.53,
+          "umbral": "city",
+          "confianza": 10.0,
+          "latencia_s": 175.22,
+          "vram_pico_mb": 5572
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-1089270724886169.jpg",
+          "error_km": 0.0,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 145.14,
+          "vram_pico_mb": 5703
+        },
+        {
+          "archivo": "tools/banco-imagenes/kv-1170767689.jpg",
+          "error_km": 0.01,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 152.16,
+          "vram_pico_mb": 5910
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-1118769210312490.jpg",
+          "error_km": 0.02,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 155.51,
+          "vram_pico_mb": 5677
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-469603667480653.jpg",
+          "error_km": 0.0,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 268.92,
+          "vram_pico_mb": 5667
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-116961020438624.jpg",
+          "error_km": 0.11,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 129.36,
+          "vram_pico_mb": 5678
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-780128648304442.jpg",
+          "error_km": 0.02,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 128.81,
+          "vram_pico_mb": 7191
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-3015454555444506.jpg",
+          "error_km": 0.0,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 172.58,
+          "vram_pico_mb": 5019
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-1725104888184147.jpg",
+          "error_km": 0.0,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 125.88,
+          "vram_pico_mb": 4959
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-1486799152738828.jpg",
+          "error_km": 0.09,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 124.06,
+          "vram_pico_mb": 5095
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-778721349455555.jpg",
+          "error_km": 0.04,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 134.41,
+          "vram_pico_mb": 5234
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-1056137158248184.jpg",
+          "error_km": 0.01,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 150.33,
+          "vram_pico_mb": 5235
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-242088871038506.jpg",
+          "error_km": 0.2,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 134.41,
+          "vram_pico_mb": 5136
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-215319743438800.jpg",
+          "error_km": 0.01,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 301.12,
+          "vram_pico_mb": 5132
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-796792344547857.jpg",
+          "error_km": 0.0,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 134.22,
+          "vram_pico_mb": 5115
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-5550119148362740.jpg",
+          "error_km": 0.0,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 129.33,
+          "vram_pico_mb": 5138
+        }
+      ],
+      "n_consultas": 16,
+      "n_resueltas": 16,
+      "acierto_por_umbral_pct": {
+        "street": 93.8,
+        "city": 100.0,
+        "region": 100.0,
+        "country": 100.0,
+        "continent": 100.0
+      },
+      "error_km_mediana": 0.01,
+      "latencia_s_mediana": 139.77,
+      "vram_pico_mb_max": 7191
+    }
+  }
+}

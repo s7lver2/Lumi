@@ -1,7 +1,9 @@
+import { useEffect, useState } from "react";
 import { lumiUrl } from "../lib/bridge";
 import type { Analysis, DichoDeAgente, Hipotesis, Image } from "../lib/api";
 import { Drawer } from "./Drawer";
 import { Icon } from "../ui/Icon";
+import { CompareSlider } from "../ui/CompareSlider";
 
 /** Metros entre dos coordenadas. Haversine con el radio medio de la Tierra:
  *  precisión de sobra para decir «el EXIF declara un GPS a 300 m de aquí». */
@@ -15,21 +17,56 @@ export function metersBetween(aLat: number, aLng: number, bLat: number, bLng: nu
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-/** Resultado principal + alternativas, con su barra de peso y su respaldo
- *  geométrico si lo tiene. Sin lista de intentos aquí (vive en
- *  `AttemptsRail`) — todo este espacio es del intento seleccionado. */
-function HipotesisList({ a }: { a: Analysis }) {
+/** La principal, con la misma forma que una alternativa — así una lista y un
+ *  selector no necesitan dos caminos distintos para tratarlas. */
+function principalComoHipotesis(a: Analysis): Hipotesis | null {
   if (a.state !== "hecho" || a.result_lat == null || a.result_lng == null) return null;
-  const principal: Hipotesis = {
+  return {
     lat: a.result_lat, lng: a.result_lng, radio_m: a.result_radius_m ?? 0,
     peso: a.result_confidence ?? 0, indice: "", autor: "",
+    imagen_id: a.result_imagen_id,
     inliers: a.result_inliers, verificador: a.result_verificador,
     motivo_agente: null,
   };
-  const todas = [principal, ...a.hypotheses];
-  const maxPeso = Math.max(...todas.map((h) => h.peso), 1e-9);
+}
+
+/** Insignia de verificación: SIEMPRE en `fg`/blanco, nunca verde — DESIGN.md
+ *  lo prohíbe ("Completado se representa en blanco"). */
+function InsigniaVerificacion({ h }: { h: Hipotesis }) {
   return (
-    <div className="flex flex-col gap-2.5 rounded-[10px] border border-border p-3">
+    <div className="flex items-center gap-1.5 border-t border-border pt-2.5">
+      {h.verificador ? (
+        <>
+          <Icon name="check" size={12} className="text-fg" />
+          <span className="text-[10.5px] text-fg">
+            verificado por {h.verificador} ·{" "}
+            <span className="font-mono tabular-nums">{h.inliers}</span> correspondencias
+          </span>
+        </>
+      ) : (
+        <span className="text-[10.5px] text-subtle">sin verificación geométrica · coordenada de recuperación</span>
+      )}
+    </div>
+  );
+}
+
+/** La mayor coincidencia, con tu foto y la de referencia lado a lado en un
+ *  comparador arrastrable — o solo sus coordenadas si esta hipótesis no
+ *  trae foto de referencia (motor que resolvió por su cuenta, o un análisis
+ *  de antes de que este campo existiera). Clicable: lleva a la vista
+ *  Detalle de la principal. */
+function TarjetaPrincipal({ principal, image, onAbrir }: {
+  principal: Hipotesis; image: Image | null; onAbrir: () => void;
+}) {
+  return (
+    <button onClick={onAbrir} className="flex w-full flex-col gap-2.5 rounded-[10px] border border-border p-3 text-left
+      transition-colors duration-300 ease-expo hover:border-white/20">
+      {principal.imagen_id != null && image ? (
+        <CompareSlider
+          izquierda={lumiUrl(`/v1/images/${image.id}/thumb`)}
+          derecha={lumiUrl(`/v1/reference-images/${principal.imagen_id}/thumb`)}
+          etiquetaIzquierda="tuya" etiquetaDerecha="referencia" />
+      ) : null}
       <div className="font-mono text-[18px] leading-none text-fg">
         {principal.lat.toFixed(4)}, {principal.lng.toFixed(4)}
       </div>
@@ -43,40 +80,74 @@ function HipotesisList({ a }: { a: Analysis }) {
           <div className="mt-0.5 font-mono text-[12.5px] text-fg">{principal.peso.toFixed(1)}×</div>
         </div>
       </div>
-      {/* Insignia de verificación: SIEMPRE en `fg`/blanco, nunca verde —
-          DESIGN.md lo prohíbe ("Completado se representa en blanco"). */}
-      <div className="flex items-center gap-1.5 border-t border-border pt-2.5">
-        {principal.verificador ? (
-          <>
-            <Icon name="check" size={12} className="text-fg" />
-            <span className="text-[10.5px] text-fg">
-              verificado por {principal.verificador} ·{" "}
-              <span className="font-mono tabular-nums">{principal.inliers}</span> correspondencias
-            </span>
-          </>
-        ) : (
-          <span className="text-[10.5px] text-subtle">sin verificación geométrica · coordenada de recuperación</span>
+      <InsigniaVerificacion h={principal} />
+    </button>
+  );
+}
+
+/** Las alternativas, compactas — cada una lleva a su propia vista Detalle. */
+function ListaAlternativas({ alternativas, maxPeso, onAbrir }: {
+  alternativas: Hipotesis[]; maxPeso: number; onAbrir: (i: number) => void;
+}) {
+  if (alternativas.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-border pt-2.5">
+      <p className="text-[8px] uppercase tracking-[.08em] text-subtle">Alternativas</p>
+      {alternativas.map((h, i) => (
+        <button key={i} onClick={() => onAbrir(i)}
+          className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors
+            duration-300 ease-expo hover:bg-white/[.04]">
+          <span className="w-3 shrink-0 font-mono text-[9px] text-subtle">{i + 2}</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline gap-1.5">
+              <span className="font-mono text-[10px] text-fg">{h.lat.toFixed(4)}, {h.lng.toFixed(4)}</span>
+              <span className="font-mono text-[9px] text-subtle">± {Math.round(h.radio_m)} m</span>
+            </div>
+            <div className="mt-1 h-[3px] overflow-hidden rounded-full bg-white/[.06]">
+              <div className="h-full bg-white/40" style={{ width: `${Math.max(6, (h.peso / maxPeso) * 100)}%` }} />
+            </div>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Una hipótesis sola, a fondo: se centra en el mapa al entrar (recupera
+ *  `onCenter`, que la firma de `ResultsDrawer` ya aceptaba pero nadie
+ *  disparaba desde aquí) y se enseña toda su info. Sin foto de comparación:
+ *  el slider es cosa de la vista Comparar, no se duplica. */
+function VistaDetalle({ h, onCenter, onVolver }: {
+  h: Hipotesis; onCenter: (lat: number, lng: number) => void; onVolver: () => void;
+}) {
+  useEffect(() => { onCenter(h.lat, h.lng); }, [h.lat, h.lng, onCenter]);
+  return (
+    <div className="flex flex-col gap-2.5 rounded-[10px] border border-border p-3">
+      <button onClick={onVolver}
+        className="-ml-1 flex w-fit items-center gap-1 rounded-[7px] px-1.5 py-1 text-[10.5px]
+          text-subtle transition-colors duration-300 ease-expo hover:text-fg">
+        <Icon name="back" size={11} /> Volver
+      </button>
+      <div className="font-mono text-[18px] leading-none text-fg">
+        {h.lat.toFixed(4)}, {h.lng.toFixed(4)}
+      </div>
+      <div className="flex gap-4">
+        <div>
+          <div className="text-[8px] uppercase tracking-[.08em] text-subtle">Radio</div>
+          <div className="mt-0.5 font-mono text-[12.5px] text-fg">± {Math.round(h.radio_m)} m</div>
+        </div>
+        <div>
+          <div className="text-[8px] uppercase tracking-[.08em] text-subtle">Confianza</div>
+          <div className="mt-0.5 font-mono text-[12.5px] text-fg">{h.peso.toFixed(1)}×</div>
+        </div>
+        {h.indice && (
+          <div>
+            <div className="text-[8px] uppercase tracking-[.08em] text-subtle">Índice</div>
+            <div className="mt-0.5 text-[11.5px] text-fg">{h.indice} · {h.autor}</div>
+          </div>
         )}
       </div>
-      {a.hypotheses.length > 0 && (
-        <div className="flex flex-col gap-1.5 border-t border-border pt-2.5">
-          <p className="text-[8px] uppercase tracking-[.08em] text-subtle">Alternativas</p>
-          {todas.slice(1).map((h, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span className="w-3 shrink-0 font-mono text-[9px] text-subtle">{i + 2}</span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="font-mono text-[10px] text-fg">{h.lat.toFixed(4)}, {h.lng.toFixed(4)}</span>
-                  <span className="font-mono text-[9px] text-subtle">± {Math.round(h.radio_m)} m</span>
-                </div>
-                <div className="mt-1 h-[3px] overflow-hidden rounded-full bg-white/[.06]">
-                  <div className="h-full bg-white/40" style={{ width: `${Math.max(6, (h.peso / maxPeso) * 100)}%` }} />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <InsigniaVerificacion h={h} />
     </div>
   );
 }
@@ -151,7 +222,13 @@ function AgentesPanel({ agentes }: { agentes: DichoDeAgente[] }) {
  *  que declara la cámara. `analysis` ya viene resuelto por quien monta este
  *  componente (antes `ResultsDrawer` buscaba entre TODOS los intentos y
  *  además los listaba aquí mismo — eso ahora es trabajo de `AttemptsRail`
- *  y de `CaseView`, no de este componente). */
+ *  y de `CaseView`, no de este componente).
+ *
+ *  Dos vistas por dentro: Comparar (la mayor coincidencia con ambas fotos,
+ *  más la lista de alternativas) y Detalle (una hipótesis sola, centrada en
+ *  el mapa). Se reinician a Comparar cada vez que cambia de análisis — la
+ *  selección de un intento viejo no debería aterrizar en el detalle del
+ *  intento anterior. */
 export function ResultsDrawer({
   open, image, analysis, busy, onAnalyze, onCenter,
 }: {
@@ -163,11 +240,15 @@ export function ResultsDrawer({
   onCenter: (lat: number, lng: number) => void;
 }) {
   const exif = image?.exif_lat != null && image.exif_lng != null;
-  // `onCenter` se mantiene en la firma para no romper a quien monta este
-  // componente (centrar el mapa en una alternativa sigue siendo su
-  // contrato) aunque este fichero ya no dibuje el menú contextual que lo
-  // disparaba — ese menú vive ahora en `AttemptsRail`.
-  void onCenter;
+  const [vista, setVista] = useState<"comparar" | "detalle">("comparar");
+  const [sel, setSel] = useState(0);
+  useEffect(() => { setVista("comparar"); setSel(0); }, [analysis?.id]);
+
+  const principal = analysis ? principalComoHipotesis(analysis) : null;
+  const alternativas = analysis?.hypotheses ?? [];
+  const todas = principal ? [principal, ...alternativas] : [];
+  const maxPeso = Math.max(...todas.map((h) => h.peso), 1e-9);
+  const seleccionada = todas[sel] ?? null;
 
   return (
     <Drawer open={open}>
@@ -198,7 +279,18 @@ export function ResultsDrawer({
         </p>
       )}
 
-      {analysis && <HipotesisList a={analysis} />}
+      {vista === "detalle" && seleccionada ? (
+        <VistaDetalle h={seleccionada} onCenter={onCenter} onVolver={() => setVista("comparar")} />
+      ) : (
+        <>
+          {principal && (
+            <TarjetaPrincipal principal={principal} image={image} onAbrir={() => { setSel(0); setVista("detalle"); }} />
+          )}
+          <ListaAlternativas alternativas={alternativas} maxPeso={maxPeso}
+            onAbrir={(i) => { setSel(i + 1); setVista("detalle"); }} />
+        </>
+      )}
+
       {analysis && <AgentesPanel agentes={analysis.agentes} />}
       {analysis?.state === "hecho" && analysis.agentes.length === 0 && (
         <p className="text-[10px] leading-relaxed text-subtle">

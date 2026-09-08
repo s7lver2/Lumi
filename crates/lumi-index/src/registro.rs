@@ -162,13 +162,15 @@ pub fn cargar_niveles(dir: &Path) -> Vec<Nivel> {
 }
 
 /// Los agentes. Mismo trato que los demás registros: un fichero malo cuesta un
-/// agente, nunca la lista. Se descarta además el que diga que filtra sin decir
-/// por qué restricción — filtraría con la cadena vacía y no acotaría nada,
-/// que es peor que no estar.
+/// agente, nunca la lista. Se descarta además el que tenga `restriccion` y
+/// `mapa` a medias — uno sin el otro no acota nada (una restricción sin
+/// valores que la cumplan, o un mapa que no apunta a ningún atributo), que es
+/// peor que no estar: mejor abstenerse a callar de mentira. Ya no depende de
+/// `tipo`, que no rama ningún comportamiento.
 pub fn cargar_agentes(dir: &Path) -> Vec<crate::agentes::Agente> {
     leer_dir::<crate::agentes::Agente>(dir)
         .into_iter()
-        .filter(|a| !a.id.is_empty() && (a.tipo != "filtra" || !a.restriccion.is_empty()))
+        .filter(|a| !a.id.is_empty() && a.restriccion.is_empty() == a.mapa.is_empty())
         .collect()
 }
 

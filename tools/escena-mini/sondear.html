@@ -1,0 +1,78 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>sonda</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "/node_modules/three/build/three.module.js",
+    "three/addons/": "/node_modules/three/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+const cargador = new GLTFLoader();
+const cargar = (ruta) => new Promise((ok, mal) => cargador.load(ruta, ok, undefined, mal));
+
+function medir(objeto) {
+  const caja = new THREE.Box3().setFromObject(objeto);
+  const t = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  caja.getSize(t);
+  caja.getCenter(c);
+  return { tam: t.toArray().map((n) => +n.toFixed(3)), centro: c.toArray().map((n) => +n.toFixed(3)) };
+}
+
+window.sondear = async () => {
+  const fuera = {};
+
+  for (const nombre of ["apple_mac_mini_m1", "robotic_prosthetic_arm", "server_racking_system"]) {
+    const gltf = await cargar(`/modelos/${nombre}/scene.gltf`);
+    fuera[nombre] = { global: medir(gltf.scene) };
+
+    if (nombre === "robotic_prosthetic_arm") {
+      // Los huesos: nombre, longitud al padre y posición en reposo. Con eso se
+      // deduce cuál es cada dedo sin abrir el modelo en un editor.
+      const huesos = [];
+      gltf.scene.traverse((o) => {
+        if (o.isBone) {
+          huesos.push({
+            nombre: o.name,
+            padre: o.parent?.name ?? null,
+            hijos: o.children.filter((h) => h.isBone).map((h) => h.name),
+            pos: o.position.toArray().map((n) => +n.toFixed(4)),
+          });
+        }
+      });
+      fuera[nombre].huesos = huesos;
+    }
+
+    if (nombre === "server_racking_system") {
+      // Solo las mallas grandes: el modelo tiene cientos de tornillos y no
+      // interesa ninguno. Se busca la unidad rack-mount individual.
+      const piezas = [];
+      gltf.scene.traverse((o) => {
+        if (o.isMesh) {
+          const m = medir(o);
+          const vol = m.tam[0] * m.tam[1] * m.tam[2];
+          piezas.push({ nombre: o.name, padre: o.parent?.name ?? null, ...m, vol: +vol.toFixed(2) });
+        }
+      });
+      piezas.sort((a, b) => b.vol - a.vol);
+      fuera[nombre].piezasGrandes = piezas.slice(0, 25);
+      fuera[nombre].totalMallas = piezas.length;
+      // Cuántos grupos distintos hay por prefijo de nombre, para ver la
+      // estructura repetida del rack.
+      const prefijos = {};
+      for (const p of piezas) {
+        const k = p.nombre.replace(/\d+/g, "#");
+        prefijos[k] = (prefijos[k] ?? 0) + 1;
+      }
+      fuera[nombre].prefijos = Object.entries(prefijos).sort((a, b) => b[1] - a[1]).slice(0, 20);
+    }
+  }
+  return fuera;
+};
+</script>

@@ -34,11 +34,30 @@ pub const LIMITE: Duration = Duration::from_secs(120);
 /// del log — el mismo síntoma exacto que el de `queue::lanzar_uno` antes de
 /// unificar en `assets::pesos_dir`, solo que en un tercer sitio que ese
 /// arreglo no tocaba.
-pub async fn preguntar(agentes: &[String], consulta: &str, python: &Path, pesos: &Path) -> Vec<(Veredicto, String)> {
+pub async fn preguntar(
+    agentes: &[String],
+    consulta: &str,
+    python: &Path,
+    pesos: &Path,
+    store: &crate::store::Store,
+    persistente: &crate::persistente::Persistente,
+) -> Vec<(Veredicto, String)> {
     if agentes.is_empty() || consulta.is_empty() {
         return Vec::new();
     }
-    match tokio::time::timeout(LIMITE, correr(agentes, consulta, python, pesos)).await {
+    // Ajuste `agentes_persistente` (`routes::rendimiento`): por defecto
+    // ("0" o ausente) sigue lanzando un proceso por análisis, como siempre.
+    let persistente_activo = store.get_meta("agentes_persistente").as_deref() == Some("1");
+    // `if`/`else` con dos `async fn` da dos tipos `impl Future` distintos
+    // aunque devuelvan lo mismo — de ahí el `Box::pin` en vez de un `if`
+    // directo sobre las llamadas.
+    let tarea: std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Vec<(Veredicto, String)>>> + Send>> =
+        if persistente_activo {
+            Box::pin(correr_persistente(agentes, consulta, python, pesos, persistente))
+        } else {
+            Box::pin(correr(agentes, consulta, python, pesos))
+        };
+    match tokio::time::timeout(LIMITE, tarea).await {
         Ok(Ok(v)) => v,
         Ok(Err(e)) => {
             tracing::warn!("los agentes no contestaron: {e}");
@@ -49,6 +68,34 @@ pub async fn preguntar(agentes: &[String], consulta: &str, python: &Path, pesos:
             Vec::new()
         }
     }
+}
+
+/// Igual que `correr`, pero reutilizando un proceso ya vivo en vez de lanzar
+/// uno nuevo — `Persistente::pedir` lo lanza la primera vez que hace falta y
+/// lo relanza solo si murió a mitad de una petición anterior.
+async fn correr_persistente(
+    agentes: &[String], consulta: &str, python: &Path, pesos: &Path, persistente: &crate::persistente::Persistente,
+) -> anyhow::Result<Vec<(Veredicto, String)>> {
+    let script = crate::assets::ruta("workers/lumi_agentes.py");
+    let registro = crate::assets::ruta("registros/agentes");
+    let orden = serde_json::json!({
+        "tipo": "agentes",
+        "id": 0,
+        "consulta": consulta,
+        "agentes": agentes,
+    });
+    let envs: [(&str, &Path); 2] = [("LUMI_REGISTRO_AGENTES", &registro), ("LUMI_PESOS", pesos)];
+    let msgs = persistente.pedir(&orden, python, &script, &envs).await?;
+    Ok(msgs
+        .into_iter()
+        .filter_map(|msg| {
+            if let lumi_proto::worker::Msg::Agente { agente, etiqueta, confianza, detalle, .. } = msg {
+                Some((Veredicto { agente, etiqueta, confianza }, detalle))
+            } else {
+                None
+            }
+        })
+        .collect())
 }
 
 async fn correr(

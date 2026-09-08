@@ -127,12 +127,29 @@ def main():
 
         if item.get("gestion_propia"):
             # PaddleOCR: su propia libreria baja sus pesos la primera vez que
-            # se instancia. Aqui solo se deja constancia de la licencia.
+            # se instancia. Antes eso se dejaba para esa primera instancia
+            # real, que ocurre dentro de una llamada de agente -- y esa
+            # llamada corre bajo el timeout de 120s de `lumid::agentar`
+            # (`LIMITE`), que no distingue "se estaba descargando" de "no
+            # hay agentes": un fallo de red ahi se veia en el cliente como
+            # un misterioso "los agentes no llegaron a correr", sin log
+            # utilizable. Se fuerza aqui, con la generosidad de tiempo de
+            # esta tarea de instalacion, para que un fallo real (red,
+            # idioma no disponible) aparezca en ESTE log en vez de detras
+            # de un timeout ajeno.
             directorio = os.path.dirname(item["destino"])
             os.makedirs(directorio, exist_ok=True)
             with open(os.path.join(directorio, "LICENCIA.txt"), "w") as f:
                 f.write(item["licencia_texto"])
-            print(f"      gestion propia: licencia escrita, la libreria trae sus pesos sola", flush=True)
+            print(f"      gestion propia: licencia escrita, forzando la descarga de sus pesos…", flush=True)
+            try:
+                from paddleocr import PaddleOCR
+
+                PaddleOCR(use_angle_cls=True, lang="latin", show_log=False, use_gpu=False)
+                print(f"      pesos de paddleocr descargados y cargados", flush=True)
+            except Exception as e:
+                print(f"FATAL paddleocr no pudo descargar/cargar sus pesos: {e}", flush=True)
+                sys.exit(1)
             continue
 
         if item.get("hf_repo"):

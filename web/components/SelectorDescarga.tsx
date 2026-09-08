@@ -5,10 +5,10 @@ import { createPortal } from "react-dom";
 import type { ProductoDescargable } from "../lib/version";
 
 const NOMBRES: Record<string, string> = {
-  cliente: "Cliente",
+  cliente: "Client",
   indexer: "Indexer",
   lumid: "lumid",
-  instalador: "Instalador",
+  instalador: "Installer",
 };
 
 const ETIQUETAS_PLATAFORMA: Record<string, string> = {
@@ -159,7 +159,7 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
         className="jg-micro jg-micro-scale rounded-card border border-border px-4 py-2 text-[13px] font-medium text-fg hover:border-subtle hover:bg-elevated"
         href="https://github.com/s7lver2/Lumi/releases/latest"
       >
-        Descargar cliente
+        Download Client
       </a>
     );
   }
@@ -199,7 +199,7 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
         className="jg-micro jg-micro-scale rounded-card bg-accent px-4 py-2 text-[13px] font-medium text-bg hover:opacity-90"
         onClick={() => setAbierto(true)}
       >
-        Descargar Lumi
+        Downlaod Lumi
       </button>
 
       {abierto &&
@@ -215,11 +215,11 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
             >
               <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
                 <span className="text-[14px] font-medium">
-                  {!producto ? "¿Qué quieres descargar?" : esLumid || plataforma ? "Listo" : "¿Qué sistema usas?"}
+                  {!producto ? "What product you want to download?" : esLumid || plataforma ? "Ready" : "Which is your system?"}
                 </span>
                 <button
                   type="button"
-                  aria-label="Cerrar"
+                  aria-label="Close"
                   className="jg-micro flex h-6 w-6 items-center justify-center rounded-[6px] text-subtle hover:bg-elevated hover:text-fg"
                   onClick={cerrar}
                 >
@@ -249,9 +249,8 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
                     <div>
                       <div className="text-[14px] font-medium">lumid</div>
                       <div className="mt-1 max-w-[36ch] text-[11px] leading-relaxed text-subtle">
-                        lumid no se descarga suelto: este comando descarga el instalador (sin
-                        binario compilado de por medio) y arranca su asistente en el mismo paso.
-                        Cópialo en la terminal de tu servidor.
+                        Run this command on your remote machine to setup the server, it will download
+                        lumid, so you will require internet connection
                       </div>
                     </div>
                     <div className="flex w-full items-center gap-2 rounded-card border border-border bg-elevated px-3.5 py-2.5">
@@ -263,14 +262,14 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
                         onClick={copiarOneliner}
                         className="jg-micro shrink-0 rounded-[6px] px-2 py-1 text-[11px] text-subtle hover:bg-panel hover:text-fg"
                       >
-                        {copiado ? "copiado" : "copiar"}
+                        {copiado ? "copied" : "copy"}
                       </button>
                     </div>
                     <div className="text-[11px] text-subtle">
-                      sin preguntas: añade <code className="font-mono">-- --version latest -y</code> tras <code className="font-mono">sh</code>
+                      auto: add <code className="font-mono">-- --version latest -y</code> after <code className="font-mono">sh</code>
                     </div>
                     <button type="button" className="jg-micro text-[12px] text-subtle hover:text-fg" onClick={reiniciar}>
-                      elegir otra vez
+                      choose again
                     </button>
                   </div>
                 )}
@@ -299,17 +298,17 @@ export function SelectorDescarga({ productos }: { productos: ProductoDescargable
                         v{fuenteDescarga.version} · {formatoMB(artefactoFinal.bytes)}
                       </div>
                       {viaInstalador && (
-                        <div className="mt-1 text-[11px] text-subtle">se instala con el instalador de Lumi</div>
+                        <div className="mt-1 text-[11px] text-subtle">Its installed using lumi Installer</div>
                       )}
                     </div>
                     <a
                       href={artefactoFinal.url}
                       className="jg-micro jg-micro-scale w-full rounded-card bg-accent px-4 py-2.5 text-[13px] font-medium text-bg hover:opacity-90"
                     >
-                      Descargar
+                      Download
                     </a>
                     <button type="button" className="jg-micro text-[12px] text-subtle hover:text-fg" onClick={reiniciar}>
-                      elegir otra vez
+                      Choose again
                     </button>
                   </div>
                 )}

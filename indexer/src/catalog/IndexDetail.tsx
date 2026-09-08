@@ -59,6 +59,12 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
   // del empaquetado firmó cada publicación, y hoy nada lo necesita más que
   // este caso excepcional.
   const [forzarPublicar, setForzarPublicar] = useState(false);
+  // Modelos completos que el paquete sellado en disco todavía no lleva —
+  // vacío casi siempre, solo tiene contenido cuando un modelo se terminó de
+  // embeber DESPUÉS de sellar (`reembeber`/"Portear a otro nivel" no tienen
+  // forma de llegar al paquete por su cuenta, sellar es de un solo uso).
+  const [capasPendientes, setCapasPendientes] = useState<string[]>([]);
+  const [agregandoCapa, setAgregandoCapa] = useState<string | null>(null);
 
   useEffect(() => { void api.identidadLeer().then(setSesion); }, []);
 
@@ -67,7 +73,18 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
     void api.indiceLotes(id).then(setLotes);
     void api.publicacionHayNovedades(id).then(setHayNovedades);
     void api.indiceUrlPublicada(id).then(setUrlPublicada);
+    void api.paqueteCapasPendientes(id).then(setCapasPendientes);
   };
+
+  async function agregarCapa(modeloId: string) {
+    setAgregandoCapa(modeloId);
+    try {
+      await api.paqueteAgregarCapa(id, modeloId);
+      refrescar();
+    } finally {
+      setAgregandoCapa(null);
+    }
+  }
 
   useEffect(() => {
     refrescar();
@@ -281,6 +298,21 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
             className="jg-press w-fit rounded-lg border border-border px-3 py-1.5 text-[11px] text-fg">
             Abrir en mapa
           </button>
+        )}
+
+        {sellado && !soloLectura && capasPendientes.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-warning/[.35] p-[8px_10px]">
+            <span className="text-[10.5px] text-warning-fg">
+              Terminaron de embeberse después del sellado, sin capa en el paquete:
+            </span>
+            {capasPendientes.map((m) => (
+              <button key={m} onClick={() => void agregarCapa(m)} disabled={agregandoCapa !== null}
+                className="jg-press rounded-lg border border-border px-2.5 py-1 font-mono text-[10.5px]
+                  text-fg disabled:opacity-40">
+                {agregandoCapa === m ? "Añadiendo…" : `+ ${m}`}
+              </button>
+            ))}
+          </div>
         )}
 
         <div className="flex gap-6">

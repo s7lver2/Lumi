@@ -1,0 +1,11 @@
+Model Information:
+* title:	Server Racking System
+* source:	https://sketchfab.com/3d-models/server-racking-system-6fe2cacf836b4aed96c650b286db5486
+* author:	wpanayides (https://sketchfab.com/mcpanayides)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Server Racking System" (https://sketchfab.com/3d-models/server-racking-system-6fe2cacf836b4aed96c650b286db5486) by wpanayides (https://sketchfab.com/mcpanayides) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

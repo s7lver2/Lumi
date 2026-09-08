@@ -42,13 +42,24 @@ const HASTA = -355; // centra la ventana por geometría: 92 + Y·cos75° ≈ 0
 const FIN_VUELO = 0.46; // hasta aquí el viaje termina de llegar a HASTA
 const INICIO_ALZA = 0.28; // el alzamiento empieza a mezclarse ANTES de que el viaje acabe — las dos cosas a la vez, no una detrás de otra
 const FIN_LEVANTAMIENTO = 0.58;
-const RECORRIDO_PX = 15400; // fase A+B como antes, más recorrido para la fase C: más scroll por salto, menos sensación de caos
+const RECORRIDO_PX = 20800; // fase A+B como antes, más recorrido para la fase C: más scroll por salto, menos sensación de caos
+const ANCHO_CRUCE = 1.15; // ancho (en unidades de índice) del solape entre dos pantallas — más ancho que antes (.95) para que el cruce se sienta como un fundido, no un corte
 
 function easeOutCubic(x: number) {
   return 1 - Math.pow(1 - x, 3);
 }
 function easeInOutCubic(x: number) {
   return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+}
+
+/** Cuánto se ve una pantalla a `dist` unidades de índice de la más cercana:
+ *  antes era una rampa lineal (`1 - dist*0.95`), que se lee como un corte
+ *  seco apenas empieza a moverse. `smoothstep` frena la salida y la entrada
+ *  del fundido en vez de una recta, así el cruce se siente como un fundido
+ *  de verdad y no un tirón. */
+function cruce(dist: number) {
+  const t = Math.max(0, Math.min(1, 1 - dist / ANCHO_CRUCE));
+  return t * t * (3 - 2 * t);
 }
 
 type Pintura = {
@@ -139,29 +150,29 @@ const PANTALLAS: {
 }[] = [
   {
     n: "01", etiqueta: "análisis",
-    t: "El análisis, no una cola",
-    d: "Cada imagen se enfrenta a varios verificadores geométricos a la vez — gana quien se acerque más al punto real, no un modelo único.",
+    t: "Clean UI",
+    d: "An ui with a minimalist look, designed for efficiency with style, handle your cases from this screen and keep them organized. powered by mapbox ",
     src: "/sobrevuelo/02-analisis.png",
     zoom: { escala: 1.1, origen: "45% 40%" }, // se acerca al globo y al panel de estado
   },
   {
     n: "02", etiqueta: "proyectos",
-    t: "Tus proyectos, siempre a mano",
-    d: "Cada investigación es un espacio propio: imágenes, casos y análisis anteriores, exactamente donde los dejaste.",
+    t: "Proyects And Colaboration",
+    d: "Organize your images in projects and invite other persons to colaborate in them with a single click, personalizable limits",
     src: "/sobrevuelo/01-proyectos.png",
     zoom: { escala: 1.15, origen: "14% 14%" }, // se acerca a la tarjeta del proyecto
   },
   {
     n: "03", etiqueta: "resultado",
-    t: "La sección de resultado, tal cual",
-    d: "Cada hipótesis lista los verificadores que compitieron y su distancia entre sí, anclada sobre el terreno con el radio de confianza real.",
+    t: "The Final Guess",
+    d: "See the predictions, evaluate agents veredicts, and compare them with the reality",
     src: "/sobrevuelo/03-resultado.png",
     zoom: { escala: 1.15, origen: "40% 42%" }, // se acerca al marcador y su radio de confianza
   },
   {
     n: "04", etiqueta: "administración",
-    t: "Control total del servidor",
-    d: "Modelos, GPUs y usuarios, gestionados desde el mismo cliente — nunca desde un panel de terceros.",
+    t: "Take The Control",
+    d: "Handle your hardware and your users easely, customize your server, all from one place",
     src: "/sobrevuelo/04-administracion.png",
     zoom: { escala: 1.15, origen: "68% 58%" }, // se acerca a la tarjeta de hardware/GPU
   },
@@ -269,9 +280,9 @@ export function Sobrevuelo() {
   const pantallaTexto = PANTALLAS[idxCercano];
   // El zoom es de TODA la ventana, no de la captura interior: cuando una
   // pantalla con `zoom` queda centrada, el marco entero se acerca sobre su
-  // punto de interés y se aleja de nuevo al abandonarla. 0.95 en vez de
-  // 1.15: el cruce entre pantallas dura más scroll, se siente menos brusco.
-  const enfoqueActivo = Math.max(0, 1 - Math.min(1, Math.abs(indiceFloat - idxCercano) * 0.95));
+  // punto de interés y se aleja de nuevo al abandonarla. Usa la misma curva
+  // suavizada que el cruce de imágenes, no un tramo lineal aparte.
+  const enfoqueActivo = cruce(Math.abs(indiceFloat - idxCercano));
   const zoomActivo = pantallaTexto.zoom;
   const escalaZoomVentana = zoomActivo ? 1 + (zoomActivo.escala - 1) * enfoqueActivo : 1;
 
@@ -285,16 +296,16 @@ export function Sobrevuelo() {
       <div className={movil ? "relative py-16" : "sticky top-0 h-screen overflow-hidden"}>
         {movil ? (
           <div className="mx-auto max-w-[720px] px-7 text-center">
-            <span className="font-mono text-[11px] uppercase tracking-wide text-subtle">meet lumi</span>
+            <span className="font-mono text-[11px] uppercase tracking-wide text-subtle">Meet lumi</span>
             <h2 className="mt-2 text-[clamp(24px,3.4vw,36px)] font-semibold tracking-tight">
-              La misma interfaz, sin importar el modelo
+              A UI for all your Research
             </h2>
           </div>
         ) : (
           <div className="pointer-events-none absolute left-0 right-0 top-16 z-10 mx-auto max-w-[720px] px-7 text-center">
             <span className="font-mono text-[11px] uppercase tracking-wide text-subtle">meet lumi</span>
             <h2 className="mt-2 text-[clamp(24px,3.4vw,36px)] font-semibold tracking-tight">
-              La misma interfaz, sin importar el modelo
+              A UI for all your Research
             </h2>
           </div>
         )}
@@ -383,18 +394,26 @@ export function Sobrevuelo() {
                     <div className="relative w-[1180px] max-w-[94vw] overflow-hidden rounded-card border border-border bg-panel shadow-2xl">
                       <BarraVentana />
                       <div className="relative h-[560px]">
-                        {PANTALLAS.map((pn, i) => (
+                        {PANTALLAS.map((pn, i) => {
+                          const c = cruce(Math.abs(indiceFloat - i));
+                          return (
                           <div
                             key={pn.n}
                             className="absolute inset-0"
                             style={{
-                              opacity: Math.max(0, 1 - Math.min(1, Math.abs(indiceFloat - i) * 0.95)),
+                              opacity: c,
+                              // Un fundido de solo opacidad sobre dos capas apiladas se
+                              // lee plano; un escalado mínimo que se resuelve junto con
+                              // la opacidad (995→1000‰) da la sensación de que la
+                              // pantalla entrante "se asienta" en vez de solo aparecer.
+                              transform: `scale(${0.988 + 0.012 * c})`,
                               pointerEvents: i === idxCercano ? "auto" : "none",
                             }}
                           >
                             <PantallaContenido indice={i} src={pn.src} />
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   </div>

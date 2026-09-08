@@ -18,3 +18,8 @@ __pycache__/
 .lumi-indexer/
 .release-tmp/
 .dev-data/
+
+# tools/benchmark.py: banco de consultas y sus fotos, copiadas de un índice
+# instalado solo para pruebas locales — no son nuestras para redistribuir.
+/banco.jsonl
+/tools/banco-imagenes/

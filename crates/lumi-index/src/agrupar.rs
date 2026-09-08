@@ -11,6 +11,11 @@ use crate::tiles::xy_de_quadkey;
 
 #[derive(Debug, Clone)]
 pub struct Candidato {
+    /// La fila de `reference_images` en SQLite. Es lo que permite servir su
+    /// foto (`GET /v1/reference-images/:id/thumb`) sin tener que volver a
+    /// buscarla por quadkey+coordenada, como hacía `rutas_de_candidatos`
+    /// antes de que este campo existiera.
+    pub id: i64,
     pub lat: f64,
     pub lng: f64,
     pub quadkey: String,
@@ -28,6 +33,11 @@ pub struct Grupo {
     pub candidatos: usize,
     pub indice: String,
     pub autor: String,
+    /// La foto de referencia que representa al grupo entero: el mismo
+    /// candidato de más peso que decide `indice`/`autor` arriba, no uno
+    /// elegido por un criterio distinto — un grupo ya tiene un solo autor y un
+    /// solo índice, y esto es la misma regla aplicada a la foto.
+    pub imagen_id: i64,
     /// Coordenada original de cada candidato que aportó a este grupo -- el
     /// centroide de arriba (`lat`/`lng`) es un promedio ponderado y casi
     /// nunca coincide con la de ninguno en concreto, así que quien necesite
@@ -109,6 +119,7 @@ fn resumir(cands: &[Candidato], isla: &[usize]) -> Grupo {
         candidatos: isla.len(),
         indice: cands[mejor].indice.clone(),
         autor: cands[mejor].autor.clone(),
+        imagen_id: cands[mejor].id,
         miembros: isla.iter().map(|&i| (cands[i].lat, cands[i].lng)).collect(),
     }
 }
@@ -140,9 +151,9 @@ fn metros_entre(a_lat: f64, a_lng: f64, b_lat: f64, b_lng: f64) -> f64 {
 mod tests {
     use super::*;
 
-    fn cand(qk: &str, lat: f64, lng: f64, sim: f64, indice: &str, autor: &str) -> Candidato {
+    fn cand(id: i64, qk: &str, lat: f64, lng: f64, sim: f64, indice: &str, autor: &str) -> Candidato {
         Candidato {
-            lat, lng, quadkey: qk.into(), similitud: sim,
+            id, lat, lng, quadkey: qk.into(), similitud: sim,
             indice: indice.into(), autor: autor.into(),
         }
     }
@@ -150,7 +161,7 @@ mod tests {
     fn grupo(peso: f64) -> Grupo {
         Grupo {
             lat: 0.0, lng: 0.0, radio_m: 100.0, peso,
-            candidatos: 1, indice: "A".into(), autor: "@ana".into(),
+            candidatos: 1, indice: "A".into(), autor: "@ana".into(), imagen_id: 1,
             miembros: vec![(0.0, 0.0)],
         }
     }
@@ -158,9 +169,9 @@ mod tests {
     #[test]
     fn dos_teselas_contiguas_son_el_mismo_sitio_y_una_lejana_no() {
         let c = vec![
-            cand("03131010101010", 43.36, -8.41, 0.90, "A", "@ana"),
-            cand("03131010101011", 43.36, -8.40, 0.80, "A", "@ana"),
-            cand("12000000000000", 10.00, 20.00, 0.70, "B", "@bea"),
+            cand(1, "03131010101010", 43.36, -8.41, 0.90, "A", "@ana"),
+            cand(2, "03131010101011", 43.36, -8.40, 0.80, "A", "@ana"),
+            cand(3, "12000000000000", 10.00, 20.00, 0.70, "B", "@bea"),
         ];
         let g = en_grupos(&c);
         assert_eq!(g.len(), 2, "las dos contiguas van juntas");
@@ -169,6 +180,8 @@ mod tests {
         // La atribución sale del candidato que más pesa dentro del grupo.
         assert_eq!(g[0].indice, "A");
         assert_eq!(g[0].autor, "@ana");
+        // Y su foto es la de ESE mismo candidato, no la de cualquiera del grupo.
+        assert_eq!(g[0].imagen_id, 1);
     }
 
     #[test]
