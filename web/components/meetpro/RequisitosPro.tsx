@@ -1,22 +1,28 @@
 "use client";
 import { usarRevelado } from "../usarRevelado";
 
-/** Mismo formato que `RequisitosMini`, pero SIN el dato real que allí sí
- *  hay: `tools/benchmark.py` todavía no se ha corrido contra `pro` (el
- *  único resultado real que existe hoy es el de `mini`, en
- *  `resultados.json`). Así que aquí TODO va marcado como estimación —
- *  nada de fingir una medición que no se ha hecho. En cuanto exista un
- *  `resultados.json` con el nivel `pro`, esta tabla se sustituye por esos
- *  números reales, igual que ya pasó con el VRAM de Mini. */
+/** Mismo formato que `RequisitosMini`. La VRAM ya tiene dato real: un
+ *  corte de `tools/benchmark.py --niveles pro` (`resultados.json`) llegó a
+ *  completar 7 de 16 consultas antes de que una caída de infraestructura
+ *  durante la propia prueba (reinicios de `lumid` en marcha) tumbara el
+ *  resto — el pico de VRAM de esas 7 sí es una medición real, aunque la
+ *  tanda se cortara antes de terminar. El resto sigue siendo estimación:
+ *  RAM/CPU no se miden con este banco, y el disco es una extrapolación del
+ *  peso documentado de cada motor, no una suma verificada. */
 
-type Fila = { etiqueta: string; minimo: string; recomendado: string };
+type Fila = { etiqueta: string; minimo: string; recomendado: string; fuente: "medido" | "estimado" };
 
 const FILAS: Fila[] = [
-  { etiqueta: "GPU · VRAM", minimo: "12 GB", recomendado: "24 GB" },
-  { etiqueta: "RAM del sistema", minimo: "32 GB", recomendado: "64 GB" },
-  { etiqueta: "Disco para los pesos", minimo: "~15 GB", recomendado: "~15 GB" },
-  { etiqueta: "CPU", minimo: "8 núcleos", recomendado: "16 núcleos" },
+  { etiqueta: "GPU · VRAM", minimo: "8 GB", recomendado: "20 GB", fuente: "medido" },
+  { etiqueta: "RAM del sistema", minimo: "32 GB", recomendado: "64 GB", fuente: "estimado" },
+  { etiqueta: "Disco para los pesos", minimo: "~15 GB", recomendado: "~15 GB", fuente: "estimado" },
+  { etiqueta: "CPU", minimo: "8 núcleos", recomendado: "16 núcleos", fuente: "estimado" },
 ];
+
+function Insignia({ fuente }: { fuente: Fila["fuente"] }) {
+  const texto = fuente === "medido" ? "medido en benchmark" : "estimado";
+  return <span className="font-mono text-[9px] uppercase tracking-wide text-subtle">{texto}</span>;
+}
 
 export function RequisitosPro() {
   const { ref, visible } = usarRevelado<HTMLElement>();
@@ -72,12 +78,22 @@ export function RequisitosPro() {
         </div>
       </div>
 
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+        {FILAS.map((f) => (
+          <div key={f.etiqueta} className="flex items-center gap-1.5">
+            <span className="text-[10.5px] text-subtle">{f.etiqueta}:</span>
+            <Insignia fuente={f.fuente} />
+          </div>
+        ))}
+      </div>
+
       <p
         className="mt-6 text-center font-mono text-[10px] text-subtle"
         style={visible ? { animation: "jg-reveal-up .6s cubic-bezier(.16,1,.3,1) both .3s" } : { opacity: 0 }}
       >
-        *Estimaciones — a diferencia de Mini, `tools/benchmark.py` todavía no se ha corrido
-        contra Pro. Se sustituirán por medidas reales en cuanto exista ese resultado.
+        *VRAM mínima: pico real de `tools/benchmark.py --niveles pro` sobre 7 consultas resueltas
+        antes de que un corte de infraestructura interrumpiera la tanda — ver `resultados.json`.
+        RAM, CPU y disco siguen siendo estimaciones razonables, no medidas.
       </p>
     </section>
   );

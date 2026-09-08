@@ -5,10 +5,14 @@ import { usarRevelado } from "../usarRevelado";
 /** Mismo criterio que `BenchmarksMini`: la comparativa con GeoCLIP/PIGEON
  *  usa las cifras REALES que publican sus propios papers (misma fuente
  *  citada allí); la cifra de Pro es un ejemplo propio, pendiente de medir
- *  con un banco de fotos que NO estén ya en el índice (el único resultado
- *  real que existe hoy, `resultados.json`, es de `mini` contra fotos que
- *  SÍ estaban indexadas — memorización, no generalización, así que no vale
- *  para esta comparación y no se usa aquí). */
+ *  con un banco de fotos que NO estén ya en el índice. `resultados.json`
+ *  ya trae un corte real de `pro` (7 de 16 consultas completadas antes de
+ *  que una caída de infraestructura interrumpiera la tanda), pero sigue
+ *  siendo contra fotos YA indexadas -- memorización, no generalización --
+ *  y una muestra de 7 es demasiado pequeña para sostener una comparación
+ *  contra el banco de miles de fotos de GeoCLIP/PIGEON, así que tampoco se
+ *  usa aquí. (Sí se usa en `RequisitosPro.tsx`: la VRAM medida no depende
+ *  de si la foto era conocida.) */
 
 type Externo = { id: string; nombre: string; ciudad25km: number; fuente: string; url: string };
 
