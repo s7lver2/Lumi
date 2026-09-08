@@ -90,11 +90,15 @@ function el(m: Marker, oscuro: boolean): HTMLElement {
 }
 
 export function MapCanvas({
-  markers, onMarker, flyTo,
+  markers, onMarker, flyTo, procesando,
 }: {
   markers: Marker[];
   onMarker?: (id: string) => void;
   flyTo?: { lat: number; lng: number; zoom: number } | null;
+  /** Hay un análisis en curso para lo que se está mirando: la cámara se aleja
+   *  a ver el globo entero y gira sola en vez de quedarse quieta esperando —
+   *  es lo mismo que ya hacía la pantalla de entrada, aquí con el mapa real. */
+  procesando?: boolean;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<AnyMap | null>(null);
@@ -333,6 +337,52 @@ export function MapCanvas({
     // dispararse solo (`flyTo` no cambia otra vez), y el vuelo se perdía —
     // el mapa aparecía ya puesto en el punto, sin ningún tramo que animar.
   }, [flyTo, ready]);
+
+  // Mientras se procesa: alejarse a ver el globo entero y girarlo despacio.
+  // Al terminar (o al desmontarse este efecto) solo se endereza el rumbo —
+  // el resto de la cámara lo resuelve el vuelo al resultado que ya dispara
+  // el efecto de `flyTo` de arriba en cuanto el análisis termina; si no hay
+  // resultado (error, o nada encontrado), quedarse mirando el planeta es
+  // mejor que un mapa a medio encuadrar sin ningún punto que enseñar.
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    if (!procesando) {
+      m.setBearing(0);
+      return;
+    }
+    const setProj = (o: { type: string; name: string }) =>
+      (m as { setProjection?: (o: unknown) => void }).setProjection?.(o);
+    // El giro solo se lee como "planeta" en proyección globo — en plano
+    // sería un mapa rectangular rotando sobre sí mismo, no una órbita. Es un
+    // cambio puramente visual, no toca la preferencia guardada de quien mira.
+    setProj({ type: "globe", name: "globe" });
+    m.easeTo({ zoom: 1.6, pitch: 0, duration: 1400, easing: EASE_OUT_CUBIC });
+
+    // Sin movimiento continuo para quien pidió reducirlo: el alejamiento de
+    // arriba ya cuenta la historia ("se está procesando"), no hace falta
+    // además una rotación infinita para decirlo.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return () => setProj({ type: globe ? "globe" : "mercator", name: globe ? "globe" : "mercator" });
+    }
+
+    let raf = 0;
+    let vivo = true;
+    const girar = () => {
+      if (!vivo) return;
+      m.setBearing((m.getBearing() + 0.04) % 360);
+      raf = requestAnimationFrame(girar);
+    };
+    // Espera a que termine el alejamiento antes de girar: arrancar los dos
+    // `easeTo`/rotación a la vez los hace pelearse por la cámara.
+    const t = setTimeout(() => { raf = requestAnimationFrame(girar); }, 1400);
+    return () => {
+      vivo = false;
+      clearTimeout(t);
+      cancelAnimationFrame(raf);
+      setProj({ type: globe ? "globe" : "mercator", name: globe ? "globe" : "mercator" });
+    };
+  }, [procesando, globe]);
 
   /** Encuadra todo lo que hay que ver. Un mapa que arranca en el mundo entero
    *  y deja los resultados como dos motas obliga a buscarlos a mano. */

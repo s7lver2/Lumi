@@ -322,6 +322,13 @@ export function CaseView({
     return out;
   }, [mine, image, shown]);
 
+  /** Lo que se está mirando tiene un análisis sin terminar. `sel` y no
+   *  `shown.state`: mientras el primer intento corre no hay ningún análisis
+   *  "mostrado" todavía (`shown` cae al último de la lista sin filtrar por
+   *  estado), y da igual cuál de los intentos de esta imagen sea el que está
+   *  en curso — el mapa se aleja igual. */
+  const procesando = sel !== null && (estados.get(sel) === "pendiente" || estados.get(sel) === "en_curso");
+
   const flyTo = useMemo(
     () =>
       fly ??
@@ -358,7 +365,7 @@ export function CaseView({
     // cadena que resolver.
     <div className="absolute inset-0 overflow-hidden"
       style={{ animation: "jg-page-fade-in 260ms cubic-bezier(.16,1,.3,1) both" }}>
-      <MapCanvas markers={markers} flyTo={flyTo} onMarker={(id) => {
+      <MapCanvas markers={markers} flyTo={flyTo} procesando={procesando} onMarker={(id) => {
         // "a123" es un análisis; "a123h0" es una de sus alternativas y
         // selecciona el mismo análisis, que es lo que ya sabe pintar el cajón.
         const m = /^a(\d+)/.exec(id);
