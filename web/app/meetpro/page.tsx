@@ -4,7 +4,14 @@ import { mapaAsciiMundo } from "../../lib/mapaAscii";
 export default function Page() {
   // Calculado en build (página estática): a esta resolución tarda unos
   // 15-20s, aceptable como coste de build, no aceptable por petición.
-  const mapa = mapaAsciiMundo(340, 148);
+  //
+  // 400x120 y no un número "bonito" al azar: un carácter mono mide en
+  // pantalla ~0.6 de ancho por cada unidad de alto (mismo factor que ya usa
+  // `HeroIndice.tsx`), así que para que el mapa se vea con las proporciones
+  // reales (360° de largo por 180° de alto, 2:1) hacen falta columnas y filas
+  // en proporción 2/0.6 ≈ 3.33, no las columnas/filas del mapa a secas —
+  // con menos columnas de las que tocan, todo sale estirado verticalmente.
+  const mapa = mapaAsciiMundo(400, 120);
 
   return (
     <main>

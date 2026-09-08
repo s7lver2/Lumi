@@ -22,7 +22,15 @@ const ESTRELLA_D = "M512 176c30 188 116 274 300 300-184 26-270 112-300 300-30-18
 // ninguna librería ni marca de nadie.
 const PIN_D = "M12 0.5C7.03 0.5 3 4.53 3 9.5c0 6.5 9 14 9 14s9-7.5 9-14c0-4.97-4.03-9-9-9z";
 
-const VB_W = 1000, VB_H = 620;
+// 2:1, el aspecto real de un mapa equirrectangular (360° de largo por 180°
+// de alto) — tiene que ser EXACTAMENTE la misma proporción que usa el mapa
+// de caracteres de fondo (ver el comentario en `app/meetpro/page.tsx` sobre
+// por qué 400x120). Si estas dos cajas no comparten proporción, el SVG
+// (que se ajusta con `preserveAspectRatio="slice"`, o sea recorta como
+// `background-size: cover`) recorta por un sitio distinto al que recorta el
+// `<pre>` del mapa (ajustado a mano más abajo con la misma lógica), y las
+// chinchetas dejan de caer donde caen los caracteres del mapa real.
+const VB_W = 1000, VB_H = 500;
 function proyectar(lon: number, lat: number) {
   return { x: ((lon + 180) / 360) * VB_W, y: ((90 - lat) / 180) * VB_H };
 }

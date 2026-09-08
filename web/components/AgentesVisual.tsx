@@ -457,15 +457,13 @@ export function AgentesVisual() {
         className="mt-2 text-[clamp(24px,3.4vw,36px)] font-semibold tracking-tight"
         style={visible ? { animation: "jg-reveal-up .7s cubic-bezier(.16,1,.3,1) both .05s" } : { opacity: 0 }}
       >
-        Lo que dice la imagen
+        The Agents
       </h2>
       <p
         className="mt-3 max-w-[70ch] leading-relaxed text-muted"
         style={visible ? { animation: "jg-reveal-up .7s cubic-bezier(.16,1,.3,1) both .1s" } : { opacity: 0 }}
       >
-        Elige una imagen: cada agente lee UN atributo y compite entre varias hipótesis, nunca una
-        sola respuesta cerrada — el mismo panel que ves en el cliente, aplicado aquí a un atributo
-        visual en vez de a la ubicación final.
+        Discover what our custom agents are capable of with this example images!
       </p>
 
       {/* Envoltorio de anclaje: más alto que la pantalla a propósito, es el
