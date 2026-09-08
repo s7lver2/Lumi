@@ -387,6 +387,10 @@ fn migrate(c: &Connection) {
         // El nivel que realmente corrió tras la degradación del 5b. Nulo
         // significa «el pedido», que es lo normal.
         ("analyses", "nivel_efectivo", "TEXT"),
+        // Si nació de una clave de API. "Conectado" no tiene sentido para
+        // tráfico sin sesión persistente — este trabajo puntual se trata como
+        // si su dueño tuviera segundo plano activado, sin tocar su ajuste real.
+        ("analyses", "via_api", "INTEGER NOT NULL DEFAULT 0"),
         // De qué verificador salió la coordenada afinada y con cuánto
         // respaldo. Es evidencia, no telemetría.
         ("analysis_hypotheses", "inliers", "INTEGER"),

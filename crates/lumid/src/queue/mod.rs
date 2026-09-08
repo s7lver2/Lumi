@@ -387,7 +387,7 @@ impl Queue {
                 let razon = duenos.get(&cand.user_id).and_then(|d| {
                     if d.bloqueado {
                         Some(RazonBloqueo::Bloqueado)
-                    } else if !d.conectado && !d.segundo_plano {
+                    } else if !d.conectado && !d.segundo_plano && !cand.via_api {
                         Some(RazonBloqueo::Desconectado)
                     } else if d.en_curso >= d.max_concurrent {
                         Some(RazonBloqueo::LimiteAlcanzado)
@@ -1205,7 +1205,7 @@ impl Queue {
     fn candidatos(&self) -> Vec<Candidato> {
         let c = self.store.conn();
         let Ok(mut q) = c.prepare(
-            "SELECT id, requested_by, model, created_at FROM analyses
+            "SELECT id, requested_by, model, created_at, via_api FROM analyses
              WHERE state = 'pendiente' ORDER BY created_at",
         ) else {
             return vec![];
@@ -1216,6 +1216,7 @@ impl Queue {
                 user_id: r.get(1)?,
                 modelo: r.get(2)?,
                 created_at: r.get(3)?,
+                via_api: r.get::<_, i64>(4)? == 1,
             })
         })
         .map(|it| it.flatten().collect())

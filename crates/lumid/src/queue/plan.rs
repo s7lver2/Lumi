@@ -14,6 +14,10 @@ pub struct Candidato {
     pub user_id: i64,
     pub modelo: String,
     pub created_at: i64,
+    /// Si nació de una clave de API: "conectado" no significa nada para
+    /// tráfico sin sesión persistente, así que este trabajo puntual se trata
+    /// como si tuviera segundo plano, sin tocar el ajuste real del dueño.
+    pub via_api: bool,
 }
 
 /// Lo que se sabe del dueño de un trabajo en el instante de repartir.
@@ -58,7 +62,7 @@ pub fn repartir(
         .iter()
         .filter_map(|c| Some((c, duenos.get(&c.user_id)?)))
         .filter(|(_, d)| !d.bloqueado)
-        .filter(|(_, d)| d.conectado || d.segundo_plano)
+        .filter(|(c, d)| d.conectado || d.segundo_plano || c.via_api)
         .filter(|(_, d)| d.en_curso < d.max_concurrent)
         .collect();
 
@@ -114,7 +118,10 @@ mod tests {
         Dueno { bloqueado, conectado, segundo_plano, max_concurrent, prioridad, en_curso }
     }
     fn cand(analysis_id: i64, user_id: i64, created_at: i64) -> Candidato {
-        Candidato { analysis_id, user_id, modelo: "mini".into(), created_at }
+        Candidato { analysis_id, user_id, modelo: "mini".into(), created_at, via_api: false }
+    }
+    fn cand_api(analysis_id: i64, user_id: i64, created_at: i64) -> Candidato {
+        Candidato { analysis_id, user_id, modelo: "mini".into(), created_at, via_api: true }
     }
     fn libre(dispositivo: &str, modelo: Option<&str>) -> Libre {
         Libre { dispositivo: dispositivo.into(), modelo: modelo.map(String::from) }
@@ -173,5 +180,20 @@ mod tests {
 
         // Sin trabajadores no se reparte nada, y no revienta.
         assert!(repartir(&cinco, &d, &[]).is_empty());
+    }
+
+    #[test]
+    fn una_clave_de_api_corre_aunque_su_dueno_este_desconectado() {
+        // Desconectado y sin segundo plano: por defecto no correría (arriba
+        // ya se comprueba). Pero si ESTE trabajo nació de una clave de API,
+        // "conectado" no significa nada para él y corre igual.
+        let d = HashMap::from([(1, dueno(false, false, false, 2, 0, 0))]);
+        let uno = [libre("cuda:0", None)];
+        let r = repartir(&[cand_api(10, 1, 100)], &d, &uno);
+        assert_eq!(r.len(), 1, "una clave de API no depende de si el dueño está conectado");
+
+        // No se salta el resto de límites: bloqueado sigue bloqueando.
+        let d = HashMap::from([(1, dueno(true, false, false, 2, 0, 0))]);
+        assert!(repartir(&[cand_api(10, 1, 100)], &d, &uno).is_empty(), "bloqueado sigue bloqueando aunque sea de API");
     }
 }

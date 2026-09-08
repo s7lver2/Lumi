@@ -5,7 +5,7 @@
 //! subsistema 4: cuando la cola arranque, encontrará trabajo real esperando.
 
 use crate::routes::access::now;
-use crate::routes::auth::{bearer, require_admin, require_session};
+use crate::routes::auth::{bearer, is_api_key, require_admin, require_session};
 use crate::routes::cases::guard_case;
 use crate::routes::projects::{err, Fail};
 use crate::App;
@@ -218,12 +218,13 @@ pub async fn create(
     }
 
     let t = now();
+    let via_api = is_api_key(&app.store, &bearer(&headers));
     let id = {
         let c = app.store.conn();
         c.execute(
-            "INSERT INTO analyses (case_id, requested_by, model, state, created_at)
-             VALUES (?1, ?2, ?3, 'pendiente', ?4)",
-            rusqlite::params![case_id, uid, req.model, t],
+            "INSERT INTO analyses (case_id, requested_by, model, state, created_at, via_api)
+             VALUES (?1, ?2, ?3, 'pendiente', ?4, ?5)",
+            rusqlite::params![case_id, uid, req.model, t, via_api],
         )
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
         let id = c.last_insert_rowid();

@@ -234,6 +234,21 @@ pub fn require_admin(app: &App, token: &str) -> Result<i64, StatusCode> {
     Ok(uid)
 }
 
+/// Si el token que abrió esta sesión es una clave de API y no un login. Se
+/// comprueba aparte de `require_session` porque a esto no le interesa quién
+/// es ni si puede operar, solo el `kind` de la fila — lo usa la cola para
+/// saber que "conectado" no aplica a este trabajo.
+pub fn is_api_key(store: &Store, token: &str) -> bool {
+    store
+        .conn()
+        .query_row(
+            "SELECT 1 FROM sessions WHERE token = ?1 AND kind = 'api_key'",
+            [hash_token(token)],
+            |_| Ok(()),
+        )
+        .is_ok()
+}
+
 pub fn bearer(h: &axum::http::HeaderMap) -> String {
     h.get("authorization")
         .and_then(|v| v.to_str().ok())
