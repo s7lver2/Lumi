@@ -1,4 +1,8 @@
 import { HeroCarrera } from "../../components/meetpro/HeroCarrera";
+import { ArquitecturaPro } from "../../components/meetpro/ArquitecturaPro";
+import { RequisitosPro } from "../../components/meetpro/RequisitosPro";
+import { BenchmarksPro } from "../../components/meetpro/BenchmarksPro";
+import { SeparadorSeccion } from "../../components/SeparadorSeccion";
 import { mapaAsciiMundo } from "../../lib/mapaAscii";
 
 export default function Page() {
@@ -31,6 +35,18 @@ export default function Page() {
           </p>
         </div>
       </section>
+
+      <SeparadorSeccion />
+
+      <ArquitecturaPro />
+
+      <SeparadorSeccion />
+
+      <RequisitosPro />
+
+      <SeparadorSeccion />
+
+      <BenchmarksPro />
     </main>
   );
 }
