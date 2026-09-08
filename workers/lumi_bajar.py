@@ -145,6 +145,8 @@ def main():
             try:
                 from paddleocr import PaddleOCR
 
+                # Mismos parametros que `lumi_motores.py::Ocr` -- ver su
+                # comentario sobre por que esto sigue fijado a PaddleOCR 2.x.
                 PaddleOCR(use_angle_cls=True, lang="latin", show_log=False, use_gpu=False)
                 print(f"      pesos de paddleocr descargados y cargados", flush=True)
             except Exception as e:

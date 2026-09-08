@@ -146,6 +146,114 @@
       "error_km_mediana": 0.01,
       "latencia_s_mediana": 139.77,
       "vram_pico_mb_max": 7191
+    },
+    "pro": {
+      "filas": [
+        {
+          "archivo": "tools/banco-imagenes/mly-3687394728038983.jpg",
+          "error_km": 0.02,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 205.59,
+          "vram_pico_mb": 5071
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-1089270724886169.jpg",
+          "error_km": 0.0,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 147.76,
+          "vram_pico_mb": 5206
+        },
+        {
+          "archivo": "tools/banco-imagenes/kv-1170767689.jpg",
+          "error_km": 0.02,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 198.09,
+          "vram_pico_mb": 5463
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-1118769210312490.jpg",
+          "error_km": 0.01,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 199.8,
+          "vram_pico_mb": 5647
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-469603667480653.jpg",
+          "error_km": 0.01,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 191.61,
+          "vram_pico_mb": 5895
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-116961020438624.jpg",
+          "error_km": 0.01,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 210.42,
+          "vram_pico_mb": 5773
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-780128648304442.jpg",
+          "error": "TimeoutError: análisis 41 no terminó en 300s"
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-3015454555444506.jpg",
+          "error": "TimeoutError: análisis 42 no terminó en 300s"
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-1725104888184147.jpg",
+          "error": "TimeoutError: análisis 43 no terminó en 300s"
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-1486799152738828.jpg",
+          "error": "TimeoutError: análisis 44 no terminó en 300s"
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-778721349455555.jpg",
+          "error": "TimeoutError: análisis 45 no terminó en 300s"
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-1056137158248184.jpg",
+          "error": "TimeoutError: análisis 46 no terminó en 300s"
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-242088871038506.jpg",
+          "error": "TimeoutError: análisis 47 no terminó en 300s"
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-215319743438800.jpg",
+          "error": "TimeoutError: análisis 48 no terminó en 300s"
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-796792344547857.jpg",
+          "error": "TimeoutError: análisis 49 no terminó en 300s"
+        },
+        {
+          "archivo": "tools/banco-imagenes/mly-5550119148362740.jpg",
+          "error_km": 0.0,
+          "umbral": "street",
+          "confianza": 10.0,
+          "latencia_s": 234.0,
+          "vram_pico_mb": 8108
+        }
+      ],
+      "n_consultas": 16,
+      "n_resueltas": 7,
+      "acierto_por_umbral_pct": {
+        "street": 43.8,
+        "city": 43.8,
+        "region": 43.8,
+        "country": 43.8,
+        "continent": 43.8
+      },
+      "error_km_mediana": 0.01,
+      "latencia_s_mediana": 199.8,
+      "vram_pico_mb_max": 8108
     }
   }
 }

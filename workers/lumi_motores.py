@@ -114,6 +114,13 @@ class Ocr(object):
     def __init__(self, pesos_dir, dispositivo):
         from paddleocr import PaddleOCR
 
+        # ponytail: fijado a PaddleOCR 2.x (`tasks.rs`) a propósito. La 3.x
+        # rehizo esta API entera (otro nombre de idioma, otros parámetros de
+        # construcción, otro método de inferencia, otro formato de salida) Y
+        # además trae un runtime CPU con un fallo propio (`NotImplementedError:
+        # ConvertPirAttribute2RuntimeAttribute...`) en la versión probada — no
+        # es solo cambiar nombres de argumentos aquí. El día que 3.x sea
+        # imprescindible, esto se reescribe entero contra su API nueva.
         _directorio(pesos_dir, "paddleocr")
         self.red = PaddleOCR(use_angle_cls=True, lang="latin", show_log=False,
                              use_gpu=(dispositivo != "cpu"))

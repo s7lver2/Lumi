@@ -109,7 +109,17 @@ def _construir(verificador, pesos):
         # que puedan cargarse en el mismo proceso.
         torch.set_float32_matmul_precision("highest")
         dinov2_weights = _pesos_de("dinov2-vitl14")
-        return romatch.roma_outdoor(device=DISPOSITIVO, weights=pesos, dinov2_weights=dinov2_weights)
+        # `use_custom_corr=True` (el default de romatch) exige el paquete
+        # nativo `local_corr` -- una extension CUDA que hay que compilar a
+        # mano, no algo que `pip install romatch` trae. Sin esto, roma
+        # moria en el primer candidato con `ModuleNotFoundError: No module
+        # named 'local_corr'` y nunca llegaba a verificar nada. El propio
+        # romatch trae un equivalente en PyTorch puro
+        # (`shitty_native_torch_local_corr`) para este caso -- mas lento,
+        # pero funciona sin compilar nada.
+        return romatch.roma_outdoor(
+            device=DISPOSITIVO, weights=pesos, dinov2_weights=dinov2_weights, use_custom_corr=False,
+        )
     if verificador == "lightglue-aliked":
         # LightGlue+ALIKED es un pipeline disperso (keypoints + emparejador),
         # no un flujo denso como RoMa -- necesita DOS redes distintas, no
@@ -252,8 +262,15 @@ def _inliers_disperso(envoltorio, consulta, candidato):
 
     extractor, matcher = envoltorio
     img_a, img_b = _redimensionar(consulta), _redimensionar(candidato)
-    tensor_a = numpy_image_to_torch(np.array(img_a))
-    tensor_b = numpy_image_to_torch(np.array(img_b))
+    # `match_pair()` solo mueve la SALIDA a `device` -- llama a
+    # `extractor.extract()` sobre el tensor de entrada tal cual se lo pasen,
+    # y ese extractor ya vive en `DISPOSITIVO` (`_construir` lo manda ahí al
+    # cargarlo). Sin este `.to()` el tensor de entrada se quedaba en CPU
+    # mientras los pesos estaban en GPU: "Input type (torch.FloatTensor) and
+    # weight type (torch.cuda.FloatTensor) should be the same", en el primer
+    # candidato, siempre.
+    tensor_a = numpy_image_to_torch(np.array(img_a)).to(DISPOSITIVO)
+    tensor_b = numpy_image_to_torch(np.array(img_b)).to(DISPOSITIVO)
 
     with torch.inference_mode():
         feats_a, feats_b, matches01 = match_pair(extractor, matcher, tensor_a, tensor_b, device=DISPOSITIVO)
@@ -268,11 +285,29 @@ def _inliers_disperso(envoltorio, consulta, candidato):
     return int(np.sum(mascara)) if mascara is not None else 0
 
 
+def _es_componente(verificador_id):
+    """`dinov2-vitl14` y `aliked-n16` viven en el registro de verificadores
+    (`tipo: "componente"`) porque necesitan su propio sha256/licencia, pero
+    no son verificadores que se puedan correr solos -- son el segundo fichero
+    que `roma`/`lightglue-aliked` cargan por su cuenta vía `_pesos_de()`.
+    `nivel.geometricos` los lista igualmente (así el panel de instalación
+    los cuenta como pendientes de descargar), así que aquí, al despachar
+    quién corre de verdad, se filtran por el mismo dato -- no una segunda
+    lista de ids a mano que pudiera desincronizarse de esa primera."""
+    import lumi_pesos
+
+    try:
+        return lumi_pesos._ficha(verificador_id, REGISTRO).get("tipo") == "componente"
+    except ValueError:
+        return False
+
+
 def _verificar(job):
     fuera = []
     consulta = job["consulta"]
+    verificadores = [v for v in job["verificadores"] if not _es_componente(v)]
     for cand in job["candidatos"]:
-        for verificador in job["verificadores"]:
+        for verificador in verificadores:
             try:
                 m = _cargar(verificador)
                 # _construir devuelve una tupla (extractor, matcher) solo
