@@ -10,6 +10,13 @@
 # propósito. Sincronizar el árbol completo las traería de vuelta cada vez
 # que se corra esto. Justo por acotar tanto es como `workers/` se quedó
 # fuera sin querer la primera vez — de ahí que ahora esté en la lista.
+#
+# `registros/` se quedó fuera de la misma manera: un `sha256`/`tipo` corregido
+# en el checkout de Windows nunca llegaba al servidor real, y el síntoma en
+# producción (verificador sin sha256, agente con `tipo` viejo) no se parecía
+# en nada a "faltó sincronizar un directorio" — parecía un dato mal rellenado
+# a mano. `crate::assets::ruta` lo lee de `/var/lib/lumi/registros` en cada
+# análisis, así que ni pide reiniciar `lumid`: entra solo con este rsync.
 set -euo pipefail
 
 WIN_REPO="/mnt/e/Lumi Station"
@@ -20,11 +27,16 @@ if [ ! -d "$WIN_REPO" ]; then
   exit 1
 fi
 
-echo "→ sincronizando crates/, workers/, Cargo.toml y Cargo.lock"
+echo "→ sincronizando crates/, workers/, registros/, Cargo.toml y Cargo.lock"
 rsync -a --delete "$WIN_REPO/crates/" "$WSL_REPO/crates/"
 rsync -a --delete "$WIN_REPO/workers/" "$WSL_REPO/workers/"
+rsync -a --delete "$WIN_REPO/registros/" "$WSL_REPO/registros/"
 cp "$WIN_REPO/Cargo.toml" "$WSL_REPO/Cargo.toml"
 [ -f "$WIN_REPO/Cargo.lock" ] && cp "$WIN_REPO/Cargo.lock" "$WSL_REPO/Cargo.lock"
+
+echo "→ sincronizando registros/ y workers/ también al directorio de datos en vivo"
+sudo rsync -a --delete "$WIN_REPO/registros/" /var/lib/lumi/registros/
+sudo rsync -a --delete "$WIN_REPO/workers/" /var/lib/lumi/workers/
 
 echo "→ compilando lumid"
 cd "$WSL_REPO"
