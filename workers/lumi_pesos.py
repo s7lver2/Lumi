@@ -12,8 +12,52 @@ torch. El runner del 7a es quien lo instala.
 import hashlib
 import json
 import os
+import time
 
 _hilos_limitados = False
+
+#: Cuánto puede estar un motor/modelo/verificador sin usarse antes de que un
+#: proceso persistente lo suelte -- ver `purgar_inactivos`. 10 minutos es un
+#: punto de partida razonable: bastante para no desalojar entre análisis
+#: seguidos de una sesión activa, poco para que la RAM/VRAM de un proceso que
+#: lleva horas vivo no crezca sin límite con cada modelo distinto que haya
+#: tocado alguna vez.
+UMBRAL_INACTIVIDAD_SEG = 600
+
+
+def purgar_inactivos(cache, usos, umbral_seg=UMBRAL_INACTIVIDAD_SEG):
+    """Descarta de `cache` las entradas de `usos` (dict paralelo de
+    último-uso en segundos, mismas claves) que llevan más de `umbral_seg`
+    sin usarse -- sin esto un proceso persistente (`lumi_geo.py`,
+    `lumi_verify.py`, `lumi_agentes.py`) no suelta nunca un modelo ya
+    cargado, y la memoria solo puede crecer durante toda la vida del
+    proceso, sin importar cuánto tiempo lleve sin usarse ese modelo en
+    concreto.
+
+    Las entradas que fallaron al cargar (`_fallidos`, o `_motores[clase] =
+    None` en `lumi_agentes.py`) no pasan por `usos` y por tanto nunca se
+    desalojan aquí -- reintentar un motor roto no cuesta memoria, así que no
+    hay nada que ganar desalojándolo.
+
+    Devuelve la lista de claves desalojadas, para que cada trabajador decida
+    cómo registrarlo en su propio log."""
+    ahora = time.time()
+    desalojadas = [clave for clave, ultimo in usos.items() if ahora - ultimo > umbral_seg]
+    for clave in desalojadas:
+        cache.pop(clave, None)
+        usos.pop(clave, None)
+    if desalojadas:
+        # Solo tiene sentido sincronizar y devolver bloques al driver cuando
+        # de verdad se soltó algo -- llamarlo en cada job sin haber desalojado
+        # nada sería el mismo coste que el `empty_cache()` de más que ya se
+        # quitó del bucle de verificación por candidato.
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:
+            pass
+    return desalojadas
 
 
 def _limitar_hilos():

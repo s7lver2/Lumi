@@ -13,12 +13,16 @@ import contextlib
 import json
 import os
 import sys
+import time
 
 DISPOSITIVO = os.environ.get("LUMI_DEVICE", "cpu")
 REGISTRO = os.environ.get("LUMI_REGISTRO_VERIF", "registros/verificadores")
 PESOS = os.environ.get("LUMI_PESOS", "pesos")
 
 _cargados = {}
+#: Último uso (`time.time()`) de cada verificador en `_cargados` -- ver
+#: `lumi_pesos.purgar_inactivos`, llamado al principio de cada tanda.
+_ultimo_uso = {}
 
 
 def _decir(msg):
@@ -163,6 +167,7 @@ def _cargar(verificador):
     reutiliza `lumi_pesos._verificar` para no tener dos posturas distintas
     sobre lo mismo."""
     if verificador in _cargados:
+        _ultimo_uso[verificador] = time.time()
         return _cargados[verificador]
     if verificador in _fallidos:
         raise _fallidos[verificador]
@@ -197,6 +202,7 @@ def _cargar(verificador):
     if not isinstance(m, tuple):
         m.eval()
     _cargados[verificador] = m
+    _ultimo_uso[verificador] = time.time()
     _decir({"tipo": "listo", "dispositivo": DISPOSITIVO, "modelo": verificador})
     return m
 
@@ -358,6 +364,13 @@ def _es_componente(verificador_id):
 
 
 def _verificar(job):
+    if _cargados:
+        # Solo si ya se cargó algo alguna vez -- evita el import de balde en
+        # el primer trabajo de un proceso recién arrancado.
+        import lumi_pesos
+        for v in lumi_pesos.purgar_inactivos(_cargados, _ultimo_uso):
+            _log("verificador %s desalojado por inactividad" % v)
+
     fuera = []
     consulta = job["consulta"]
     verificadores = [v for v in job["verificadores"] if not _es_componente(v)]

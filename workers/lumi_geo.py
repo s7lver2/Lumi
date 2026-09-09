@@ -23,12 +23,16 @@ import os
 import struct
 import sys
 import tempfile
+import time
 
 DISPOSITIVO = os.environ.get("LUMI_DEVICE", "cpu")
 REGISTRO = os.environ.get("LUMI_REGISTRO", "registros/modelos")
 PESOS = os.environ.get("LUMI_PESOS", "pesos")
 
 _cargados = {}
+#: Último uso (`time.time()`) de cada modelo en `_cargados` -- ver
+#: `lumi_pesos.purgar_inactivos`, llamado al principio de cada trabajo.
+_ultimo_uso = {}
 
 
 def _decir(msg):
@@ -46,6 +50,7 @@ def _cargar(modelo):
     disco, y con ocho por analisis eso se paga ocho veces por trabajo si no se
     guardan."""
     if modelo in _cargados:
+        _ultimo_uso[modelo] = time.time()
         return _cargados[modelo]
     import lumi_pesos
     # Compartido con los demás trabajadores -- ver el docstring de
@@ -59,6 +64,7 @@ def _cargar(modelo):
     _log("cargando modelo %s en %s" % (modelo, DISPOSITIVO))
     e = lumi_pesos.cargar(modelo, REGISTRO, PESOS, DISPOSITIVO)
     _cargados[modelo] = e
+    _ultimo_uso[modelo] = time.time()
     _decir({"tipo": "listo", "dispositivo": DISPOSITIVO, "modelo": modelo})
     return e
 
@@ -69,6 +75,14 @@ def _embeber(job):
 
     La imagen de consulta es la primera del trabajo: un analisis hoy es siempre
     una sola imagen (ver lumi_proto::api::Analysis)."""
+    if _cargados:
+        # Solo tiene sentido si ya se cargó algo alguna vez -- evita el
+        # `import lumi_pesos` de balde en el primer trabajo de un proceso
+        # recién arrancado, cuando `_cargados`/`_ultimo_uso` están vacíos.
+        import lumi_pesos
+        for m in lumi_pesos.purgar_inactivos(_cargados, _ultimo_uso):
+            _log("modelo %s desalojado por inactividad" % m)
+
     rutas = job["imagenes"]
     if not rutas:
         return [{"tipo": "fallo", "id": job["id"], "motivo": "el trabajo no trae ninguna imagen"}]

@@ -13,6 +13,7 @@ doce veredictos, y no doce por candidato.
 import json
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -69,6 +70,11 @@ def dispositivo():
 # proceso frente al modo de una sola orden -- el mismo cache que
 # `lumi_verify.py` ya usa con `_cargados` para sus verificadores.
 _motores = {}
+#: Último uso (`time.time()`) de cada motor en `_motores` -- ver
+#: `lumi_pesos.purgar_inactivos`, llamado al principio de cada orden. Un
+#: motor que falló al cargar (`_motores[clase] = None`, justo abajo) nunca
+#: entra aquí, así que nunca se desaloja: reintentarlo no cuesta memoria.
+_ultimo_uso = {}
 
 
 def _motor(clase, disp):
@@ -82,10 +88,19 @@ def _motor(clase, disp):
             # siguiente del mismo proceso persistente.
             print("motor %s fuera: %s" % (clase, e), file=sys.stderr)
             _motores[clase] = None
+    if _motores[clase] is not None:
+        _ultimo_uso[clase] = time.time()
     return _motores[clase]
 
 
 def _procesar(orden, disp):
+    if _motores:
+        # Solo si ya se cargó algo alguna vez -- evita el import de balde en
+        # la primera orden de un proceso recién arrancado.
+        import lumi_pesos
+        for m in lumi_pesos.purgar_inactivos(_motores, _ultimo_uso):
+            print("motor %s desalojado por inactividad" % m, file=sys.stderr)
+
     id_analisis = orden["id"]
     consulta = orden["consulta"]
     fichas = registro()
