@@ -8,13 +8,25 @@ Tres síntomas que el dueño reportó por separado resultan estar encadenados:
 2. «La app a veces va muy lenta y las solicitudes tardan en cargar.»
 3. «Una imagen de la catedral de León da un radio de 1,7 km, que es más o menos
    el área de todo el dataset.»
+4. «Mientras se analiza con pro, el servidor pierde conexión unos segundos, varias
+   veces.»
 
 Este documento recoge el diagnóstico —**medido sobre el servidor en producción, no
 inferido**— y el plan de arreglo. Cada afirmación lleva su evidencia.
 
-El hallazgo que une los tres: **ningún análisis de la historia de este servidor ha
-terminado antes de 124 segundos, y no porque el trabajo cueste eso.** El trabajo real
-son ~35 s; el resto es esperar a un `timeout` de agentes que nunca iban a contestar.
+Dos hallazgos los explican casi enteros:
+
+- **Ningún análisis de la historia de este servidor ha terminado antes de 124
+  segundos, y no porque el trabajo cueste eso.** En `mini` el trabajo real son ~35 s;
+  el resto es esperar a un `timeout` de agentes que nunca iban a contestar.
+- **El daemon no pierde la conexión: muere.** El OOM killer se lleva un `python3` de
+  5,25 GB, y systemd —con `OOMPolicy` por defecto— tumba el servicio entero con él.
+
+Y el más incómodo, que no estaba en ninguno de los cuatro síntomas: con una foto
+frontal y limpia de la catedral, el sistema responde **a 1,2 km del sitio correcto,
+con confianza máxima y respaldo geométrico**. Los 12 de 12 candidatos pasan la
+verificación. Eso no es lentitud: es una respuesta forense equivocada que se presenta
+como segura.
 
 ---
 
@@ -142,10 +154,10 @@ cambio.
    (`verificar.rs:177`). En una caja multi-GPU, un análisis en `cuda:1` manda sus
    agentes a molestar a `cuda:0`.
 
-**Coste de VRAM:** con persistencia activada, RoMa + DINOv2-L + Qwen3-VL +
-PaddleOCR + DepthAnything quedan residentes junto a los 4–8 modelos del embebedor.
-Este es el riesgo real del cambio y va acompañado de la política de VRAM de la
-Parte 4.
+**Coste de memoria — bloqueante, ver Parte 3 bis:** con persistencia activada, RoMa +
+DINOv2-L + Qwen3-VL + PaddleOCR + DepthAnything quedan residentes junto a los 4–8
+modelos del embebedor. El servidor **ya muere por OOM hoy** sin persistencia, con un
+techo de 8 GB en WSL. Este arreglo no puede aplicarse antes de subir ese techo.
 
 ---
 
@@ -200,12 +212,58 @@ posibles». En una herramienta forense eso es lo contrario de lo que debe hacer.
    `cosplace` no trae la catedral. Hay que distinguirlo antes de tocar el umbral, y
    bajarlo sin distinguir sería introducir falsos positivos.
 
-### Cómo distinguir (experimento, antes de tocar nada)
+### El experimento, ya hecho: el resultado es peor de lo esperado
 
-Encolar la misma foto en `pro` (4 recuperadores en vez de 1, 2 verificadores reales
-en vez de 1) y mirar si el top-12 trae alguna de las 24 imágenes de referencia de la
-catedral. Si las trae → el fallo es de `tiny-roma`/umbral. Si no → el fallo es de
-recuperación y ningún arreglo de verificación lo va a salvar.
+Se corrieron dos análisis `pro` sobre la catedral, uno con un grabado de 1850 y otro
+con una fotografía frontal limpia, para separar «el sistema falla» de «el sistema
+falla con dibujos».
+
+| # | Consulta | Radio | Confianza | Respaldo | Imagen mostrada | Supervivientes |
+|---|---|---|---|---|---|---|
+| 52 | grabado 1850 | 3148 m | 10,0× | `roma`, 1742 | a 2087 m de la catedral | **10 de 12** |
+| 53 | foto frontal | 903 m | 10,0× | `roma`, 897 | a 1222 m de la catedral | **12 de 12** |
+
+**No era el dibujo.** Con una foto limpia el sistema devuelve un arco de piedra a 1,2 km
+«verificado por roma con 897 correspondencias».
+
+Y el dato que lo explica: **10 y 12 de los 12 candidatos pasaron la verificación.**
+Diez fotos de calle repartidas por 3 km no pueden ser todas la misma fachada. El
+umbral no está filtrando nada.
+
+### Hallazgo nuevo: `UMBRAL_INLIERS` está en la escala del verificador equivocado
+
+`UMBRAL_INLIERS = 200` se calibró contra `tiny-roma` (`arbitro.rs:29-46`: positivos
+126–2920, negativos 55–143). Pero `roma` completo corre denso con *upsample* a 864×864
+y produce correspondencias en otro orden de magnitud. Evidencia directa de este mismo
+servidor:
+
+- `tiny-roma` sobre la catedral: **78 inliers** (por debajo incluso de sus propios
+  negativos medidos) → 0 supervivientes.
+- `roma` sobre la misma catedral: **897–1742** → 12 de 12 supervivientes.
+
+Un solo número no puede servir para los dos. **El umbral tiene que ser por
+verificador**, declarado en su ficha de `registros/verificadores/*.json` junto al
+`tipo` que ya tienen, y calibrado contra pares de control propios de cada uno.
+
+Mientras el umbral no discrimine, el tope de confianza de `queue/mod.rs` no protege:
+solo se aplica cuando `verificador.is_none()`, y aquí *hay* verificador — uno que dice
+que sí a todo.
+
+### Hallazgo nuevo: la foto que se enseña no es la que sostiene el resultado
+
+Visible en el panel: junto a «verificado por roma · 897 correspondencias» se muestra
+una foto de referencia que **no** es la que produjo esas correspondencias.
+
+- `agrupar.rs:109-113` elige `Grupo::imagen_id` por **máxima similitud**.
+- `queue/mod.rs:841-844` elige el respaldo por **máximos inliers**.
+
+Son dos criterios distintos sobre el mismo grupo, así que pueden señalar a candidatos
+distintos — y en #52 y #53 lo hacen. **Se está enseñando la prueba A etiquetada con el
+respaldo de la prueba B.** En una herramienta forense eso es peor que no enseñar nada.
+
+**Arreglo:** que `imagen_id` salga del mismo candidato que el respaldo cuando lo haya
+(el de más inliers), y solo caiga a «el de más similitud» cuando no exista respaldo.
+Es un criterio, no dos.
 
 ---
 
@@ -335,6 +393,63 @@ disparado mientras se pinta el Dock se pone a la cola detrás de decenas de hand
 
 ---
 
+## Parte 3 bis — El servidor «pierde la conexión»: es el OOM killer
+
+Reportado como «mientras se analiza con pro, el servidor pierde conexión unos
+segundos, y parece ocurrir varias veces». No es red. Es el daemon muriendo y
+reiniciándose.
+
+```
+14:05:19 kernel: oom-kill: task_memcg=/system.slice/lumid.service, task=python3, pid=8979
+14:05:19 kernel: Out of memory: Killed process 8979 (python3) anon-rss:5252868kB
+14:05:21 systemd: lumid.service: Failed with result 'oom-kill'
+14:05:21 systemd: Consumed 6min 3.318s CPU time, 7.2G memory peak, 1.9G swap peak
+14:05:25 systemd: Scheduled restart job, restart counter is at 1
+```
+
+El análisis #53 tardó **1095 s** en lugar de ~375 porque se reencoló dos veces
+(`1 trabajos quedaron a medias en la caída anterior; vuelven a la cola` — la
+recuperación de la cola funciona bien, ese lado está sano).
+
+### Las tres causas, encadenadas
+
+1. **WSL está limitado a 8 GB en una máquina de 32.** `~/.wslconfig` tiene
+   `memory=8388608000` y `processors=4`. El host tiene 31,9 GB. Este es el cuello
+   inmediato y no está en el repositorio: es configuración de la máquina del dueño.
+
+2. **Un solo `python3` llegó a 5,25 GB de RSS.** Durante un `pro` hay hasta *tres*
+   procesos Python vivos: el embebedor persistente (4 modelos residentes), el
+   verificador (RoMa + DINOv2-L, arranque en frío) y los agentes (Qwen3-VL +
+   PaddleOCR + DepthAnything, arranque en frío). Los dos últimos cargan **a la vez**
+   por el `tokio::join!` de `queue/mod.rs:710`. Ese solape es deliberado y correcto
+   *para la lógica* (un agente no puede matar un candidato antes de que RANSAC opine),
+   pero nadie acotó su coste en memoria.
+
+3. **Un hijo muerto por OOM se lleva el servicio entero.** La unit no declara
+   `OOMPolicy`, y el valor por defecto de systemd es `stop`: el `python3` que muere
+   arrastra a `lumid`, que estaba perfectamente sano.
+
+### Arreglo
+
+| # | Cambio | Dónde | Nota |
+|---|---|---|---|
+| 1 | Subir el techo de memoria de WSL (p. ej. `memory=24GB`) | `~/.wslconfig` del dueño | fuera del repo; requiere `wsl --shutdown` |
+| 2 | `OOMPolicy=continue` en la unit | plantilla systemd de `lumi-cli`/instalador | un hijo muerto no debe tumbar el daemon |
+| 3 | No cargar verificador y agentes a la vez cuando la memoria libre no da | `queue/mod.rs:710` | mantener el solape, pero con un presupuesto |
+| 4 | Reportar el OOM como causa del fallo del análisis | `queue/mod.rs` | hoy el análisis simplemente «vuelve a la cola» sin decir por qué |
+
+### Corrección a la Parte 1
+
+**Esto invalida activar la persistencia como primer paso.** Con 8 GB de techo, dejar
+RoMa + DINOv2-L + Qwen3-VL + PaddleOCR + DepthAnything residentes de forma permanente
+no reduce el pico: lo vuelve sostenido, y garantiza el OOM.
+
+El orden correcto es: **primero el techo de memoria (#1), después la persistencia.**
+La persistencia sigue siendo el arreglo correcto para el `timeout` de agentes —
+simplemente no cabe hoy.
+
+---
+
 ## Parte 4 — Acelerar los modelos
 
 ### 4.1 El VLM re-procesa la misma imagen una vez por etiqueta
@@ -454,8 +569,22 @@ dice «27 s por par, medido» y `docs/superpowers/specs/2026-08-13-motor-5b-desi
 dice «150–600 ms» para el mismo verificador. **Dos órdenes de magnitud de
 contradicción, y nadie puede resolverla sin cronometrar a mano.**
 
-Los datos de §0.1 acotan la respuesta por arriba —un `pro` entero tarda 204 s de
-media, así que 12 pares no pueden costar 27 s cada uno— pero no la cierran.
+**Resuelta, con el análisis #52.** El reloj del journal acota la fase de verificación
+sola:
+
+```
+13:50:46  #52 encolado
+13:57:00  verificación geométrica terminada (24 veredictos)
+```
+
+≈ 360 s para 24 pares = **~15 s por par de media**, y de los dos verificadores reales
+`roma` es el caro y `lightglue-aliked` el barato — así que `roma` está en el entorno de
+los 27 s/par que dice su propio comentario.
+
+**El spec del 5b está equivocado en dos órdenes de magnitud y hay que corregirlo.**
+Consecuencia práctica: en `pro` el camino crítico **no** son los agentes (que agotan
+sus 120 s en paralelo) sino la verificación, que se lleva ~6 minutos. La cascada de
+§4.4 pasa de «optimización interesante» a **la palanca principal** de `pro`.
 
 **Antes de tocar los modelos**: tres `Instant::now()`/`elapsed()` en `verificar::afinar`,
 `agentar::preguntar` y alrededor del `Evento::Vectores` de `queue/mod.rs:649`, volcados
@@ -481,44 +610,57 @@ Ordenado por relación impacto/riesgo, no por tema. Cada tanda es un commit.
 |---|---|---|---|
 | 1 | WAL + `synchronous=NORMAL` | `store.rs:301` | 2 líneas |
 | 2 | Los 6 índices que faltan | `store.rs` (`SCHEMA`) | 6 líneas |
-| 3 | Invertir el defecto de persistencia de agentes y verificación | `agentar.rs:50`, `verificar.rs:60`, `rendimiento.rs:22` | 3 líneas |
+| 3 | `OOMPolicy=continue` en la unit systemd | plantilla del instalador | 1 línea |
 | 4 | Deduplicar los 4 SSE (patrón `logs_task`) | `client/src-tauri/src/main.rs` | copiar 4 veces |
 | 5 | Estrechar el selector de `sample` | `App.tsx:89` | 1 línea |
 | 6 | Instrumentar tiempos por fase (Hallazgo 0) | `verificar.rs`, `agentar.rs`, `queue/mod.rs` | media hora |
 
-Esperado: análisis de ~180 s → ~40 s; escrituras de 157 ms → 4,6 ms; fin del
+Esperado: escrituras de 157 ms → 4,6 ms; fin de los reinicios por OOM; fin del
 crecimiento de coste con la duración de la sesión.
+
+**Prerrequisito fuera del repo:** subir el techo de memoria de WSL (Parte 3 bis, #1).
+Sin eso, la persistencia de modelos —el arreglo del `timeout` de agentes, que recorta
+el análisis de ~180 s a ~40 s— no cabe y queda aplazada a la Tanda 2.
 
 ### Tanda 2 — Corrección de resultados
 
+Esta es ahora la tanda importante: los experimentos #52 y #53 muestran que el sistema
+da una respuesta **con máxima confianza y respaldo geométrico** que está a 1,2 km del
+sitio correcto. Eso es peor que no responder.
+
 | # | Cambio | Fichero |
 |---|---|---|
-| 7 | Sin verificación, cada candidato es su propia hipótesis (no fundir) | `queue/mod.rs:768` |
-| 8 | Agrupar por distancia real (~150 m), no por vecindad z14 | `agrupar.rs:52` |
-| 9 | Experimento: la misma foto en `pro`, ver si el top-12 trae la catedral | — |
+| 7 | **Umbral de inliers por verificador**, en su ficha de registro, no una constante global | `arbitro.rs:47`, `registros/verificadores/*.json` |
+| 8 | `imagen_id` sale del candidato del respaldo (más inliers), no del de más similitud | `agrupar.rs:109`, `queue/mod.rs:841` |
+| 9 | Sin verificación, cada candidato es su propia hipótesis (no fundir) | `queue/mod.rs:768` |
+| 10 | Agrupar por distancia real (~150 m), no por vecindad z14 | `agrupar.rs:52` |
+| 11 | Activar la persistencia de agentes y verificación (**tras** el techo de memoria) | `agentar.rs:50`, `verificar.rs:60`, `rendimiento.rs:22` |
+
+El #7 es la raíz: mientras `roma` apruebe 12 de 12, arreglar la agrupación solo cambia
+un círculo grande y equivocado por tres pequeños y equivocados.
 
 ### Tanda 3 — Rendimiento estructural
 
 | # | Cambio | Fichero |
 |---|---|---|
-| 10 | `tokio::spawn` del post-proceso de `Vectores` | `queue/mod.rs:649` |
-| 11 | NVML una vez + telemetría en un broadcast único | `telemetry.rs:9`, `routes/telemetry.rs` |
-| 12 | Cliente reqwest aparte + semáforo para `lumi://`, más `Cache-Control` | `client/src-tauri/src/main.rs:806` |
-| 13 | Colapsar los N+1 de `analyses::list` y `admin::list_users` | `routes/analyses.rs:118`, `routes/admin.rs:141` |
-| 14 | `QueueRow` por SSE en vez de sondeo; quitar el `/resumen` duplicado | `admin/QueueRow.tsx:25`, `ResumenView.tsx:100` |
-| 15 | No montar `PlanetBackground` en `mode === "case"`; globo a 20 fps | `App.tsx:303`, `MapCanvas.tsx:385` |
+| 12 | `tokio::spawn` del post-proceso de `Vectores` | `queue/mod.rs:649` |
+| 13 | NVML una vez + telemetría en un broadcast único | `telemetry.rs:9`, `routes/telemetry.rs` |
+| 14 | Cliente reqwest aparte + semáforo para `lumi://`, más `Cache-Control` | `client/src-tauri/src/main.rs:806` |
+| 15 | Colapsar los N+1 de `analyses::list` y `admin::list_users` | `routes/analyses.rs:118`, `routes/admin.rs:141` |
+| 16 | `QueueRow` por SSE en vez de sondeo; quitar el `/resumen` duplicado | `admin/QueueRow.tsx:25`, `ResumenView.tsx:100` |
+| 17 | No montar `PlanetBackground` en `mode === "case"`; globo a 20 fps | `App.tsx:303`, `MapCanvas.tsx:385` |
 
 ### Tanda 4 — Modelos (después de la instrumentación)
 
 | # | Cambio | Fichero |
 |---|---|---|
-| 16 | Cachear `_redimensionar` y los keypoints de la consulta | `lumi_verify.py:236`, `:278` |
-| 17 | `_limitar_hilos()` en los cuatro `main()` | `lumi_pesos.py`, los cuatro workers |
-| 18 | Cachear también los fallos de `_cargar` | `lumi_verify.py:317` |
-| 19 | `LUMI_DEVICE` a los agentes | `agentar.rs:87`, `lumi_agentes.py:47` |
-| 20 | Batch de etiquetas del VLM + máscara del prompt | `lumi_motores.py:96` |
-| 21 | Tope de píxeles del VLM | `lumi_motores.py:75` |
-| 22 | `empty_cache()` una vez por trabajo; `torch_dtype` en DepthAnything | `lumi_verify.py:329`, `lumi_motores.py:190` |
+| 18 | Cachear `_redimensionar` y los keypoints de la consulta | `lumi_verify.py:236`, `:278` |
+| 19 | `_limitar_hilos()` en los cuatro `main()` | `lumi_pesos.py`, los cuatro workers |
+| 20 | Cachear también los fallos de `_cargar` | `lumi_verify.py:317` |
+| 21 | `LUMI_DEVICE` a los agentes | `agentar.rs:87`, `lumi_agentes.py:47` |
+| 22 | Batch de etiquetas del VLM + máscara del prompt | `lumi_motores.py:96` |
+| 23 | Tope de píxeles del VLM | `lumi_motores.py:75` |
+| 24 | `empty_cache()` una vez por trabajo; `torch_dtype` en DepthAnything | `lumi_verify.py:329`, `lumi_motores.py:190` |
 
 ### Fuera de esta tanda, con diseño propio
 
