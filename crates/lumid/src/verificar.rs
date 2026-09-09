@@ -66,9 +66,14 @@ pub async fn afinar(
     // Activado, se reutiliza un proceso ya vivo en vez de lanzar uno nuevo
     // por análisis — mismo protocolo de entrada/salida, solo cambia quién
     // lo lanza y cuándo muere.
+    // Ajuste `limpieza_por_presion` (`routes::rendimiento`): a diferencia del
+    // anterior, este nace ACTIVADO -- la ausencia de la clave cuenta como
+    // "activado", solo un "0" explícito lo apaga.
+    let limpieza_activo = store.get_meta("limpieza_por_presion").as_deref() != Some("0");
     if store.get_meta("verificacion_persistente").as_deref() == Some("1") {
         return afinar_persistente(
             nivel, consulta, candidatos, rutas, python, dispositivo, registro, pesos, verificadores, persistente,
+            limpieza_activo,
         )
         .await;
     }
@@ -78,6 +83,10 @@ pub async fn afinar(
         .env("LUMI_DEVICE", dispositivo)
         .env("LUMI_REGISTRO_VERIF", registro)
         .env("LUMI_PESOS", pesos)
+        // En modo no persistente el proceso muere con este análisis, así que
+        // el efecto práctico de este interruptor es nulo -- se pasa igual por
+        // consistencia con el camino persistente.
+        .env("LUMI_LIMPIEZA_PRESION", if limpieza_activo { "1" } else { "0" })
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -173,6 +182,7 @@ async fn afinar_persistente(
     pesos: &Path,
     verificadores: &[Verificador],
     persistente: &crate::persistente::Persistente,
+    limpieza_activo: bool,
 ) -> Result<Vec<Afinado>> {
     let inicio = std::time::Instant::now();
     let script = crate::assets::ruta("workers/lumi_verify.py");
@@ -188,7 +198,13 @@ async fn afinar_persistente(
         "candidatos": lista,
         "verificadores": nivel.geometricos,
     });
-    let envs: [(&str, &Path); 3] = [("LUMI_DEVICE", Path::new(dispositivo)), ("LUMI_REGISTRO_VERIF", registro), ("LUMI_PESOS", pesos)];
+    let limpieza_env = Path::new(if limpieza_activo { "1" } else { "0" });
+    let envs: [(&str, &Path); 4] = [
+        ("LUMI_DEVICE", Path::new(dispositivo)),
+        ("LUMI_REGISTRO_VERIF", registro),
+        ("LUMI_PESOS", pesos),
+        ("LUMI_LIMPIEZA_PRESION", limpieza_env),
+    ];
 
     let mut por_candidato: std::collections::HashMap<i64, Vec<Veredicto>> = Default::default();
     match persistente.pedir(&orden, python, &script, &envs).await {

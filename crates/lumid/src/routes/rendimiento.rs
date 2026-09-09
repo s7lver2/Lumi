@@ -13,26 +13,44 @@ use lumi_proto::api::{PatchRendimientoReq, RendimientoSettings};
 
 const CLAVE_VERIFICACION: &str = "verificacion_persistente";
 const CLAVE_AGENTES: &str = "agentes_persistente";
+const CLAVE_LIMPIEZA_PRESION: &str = "limpieza_por_presion";
 
 const DESC_ON: &str = "activado: mantiene los modelos cargados en VRAM entre análisis — respuestas mucho más rápidas, pero consume esa memoria todo el tiempo, incluso sin trabajo pendiente.";
 const DESC_OFF: &str = "desactivado: cada análisis carga y descarga sus modelos — más lento, pero sin huella de memoria en reposo.";
 
+const DESC_LIMPIEZA_ON: &str = "activado: si la memoria disponible está al límite justo antes de cargar un modelo nuevo, se desalojan todos los modelos cargados sin esperar los 10 minutos de inactividad.";
+const DESC_LIMPIEZA_OFF: &str = "desactivado: solo se desaloja por inactividad, nunca por presión de memoria en el momento de cargar un modelo.";
+
 fn leer_bool(app: &App, clave: &str) -> bool {
     app.store.get_meta(clave).as_deref() == Some("1")
+}
+
+/// Igual que `leer_bool`, pero para ajustes que quieren nacer ACTIVADOS: la
+/// AUSENCIA de la clave (nunca se tocó desde `PATCH`) cuenta como "activado",
+/// no como "desactivado" — solo un `"0"` explícito lo apaga.
+fn leer_bool_activo_por_defecto(app: &App, clave: &str) -> bool {
+    app.store.get_meta(clave).as_deref() != Some("0")
 }
 
 fn desc(activo: bool) -> String {
     if activo { DESC_ON.into() } else { DESC_OFF.into() }
 }
 
+fn desc_limpieza(activo: bool) -> String {
+    if activo { DESC_LIMPIEZA_ON.into() } else { DESC_LIMPIEZA_OFF.into() }
+}
+
 fn settings(app: &App) -> RendimientoSettings {
     let verificacion_persistente = leer_bool(app, CLAVE_VERIFICACION);
     let agentes_persistente = leer_bool(app, CLAVE_AGENTES);
+    let limpieza_por_presion = leer_bool_activo_por_defecto(app, CLAVE_LIMPIEZA_PRESION);
     RendimientoSettings {
         verificacion_persistente_desc: desc(verificacion_persistente),
         verificacion_persistente,
         agentes_persistente_desc: desc(agentes_persistente),
         agentes_persistente,
+        limpieza_por_presion_desc: desc_limpieza(limpieza_por_presion),
+        limpieza_por_presion,
     }
 }
 
@@ -58,6 +76,12 @@ pub async fn patch(
             .set_meta(CLAVE_AGENTES, if v { "1" } else { "0" })
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         tracing::info!("agentes persistente {} por el administrador {admin}", if v { "activados" } else { "desactivados" });
+    }
+    if let Some(v) = req.limpieza_por_presion {
+        app.store
+            .set_meta(CLAVE_LIMPIEZA_PRESION, if v { "1" } else { "0" })
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        tracing::info!("limpieza por presión de memoria {} por el administrador {admin}", if v { "activada" } else { "desactivada" });
     }
     // ponytail: un cambio en caliente no relanza ni mata un proceso
     // persistente que ya estuviera vivo — `verificar::afinar` y

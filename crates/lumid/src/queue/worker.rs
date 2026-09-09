@@ -111,6 +111,7 @@ pub fn spawn(
     eventos: UnboundedSender<Evento>,
     registro: &Path,
     pesos: &Path,
+    limpieza_activo: bool,
 ) -> Result<Lanzado> {
     let mut hijo = Command::new(python)
         // `-u` no es opcional: sin él Python almacena su salida y el daemon no
@@ -119,6 +120,10 @@ pub fn spawn(
         .arg("-u")
         .arg(script)
         .env("LUMI_DEVICE", &dispositivo)
+        // El trabajador de recuperación (`lumi_geo.py`) SIEMPRE es
+        // persistente -- no hay un `if` de por medio como en verificación/
+        // agentes, este interruptor le aplica siempre.
+        .env("LUMI_LIMPIEZA_PRESION", if limpieza_activo { "1" } else { "0" })
         // `lumi_geo.py` cae a la ruta relativa "registros/modelos" si esto
         // falta — y como el hijo hereda el cwd de `lumid` (bajo systemd, "/"
         // salvo que se fije WorkingDirectory), esa ruta relativa nunca

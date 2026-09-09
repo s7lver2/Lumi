@@ -21,6 +21,10 @@ from lumi_motores import cargar_motor
 
 REGISTRO = os.environ.get("LUMI_REGISTRO_AGENTES", "registros/agentes")
 PESOS = os.environ.get("LUMI_PESOS", "pesos")
+#: Segura por defecto -- activa salvo que se ponga explicitamente a "0", igual
+#: criterio que ya usa el proyecto para otros flags. Se lee una sola vez al
+#: arrancar el proceso, no en cada orden.
+LIMPIEZA_PRESION = os.environ.get("LUMI_LIMPIEZA_PRESION", "1") != "0"
 
 
 def escribir(msg):
@@ -79,6 +83,11 @@ _ultimo_uso = {}
 
 def _motor(clase, disp):
     if clase not in _motores:
+        # Justo antes de pedir memoria para un motor nuevo, no en cada orden
+        # entera (eso ya lo hace `purgar_inactivos` en `_procesar`).
+        import lumi_pesos
+        for m in lumi_pesos.quizas_purgar_por_presion(_motores, _ultimo_uso, LIMPIEZA_PRESION):
+            print("motor %s desalojado por presion de memoria" % m, file=sys.stderr)
         try:
             _motores[clase] = cargar_motor(clase, PESOS, disp)
         except Exception as e:

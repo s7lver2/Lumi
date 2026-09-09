@@ -18,6 +18,10 @@ import time
 DISPOSITIVO = os.environ.get("LUMI_DEVICE", "cpu")
 REGISTRO = os.environ.get("LUMI_REGISTRO_VERIF", "registros/verificadores")
 PESOS = os.environ.get("LUMI_PESOS", "pesos")
+#: Segura por defecto -- activa salvo que se ponga explicitamente a "0", igual
+#: criterio que ya usa el proyecto para otros flags. Se lee una sola vez al
+#: arrancar el proceso, no en cada job.
+LIMPIEZA_PRESION = os.environ.get("LUMI_LIMPIEZA_PRESION", "1") != "0"
 
 _cargados = {}
 #: Último uso (`time.time()`) de cada verificador en `_cargados` -- ver
@@ -177,6 +181,11 @@ def _cargar(verificador):
         # Compartido con los demás trabajadores -- ver el docstring de
         # `lumi_pesos._limitar_hilos`.
         lumi_pesos._limitar_hilos()
+
+        # Justo antes de pedir memoria para un verificador nuevo, no en cada
+        # tanda entera (eso ya lo hace `purgar_inactivos` en `_verificar`).
+        for v in lumi_pesos.quizas_purgar_por_presion(_cargados, _ultimo_uso, LIMPIEZA_PRESION):
+            _log("verificador %s desalojado por presion de memoria" % v)
 
         ficha = lumi_pesos._ficha(verificador, REGISTRO)
         directorio = os.path.join(PESOS, verificador)

@@ -24,6 +24,69 @@ _hilos_limitados = False
 #: tocado alguna vez.
 UMBRAL_INACTIVIDAD_SEG = 600
 
+#: Margen de memoria libre (MB) por debajo del cual `quizas_purgar_por_presion`
+#: fuerza un desalojo total antes de cargar un modelo nuevo -- un colchon de
+#: seguridad ANTES de que el OOM killer del kernel pueda entrar en juego, no
+#: "memoria en cero". 512 es un punto de partida razonable: de sobra para que
+#: quepa un modelo mas sin que el proceso llegue a pedir memoria que el kernel
+#: ya no tiene.
+UMBRAL_MEMORIA_LIBRE_MB = 512
+
+
+def _memoria_libre_mb():
+    """`MemAvailable` de /proc/meminfo, no `MemFree`: `MemAvailable` ya cuenta
+    como recuperable la cache/buffers del kernel, que es la metrica correcta
+    de "cuanta memoria puedo pedir de verdad" -- `MemFree` a secas subestima
+    mucho lo disponible en Linux (una caja con mucha cache de disco pero poca
+    memoria "libre" en el sentido estricto parece al borde del OOM sin estarlo).
+
+    Devuelve `None` si no se puede leer (no es Linux, permisos, el fichero no
+    trae esa linea...) -- sin ese dato real la limpieza por presion
+    simplemente no puede activarse, nunca se inventa un numero."""
+    try:
+        with open("/proc/meminfo", "r") as f:
+            for linea in f:
+                if linea.startswith("MemAvailable:"):
+                    return int(linea.split()[1]) / 1024
+    except Exception:
+        pass
+    return None
+
+
+def quizas_purgar_por_presion(cache, usos, activo):
+    """Segunda via de desalojo, complementaria a `purgar_inactivos`: si la
+    memoria disponible del sistema esta al limite justo cuando se va a cargar
+    un modelo nuevo, fuerza una limpieza inmediata sin esperar los
+    `UMBRAL_INACTIVIDAD_SEG` de inactividad.
+
+    Si `activo` es `False` no mide memoria ni hace nada -- ni siquiera abre
+    /proc/meminfo, el interruptor tiene que ser gratis cuando esta apagado.
+
+    A diferencia de `purgar_inactivos`, aqui no importa cuanto tiempo llevan
+    cargadas las entradas de `usos`: si hay presion de memoria YA, se
+    descartan TODAS, no solo las mas antiguas -- no hay diez minutos que
+    esperar cuando el margen de seguridad ya se cruzo.
+
+    Devuelve la lista de claves desalojadas, para que cada trabajador decida
+    como registrarlo en su propio log."""
+    if not activo:
+        return []
+    libre = _memoria_libre_mb()
+    if libre is None or libre >= UMBRAL_MEMORIA_LIBRE_MB:
+        return []
+    desalojadas = list(usos.keys())
+    for clave in desalojadas:
+        cache.pop(clave, None)
+        usos.pop(clave, None)
+    if desalojadas:
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:
+            pass
+    return desalojadas
+
 
 def purgar_inactivos(cache, usos, umbral_seg=UMBRAL_INACTIVIDAD_SEG):
     """Descarta de `cache` las entradas de `usos` (dict paralelo de

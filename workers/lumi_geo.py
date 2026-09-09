@@ -28,6 +28,10 @@ import time
 DISPOSITIVO = os.environ.get("LUMI_DEVICE", "cpu")
 REGISTRO = os.environ.get("LUMI_REGISTRO", "registros/modelos")
 PESOS = os.environ.get("LUMI_PESOS", "pesos")
+#: Segura por defecto -- activa salvo que se ponga explicitamente a "0", igual
+#: criterio que ya usa el proyecto para otros flags. Se lee una sola vez al
+#: arrancar el proceso, no en cada job.
+LIMPIEZA_PRESION = os.environ.get("LUMI_LIMPIEZA_PRESION", "1") != "0"
 
 _cargados = {}
 #: Último uso (`time.time()`) de cada modelo en `_cargados` -- ver
@@ -60,6 +64,12 @@ def _cargar(modelo):
     # los núcleos" no puede pagarse hasta que se sabe que sí lo hay -- justo
     # aquí, donde `import lumi_pesos` ya lo confirma.
     lumi_pesos._limitar_hilos()
+
+    # Justo antes de pedir memoria para un modelo nuevo, no en cada job
+    # entero (eso ya lo hace `purgar_inactivos` en `_embeber`): "voy a cargar
+    # algo, compruebo el margen justo antes".
+    for m in lumi_pesos.quizas_purgar_por_presion(_cargados, _ultimo_uso, LIMPIEZA_PRESION):
+        _log("modelo %s desalojado por presion de memoria" % m)
 
     _log("cargando modelo %s en %s" % (modelo, DISPOSITIVO))
     e = lumi_pesos.cargar(modelo, REGISTRO, PESOS, DISPOSITIVO)

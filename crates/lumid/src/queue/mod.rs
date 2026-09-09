@@ -449,6 +449,10 @@ impl Queue {
             .join("workers")
             .join(format!("{}.log", dispositivo.replace(':', "-")));
         let pesos = crate::assets::pesos_dir(&self.store, &self.dir);
+        // Ajuste `limpieza_por_presion` (`routes::rendimiento`): nace
+        // ACTIVADO -- la ausencia de la clave cuenta como "activado", solo un
+        // "0" explícito lo apaga.
+        let limpieza_activo = self.store.get_meta("limpieza_por_presion").as_deref() != Some("0");
         match worker::spawn(
             dispositivo.to_string(),
             &interprete_python(&self.store),
@@ -457,6 +461,7 @@ impl Queue {
             self.eventos.clone(),
             &crate::assets::ruta("registros/modelos"),
             &pesos,
+            limpieza_activo,
         ) {
             Ok(l) => {
                 if let Ok(mut e) = self.estado.lock() {

@@ -505,6 +505,12 @@ pub struct RendimientoSettings {
     pub verificacion_persistente_desc: String,
     pub agentes_persistente: bool,
     pub agentes_persistente_desc: String,
+    /// A diferencia de los dos anteriores, este viene ACTIVADO de fábrica: es
+    /// una segunda vía de desalojo (por presión de memoria, no por
+    /// inactividad) que el owner quiere encendida salvo que se apague a
+    /// mano, no un modo opt-in.
+    pub limpieza_por_presion: bool,
+    pub limpieza_por_presion_desc: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -512,6 +518,7 @@ pub struct PatchRendimientoReq {
     /// `None` no toca ese ajuste — mismo patrón que `PatchLogSettingsReq`.
     pub verificacion_persistente: Option<bool>,
     pub agentes_persistente: Option<bool>,
+    pub limpieza_por_presion: Option<bool>,
 }
 
 

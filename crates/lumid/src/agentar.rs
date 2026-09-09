@@ -66,14 +66,18 @@ pub async fn preguntar(
     // Ajuste `agentes_persistente` (`routes::rendimiento`): por defecto
     // ("0" o ausente) sigue lanzando un proceso por análisis, como siempre.
     let persistente_activo = store.get_meta("agentes_persistente").as_deref() == Some("1");
+    // Ajuste `limpieza_por_presion` (`routes::rendimiento`): a diferencia del
+    // anterior, este nace ACTIVADO -- la ausencia de la clave cuenta como
+    // "activado", solo un "0" explícito lo apaga.
+    let limpieza_activo = store.get_meta("limpieza_por_presion").as_deref() != Some("0");
     // `if`/`else` con dos `async fn` da dos tipos `impl Future` distintos
     // aunque devuelvan lo mismo — de ahí el `Box::pin` en vez de un `if`
     // directo sobre las llamadas.
     let tarea: std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Vec<(Veredicto, String)>>> + Send>> =
         if persistente_activo {
-            Box::pin(correr_persistente(agentes, consulta, python, pesos, dispositivo, persistente))
+            Box::pin(correr_persistente(agentes, consulta, python, pesos, dispositivo, persistente, limpieza_activo))
         } else {
-            Box::pin(correr(agentes, consulta, python, pesos, dispositivo))
+            Box::pin(correr(agentes, consulta, python, pesos, dispositivo, limpieza_activo))
         };
     let resultado = match tokio::time::timeout(limite, tarea).await {
         Ok(Ok(v)) => v,
@@ -101,7 +105,7 @@ pub async fn preguntar(
 /// lo relanza solo si murió a mitad de una petición anterior.
 async fn correr_persistente(
     agentes: &[String], consulta: &str, python: &Path, pesos: &Path, dispositivo: &str,
-    persistente: &crate::persistente::Persistente,
+    persistente: &crate::persistente::Persistente, limpieza_activo: bool,
 ) -> anyhow::Result<Vec<(Veredicto, String)>> {
     let script = crate::assets::ruta("workers/lumi_agentes.py");
     let registro = crate::assets::ruta("registros/agentes");
@@ -111,8 +115,13 @@ async fn correr_persistente(
         "consulta": consulta,
         "agentes": agentes,
     });
-    let envs: [(&str, &Path); 3] =
-        [("LUMI_REGISTRO_AGENTES", &registro), ("LUMI_PESOS", pesos), ("LUMI_DEVICE", Path::new(dispositivo))];
+    let limpieza_env = Path::new(if limpieza_activo { "1" } else { "0" });
+    let envs: [(&str, &Path); 4] = [
+        ("LUMI_REGISTRO_AGENTES", &registro),
+        ("LUMI_PESOS", pesos),
+        ("LUMI_DEVICE", Path::new(dispositivo)),
+        ("LUMI_LIMPIEZA_PRESION", limpieza_env),
+    ];
     let msgs = persistente.pedir(&orden, python, &script, &envs).await?;
     Ok(msgs
         .into_iter()
@@ -130,7 +139,7 @@ async fn correr_persistente(
 }
 
 async fn correr(
-    agentes: &[String], consulta: &str, python: &Path, pesos: &Path, dispositivo: &str,
+    agentes: &[String], consulta: &str, python: &Path, pesos: &Path, dispositivo: &str, limpieza_activo: bool,
 ) -> anyhow::Result<Vec<(Veredicto, String)>> {
     let mut hijo = tokio::process::Command::new(python)
         .arg(crate::assets::ruta("workers/lumi_agentes.py"))
@@ -143,6 +152,11 @@ async fn correr(
         // que podía estar ya ocupada con otro análisis. La verificación
         // geométrica ya recibía esto (`verificar.rs`); los agentes no.
         .env("LUMI_DEVICE", dispositivo)
+        // En modo no persistente el proceso muere con este análisis, así que
+        // el efecto práctico de este interruptor es nulo (no hay nada que
+        // desalojar a mitad de vida) -- se pasa igual por consistencia con el
+        // camino persistente.
+        .env("LUMI_LIMPIEZA_PRESION", if limpieza_activo { "1" } else { "0" })
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
