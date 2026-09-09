@@ -187,7 +187,13 @@ class Profundidad(object):
         d = _directorio(pesos_dir, "depth-anything-v2-small")
         self.dispositivo = dispositivo
         self.proc = AutoImageProcessor.from_pretrained(d)
-        self.red = AutoModelForDepthEstimation.from_pretrained(d)
+        # Mismo `torch_dtype` que ya usa `Vlm.__init__` para el mismo motivo
+        # -- antes cargaba siempre en fp32 mientras el VLM ya iba en fp16,
+        # una asimetría que parece un olvido y no una decisión: la salida se
+        # consume solo como medias de franjas y un cociente normalizado
+        # (`responder()`, abajo), donde fp16 no puede mover ningún umbral.
+        self.red = AutoModelForDepthEstimation.from_pretrained(
+            d, torch_dtype=torch.float16 if dispositivo != "cpu" else torch.float32)
         self.red.to(dispositivo)
         self.red.eval()
 

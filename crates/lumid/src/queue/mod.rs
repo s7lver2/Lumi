@@ -756,6 +756,7 @@ impl Queue {
                                 &consulta,
                                 &python,
                                 &pesos,
+                                &dispositivo,
                                 &self.store,
                                 &self.agentes_persistente,
                             ),

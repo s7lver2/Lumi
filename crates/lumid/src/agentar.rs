@@ -39,6 +39,7 @@ pub async fn preguntar(
     consulta: &str,
     python: &Path,
     pesos: &Path,
+    dispositivo: &str,
     store: &crate::store::Store,
     persistente: &crate::persistente::Persistente,
 ) -> Vec<(Veredicto, String)> {
@@ -60,9 +61,9 @@ pub async fn preguntar(
     // directo sobre las llamadas.
     let tarea: std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Vec<(Veredicto, String)>>> + Send>> =
         if persistente_activo {
-            Box::pin(correr_persistente(agentes, consulta, python, pesos, persistente))
+            Box::pin(correr_persistente(agentes, consulta, python, pesos, dispositivo, persistente))
         } else {
-            Box::pin(correr(agentes, consulta, python, pesos))
+            Box::pin(correr(agentes, consulta, python, pesos, dispositivo))
         };
     let resultado = match tokio::time::timeout(LIMITE, tarea).await {
         Ok(Ok(v)) => v,
@@ -89,7 +90,8 @@ pub async fn preguntar(
 /// uno nuevo — `Persistente::pedir` lo lanza la primera vez que hace falta y
 /// lo relanza solo si murió a mitad de una petición anterior.
 async fn correr_persistente(
-    agentes: &[String], consulta: &str, python: &Path, pesos: &Path, persistente: &crate::persistente::Persistente,
+    agentes: &[String], consulta: &str, python: &Path, pesos: &Path, dispositivo: &str,
+    persistente: &crate::persistente::Persistente,
 ) -> anyhow::Result<Vec<(Veredicto, String)>> {
     let script = crate::assets::ruta("workers/lumi_agentes.py");
     let registro = crate::assets::ruta("registros/agentes");
@@ -99,7 +101,8 @@ async fn correr_persistente(
         "consulta": consulta,
         "agentes": agentes,
     });
-    let envs: [(&str, &Path); 2] = [("LUMI_REGISTRO_AGENTES", &registro), ("LUMI_PESOS", pesos)];
+    let envs: [(&str, &Path); 3] =
+        [("LUMI_REGISTRO_AGENTES", &registro), ("LUMI_PESOS", pesos), ("LUMI_DEVICE", Path::new(dispositivo))];
     let msgs = persistente.pedir(&orden, python, &script, &envs).await?;
     Ok(msgs
         .into_iter()
@@ -114,12 +117,19 @@ async fn correr_persistente(
 }
 
 async fn correr(
-    agentes: &[String], consulta: &str, python: &Path, pesos: &Path,
+    agentes: &[String], consulta: &str, python: &Path, pesos: &Path, dispositivo: &str,
 ) -> anyhow::Result<Vec<(Veredicto, String)>> {
     let mut hijo = tokio::process::Command::new(python)
         .arg(crate::assets::ruta("workers/lumi_agentes.py"))
         .env("LUMI_REGISTRO_AGENTES", crate::assets::ruta("registros/agentes"))
         .env("LUMI_PESOS", pesos)
+        // Antes ausente: `lumi_agentes.py` decidía su dispositivo por su
+        // cuenta (`dispositivo()`, siempre "cuda" si hay alguna GPU) sin
+        // saber en cuál de varias corría este análisis -- en una caja
+        // multi-GPU, un análisis en "cuda:1" mandaba sus agentes a "cuda:0",
+        // que podía estar ya ocupada con otro análisis. La verificación
+        // geométrica ya recibía esto (`verificar.rs`); los agentes no.
+        .env("LUMI_DEVICE", dispositivo)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

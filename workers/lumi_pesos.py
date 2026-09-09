@@ -13,6 +13,34 @@ import hashlib
 import json
 import os
 
+_hilos_limitados = False
+
+
+def _limitar_hilos():
+    """Sin esto, torch coge TODOS los nucleos logicos para su propio
+    paralelismo interno (redimensionar/normalizar imagenes incluido), y ese
+    hilo de mas compite con la interfaz del sistema por CPU -- "el pc va
+    fatal" mientras embebe no era falta de GPU, era esto. Se deja al menos
+    la mitad de los nucleos libres para el resto de la maquina.
+
+    Vive aquí (no en cada trabajador por separado, como estaba antes solo en
+    `lumi_embed.py`) porque en Station puede haber hasta TRES procesos Python
+    vivos a la vez por análisis (embebedor persistente + verificación +
+    agentes en paralelo, `tokio::join!` en `queue::mod`) -- sin esto en los
+    tres, cada uno cogiendo todos los núcleos, es al daemon y al cliente a
+    quien muerde, no solo "al pc" del comentario original. Guardado en un
+    flag de módulo: `set_num_threads` no es gratis reinvocarlo sin necesidad
+    en cada job, y los trabajadores que lo llaman lo hacen desde su propio
+    punto de carga perezosa (una vez por modelo pedido), no una vez por
+    trabajo."""
+    global _hilos_limitados
+    if _hilos_limitados:
+        return
+    import torch
+    nucleos = os.cpu_count() or 4
+    torch.set_num_threads(max(1, nucleos // 2))
+    _hilos_limitados = True
+
 #: Lado del redimensionado antes del forward, por modelo -- 322 de defecto
 #: (23*14, encaja con el patch size 14 de los backbones DINOv2/ViT). MixVPR
 #: es la excepcion: su `FeatureMixerLayer` fija `in_h=in_w=20` al construirse

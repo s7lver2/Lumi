@@ -45,6 +45,14 @@ def registro():
 
 
 def dispositivo():
+    # `LUMI_DEVICE` es lo que manda cuando lo hay -- `verificar.rs` ya se lo
+    # pasaba a la verificación geométrica, pero `agentar.rs` no se lo pasaba
+    # a este proceso, así que en una caja con varias GPUs los agentes de un
+    # análisis en "cuda:1" acababan siempre en "cuda:0" por el auto-detectado
+    # de abajo, compitiendo con quien de verdad estuviera trabajando ahí.
+    explicito = os.environ.get("LUMI_DEVICE")
+    if explicito:
+        return explicito
     try:
         import torch
         if torch.cuda.is_available():
@@ -101,6 +109,12 @@ def _procesar(orden, disp):
 
 
 def main():
+    # Compartido con los demás trabajadores -- ver el docstring de
+    # `lumi_pesos._limitar_hilos`. Este proceso ya importa `lumi_motores`
+    # (y con él, transformers/torch) al arrancar, así que no hay nada que
+    # esperar como sí hace `lumi_geo.py`.
+    import lumi_pesos
+    lumi_pesos._limitar_hilos()
     disp = dispositivo()
     escribir({"tipo": "listo", "dispositivo": disp, "modelo": None})
 

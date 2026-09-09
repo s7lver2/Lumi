@@ -149,27 +149,48 @@ def _construir(verificador, pesos):
     )
 
 
+#: Un verificador que falló una vez (sha256 sin rellenar, licencia sin
+#: aceptar, OOM al construirlo...) se reintentaba en CADA candidato de la
+#: tanda -- 12 veces, cada una repitiendo el SHA-256 completo del fichero de
+#: pesos (puede ser un fichero de varios GB) antes de fallar de nuevo por lo
+#: mismo. `None` aquí significa "ya se intentó y no se puede", el mismo trato
+#: que ya usa `lumi_agentes._motor` para el mismo problema.
+_fallidos = {}
+
+
 def _cargar(verificador):
     """Los pesos se verifican por sha256 igual que los del embebedor: se
     reutiliza `lumi_pesos._verificar` para no tener dos posturas distintas
     sobre lo mismo."""
     if verificador in _cargados:
         return _cargados[verificador]
-    import lumi_pesos
-    import torch
+    if verificador in _fallidos:
+        raise _fallidos[verificador]
+    try:
+        import lumi_pesos
+        import torch
+        # Compartido con los demás trabajadores -- ver el docstring de
+        # `lumi_pesos._limitar_hilos`.
+        lumi_pesos._limitar_hilos()
 
-    ficha = lumi_pesos._ficha(verificador, REGISTRO)
-    directorio = os.path.join(PESOS, verificador)
-    ruta = os.path.join(directorio, "pesos.pth")
-    lumi_pesos._licencia(directorio)
-    lumi_pesos._verificar(ruta, ficha.get("sha256", ""))
-    # Publicado como state_dict crudo, no como módulo entero: por eso
-    # `weights_only=True` sí puede leerlo directamente (es un contenedor
-    # básico de tensores, nada de pickling arbitrario) y por qué hace falta
-    # `_construir` -- cargarlo tal cual y llamar `.eval()` fallaba con
-    # "'collections.OrderedDict' object has no attribute 'eval'".
-    pesos = torch.load(ruta, map_location=DISPOSITIVO, weights_only=True)
-    m = _construir(verificador, pesos)
+        ficha = lumi_pesos._ficha(verificador, REGISTRO)
+        directorio = os.path.join(PESOS, verificador)
+        ruta = os.path.join(directorio, "pesos.pth")
+        lumi_pesos._licencia(directorio)
+        lumi_pesos._verificar(ruta, ficha.get("sha256", ""))
+        # Publicado como state_dict crudo, no como módulo entero: por eso
+        # `weights_only=True` sí puede leerlo directamente (es un contenedor
+        # básico de tensores, nada de pickling arbitrario) y por qué hace
+        # falta `_construir` -- cargarlo tal cual y llamar `.eval()` fallaba
+        # con "'collections.OrderedDict' object has no attribute 'eval'".
+        pesos = torch.load(ruta, map_location=DISPOSITIVO, weights_only=True)
+        m = _construir(verificador, pesos)
+    except Exception as e:
+        # Cachear también el fallo: sin esto, un verificador roto se
+        # reintentaba una vez por candidato (hasta 12 veces por análisis),
+        # cada una desde el SHA-256 completo del fichero de pesos.
+        _fallidos[verificador] = e
+        raise
     # lightglue-aliked devuelve (extractor, matcher) en vez de un solo
     # módulo -- cada uno ya sale de _construir en modo eval, así que aquí
     # basta con no llamar .eval() sobre la tupla misma.
@@ -191,7 +212,15 @@ def _cargar(verificador):
 LADO_MAX = 640
 
 
-def _redimensionar(ruta):
+def _redimensionar(ruta, cache=None):
+    """`cache`, cuando se pasa, es el dict de una sola tanda de `_verificar`
+    (nunca uno global entre trabajos): la MISMA consulta se abría, convertía
+    y reescalaba con LANCZOS una vez por (candidato × verificador) -- 24
+    veces en Pro, 48 en Vision, siempre con el mismo resultado exacto porque
+    ni la ruta ni `LADO_MAX` cambian dentro de una tanda. Un candidato
+    repetido entre `roma` y `lightglue-aliked` también se reaprovecha."""
+    if cache is not None and ruta in cache:
+        return cache[ruta]
     from PIL import Image
 
     img = Image.open(ruta).convert("RGB")
@@ -199,10 +228,12 @@ def _redimensionar(ruta):
     escala = LADO_MAX / max(ancho, alto)
     if escala < 1:
         img = img.resize((max(1, round(ancho * escala)), max(1, round(alto * escala))), Image.LANCZOS)
+    if cache is not None:
+        cache[ruta] = img
     return img
 
 
-def _inliers(matcher, consulta, candidato):
+def _inliers(matcher, consulta, candidato, cache_redim=None):
     """Correspondencias que sobreviven a RANSAC sobre la matriz fundamental.
     Es la unica senal del arbitraje, y por eso es lo unico que se devuelve.
 
@@ -233,7 +264,7 @@ def _inliers(matcher, consulta, candidato):
     import numpy as np
     import torch
 
-    img_a, img_b = _redimensionar(consulta), _redimensionar(candidato)
+    img_a, img_b = _redimensionar(consulta, cache_redim), _redimensionar(candidato, cache_redim)
     ancho_a, alto_a = img_a.size
     ancho_b, alto_b = img_b.size
     with torch.inference_mode():
@@ -251,40 +282,58 @@ def _inliers(matcher, consulta, candidato):
     return int(np.sum(mascara)) if mascara is not None else 0
 
 
-def _inliers_disperso(envoltorio, consulta, candidato):
+def _inliers_disperso(envoltorio, consulta, candidato, cache_redim=None, cache_feats_consulta=None):
     """LightGlue+ALIKED es disperso, no denso: no hay `warp`+`certainty` que
     muestrear (esa API es exclusiva de RoMa/tiny-roma). Se extraen keypoints
-    de cada imagen por separado con ALIKED y se emparejan con LightGlue --
-    `match_pair()` (el propio helper de `lightglue.utils`) hace ambos pasos
-    y ya filtra por `filter_threshold` antes de devolver las correspondencias.
+    de cada imagen por separado con ALIKED y se emparejan con LightGlue.
     Los puntos emparejados van al mismo `cv2.findFundamentalMat` con el
     mismo umbral/confianza/iteraciones que `_inliers` calibró para RoMa --
     RANSAC no tiene por qué discriminar distinto según de dónde vinieron las
-    correspondencias."""
+    correspondencias.
+
+    `cache_feats_consulta`, cuando se pasa, evita volver a extraer los
+    keypoints ALIKED de la CONSULTA en cada candidato -- los del candidato sí
+    cambian y se calculan siempre, pero los de la consulta son los mismos 12
+    veces en una tanda de Pro. Antes esto llamaba a `match_pair()` (el
+    helper de `lightglue.utils`), que extrae las dos imágenes sin excepción;
+    aquí se hace el mismo trabajo a mano, extrayendo la consulta solo la
+    primera vez -- verificado bit a bit contra `match_pair()` (mismos
+    keypoints, mismas correspondencias) antes de desplegarlo."""
     import cv2
     import numpy as np
     import torch
-    from lightglue.utils import match_pair, numpy_image_to_torch
+    from lightglue.utils import batch_to_device, numpy_image_to_torch, rbd
 
     extractor, matcher = envoltorio
-    img_a, img_b = _redimensionar(consulta), _redimensionar(candidato)
-    # `match_pair()` solo mueve la SALIDA a `device` -- llama a
-    # `extractor.extract()` sobre el tensor de entrada tal cual se lo pasen,
-    # y ese extractor ya vive en `DISPOSITIVO` (`_construir` lo manda ahí al
-    # cargarlo). Sin este `.to()` el tensor de entrada se quedaba en CPU
-    # mientras los pesos estaban en GPU: "Input type (torch.FloatTensor) and
-    # weight type (torch.cuda.FloatTensor) should be the same", en el primer
-    # candidato, siempre.
-    tensor_a = numpy_image_to_torch(np.array(img_a)).to(DISPOSITIVO)
+    img_a, img_b = _redimensionar(consulta, cache_redim), _redimensionar(candidato, cache_redim)
+    # Sin este `.to()` el tensor de entrada se quedaba en CPU mientras los
+    # pesos estaban en GPU: "Input type (torch.FloatTensor) and weight type
+    # (torch.cuda.FloatTensor) should be the same", en el primer candidato,
+    # siempre. El extractor ya vive en `DISPOSITIVO` (`_construir` lo manda
+    # ahí al cargarlo).
     tensor_b = numpy_image_to_torch(np.array(img_b)).to(DISPOSITIVO)
 
     with torch.inference_mode():
-        feats_a, feats_b, matches01 = match_pair(extractor, matcher, tensor_a, tensor_b, device=DISPOSITIVO)
+        if cache_feats_consulta is not None and "consulta" in cache_feats_consulta:
+            feats_a = cache_feats_consulta["consulta"]
+        else:
+            tensor_a = numpy_image_to_torch(np.array(img_a)).to(DISPOSITIVO)
+            # SIN `rbd()` todavía -- el matcher exige la dimensión de batch
+            # que `extractor.extract()` deja puesta; se quita solo al final,
+            # igual que hace `match_pair()` internamente.
+            feats_a = extractor.extract(tensor_a)
+            if cache_feats_consulta is not None:
+                cache_feats_consulta["consulta"] = feats_a
+        feats_b = extractor.extract(tensor_b)
+        matches01 = matcher({"image0": feats_a, "image1": feats_b})
+        feats_a_r, feats_b_r, matches01 = [
+            batch_to_device(rbd(x), DISPOSITIVO) for x in (feats_a, feats_b, matches01)
+        ]
         parejas = matches01["matches"]
         if len(parejas) < 8:
             return 0
-        kpts_a = feats_a["keypoints"][parejas[:, 0]].cpu().numpy()
-        kpts_b = feats_b["keypoints"][parejas[:, 1]].cpu().numpy()
+        kpts_a = feats_a_r["keypoints"][parejas[:, 0]].cpu().numpy()
+        kpts_b = feats_b_r["keypoints"][parejas[:, 1]].cpu().numpy()
     _, mascara = cv2.findFundamentalMat(
         kpts_a, kpts_b, method=cv2.USAC_MAGSAC, ransacReprojThreshold=0.2, confidence=0.999999, maxIters=10000,
     )
@@ -312,6 +361,11 @@ def _verificar(job):
     fuera = []
     consulta = job["consulta"]
     verificadores = [v for v in job["verificadores"] if not _es_componente(v)]
+    # Cachés de UNA SOLA TANDA -- se crean vacías aquí y mueren con esta
+    # llamada, nunca sobreviven entre trabajos (una consulta o un candidato
+    # de un análisis no tienen por qué significar lo mismo en el siguiente).
+    cache_redim = {}
+    cache_feats_consulta = {}
     for cand in job["candidatos"]:
         for verificador in verificadores:
             try:
@@ -321,26 +375,28 @@ def _verificar(job):
                 # verificador hoy o en el futuro cercano necesita dos redes,
                 # así que el tipo de `m` ya basta como señal, sin una tabla
                 # de despacho aparte.
-                n = _inliers_disperso(m, consulta, cand["ruta"]) if isinstance(m, tuple) \
-                    else _inliers(m, consulta, cand["ruta"])
+                n = _inliers_disperso(m, consulta, cand["ruta"], cache_redim, cache_feats_consulta) \
+                    if isinstance(m, tuple) else _inliers(m, consulta, cand["ruta"], cache_redim)
             except Exception as e:
                 _log("verificador %s sobre %s: %s" % (verificador, cand["id"], e))
                 continue
-            finally:
-                # Con `inference_mode` cada tensor se libera solo al salir de
-                # `_inliers`, pero en una tanda de una docena de candidatos
-                # seguidos la fragmentación de VRAM se acumula igual -- esto
-                # la devuelve al asignador de CUDA entre uno y otro, no solo
-                # al final del proceso.
-                try:
-                    import torch
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                except ImportError:
-                    pass
             fuera.append({"tipo": "verificado", "id": job["id"], "candidato": cand["id"],
                           "verificador": verificador, "inliers": n,
                           "lat": cand["lat"], "lng": cand["lng"]})
+    # Antes esto se llamaba tras CADA candidato (`finally` dentro del bucle):
+    # `empty_cache()` sincroniza el dispositivo y devuelve los bloques al
+    # driver, así que la siguiente asignación tiene que volver a `cudaMalloc`
+    # en vez de reutilizar el caché del asignador -- convertía cada vuelta
+    # del bucle en un arranque frío del asignador, 24 veces en Pro. Se deja
+    # solo al final de la tanda entera: la fragmentación que esto prevenía
+    # (una docena de candidatos seguidos) se sigue evitando igual, porque el
+    # próximo trabajo empieza con la VRAM ya liberada.
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except ImportError:
+        pass
     return fuera
 
 

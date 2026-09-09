@@ -48,6 +48,13 @@ def _cargar(modelo):
     if modelo in _cargados:
         return _cargados[modelo]
     import lumi_pesos
+    # Compartido con los demás trabajadores -- ver el docstring de
+    # `lumi_pesos._limitar_hilos`. Aquí y no al arrancar el proceso: este
+    # script sigue arrancando antes de saber si el intérprete de verdad
+    # tiene torch (ver la cabecera del fichero), así que "torch coge todos
+    # los núcleos" no puede pagarse hasta que se sabe que sí lo hay -- justo
+    # aquí, donde `import lumi_pesos` ya lo confirma.
+    lumi_pesos._limitar_hilos()
 
     _log("cargando modelo %s en %s" % (modelo, DISPOSITIVO))
     e = lumi_pesos.cargar(modelo, REGISTRO, PESOS, DISPOSITIVO)
