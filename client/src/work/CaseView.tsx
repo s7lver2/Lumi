@@ -13,6 +13,7 @@ import { CreditRequestDialog } from "./CreditRequestDialog";
 import { Dock, type ImgState } from "./Dock";
 import { DrawerTab, DRAWER_W, RAIL_W, type DrawerId } from "./Drawer";
 import { DropFrame, DropTarget } from "./DropTarget";
+import { AgentPickerPopup } from "./AgentPickerPopup";
 import { MapCanvas, type Marker } from "./MapCanvas";
 import { ResultsDrawer } from "./ResultsDrawer";
 import { UploadPopup } from "./UploadPopup";
@@ -20,7 +21,7 @@ import { UploadPopup } from "./UploadPopup";
 const GB = 1024 * 1024 * 1024;
 
 export function CaseView({
-  project, case_, rail, drawer, drawerId, setDrawer, onAgentes,
+  project, case_, rail, drawer, drawerId, setDrawer, onAgentes, onIrAModelos,
 }: {
   project: Project;
   case_: Case;
@@ -29,10 +30,14 @@ export function CaseView({
   drawer: React.ReactNode;
   drawerId: DrawerId;
   setDrawer: (d: DrawerId) => void;
-  /** Elegir «Agentes» en el popup de subida no encola: navega a la pantalla
-   *  completa del modo Agentes con la imagen ya elegida — la decide `App`,
-   *  que es quien sabe cambiar de `mode`. */
-  onAgentes: (image: Image) => void;
+  /** Elegir «Agentes» en el popup de subida abre `AgentPickerPopup` (aquí
+   *  mismo); una vez lanzado el análisis, esto navega a la pantalla completa
+   *  del modo Agentes con la imagen y el análisis ya en marcha — lo decide
+   *  `App`, que es quien sabe cambiar de `mode`. */
+  onAgentes: (image: Image, analysis: Analysis) => void;
+  /** El admin de un agente sin motor instalado puede saltar directo a
+   *  Modelos — decide `App`, igual que `onAgentes`. */
+  onIrAModelos: () => void;
 }) {
   const token = useServer((s) => s.token) ?? undefined;
   const isAdmin = useServer((s) => s.isAdmin);
@@ -57,6 +62,10 @@ export function CaseView({
   /** Las imágenes que el popup tiene delante. `null` = popup cerrado. */
   const [staged, setStaged] = useState<number[] | null>(null);
   const popup = useDismissable(staged !== null, 180);
+  /** La imagen para la que se está eligiendo agente. `null` = popup cerrado —
+   *  se abre al elegir «Agentes» en `UploadPopup` en vez de encolar directo. */
+  const [agentPickerImage, setAgentPickerImage] = useState<Image | null>(null);
+  const agentPicker = useDismissable(agentPickerImage !== null, 180);
 
   async function load() {
     try {
@@ -454,17 +463,27 @@ export function CaseView({
             // El modo Agentes solo trabaja con una imagen a la vez (multi-
             // selección se descartó en el diseño) -- si el popup traía
             // varias en cola, se lanza sobre la primera y el resto se queda
-            // esperando en el caso, sin analizar todavía.
+            // esperando en el caso, sin analizar todavía. Elegir el agente en
+            // sí es OTRO popup (`AgentPickerPopup`), no la navegación directa
+            // de antes -- este solo se cierra y le pasa el testigo.
             if (m === "agentes") {
               const id = (staged ?? [])[0];
               const img = list.find((im) => im.id === id);
               setStaged(null);
-              if (img) onAgentes(img);
+              if (img) setAgentPickerImage(img);
               return;
             }
             void analyze(m, staged ?? []);
           }}
           onClose={() => { setStaged(null); setError(null); }} />
+      )}
+
+      {agentPicker.rendered && agentPickerImage && (
+        <AgentPickerPopup token={token} caseId={case_.id} image={agentPickerImage} isAdmin={isAdmin}
+          closing={agentPicker.closing}
+          onLaunched={(a) => { const img = agentPickerImage; setAgentPickerImage(null); onAgentes(img, a); }}
+          onClose={() => setAgentPickerImage(null)}
+          onIrAModelos={onIrAModelos} />
       )}
 
       {topeAlcanzado && token && (

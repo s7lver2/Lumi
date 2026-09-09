@@ -21,7 +21,7 @@ import { comprobarActualizacion, dispararActualizacionSilenciosa, errorActualiza
 import { DebugOrb } from "./dev/DebugOrb";
 import { useServer } from "./lib/store";
 import { useWorkspace } from "./lib/workspace";
-import { api, type Hello, type Me, type Sample, type TaskStatus } from "./lib/api";
+import { api, type Analysis, type Hello, type Me, type Sample, type TaskStatus } from "./lib/api";
 import { announcePresence, fetchLumiAvatarDataUrl, setAuth } from "./lib/bridge";
 import { loadSession, updateServerAvatar, updateSession } from "./lib/session";
 import { ProjectPicker } from "./work/ProjectPicker";
@@ -37,11 +37,13 @@ export default function App() {
   const [step, setStep] = useState(0);
   const [resuming, setResuming] = useState(true);
   const [mode, setMode] = useState<"entry" | "wizard" | "picker" | "project" | "case" | "agentes" | "admin" | "profile">("entry");
-  /** La imagen elegida para el modo Agentes — nace al elegir «Agentes» en el
-   *  popup de subida de un caso (`CaseView`) y muere al volver a él. Vive
-   *  aquí y no en `useWorkspace` porque es de esta sola pantalla, no del
-   *  proyecto/caso abierto en general. */
+  /** La imagen y el análisis del modo Agentes — nacen al elegir el agente en
+   *  `AgentPickerPopup` (abierto desde `CaseView`) y mueren al volver a él.
+   *  El análisis ya viene lanzado: la elección es un popup, no una fase
+   *  interna de esta pantalla. Viven aquí y no en `useWorkspace` porque son
+   *  de esta sola pantalla, no del proyecto/caso abierto en general. */
   const [agentesImagen, setAgentesImagen] = useState<Image | null>(null);
+  const [agentesAnalysis, setAgentesAnalysis] = useState<Analysis | null>(null);
   const [adminBusy, setAdminBusy] = useState(false);
   const [runtimeDone, setRuntimeDone] = useState(false);
   const [terminando, setTerminando] = useState(false);
@@ -439,18 +441,20 @@ export default function App() {
       ) : mode === "picker" ? (
         <ProjectPicker refresh={projectsTick}
           onOpen={(p) => { useWorkspace.getState().setProject(p); setMode("project"); }} />
-      ) : mode === "agentes" && agentesImagen ? (
+      ) : mode === "agentes" && agentesImagen && agentesAnalysis ? (
         // Pantalla completa, sin rail ni cajón lateral — decisión explícita
         // del owner (ver el spec del panel de agentes). El caso sigue en
-        // `useWorkspace`: volver atrás no lo pierde.
+        // `useWorkspace`: volver atrás no lo pierde. La elección de agente ya
+        // pasó (popup, en `CaseView`): esto nace con el análisis en marcha.
         <AgentesView
           token={useServer.getState().token ?? undefined}
           caseId={useWorkspace.getState().case_!.id}
           caseName={useWorkspace.getState().case_!.name}
           image={agentesImagen}
           isAdmin={isAdmin}
-          onBack={() => { setAgentesImagen(null); setMode("case"); }}
-          onIrAModelos={() => { setAgentesImagen(null); leaveProject(); setMode("admin"); }} />
+          analysisInicial={agentesAnalysis}
+          onBack={() => { setAgentesImagen(null); setAgentesAnalysis(null); setMode("case"); }}
+          onIrAModelos={() => { setAgentesImagen(null); setAgentesAnalysis(null); leaveProject(); setMode("admin"); }} />
       ) : (
         (() => {
           const { project, case_ } = useWorkspace.getState();
@@ -478,7 +482,8 @@ export default function App() {
           return mode === "case" && case_ ? (
             <CaseView project={project} case_={case_} rail={rail} drawer={cajon}
               drawerId={drawer} setDrawer={setDrawer}
-              onAgentes={(img) => { setAgentesImagen(img); setMode("agentes"); }} />
+              onAgentes={(img, analysis) => { setAgentesImagen(img); setAgentesAnalysis(analysis); setMode("agentes"); }}
+              onIrAModelos={() => { leaveProject(); setMode("admin"); }} />
           ) : (
             <ProjectView project={project} rail={rail} drawer={cajon}
               onOpenCase={(c) => { useWorkspace.getState().setCase(c); setMode("case"); }} />

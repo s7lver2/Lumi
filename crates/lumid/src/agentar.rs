@@ -18,8 +18,17 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 /// Doce agentes sobre un VLM en CPU pueden tardar; más de esto y el
 /// investigador está esperando por algo que es un accesorio del resultado, no
-/// el resultado.
+/// el resultado. Se usa cuando los agentes son un extra sobre un análisis
+/// `pro` que ya encontró candidatos por su cuenta -- perder los agentes aquí
+/// no pierde el resultado principal.
 pub const LIMITE: Duration = Duration::from_secs(120);
+
+/// El modo Agentes standalone (`queue::correr_agente_unico`) no tiene ningún
+/// resultado de respaldo: el agente ES la respuesta entera. Cargar el motor
+/// VLM en frío ya se come casi todo `LIMITE` por sí solo, así que aquí hace
+/// falta más margen -- el doble, suficiente para una carga en frío sin ser
+/// una espera eterna.
+pub const LIMITE_STANDALONE: Duration = Duration::from_secs(240);
 
 /// Un veredicto por agente, con su detalle. Vacío significa «no hubo agentes»,
 /// que es un estado legítimo y no un fallo.
@@ -42,6 +51,7 @@ pub async fn preguntar(
     dispositivo: &str,
     store: &crate::store::Store,
     persistente: &crate::persistente::Persistente,
+    limite: Duration,
 ) -> Vec<(Veredicto, String)> {
     if agentes.is_empty() || consulta.is_empty() {
         return Vec::new();
@@ -65,14 +75,14 @@ pub async fn preguntar(
         } else {
             Box::pin(correr(agentes, consulta, python, pesos, dispositivo))
         };
-    let resultado = match tokio::time::timeout(LIMITE, tarea).await {
+    let resultado = match tokio::time::timeout(limite, tarea).await {
         Ok(Ok(v)) => v,
         Ok(Err(e)) => {
             tracing::warn!("los agentes no contestaron: {e}");
             Vec::new()
         }
         Err(_) => {
-            tracing::warn!("los agentes tardaron más de {}s; se sigue sin ellos", LIMITE.as_secs());
+            tracing::warn!("los agentes tardaron más de {}s; se sigue sin ellos", limite.as_secs());
             Vec::new()
         }
     };

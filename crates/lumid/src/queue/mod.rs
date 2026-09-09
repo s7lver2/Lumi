@@ -759,6 +759,7 @@ impl Queue {
                                 &dispositivo,
                                 &self.store,
                                 &self.agentes_persistente,
+                                crate::agentar::LIMITE,
                             ),
                         );
                         let afinados = afinados.unwrap_or_default();
@@ -1023,6 +1024,7 @@ impl Queue {
             &dispositivo,
             &self.store,
             &self.agentes_persistente,
+            crate::agentar::LIMITE_STANDALONE,
         )
         .await;
         self.soltar(&dispositivo, id);
@@ -1035,7 +1037,12 @@ impl Queue {
                 );
                 self.anunciar(id, "hecho");
             }
-            None => self.fallar(id, "el agente no contestó"),
+            // `agentar::preguntar` nunca distingue aquí "no contestó porque se
+            // agotó el tiempo" de "no contestó por otra razón" -- ambas caen a
+            // este mismo texto. Es exactamente el motivo real más frecuente
+            // (carga en frío del motor), así que se deja explícito en vez de
+            // dejar que el cliente adivine.
+            None => self.fallar(id, "el agente no contestó a tiempo"),
         }
     }
 

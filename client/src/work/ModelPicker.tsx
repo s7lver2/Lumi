@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Icon } from "../ui/Icon";
+import { BetaPill } from "./AgentPickerPopup";
 
 /** Los tres niveles, descritos por lo que llevan dentro — que es lo que el
  *  investigador está eligiendo cuando elige. Antes solo se conocía `mini` y
  *  para `pro` y `vision` se enseñaba «modelo habilitado por el servidor»: era
  *  honesto cuando no había ficha, y deja de serlo ahora que sí la hay. Un id
  *  desconocido sigue pasando tal cual: inventarle una ficha sería peor. */
-const CONOCIDOS: Record<string, { name: string; note: string }> = {
+const CONOCIDOS: Record<string, { name: string; note: string; beta?: boolean }> = {
   mini: {
     name: "Lumi Mini",
     note: "1 recuperador · 1 verificador · rápido, aproximado, corre en un escritorio",
@@ -21,7 +22,8 @@ const CONOCIDOS: Record<string, { name: string; note: string }> = {
   },
   agentes: {
     name: "Agentes",
-    note: "un agente especializado responde una sola pregunta cerrada · sin geolocalización",
+    note: "una pregunta cerrada a la imagen · sin geolocalización",
+    beta: true,
   },
 };
 
@@ -58,7 +60,10 @@ export function ModelPicker({ models, value, onChange }: {
           <Icon name="globe" size={15} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[11.5px] font-medium text-fg">{actual.name}</span>
+          <span className="flex items-center gap-1.5">
+            <span className="block text-[11.5px] font-medium text-fg">{actual.name}</span>
+            {actual.beta && <BetaPill />}
+          </span>
           <span className="block truncate text-[9.5px] text-muted">{actual.note}</span>
         </span>
         {models.length > 1 ? (
@@ -86,7 +91,10 @@ export function ModelPicker({ models, value, onChange }: {
               <Icon name="globe" size={15} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className={`block text-[11.5px] font-medium ${on ? "text-fg" : "text-muted"}`}>{f.name}</span>
+              <span className="flex items-center gap-1.5">
+                <span className={`block text-[11.5px] font-medium ${on ? "text-fg" : "text-muted"}`}>{f.name}</span>
+                {f.beta && <BetaPill />}
+              </span>
               <span className="block truncate text-[9.5px] text-subtle">{f.note}</span>
             </span>
             {on && <Icon name="check" size={14} className="shrink-0 text-fg" />}
