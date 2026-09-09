@@ -101,6 +101,27 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec
                  else \
                    UV_HTTP_TIMEOUT=60 \"$UV\" pip install --python \"$1/bin/python3\" romatch; \
                  fi; \
+                 # `roma_outdoor(use_custom_corr=True)` -- el modo que de
+                 # verdad se usa (ver `lumi_verify.py`) -- necesita poder
+                 # hacer `import local_corr`. Esa extension no esta en PyPI
+                 # bajo ese nombre, y el paquete mas cercano
+                 # (`fused-local-corr`) va atado a una version de
+                 # PyTorch/CUDA que no es la nuestra (probado a mano: al
+                 # instalarlo, degrada torch de 2.14+cu126 a 2.11+cu13 y
+                 # rompe todo lo demas que corre sobre ese mismo torch). En
+                 # su lugar, un kernel Triton propio con el mismo contrato:
+                 # github.com/s7lver2/local-corr-lumi -- compila contra el
+                 # PyTorch/CUDA que YA haya en el entorno, no trae un
+                 # binario prebuilt que pueda desincronizarse. Sin esto,
+                 # \"roma\" corre igual (cae al fallback en PyTorch puro que
+                 # trae romatch) pero decenas de veces mas lento -- minutos
+                 # por candidato en vez de segundos.
+                 if \"$1/bin/python3\" -c 'import local_corr' 2>/dev/null; then \
+                   echo 'local_corr ya instalado, nada que hacer'; \
+                 else \
+                   UV_HTTP_TIMEOUT=60 \"$UV\" pip install --python \"$1/bin/python3\" \
+                   git+https://github.com/s7lver2/local-corr-lumi.git; \
+                 fi; \
                  if \"$1/bin/python3\" -c 'import safetensors' 2>/dev/null; then \
                    echo 'safetensors ya instalado, nada que hacer'; \
                  else \

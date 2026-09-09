@@ -109,16 +109,22 @@ def _construir(verificador, pesos):
         # que puedan cargarse en el mismo proceso.
         torch.set_float32_matmul_precision("highest")
         dinov2_weights = _pesos_de("dinov2-vitl14")
-        # `use_custom_corr=True` (el default de romatch) exige el paquete
-        # nativo `local_corr` -- una extension CUDA que hay que compilar a
-        # mano, no algo que `pip install romatch` trae. Sin esto, roma
-        # moria en el primer candidato con `ModuleNotFoundError: No module
-        # named 'local_corr'` y nunca llegaba a verificar nada. El propio
-        # romatch trae un equivalente en PyTorch puro
-        # (`shitty_native_torch_local_corr`) para este caso -- mas lento,
-        # pero funciona sin compilar nada.
+        # `use_custom_corr=True` (el default de romatch) exige poder hacer
+        # `import local_corr` -- una extension CUDA que romatch no trae ni
+        # publica en PyPI bajo ese nombre; el paquete mas cercano
+        # (`fused-local-corr`) va atado a una version de PyTorch/CUDA que
+        # no es la nuestra y arrastra un downgrade al instalarlo (probado a
+        # mano: rompe torch 2.14+cu126 -> 2.11+cu13). En su lugar se instala
+        # `local-corr-lumi` (kernel Triton propio, mismo contrato que la
+        # extension original, compila contra el PyTorch/CUDA que ya haya en
+        # el entorno en vez de traer un binario prebuilt) -- ver su propio
+        # repo para el porque y las pruebas de correctitud/velocidad.
+        # Sin esto, cada candidato de "roma" tardaba varios MINUTOS con el
+        # fallback en PyTorch puro que trae romatch
+        # (`shitty_native_torch_local_corr`); con el kernel, ~15-18x mas
+        # rapido de extremo a extremo (medido: match() real, 27s vs ~8min).
         return romatch.roma_outdoor(
-            device=DISPOSITIVO, weights=pesos, dinov2_weights=dinov2_weights, use_custom_corr=False,
+            device=DISPOSITIVO, weights=pesos, dinov2_weights=dinov2_weights, use_custom_corr=True,
         )
     if verificador == "lightglue-aliked":
         # LightGlue+ALIKED es un pipeline disperso (keypoints + emparejador),
