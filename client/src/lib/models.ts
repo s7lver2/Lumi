@@ -4,4 +4,4 @@
  *  servidor puede conceder. El panel de solicitudes (subsistema 3, provisional)
  *  ya deja concederlos al aprobar una cuenta nueva — esta es la misma lista,
  *  para que no haya dos sitios que puedan desincronizarse. */
-export const KNOWN_MODELS = ["mini", "pro", "vision"];
+export const KNOWN_MODELS = ["mini", "pro", "vision", "agentes"];

@@ -22,6 +22,8 @@ huggingface_hub.snapshot_download, ver workers/lumi_bajar.py) -- la
 integridad de cada fichero la verifica el propio hub, no un sha256 propio de
 este proyecto.
 """
+import base64
+import io
 import json
 import os
 import re
@@ -57,6 +59,14 @@ class Vlm(object):
     etiqueta por la verosimilitud que el propio modelo le da y normalizando con
     softmax. Un modelo que se autoevalua dice «0.9» siempre; esto al menos es
     una medida de algo, y es determinista.
+
+    El softmax YA es una distribucion completa sobre el conjunto cerrado de
+    etiquetas -- antes se calculaba entero y se tiraban todas las probabilidades
+    menos la ganadora. `responder()` expone la lista ordenada entera como
+    `alternativas`: no hay ningun dato nuevo que inventar, solo dejar de
+    descartar el que ya salia de aqui. Sin rasgos: no hay interpretabilidad de
+    atencion implementada para Qwen3-VL con esta tecnica (puntuar etiquetas),
+    y un mapa de atencion fabricado seria peor que ninguno.
     """
 
     def __init__(self, pesos_dir, dispositivo):
@@ -84,7 +94,7 @@ class Vlm(object):
 
         etiquetas = agente.get("etiquetas") or []
         if not etiquetas:
-            return (None, 0.0, "")
+            return (None, 0.0, "", [], None)
         img = Image.open(ruta_imagen).convert("RGB")
         mensajes = [{"role": "user", "content": [
             {"type": "image"},
@@ -103,7 +113,8 @@ class Vlm(object):
         t = torch.tensor(puntos)
         probs = torch.softmax(t, dim=0).tolist()
         i = max(range(len(probs)), key=lambda k: probs[k])
-        return (etiquetas[i], probs[i], "")
+        alternativas = sorted(zip(etiquetas, probs), key=lambda par: -par[1])
+        return (etiquetas[i], probs[i], "", alternativas, None)
 
 
 class Ocr(object):
@@ -126,28 +137,82 @@ class Ocr(object):
                              use_gpu=(dispositivo != "cpu"))
 
     def _lineas(self, ruta_imagen):
+        from PIL import Image
+
+        # El ancho/alto hacen falta para normalizar las cajas a fraccion 0-1
+        # (`entrada[0]`, las cuatro esquinas del cuadrilatero que PaddleOCR ya
+        # calcula y que antes se tiraba sin mirar -- solo se usaba
+        # `entrada[1]`, texto+confianza). El cliente dibuja sobre cualquier
+        # tamano de render sin conocer las dimensiones originales del
+        # fichero.
+        ancho, alto = Image.open(ruta_imagen).size
         salida = self.red.ocr(ruta_imagen, cls=True) or []
         fuera = []
         for pagina in salida:
             for entrada in (pagina or []):
                 texto, confianza = entrada[1]
-                fuera.append((texto, float(confianza)))
+                puntos = entrada[0] or []
+                caja = None
+                if puntos and ancho > 0 and alto > 0:
+                    xs = [p[0] for p in puntos]
+                    ys = [p[1] for p in puntos]
+                    x0, x1 = min(xs) / ancho, max(xs) / ancho
+                    y0, y1 = min(ys) / alto, max(ys) / alto
+                    caja = (x0, y0, x1 - x0, y1 - y0)
+                fuera.append((texto, float(confianza), caja))
         return fuera
+
+    def _escritura_de(self, texto):
+        """La escritura dominante de UNA linea, con la misma aritmetica de
+        rangos Unicode que agrega `responder()` para el veredicto entero --
+        aqui sirve para etiquetar cada caja con su propio texto, no con la
+        etiqueta ganadora global (que podria no ser la de esa linea en
+        concreto)."""
+        cuenta = {}
+        for ch in texto:
+            punto = ord(ch)
+            for nombre, (lo, hi) in ESCRITURAS:
+                if lo <= punto <= hi:
+                    cuenta[nombre] = cuenta.get(nombre, 0) + 1
+                    break
+        return max(cuenta, key=lambda k: cuenta[k]) if cuenta else None
+
+    def _rasgos_de(self, lineas, etiquetador):
+        """Cajas reales para el veredicto, o `None` si no hay ninguna con
+        posicion conocida. `etiquetador(texto)` decide la etiqueta que lleva
+        cada caja -- distinta para el texto libre (el texto mismo) que para
+        las etiquetas cerradas (la escritura de esa linea)."""
+        cajas = []
+        for texto, _, caja in lineas:
+            if not caja or not texto.strip():
+                continue
+            x, y, w, h = caja
+            etq = etiquetador(texto)
+            if not etq:
+                continue
+            cajas.append({"x": x, "y": y, "w": w, "h": h, "etiqueta": etq})
+        if not cajas:
+            return None
+        return {"tipo": "ocr", "cajas": cajas}
 
     def responder(self, agente, ruta_imagen):
         lineas = self._lineas(ruta_imagen)
         if agente["id"] == "toponimos":
             # Descriptivo: el texto entero, sin interpretar. Un nombre de calle
-            # legible vale mas que cualquier etiqueta que le pusieramos.
-            texto = " · ".join(t for t, _ in lineas if t.strip())
+            # legible vale mas que cualquier etiqueta que le pusieramos. Sin
+            # distribucion genuina que ofrecer (texto libre, no un conjunto
+            # cerrado) -- `alternativas` se queda vacia a proposito.
+            textos = [t for t, _, _ in lineas if t.strip()]
+            texto = " · ".join(textos)
             if not texto:
-                return (None, 0.0, "")
-            media = sum(c for _, c in lineas) / len(lineas)
-            return ("hay texto legible", media, texto[:400])
+                return (None, 0.0, "", [], None)
+            media = sum(c for _, c, _ in lineas) / len(lineas)
+            rasgos = self._rasgos_de(lineas, lambda t: t[:40])
+            return ("hay texto legible", media, texto[:400], [], rasgos)
 
         cuenta = {}
         total = 0
-        for texto, confianza in lineas:
+        for texto, confianza, _ in lineas:
             for ch in texto:
                 punto = ord(ch)
                 for nombre, (lo, hi) in ESCRITURAS:
@@ -157,11 +222,18 @@ class Ocr(object):
                         break
         if not cuenta or total < 4:
             # Menos de cuatro caracteres no es un cartel, es ruido.
-            return ("sin texto", 0.0, "")
+            return ("sin texto", 0.0, "", [], None)
+        suma = sum(cuenta.values())
         nombre = max(cuenta, key=lambda k: cuenta[k])
-        confianza = cuenta[nombre] / sum(cuenta.values())
-        muestra = " · ".join(t for t, _ in lineas if t.strip())[:200]
-        return (nombre, confianza, muestra)
+        confianza = cuenta[nombre] / suma
+        # La misma proporcion por escritura que decide la ganadora, expuesta
+        # entera: es una distribucion real (proporcion de caracteres por
+        # escritura), no una inventada para rellenar la lista.
+        alternativas = sorted(
+            ((k, v / suma) for k, v in cuenta.items()), key=lambda par: -par[1])
+        muestra = " · ".join(t for t, _, _ in lineas if t.strip())[:200]
+        rasgos = self._rasgos_de(lineas, self._escritura_de)
+        return (nombre, confianza, muestra, alternativas, rasgos)
 
 
 class Profundidad(object):
@@ -197,6 +269,23 @@ class Profundidad(object):
         self.red.to(dispositivo)
         self.red.eval()
 
+    def _mapa_de_calor(self, mapa):
+        """El mismo tensor `mapa` que ya calculo `responder()`, reescalado a
+        0-255 y codificado en PNG -- no se repite ninguna inferencia, solo se
+        deja de tirar el mapa entero despues de reducirlo a medias de franja.
+        Escala de grises y no una paleta de color: es la distincion mas
+        simple que sigue siendo un dato real, sin inventar una paleta que
+        alguien podria leer como si tuviera un significado calibrado."""
+        import numpy as np
+        from PIL import Image
+
+        arr = mapa.detach().to("cpu").float().numpy()
+        rango = float(arr.max() - arr.min()) or 1.0
+        normalizado = ((arr - arr.min()) / rango * 255.0).astype(np.uint8)
+        buf = io.BytesIO()
+        Image.fromarray(normalizado, mode="L").save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+
     def responder(self, agente, ruta_imagen):
         import torch
         from PIL import Image
@@ -216,13 +305,19 @@ class Profundidad(object):
         abajo = float(mapa[2 * alto // 3:, :].mean())
         rango = float(mapa.max() - mapa.min()) or 1.0
 
+        # Sigue siendo un arbol de reglas con confianza fija por rama -- no
+        # hay una distribucion genuina que exponer como `alternativas`, asi
+        # que se queda vacia a proposito (fuera de alcance del diseno:
+        # rehacer esto para que de una distribucion real). El mapa de calor
+        # si es un dato real y se adjunta siempre, gane la rama que gane.
+        rasgos = {"tipo": "profundidad", "png_base64": self._mapa_de_calor(mapa)}
         if (centro - bordes) / rango > 0.15:
-            return ("calle profunda", 0.7, "")
+            return ("calle profunda", 0.7, "", [], rasgos)
         if (arriba - abajo) / rango > 0.15:
-            return ("espacio abierto", 0.6, "")
+            return ("espacio abierto", 0.6, "", [], rasgos)
         if ancho > alto:
-            return ("fachada ancha y baja", 0.6, "")
-        return ("fachada estrecha y alta", 0.6, "")
+            return ("fachada ancha y baja", 0.6, "", [], rasgos)
+        return ("fachada estrecha y alta", 0.6, "", [], rasgos)
 
 
 CLASES = {"vlm": Vlm, "ocr": Ocr, "profundidad": Profundidad}

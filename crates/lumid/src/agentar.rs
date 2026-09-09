@@ -107,8 +107,11 @@ async fn correr_persistente(
     Ok(msgs
         .into_iter()
         .filter_map(|msg| {
-            if let lumi_proto::worker::Msg::Agente { agente, etiqueta, confianza, detalle, .. } = msg {
-                Some((Veredicto { agente, etiqueta, confianza }, detalle))
+            if let lumi_proto::worker::Msg::Agente {
+                agente, etiqueta, confianza, detalle, alternativas, rasgos, ..
+            } = msg
+            {
+                Some((Veredicto { agente, etiqueta, confianza, alternativas, rasgos }, detalle))
             } else {
                 None
             }
@@ -168,9 +171,11 @@ async fn correr(
             let Ok(msg) = serde_json::from_str::<lumi_proto::worker::Msg>(&linea) else {
                 continue;
             };
-            if let lumi_proto::worker::Msg::Agente { agente, etiqueta, confianza, detalle, .. } = msg
+            if let lumi_proto::worker::Msg::Agente {
+                agente, etiqueta, confianza, detalle, alternativas, rasgos, ..
+            } = msg
             {
-                fuera.push((Veredicto { agente, etiqueta, confianza }, detalle));
+                fuera.push((Veredicto { agente, etiqueta, confianza, alternativas, rasgos }, detalle));
             }
         }
     }

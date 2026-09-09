@@ -15,7 +15,7 @@ use lumi_proto::api::{Analysis, AnalysisReq};
 
 const COLS: &str = "id, case_id, model, state, error, result_lat, result_lng,
                     result_radius_m, result_confidence, created_at, finished_at, nivel_efectivo,
-                    result_inliers, result_verificador, result_imagen_id";
+                    result_inliers, result_verificador, result_imagen_id, agente";
 
 fn image_ids(c: &rusqlite::Connection, analysis_id: i64) -> Vec<i64> {
     let Ok(mut q) = c.prepare("SELECT image_id FROM analysis_images WHERE analysis_id = ?1") else {
@@ -31,6 +31,7 @@ fn row_to_analysis(r: &rusqlite::Row) -> rusqlite::Result<Analysis> {
         id: r.get(0)?,
         case_id: r.get(1)?,
         model: r.get(2)?,
+        agente: r.get(15)?,
         state: r.get(3)?,
         error: r.get(4)?,
         result_lat: r.get(5)?,
@@ -139,11 +140,35 @@ fn hypotheses_por_caso(
     mapa
 }
 
+/// `alternativas`/`rasgos` viajan como JSON en la fila (ver `store::migrate`);
+/// se de-serializan aquí y no en el llamador, así que un `NULL` de un
+/// análisis viejo (columna recién migrada) o un JSON corrupto se convierten
+/// en «vacío»/`None` en un solo sitio, en vez de un `Result` que cada
+/// llamador tendría que decidir cómo tragarse.
+fn agente_de_fila(
+    agente: String, nombre: String, etiqueta: String, confianza: f64, tipo: String, detalle: String,
+    alternativas: Option<String>, rasgos: Option<String>,
+) -> lumi_proto::api::DichoDeAgente {
+    lumi_proto::api::DichoDeAgente {
+        agente,
+        nombre,
+        etiqueta,
+        confianza,
+        tipo,
+        detalle,
+        alternativas: alternativas
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default(),
+        rasgos: rasgos.and_then(|s| serde_json::from_str(&s).ok()),
+    }
+}
+
 fn agentes_por_caso(
     c: &rusqlite::Connection, case_id: i64,
 ) -> std::collections::HashMap<i64, Vec<lumi_proto::api::DichoDeAgente>> {
     let Ok(mut q) = c.prepare(
-        "SELECT ag.analysis_id, ag.agente, ag.nombre, ag.etiqueta, ag.confianza, ag.tipo, ag.detalle
+        "SELECT ag.analysis_id, ag.agente, ag.nombre, ag.etiqueta, ag.confianza, ag.tipo, ag.detalle,
+                ag.alternativas, ag.rasgos
            FROM analysis_agents ag JOIN analyses a ON a.id = ag.analysis_id
           WHERE a.case_id = ?1
           ORDER BY ag.analysis_id, ag.agente",
@@ -153,14 +178,9 @@ fn agentes_por_caso(
     let Ok(filas) = q.query_map([case_id], |r| {
         Ok((
             r.get::<_, i64>(0)?,
-            lumi_proto::api::DichoDeAgente {
-                agente: r.get(1)?,
-                nombre: r.get(2)?,
-                etiqueta: r.get(3)?,
-                confianza: r.get(4)?,
-                tipo: r.get(5)?,
-                detalle: r.get(6)?,
-            },
+            agente_de_fila(
+                r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?,
+            ),
         ))
     }) else {
         return Default::default();
@@ -174,20 +194,15 @@ fn agentes_por_caso(
 
 fn agentes(c: &rusqlite::Connection, analysis_id: i64) -> Vec<lumi_proto::api::DichoDeAgente> {
     let Ok(mut q) = c.prepare(
-        "SELECT agente, nombre, etiqueta, confianza, tipo, detalle
+        "SELECT agente, nombre, etiqueta, confianza, tipo, detalle, alternativas, rasgos
            FROM analysis_agents WHERE analysis_id = ?1 ORDER BY agente",
     ) else {
         return Vec::new();
     };
     let Ok(filas) = q.query_map([analysis_id], |r| {
-        Ok(lumi_proto::api::DichoDeAgente {
-            agente: r.get(0)?,
-            nombre: r.get(1)?,
-            etiqueta: r.get(2)?,
-            confianza: r.get(3)?,
-            tipo: r.get(4)?,
-            detalle: r.get(5)?,
-        })
+        Ok(agente_de_fila(
+            r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?,
+        ))
     }) else {
         return Vec::new();
     };
@@ -258,6 +273,22 @@ pub async fn create(
     if req.image_ids.is_empty() {
         return Err(err(StatusCode::BAD_REQUEST, "hay que elegir al menos una imagen"));
     }
+    // El modo Agentes lanza uno solo, nunca varios a la vez -- multi-
+    // selección se descartó explícitamente en el diseño. Se comprueba aquí,
+    // no solo en el cliente: un `POST` a mano con `agente: null` no debería
+    // colarse hasta la cola para fallar mucho más tarde con un mensaje
+    // genérico.
+    if req.model == "agentes" {
+        let Some(agente_id) = req.agente.as_deref().filter(|s| !s.is_empty()) else {
+            return Err(err(StatusCode::BAD_REQUEST, "hay que elegir un agente"));
+        };
+        let conocido = app.queue.agentes.lock().unwrap().iter().any(|a| a.id == agente_id);
+        if !conocido {
+            return Err(err(StatusCode::BAD_REQUEST, "ese agente no existe en el registro"));
+        }
+    } else if req.agente.is_some() {
+        return Err(err(StatusCode::BAD_REQUEST, "«agente» solo se acepta con el modelo agentes"));
+    }
 
     // Las imágenes tienen que ser de ESTE caso. Sin esto, conocer un id de
     // imagen ajena bastaría para arrastrarla a un análisis propio.
@@ -324,9 +355,9 @@ pub async fn create(
     let id = {
         let c = app.store.conn();
         c.execute(
-            "INSERT INTO analyses (case_id, requested_by, model, state, created_at, via_api)
-             VALUES (?1, ?2, ?3, 'pendiente', ?4, ?5)",
-            rusqlite::params![case_id, uid, req.model, t, via_api],
+            "INSERT INTO analyses (case_id, requested_by, model, agente, state, created_at, via_api)
+             VALUES (?1, ?2, ?3, ?4, 'pendiente', ?5, ?6)",
+            rusqlite::params![case_id, uid, req.model, req.agente, t, via_api],
         )
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
         let id = c.last_insert_rowid();
@@ -347,6 +378,7 @@ pub async fn create(
         id,
         case_id,
         model: req.model,
+        agente: req.agente,
         state: "pendiente".into(),
         error: None,
         result_lat: None,

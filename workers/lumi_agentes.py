@@ -96,7 +96,7 @@ def _procesar(orden, disp):
         if motor is None:
             continue
         try:
-            etiqueta, confianza, detalle = motor.responder(a, consulta)
+            etiqueta, confianza, detalle, alternativas, rasgos = motor.responder(a, consulta)
         except Exception as e:
             print("agente %s fallo: %s" % (a["id"], e), file=sys.stderr)
             continue
@@ -105,6 +105,10 @@ def _procesar(orden, disp):
         escribir({
             "tipo": "agente", "id": id_analisis, "agente": a["id"],
             "etiqueta": etiqueta, "confianza": float(confianza), "detalle": detalle or "",
+            # Tal cual salen del motor, sin logica propia aqui: vacio/None
+            # cuando el motor no tiene nada real que anadir.
+            "alternativas": [[e, float(p)] for e, p in (alternativas or [])],
+            "rasgos": rasgos,
         })
 
 

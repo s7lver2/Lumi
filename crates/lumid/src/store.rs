@@ -233,6 +233,10 @@ CREATE TABLE IF NOT EXISTS analysis_agents (
     confianza   REAL NOT NULL,
     tipo        TEXT NOT NULL,
     detalle     TEXT NOT NULL DEFAULT '',
+    -- JSON de `Vec<(String, f64)>` y de `Option<Rasgos>` tal cual los trajo
+    -- `Msg::Agente` -- se guardan serializados y no en columnas propias
+    -- porque su forma varía por motor (una lista corta o un PNG en base64) y
+    -- aquí no hace falta consultarlos por campo, solo devolverlos enteros.
     PRIMARY KEY (analysis_id, agente)
 );
 CREATE TABLE IF NOT EXISTS model_licenses (
@@ -472,6 +476,11 @@ fn migrate(c: &Connection) {
         // simplemente no ofrece foto de comparación.
         ("analyses", "result_imagen_id", "INTEGER"),
         ("analysis_hypotheses", "imagen_id", "INTEGER"),
+        // Panel de agentes: qué agente se pidió (solo con model == "agentes")
+        // y lo que ese agente trajo de más allá de la etiqueta ganadora.
+        ("analyses", "agente", "TEXT"),
+        ("analysis_agents", "alternativas", "TEXT"),
+        ("analysis_agents", "rasgos", "TEXT"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }

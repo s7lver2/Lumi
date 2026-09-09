@@ -997,6 +997,48 @@ impl Queue {
         self.store.conn().query_row("SELECT model FROM analyses WHERE id = ?1", [id], |r| r.get(0)).ok()
     }
 
+    /// El agente pedido para un análisis del modo Agentes. `None` si la
+    /// columna está vacía -- un pedido mal formado, no un dato que falte.
+    fn agente_del_analisis(&self, id: i64) -> Option<String> {
+        self.store
+            .conn()
+            .query_row("SELECT agente FROM analyses WHERE id = ?1", [id], |r| r.get::<_, Option<String>>(0))
+            .ok()
+            .flatten()
+            .filter(|s| !s.is_empty())
+    }
+
+    /// El camino entero del modo Agentes: sin recuperación ni verificación
+    /// geométrica, una sola llamada a `agentar::preguntar` con el único
+    /// agente pedido, y el resultado se guarda como un análisis normal (sin
+    /// lat/lng/radio, que quedan `NULL` como ya ocurre cuando no aplican).
+    async fn correr_agente_unico(&self, dispositivo: String, id: i64, agente_id: String, consulta: String) {
+        let pesos = crate::assets::pesos_dir(&self.store, &self.dir);
+        let python = interprete_python(&self.store);
+        let dictamen = crate::agentar::preguntar(
+            &[agente_id],
+            &consulta,
+            &python,
+            &pesos,
+            &dispositivo,
+            &self.store,
+            &self.agentes_persistente,
+        )
+        .await;
+        self.soltar(&dispositivo, id);
+        match dictamen.into_iter().next() {
+            Some(v) => {
+                self.guardar_agentes(id, std::slice::from_ref(&v));
+                let _ = self.store.conn().execute(
+                    "UPDATE analyses SET state = 'hecho', error = NULL, finished_at = ?2 WHERE id = ?1",
+                    rusqlite::params![id, ahora()],
+                );
+                self.anunciar(id, "hecho");
+            }
+            None => self.fallar(id, "el agente no contestó"),
+        }
+    }
+
     /// El nivel que de verdad se puede correr: el pedido, o el primero por
     /// debajo cuyas capas estén todas instaladas.
     fn nivel_de(&self, pedido: &str) -> Option<lumi_index::niveles::Nivel> {
@@ -1126,10 +1168,15 @@ impl Queue {
         for (v, detalle) in dictamen {
             let Some(a) = agentes.iter().find(|a| a.id == v.agente) else { continue };
             let abstiene = v.confianza < a.umbral_confianza;
+            // JSON y no columnas propias: la forma varía por motor (una
+            // lista corta de pares, o un PNG en base64) y aquí no hace falta
+            // consultar por campo, solo devolverlo entero al cliente.
+            let alternativas = serde_json::to_string(&v.alternativas).unwrap_or_default();
+            let rasgos = v.rasgos.as_ref().and_then(|r| serde_json::to_string(r).ok());
             let _ = c.execute(
                 "INSERT OR REPLACE INTO analysis_agents
-                    (analysis_id, agente, nombre, etiqueta, confianza, tipo, detalle)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    (analysis_id, agente, nombre, etiqueta, confianza, tipo, detalle, alternativas, rasgos)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 rusqlite::params![
                     id,
                     &a.id,
@@ -1138,6 +1185,8 @@ impl Queue {
                     v.confianza,
                     &a.tipo,
                     detalle,
+                    alternativas,
+                    rasgos,
                 ],
             );
         }
@@ -1227,7 +1276,7 @@ impl Queue {
         let _ = self.admin_eventos.send(EventoAdmin::ColaCambio);
     }
 
-    fn repartir_ahora(&self) {
+    fn repartir_ahora(self: &Arc<Self>) {
         let libres: Vec<Libre> = match self.estado.lock() {
             Ok(e) => e
                 .trabajadores
@@ -1269,6 +1318,44 @@ impl Queue {
                 )
                 .unwrap_or(0);
             if marcado == 0 {
+                continue;
+            }
+
+            // El modo Agentes no recupera ni verifica: es una sola pregunta
+            // cerrada a `agentar::preguntar`, sin tocar `lumi_geo.py` ni el
+            // canal del trabajador de embebido. Por eso no comparte el resto
+            // de este bucle -- lo que sigue construye un `Job` de
+            // recuperación que este modo no necesita en absoluto.
+            if modelo == "agentes" {
+                let Some(agente_id) = self.agente_del_analisis(a.analysis_id) else {
+                    self.fallar(a.analysis_id, "no se indicó qué agente lanzar");
+                    continue;
+                };
+                let ocupado = match self.estado.lock() {
+                    Ok(mut e) => match e.trabajadores.get_mut(&a.dispositivo) {
+                        Some(w) => {
+                            w.trabajo = Some(a.analysis_id);
+                            w.en_curso_desde = Some(Instant::now());
+                            true
+                        }
+                        None => false,
+                    },
+                    Err(_) => false,
+                };
+                if !ocupado {
+                    let _ = self.store.conn().execute(
+                        "UPDATE analyses SET state = 'pendiente' WHERE id = ?1",
+                        [a.analysis_id],
+                    );
+                    continue;
+                }
+                self.anunciar(a.analysis_id, "en_curso");
+                let cola = self.clone();
+                let dispositivo = a.dispositivo.clone();
+                let consulta = imagenes.first().cloned().unwrap_or_default();
+                tokio::spawn(async move {
+                    cola.correr_agente_unico(dispositivo, a.analysis_id, agente_id, consulta).await;
+                });
                 continue;
             }
 

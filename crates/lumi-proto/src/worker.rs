@@ -72,6 +72,33 @@ pub struct Hipotesis {
     pub motivo_agente: Option<String>,
 }
 
+/// Un recuadro OCR, en fracción 0-1 del ancho/alto de la imagen de consulta
+/// — así el cliente lo dibuja sobre cualquier tamaño de render sin tener que
+/// conocer las dimensiones originales del fichero.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CajaOcr {
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+    pub etiqueta: String,
+}
+
+/// Lo único que un agente puede señalar sobre la imagen misma, no solo sobre
+/// su etiqueta ganadora — y solo cuando existe de verdad. Nunca se rellena a
+/// mano: sin dato real, `Msg::Agente::rasgos` es `None` y el cliente no
+/// dibuja nada, en vez de un recuadro o un mapa inventados.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "tipo", rename_all = "lowercase")]
+pub enum Rasgos {
+    /// Las cajas por línea que PaddleOCR ya calcula.
+    Ocr { cajas: Vec<CajaOcr> },
+    /// El mapa de profundidad que Depth Anything ya calcula, reescalado a
+    /// 0-255 y codificado como PNG. Es la misma inferencia que ya corría
+    /// para sacar el veredicto — no se repite nada para producir esto.
+    Profundidad { png_base64: String },
+}
+
 /// Lo que el trabajador contesta por `stdout`. Su `stderr` es el log y no
 /// tiene contrato: se guarda tal cual.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -128,6 +155,21 @@ pub enum Msg {
         /// justifica la etiqueta. Se enseña tal cual y no se interpreta.
         #[serde(default)]
         detalle: String,
+        /// La distribución completa sobre el conjunto cerrado de etiquetas,
+        /// ya normalizada y ordenada, cuando el motor la calcula de verdad
+        /// (VLM: softmax de log-verosimilitud; OCR de etiquetas: proporción
+        /// de caracteres por escritura). Vacío y no inventado cuando el
+        /// motor no tiene una distribución genuina que exponer (OCR de
+        /// topónimos, profundidad): panel de resultado muestra una sola fila
+        /// en vez de una lista, nunca pesos rellenados a mano.
+        #[serde(default)]
+        alternativas: Vec<(String, f64)>,
+        /// Lo único real que un motor puede señalar sobre la imagen misma,
+        /// no solo sobre su etiqueta. `None` para el VLM: no hay
+        /// interpretabilidad de atención implementada, y un mapa fabricado
+        /// sería peor que ninguno.
+        #[serde(default)]
+        rasgos: Option<Rasgos>,
     },
     Resultado {
         id: i64,
@@ -270,9 +312,34 @@ mod tests {
                 etiqueta: "griego".into(),
                 confianza: 0.9,
                 detalle: String::new(),
+                alternativas: Vec::new(),
+                rasgos: None,
             }
         );
         // Y validar no tiene nada que decir de ella: no lleva coordenadas.
         assert!(ag.validar().is_ok());
+
+        // Un motor que sí calcula distribución y rasgos reales los trae tal
+        // cual — el mismo mensaje, con los dos campos nuevos rellenos.
+        let ag_completo: Msg = serde_json::from_str(
+            r#"{"tipo":"agente","id":4,"agente":"idioma","etiqueta":"latino","confianza":0.8,
+                "alternativas":[["latino",0.8],["cirilico",0.2]],
+                "rasgos":{"tipo":"ocr","cajas":[{"x":0.1,"y":0.2,"w":0.3,"h":0.1,"etiqueta":"latino"}]}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            ag_completo,
+            Msg::Agente {
+                id: 4,
+                agente: "idioma".into(),
+                etiqueta: "latino".into(),
+                confianza: 0.8,
+                detalle: String::new(),
+                alternativas: vec![("latino".into(), 0.8), ("cirilico".into(), 0.2)],
+                rasgos: Some(Rasgos::Ocr {
+                    cajas: vec![CajaOcr { x: 0.1, y: 0.2, w: 0.3, h: 0.1, etiqueta: "latino".into() }]
+                }),
+            }
+        );
     }
 }

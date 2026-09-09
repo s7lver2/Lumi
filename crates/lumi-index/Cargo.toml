@@ -5,6 +5,12 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+# Solo para reutilizar `worker::Rasgos`/`CajaOcr` en `agentes::Veredicto`: el
+# veredicto que la lógica pura arrastra es literalmente lo que trajo
+# `Msg::Agente`, y duplicar el tipo aquí solo daría dos structs que hay que
+# mantener iguales a mano. `lumi-proto` no depende de este crate, así que no
+# hay ciclo.
+lumi-proto = { path = "../lumi-proto" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }

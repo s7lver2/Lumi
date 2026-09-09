@@ -379,6 +379,7 @@ async fn main() -> anyhow::Result<()> {
             "/v1/analyses/:id",
             get(routes::analyses::get_one).delete(routes::analyses::remove),
         )
+        .route("/v1/agentes", get(routes::agentes::listar))
         .route("/v1/map/themes", get(routes::map::themes))
         .route("/v1/map/config", get(routes::map::config))
         .route("/v1/map/style", get(routes::map::style))

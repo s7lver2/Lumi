@@ -340,6 +340,14 @@ export interface Hipotesis {
    *  tocó, no que la aprobaran. */
   motivo_agente: string | null;
 }
+/** Un recuadro OCR real, en fracción 0-1 del ancho/alto de la imagen. */
+export interface CajaOcr { x: number; y: number; w: number; h: number; etiqueta: string }
+/** Lo único que un agente puede señalar sobre la imagen misma. `null` cuando
+ *  el motor no tiene nada real que mostrar — nunca se rellena a mano, y el
+ *  VLM nunca lo trae (sin interpretabilidad de atención implementada). */
+export type Rasgos =
+  | { tipo: "ocr"; cajas: CajaOcr[] }
+  | { tipo: "profundidad"; png_base64: string };
 /** Un veredicto de agente tal como se guardó. `etiqueta` vale `"abstiene"`
  *  cuando el agente corrió y no vio señal suficiente. */
 export interface DichoDeAgente {
@@ -347,9 +355,15 @@ export interface DichoDeAgente {
   confianza: number;
   tipo: "filtra" | "describe";
   detalle: string;
+  /** La distribución completa, ordenada, cuando el motor la calcula de
+   *  verdad. Vacía si no — nunca rellenada a mano para completar la lista. */
+  alternativas: [string, number][];
+  rasgos: Rasgos | null;
 }
 export interface Analysis {
   id: number; case_id: number; model: string;
+  /** El agente pedido, solo con `model === "agentes"`. */
+  agente: string | null;
   state: "pendiente" | "en_curso" | "hecho" | "error";
   error: string | null;
   result_lat: number | null; result_lng: number | null;
@@ -368,6 +382,17 @@ export interface Analysis {
   /** Lo que los agentes dijeron de la imagen. Vacía si no corrió ninguno. */
   agentes: DichoDeAgente[];
   image_ids: number[]; created_at: number; finished_at: number | null;
+}
+/** Un agente del registro, con su estado de instalación en ESTE servidor —
+ *  ver `GET /v1/agentes` (`crates/lumid/src/routes/agentes.rs`). */
+export interface AgenteVista {
+  id: string; nombre: string;
+  motor: "vlm" | "ocr" | "profundidad";
+  pregunta: string; etiquetas: string[]; umbral_confianza: number;
+  instalado: boolean;
+  /** El nombre del motor que hace falta descargar. `null` cuando `instalado`
+   *  es `true`, o cuando el registro no trae ningún motor de esa clase. */
+  requiere: string | null;
 }
 export interface Usage { used_bytes: number; limit_gb: number; overridden: boolean }
 export interface IndiceInstalado {

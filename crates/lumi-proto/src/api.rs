@@ -823,6 +823,11 @@ pub struct Analysis {
     pub id: i64,
     pub case_id: i64,
     pub model: String,
+    /// El agente pedido cuando `model == "agentes"`. `None` en cualquier
+    /// otro modelo, y también en un análisis de agentes creado antes de que
+    /// esta columna existiera.
+    #[serde(default)]
+    pub agente: Option<String>,
     /// `pendiente` | `en_curso` | `hecho` | `error`. Este subsistema solo
     /// escribe `pendiente`: mover de ahí es trabajo de la cola (subsistema 4).
     pub state: String,
@@ -873,12 +878,24 @@ pub struct DichoDeAgente {
     pub tipo: String,
     #[serde(default)]
     pub detalle: String,
+    /// Ver `crate::worker::Msg::Agente::alternativas`. Vacío si el motor no
+    /// calcula una distribución genuina — nunca rellenado a mano.
+    #[serde(default)]
+    pub alternativas: Vec<(String, f64)>,
+    /// Ver `crate::worker::Msg::Agente::rasgos`.
+    #[serde(default)]
+    pub rasgos: Option<crate::worker::Rasgos>,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct AnalysisReq {
     pub image_ids: Vec<i64>,
     pub model: String,
+    /// Solo relleno cuando `model == "agentes"`: el único agente que se le
+    /// pide a esa imagen. El modo Agentes lanza uno cada vez — la
+    /// multi-selección se descartó explícitamente en el diseño.
+    #[serde(default)]
+    pub agente: Option<String>,
 }
 
 /// Lo que el cliente puede saber del mapa. **Nunca incluye la clave.**

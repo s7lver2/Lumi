@@ -20,7 +20,7 @@ import { UploadPopup } from "./UploadPopup";
 const GB = 1024 * 1024 * 1024;
 
 export function CaseView({
-  project, case_, rail, drawer, drawerId, setDrawer,
+  project, case_, rail, drawer, drawerId, setDrawer, onAgentes,
 }: {
   project: Project;
   case_: Case;
@@ -29,6 +29,10 @@ export function CaseView({
   drawer: React.ReactNode;
   drawerId: DrawerId;
   setDrawer: (d: DrawerId) => void;
+  /** Elegir «Agentes» en el popup de subida no encola: navega a la pantalla
+   *  completa del modo Agentes con la imagen ya elegida — la decide `App`,
+   *  que es quien sabe cambiar de `mode`. */
+  onAgentes: (image: Image) => void;
 }) {
   const token = useServer((s) => s.token) ?? undefined;
   const isAdmin = useServer((s) => s.isAdmin);
@@ -446,7 +450,20 @@ export function CaseView({
           busy={busy} error={error}
           onAddMore={() => void pick()}
           onDiscard={(id) => void discard(id)}
-          onAnalyze={(m) => void analyze(m, staged ?? [])}
+          onAnalyze={(m) => {
+            // El modo Agentes solo trabaja con una imagen a la vez (multi-
+            // selección se descartó en el diseño) -- si el popup traía
+            // varias en cola, se lanza sobre la primera y el resto se queda
+            // esperando en el caso, sin analizar todavía.
+            if (m === "agentes") {
+              const id = (staged ?? [])[0];
+              const img = list.find((im) => im.id === id);
+              setStaged(null);
+              if (img) onAgentes(img);
+              return;
+            }
+            void analyze(m, staged ?? []);
+          }}
           onClose={() => { setStaged(null); setError(null); }} />
       )}
 

@@ -4,6 +4,7 @@ import type { Analysis, DichoDeAgente, Hipotesis, Image } from "../lib/api";
 import { Drawer } from "./Drawer";
 import { Icon } from "../ui/Icon";
 import { CompareSlider } from "../ui/CompareSlider";
+import { AgenteIcono } from "./AgenteIcono";
 
 /** Metros entre dos coordenadas. Haversine con el radio medio de la Tierra:
  *  precisión de sobra para decir «el EXIF declara un GPS a 300 m de aquí». */
@@ -167,39 +168,6 @@ function VistaDetalle({ h, image, onCenter, onVolver }: {
   );
 }
 
-/** Icono propio por agente — no una plantilla repetida con el icono
- *  cambiado (DESIGN.md prohíbe rejillas de tarjetas idénticas). El de
- *  `hora-sombras` es el único cuyo dibujo depende del dato real: la aguja
- *  rota al ángulo estimado a partir de la hora que dice `etiqueta`
- *  ("~13:00" → 13h). El resto son formas fijas. */
-function AgenteIcono({ agente, etiqueta, apagado }: { agente: string; etiqueta: string; apagado: boolean }) {
-  const color = apagado ? "#6a6c70" : "#e8e8e6";
-  if (agente === "hora-sombras") {
-    const m = /(\d{1,2})(?::\d{2})?/.exec(etiqueta);
-    const hora = m ? Number(m[1]) : 12;
-    // Mediodía (12h) = aguja recta hacia arriba (0°); cada hora de
-    // diferencia gira 15° (360°/24h) hacia el lado que corresponda.
-    const grados = (hora - 12) * 15;
-    return (
-      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.7}
-        strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-        <circle cx="12" cy="12" r="8.5" />
-        <line x1="12" y1="12" x2="12" y2="6" transform={`rotate(${grados} 12 12)`}
-          style={{ transition: "transform 1.1s cubic-bezier(.16,1,.3,1)" }} />
-        <circle cx="12" cy="12" r=".6" fill={color} stroke="none" />
-      </svg>
-    );
-  }
-  if (agente === "clima-aparente") {
-    return <Icon name="cloud" size={26} className={apagado ? "text-subtle" : "text-fg"} />;
-  }
-  if (agente === "lado-conduccion") {
-    return <Icon name="via" size={26} className={apagado ? "text-subtle" : "text-fg"} />;
-  }
-  // "idioma" y cualquier agente futuro sin icono propio: bocadillo genérico.
-  return <Icon name="bocadillo" size={26} className={apagado ? "text-subtle" : "text-fg"} />;
-}
-
 /** Lo que la imagen dice de sí misma. Una tarjeta por agente, con su icono
  *  propio y su frase de motivo visible — antes era una lista apretada de
  *  una columna con todos los `detalle` concatenados al final. Los
@@ -309,7 +277,16 @@ export function ResultsDrawer({
       {analysis && <AgentesPanel agentes={analysis.agentes} />}
       {analysis?.state === "hecho" && analysis.agentes.length === 0 && (
         <p className="text-[10px] leading-relaxed text-subtle">
-          Los agentes no llegaron a correr: sus modelos no están instalados en este servidor.
+          {/* Antes decía "sus modelos no están instalados en este servidor"
+              -- una conjetura, no un dato: el cliente no tiene forma de
+              distinguir "no instalados" de "tardaron más de la cuenta
+              cargando y se cortó la espera", que es lo que pasa casi
+              siempre en la práctica (ver `agentar::LIMITE`, 120s). Server
+              real, medido: los modelos SÍ estaban instalados y cargando
+              (el log mostraba a `transformers` en marcha) y aun así
+              llegaron 0 veredictos por el corte de tiempo -- el mensaje
+              viejo habría afirmado justo lo contrario de lo que pasó. */}
+          Los agentes tardaron demasiado en cargar sus modelos y se siguió sin ellos.
         </p>
       )}
 

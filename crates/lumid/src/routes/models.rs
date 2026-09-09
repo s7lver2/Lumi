@@ -183,7 +183,7 @@ pub struct NivelEstado {
 // puede decir sí cuando Python diría que no. Compartido entre `estado`
 // (necesita el conjunto entero, por nivel) y `hay_alguno_instalado` (solo
 // necesita saber si hay algo, para el Resumen).
-fn instalados_dir(app: &App) -> std::collections::HashSet<String> {
+pub(crate) fn instalados_dir(app: &App) -> std::collections::HashSet<String> {
     let modelos_dir = crate::assets::pesos_dir(&app.store, &app.dir);
     std::fs::read_dir(&modelos_dir)
         .map(|rd| {

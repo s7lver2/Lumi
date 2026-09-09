@@ -60,6 +60,16 @@ pub struct Veredicto {
     pub agente: String,
     pub etiqueta: String,
     pub confianza: f64,
+    /// La distribución completa, cuando el motor la calcula de verdad. Vacía
+    /// si no — ver `lumi_proto::worker::Msg::Agente::alternativas`, de donde
+    /// sale esto tal cual.
+    #[serde(default)]
+    pub alternativas: Vec<(String, f64)>,
+    /// Ver `lumi_proto::worker::Msg::Agente::rasgos`. `None` es un estado
+    /// legítimo (VLM, o el motor real que no tuvo nada que enseñar), no una
+    /// ausencia que haya que rellenar.
+    #[serde(default)]
+    pub rasgos: Option<lumi_proto::worker::Rasgos>,
 }
 
 /// Cuánto pesa un mismatch con un agente. Compuesto (mismatches múltiples se
@@ -214,7 +224,13 @@ mod tests {
     }
 
     fn dice(agente: &str, etiqueta: &str, confianza: f64) -> Veredicto {
-        Veredicto { agente: agente.into(), etiqueta: etiqueta.into(), confianza }
+        Veredicto {
+            agente: agente.into(),
+            etiqueta: etiqueta.into(),
+            confianza,
+            alternativas: Vec::new(),
+            rasgos: None,
+        }
     }
 
     #[test]
