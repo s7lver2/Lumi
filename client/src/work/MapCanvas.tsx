@@ -373,13 +373,18 @@ export function MapCanvas({
     // planeta -- con el centro fuera del ecuador se veía torcido, nada
     // parecido a cómo gira la Tierra de verdad. Mover la LONGITUD del
     // centro en vez del rumbo gira el globo sobre su propio eje (norte-sur)
-    // sin importar dónde esté centrada la cámara, en el mismo sentido en el
-    // que gira la Tierra (hacia el este bajo un observador fijo).
+    // sin importar dónde esté centrada la cámara.
+    //
+    // Restando y no sumando: es el mismo signo que usa el ejemplo oficial
+    // de Mapbox para esto (`center.lng -= distancePerSecond` en su demo
+    // "Create a rotating globe") -- sumar lo dejaba girando al revés de
+    // cómo se ve rotar la Tierra de verdad (el sentido en que el ecuador
+    // se desplaza bajo un observador fijo en el espacio).
     let lng = m.getCenter().lng;
     const lat = m.getCenter().lat;
     const girar = () => {
       if (!vivo) return;
-      lng += 0.04;
+      lng -= 0.04;
       m.jumpTo({ center: [lng, lat], bearing: 0, pitch: 0 });
       raf = requestAnimationFrame(girar);
     };
