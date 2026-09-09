@@ -15,7 +15,7 @@ import { DrawerTab, DRAWER_W, RAIL_W, type DrawerId } from "./Drawer";
 import { DropFrame, DropTarget } from "./DropTarget";
 import { AgentPickerPopup } from "./AgentPickerPopup";
 import { AgentResultPopup } from "./AgentResultPopup";
-import { ExportInformePopup } from "./ExportInformePopup";
+import { ExportDrawer } from "./ExportDrawer";
 import { MapCanvas, type Marker } from "./MapCanvas";
 import { ResultsDrawer } from "./ResultsDrawer";
 import { UploadPopup } from "./UploadPopup";
@@ -72,19 +72,13 @@ export function CaseView({
   const [agentResult, setAgentResult] = useState<{ image: Image; analysis: Analysis } | null>(null);
   const agentResultPopup = useDismissable(agentResult !== null, 180);
 
-  /** `true` = el popup de exportación está abierto. Reemplaza al viejo
-   *  disparo directo: ahora hay que elegir qué lleva el informe y
-   *  previsualizarlo antes de guardar (ver `ExportInformePopup`). */
-  const [exportOpen, setExportOpen] = useState(false);
-  const exportPopup = useDismissable(exportOpen, 180);
-
   /** El diálogo de guardado (nativo, del lado Rust) puede volver sin ruta si
    *  el investigador lo cierra sin elegir nada -- eso no es un error que
    *  enseñar, solo "no pasó nada". */
   async function guardarInforme(opts: ExportInformeOpts) {
     if (!token) return;
     const ruta = await exportCasePdf(case_.id, case_.name, opts, token);
-    if (ruta !== null) setExportOpen(false);
+    if (ruta !== null) setDrawer(null);
   }
 
   async function load() {
@@ -408,18 +402,16 @@ export function CaseView({
       }} />
       {rail}
 
-      {/* Exportar vive junto al resto de acciones de cabecera del caso, no
-          dentro del `Dock` (esa franja es por-imagen, esto es del caso
-          entero) -- se desplaza con el cajón de resultados igual que la
-          pestaña de intentos, para no quedar tapado detrás de él. */}
-      <button onClick={() => setExportOpen(true)}
+      {/* Exportar es una sección más del mismo carril que Resultados
+          (`DrawerId`), no un botón flotante sobre el mapa -- se apila justo
+          debajo de la pestaña de resultados y se desplaza con ella. */}
+      <button onClick={() => setDrawer(drawerId === "export" ? null : "export")}
         title="Exportar el caso a un informe forense en PDF" aria-label="Exportar informe"
-        style={{ right: detailInset + 12 }}
-        className="jg-press absolute top-3 z-[23] flex items-center gap-1.5 rounded-lg border
-          border-white/15 bg-[rgba(16,18,21,.85)] px-2.5 py-1.5 text-[11px] text-fg backdrop-blur-md
-          transition-[right,border-color] duration-[420ms] ease-expo hover:border-fg disabled:opacity-50">
-        <Icon name="doc-descarga" size={13} />
-        Exportar informe
+        style={{ right: drawerId !== null ? DRAWER_W : 0, top: "calc(50% + 32px)" }}
+        className={`jg-press absolute z-[23] grid h-[40px] w-[15px] -translate-y-1/2 place-items-center
+          rounded-l-lg border border-r-0 transition-[right,color,background-color] duration-[420ms] ease-expo
+          ${drawerId === "export" ? "border-fg bg-[rgba(16,18,21,.98)] text-fg" : "border-border bg-[rgba(16,18,21,.92)] text-subtle hover:bg-white/[.05] hover:text-fg"}`}>
+        <Icon name="doc-descarga" size={11} />
       </button>
 
       {dragging && <DropFrame />}
@@ -454,6 +446,9 @@ export function CaseView({
             busy={busy}
             onAnalyze={() => (sel !== null ? setStaged([sel]) : void pick())}
             onCenter={(lat, lng) => setFly({ lat, lng, zoom: 14 })} />
+          <ExportDrawer token={token} caseId={case_.id} caseName={case_.name}
+            firmadoPorDefecto={username} open={drawerId === "export"}
+            onClose={() => setDrawer(null)} onGuardar={guardarInforme} />
         </>
       )}
 
@@ -529,13 +524,6 @@ export function CaseView({
           analysisInicial={agentResult.analysis}
           onElegirOtro={() => { const img = agentResult.image; setAgentResult(null); setAgentPickerImage(img); }}
           onClose={() => setAgentResult(null)} />
-      )}
-
-      {exportPopup.rendered && (
-        <ExportInformePopup token={token} caseId={case_.id} caseName={case_.name}
-          firmadoPorDefecto={username} closing={exportPopup.closing}
-          onClose={() => setExportOpen(false)}
-          onGuardar={guardarInforme} />
       )}
 
       {topeAlcanzado && token && (
