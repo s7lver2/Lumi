@@ -359,6 +359,7 @@ async fn main() -> anyhow::Result<()> {
             "/v1/cases/:id",
             axum::routing::patch(routes::cases::rename).delete(routes::cases::remove),
         )
+        .route("/v1/cases/:id/export.pdf", get(routes::export::export_pdf))
         .route(
             "/v1/cases/:id/images",
             get(routes::images::list).post(routes::images::upload),

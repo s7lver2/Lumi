@@ -113,6 +113,31 @@ export async function pickPaths(): Promise<string[]> {
   return Array.isArray(sel) ? sel : [sel];
 }
 
+/** Nombre de fichero seguro a partir del nombre del caso: sin acentos, sin
+ *  mayúsculas ni caracteres que Windows/macOS rechazan en un nombre de
+ *  archivo. Un caso sin nada aprovechable ("···") cae a "caso" en vez de un
+ *  nombre de fichero vacío. */
+function nombreDeArchivo(caso: string): string {
+  // NFD separa cada letra acentuada en base + marca diacrítica combinante
+  // (rango Unicode 0x0300-0x036F); se filtran esas marcas carácter a
+  // carácter en vez de con una clase de regex, para no depender de escribir
+  // ese rango como literal en el propio fichero fuente.
+  const sinAcentos = Array.from(caso.normalize("NFD"))
+    .filter((ch) => { const cp = ch.codePointAt(0) ?? 0; return cp < 0x0300 || cp > 0x036f; })
+    .join("");
+  const limpio = sinAcentos.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return limpio || "caso";
+}
+
+/** Pide a `lumid` el informe forense del caso en PDF y lo guarda donde elija
+ *  el investigador (diálogo nativo, del lado Rust — ver `exportar_caso_pdf`
+ *  en `client/src-tauri/src/main.rs`). `null` es "cerró el diálogo sin
+ *  elegir nada", no un error. */
+export function exportCasePdf(caseId: number, caseName: string, token: string): Promise<string | null> {
+  const sugerido = `lumi-informe-${nombreDeArchivo(caseName)}.pdf`;
+  return invoke<string | null>("exportar_caso_pdf", { caseId, sugerido, token });
+}
+
 /** Como `pickPaths`, pero para un único archivo — foto de perfil, avatar o
  *  banner de servidor: aquí no tiene sentido elegir varios. */
 export async function pickImagePath(): Promise<string | null> {

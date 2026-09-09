@@ -205,6 +205,55 @@ async fn upload_server_banner_bytes(data_base64: String, state: tauri::State<'_,
     subir_bytes("/v1/admin/server-profile/banner", &data_base64, &state).await
 }
 
+/// Simétrico a `subir_bytes`, al revés: bytes del daemon a disco, con un
+/// diálogo nativo de guardado en medio. El PDF entero pasa por aquí (no por
+/// `request`, que devuelve texto -- `res.text()` con bytes binarios de
+/// verdad los corrompería) y nunca por el canal de IPC de Tauri hacia TS.
+///
+/// `Ok(None)` es "el investigador cerró el diálogo sin elegir nada" -- no un
+/// error que mostrar, ver `ExportarPdfBoton.tsx`.
+#[tauri::command]
+async fn exportar_caso_pdf(
+    case_id: i64, sugerido: String, token: String,
+    app: tauri::AppHandle, state: tauri::State<'_, Shared>,
+) -> Result<Option<String>, String> {
+    let (base, client) = {
+        let c = state.lock().unwrap();
+        (c.base.clone().ok_or("sin servidor vinculado")?, c.client.clone().ok_or("sin cliente")?)
+    };
+    let res = client
+        .get(format!("{base}/v1/cases/{case_id}/export.pdf"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    let status = res.status();
+    let bytes = res.bytes().await.map_err(|e| e.to_string())?;
+    if !status.is_success() {
+        return Err(String::from_utf8_lossy(&bytes).to_string());
+    }
+
+    // El diálogo de guardado es por callback, no bloqueante: la versión que
+    // bloquea el hilo está pensada para el hilo principal de la UI nativa, no
+    // para un comando `async` de Tauri, que corre en el pool de tokio.
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .add_filter("PDF", &["pdf"])
+        .set_file_name(&sugerido)
+        .save_file(move |elegido| {
+            let _ = tx.send(elegido);
+        });
+    let elegido = rx.await.map_err(|_| "no se pudo abrir el diálogo de guardado".to_string())?;
+    let Some(ruta) = elegido else {
+        return Ok(None);
+    };
+    let ruta = ruta.into_path().map_err(|e| e.to_string())?;
+    std::fs::write(&ruta, &bytes).map_err(|e| e.to_string())?;
+    Ok(Some(ruta.display().to_string()))
+}
+
 /// URL del canal de actualizaciones (Plan 1 de la spec). Cliente `reqwest`
 /// propio y NO el `PinnedVerifier` de arriba: eso habla con el servidor
 /// `lumid` emparejado, esto habla con Vercel, que valida contra las CA del
@@ -974,7 +1023,7 @@ fn main() {
             pair, pair_card, reconnect, request, start_telemetry, start_task_log,
             start_queue_events, start_indices_events, start_admin_events, start_logs_stream, set_auth,
             upload_images, read_image_as_data_url, upload_avatar_bytes, upload_server_avatar_bytes,
-            upload_server_banner_bytes, comprobar_actualizacion, error_actualizacion_pendiente, disparar_actualizacion_silenciosa,
+            upload_server_banner_bytes, exportar_caso_pdf, comprobar_actualizacion, error_actualizacion_pendiente, disparar_actualizacion_silenciosa,
             disparar_actualizacion_a_version, version_cliente, historial_actualizaciones,
             sin_autoactualizar_este_arranque, autoarranque_leer, autoarranque_fijar
         ])

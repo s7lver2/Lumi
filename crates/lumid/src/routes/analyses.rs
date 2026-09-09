@@ -13,7 +13,7 @@ use axum::extract::{Path, State};
 use axum::{http::HeaderMap, http::StatusCode, Json};
 use lumi_proto::api::{Analysis, AnalysisReq};
 
-const COLS: &str = "id, case_id, model, state, error, result_lat, result_lng,
+pub(crate) const COLS: &str = "id, case_id, model, state, error, result_lat, result_lng,
                     result_radius_m, result_confidence, created_at, finished_at, nivel_efectivo,
                     result_inliers, result_verificador, result_imagen_id, agente";
 
@@ -26,7 +26,7 @@ fn image_ids(c: &rusqlite::Connection, analysis_id: i64) -> Vec<i64> {
         .unwrap_or_default()
 }
 
-fn row_to_analysis(r: &rusqlite::Row) -> rusqlite::Result<Analysis> {
+pub(crate) fn row_to_analysis(r: &rusqlite::Row) -> rusqlite::Result<Analysis> {
     Ok(Analysis {
         id: r.get(0)?,
         case_id: r.get(1)?,
@@ -84,7 +84,7 @@ fn hypotheses(c: &rusqlite::Connection, analysis_id: i64) -> Vec<lumi_proto::wor
 /// `analyses` filtrado por `case_id` reutiliza el mismo filtro que ya aplica
 /// la consulta principal, así que no hace falta construir un `IN (...)`
 /// dinámico con los ids ya traídos.
-fn image_ids_por_caso(c: &rusqlite::Connection, case_id: i64) -> std::collections::HashMap<i64, Vec<i64>> {
+pub(crate) fn image_ids_por_caso(c: &rusqlite::Connection, case_id: i64) -> std::collections::HashMap<i64, Vec<i64>> {
     let Ok(mut q) = c.prepare(
         "SELECT ai.analysis_id, ai.image_id
            FROM analysis_images ai JOIN analyses a ON a.id = ai.analysis_id
@@ -102,7 +102,7 @@ fn image_ids_por_caso(c: &rusqlite::Connection, case_id: i64) -> std::collection
     mapa
 }
 
-fn hypotheses_por_caso(
+pub(crate) fn hypotheses_por_caso(
     c: &rusqlite::Connection, case_id: i64,
 ) -> std::collections::HashMap<i64, Vec<lumi_proto::worker::Hipotesis>> {
     let Ok(mut q) = c.prepare(
@@ -163,7 +163,7 @@ fn agente_de_fila(
     }
 }
 
-fn agentes_por_caso(
+pub(crate) fn agentes_por_caso(
     c: &rusqlite::Connection, case_id: i64,
 ) -> std::collections::HashMap<i64, Vec<lumi_proto::api::DichoDeAgente>> {
     let Ok(mut q) = c.prepare(

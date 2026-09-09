@@ -16,10 +16,10 @@ use sha2::{Digest, Sha256};
 const THUMB: u32 = 320;
 const MAX_BYTES: usize = 64 * 1024 * 1024;
 
-const COLS: &str = "id, case_id, filename, bytes, width, height, mime,
+pub(crate) const COLS: &str = "id, case_id, filename, bytes, width, height, mime,
                     exif_lat, exif_lng, exif_json, created_at";
 
-fn dir_for(app: &App, project_id: i64) -> std::path::PathBuf {
+pub(crate) fn dir_for(app: &App, project_id: i64) -> std::path::PathBuf {
     app.dir.join("projects").join(project_id.to_string())
 }
 
@@ -64,7 +64,7 @@ fn usage(app: &App, uid: i64) -> Usage {
     }
 }
 
-fn row_to_image(r: &rusqlite::Row) -> rusqlite::Result<Image> {
+pub(crate) fn row_to_image(r: &rusqlite::Row) -> rusqlite::Result<Image> {
     let raw: Option<String> = r.get(9)?;
     Ok(Image {
         id: r.get(0)?,

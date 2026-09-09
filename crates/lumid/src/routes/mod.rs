@@ -13,6 +13,7 @@ pub mod catalogo;
 pub mod claim;
 pub mod credit_requests;
 pub mod doctor;
+pub mod export;
 pub mod hardware;
 pub mod hardware_cpu;
 pub mod hello;

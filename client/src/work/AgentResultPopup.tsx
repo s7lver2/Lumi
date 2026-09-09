@@ -2,40 +2,45 @@ import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, type AgenteVista, type Analysis, type Cambio, type DichoDeAgente, type Image } from "../lib/api";
 import { lumiUrl } from "../lib/bridge";
-import { useDismissable } from "../lib/useDismissable";
+import { Backdrop, FloatingCard, Pop } from "../ui/FloatingCard";
 import { Icon } from "../ui/Icon";
+import { Center } from "../ui/layout";
 import { AgenteIcono } from "./AgenteIcono";
-import { AgentPickerPopup, BetaPill } from "./AgentPickerPopup";
+import { BetaPill } from "./AgentPickerPopup";
 
-/** El modo Agentes: pantalla completa, solo el resultado — nunca un cajón
- *  lateral, por decisión explícita del owner (ver
- *  `docs/superpowers/specs/2026-09-09-panel-agentes-design.md`). La elección
- *  del agente ya no vive aquí dentro: pasó a `AgentPickerPopup`, un popup
- *  como `UploadPopup`, así que esta pantalla nace siempre con un análisis ya
- *  en marcha (`analysisInicial`) y solo reabre el popup si el investigador
- *  pide otro agente. Un agente a la vez: multi-selección se descartó a mitad
- *  de diseño. */
-export function AgentesView({
-  token, caseId, caseName, image, isAdmin, analysisInicial, onBack, onIrAModelos,
+/** El resultado del modo Agentes, como popup — hasta 2.0.35 esto era la
+ *  segunda pantalla de `AgentesView` (pantalla completa); el owner probó esa
+ *  versión en producción y pidió que también el resultado fuera un popup,
+ *  igual que ya pasó con la elección (`AgentPickerPopup`). Mismo lenguaje
+ *  visual (`Backdrop`+`Center`+`Pop`+`FloatingCard`), pero más ancho: el
+ *  layout de dos columnas (foto+info) no cabe en los ~470-540px de los
+ *  popups de subir/elegir.
+ *
+ *  Vive como hermano de `AgentPickerPopup` dentro de `CaseView`, no anidado
+ *  dentro de él: «Elegir otro agente» cierra este popup y `CaseView` reabre
+ *  el de elegir, en vez de que uno monte al otro por dentro. */
+export function AgentResultPopup({
+  token, image, closing, analysisInicial, onElegirOtro, onClose,
 }: {
   token: string | undefined;
-  caseId: number;
-  caseName: string;
   image: Image;
-  isAdmin: boolean;
+  closing: boolean;
   analysisInicial: Analysis;
-  onBack: () => void;
-  onIrAModelos: () => void;
+  onElegirOtro: () => void;
+  onClose: () => void;
 }) {
   const [agentes, setAgentes] = useState<AgenteVista[] | null>(null);
   const [analysis, setAnalysis] = useState<Analysis>(analysisInicial);
   const [rasgosVisibles, setRasgosVisibles] = useState(true);
-  const [pickerAbierto, setPickerAbierto] = useState(false);
-  const picker = useDismissable(pickerAbierto, 180);
 
   useEffect(() => {
     api.get<AgenteVista[]>("/v1/agentes", token).then(setAgentes).catch(() => {});
   }, [token]);
+
+  // El análisis puede cambiar de imagen entre una apertura y otra (agente
+  // relanzado desde el picker) sin que el popup se desmonte: `analysisInicial`
+  // solo se lee una vez por montaje.
+  useEffect(() => { setAnalysis(analysisInicial); }, [analysisInicial]);
 
   // Igual que `CaseView`: el servidor avisa por evento en vez de sondear.
   useEffect(() => {
@@ -62,44 +67,51 @@ export function AgentesView({
     : null;
 
   const agenteActual = agentes?.find((a) => a.id === analysis.agente) ?? null;
+  // Mismo criterio que `busy` en `UploadPopup`: no se deja cerrar a media
+  // espera, para no perder de vista si el análisis terminó o no.
+  const corriendo = analysis.state === "pendiente" || analysis.state === "en_curso";
 
   return (
-    <div className="absolute inset-0 overflow-y-auto"
-      style={{ animation: "jg-page-fade-in 260ms cubic-bezier(.16,1,.3,1) both" }}>
-      <div className="mx-auto max-w-[900px] px-8 py-7">
-        <div className="flex items-center gap-3 border-b border-border pb-4">
-          <button onClick={onBack} className="jg-press flex items-center gap-1.5 text-[12.5px] text-muted hover:text-fg">
-            <Icon name="back" size={13} />
-            {caseName}
-          </button>
-          <span className="ml-1 flex items-center gap-1.5 text-[16px] font-medium text-fg">
-            {agenteActual?.nombre ?? "Agentes"}
-            <BetaPill />
-          </span>
-          <button onClick={() => setPickerAbierto(true)}
-            className="jg-press text-[11.5px] text-muted underline decoration-dotted underline-offset-2 hover:text-fg">
-            Elegir otro agente
-          </button>
-          <span className="ml-auto font-mono text-[11px] text-subtle">
-            {analysis.state === "en_curso" || analysis.state === "pendiente" ? "corriendo…" : null}
-          </span>
-        </div>
+    <>
+      <Backdrop closing={closing} onClick={corriendo ? undefined : onClose} />
+      <Center className="z-[55]">
+        <Pop closing={closing} className="w-[760px] max-w-[calc(100vw-48px)]">
+          <FloatingCard className="p-[17px]">
+            <div className="flex items-center gap-2.5 border-b border-border pb-3">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/[.06] text-fg">
+                <Icon name="globe" size={15} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <p className="truncate text-[13px] font-medium text-fg">{agenteActual?.nombre ?? "Agentes"}</p>
+                  <BetaPill />
+                </div>
+                <button onClick={onElegirOtro} disabled={corriendo}
+                  className="jg-press text-[11px] text-muted underline decoration-dotted underline-offset-2
+                    hover:text-fg disabled:opacity-40 disabled:no-underline">
+                  Elegir otro agente
+                </button>
+              </div>
+              {corriendo && (
+                <span className="shrink-0 font-mono text-[11px] text-subtle">corriendo…</span>
+              )}
+              <button onClick={onClose} disabled={corriendo} aria-label="Cerrar"
+                className="jg-press shrink-0 text-subtle hover:text-fg disabled:opacity-40">
+                <Icon name="x" size={13} />
+              </button>
+            </div>
 
-        <PantallaResultado image={image} analysis={analysis}
-          agentePedido={analysis.agente} motor={agenteActual?.motor ?? null}
-          elapsedS={elapsedS}
-          rasgosVisibles={rasgosVisibles}
-          onToggleRasgos={() => setRasgosVisibles((v) => !v)} />
-      </div>
-
-      {picker.rendered && (
-        <AgentPickerPopup token={token} caseId={caseId} image={image} isAdmin={isAdmin}
-          closing={picker.closing}
-          onLaunched={(a) => { setAnalysis(a); setPickerAbierto(false); }}
-          onClose={() => setPickerAbierto(false)}
-          onIrAModelos={onIrAModelos} />
-      )}
-    </div>
+            <div className="mt-1">
+              <PantallaResultado image={image} analysis={analysis}
+                agentePedido={analysis.agente} motor={agenteActual?.motor ?? null}
+                elapsedS={elapsedS}
+                rasgosVisibles={rasgosVisibles}
+                onToggleRasgos={() => setRasgosVisibles((v) => !v)} />
+            </div>
+          </FloatingCard>
+        </Pop>
+      </Center>
+    </>
   );
 }
 
@@ -145,7 +157,7 @@ function PantallaResultado({ image, analysis, agentePedido, motor, elapsedS, ras
 }) {
   if (analysis.state === "pendiente" || analysis.state === "en_curso") {
     return (
-      <div className="mt-10 flex flex-col items-center gap-3 py-16 text-center"
+      <div className="flex flex-col items-center gap-3 py-16 text-center"
         style={{ animation: "jg-fade-rise 300ms cubic-bezier(.16,1,.3,1) both" }}>
         <span className="relative grid h-9 w-9 place-items-center">
           <span className="absolute inset-0 rounded-full bg-white/[.08]"
@@ -165,7 +177,7 @@ function PantallaResultado({ image, analysis, agentePedido, motor, elapsedS, ras
     // ahora rellena explícitamente) -- solo se cae a un texto genérico
     // cuando de verdad no hay nada más honesto que decir.
     return (
-      <div className="mt-6 flex items-start gap-2.5 rounded-xl border border-border bg-panel p-4"
+      <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-border bg-panel p-4"
         style={{ animation: "jg-fade-rise 260ms ease-expo both" }}>
         <Icon name="alert" size={15} className="mt-px shrink-0 text-warning-fg" />
         <p className="text-[12px] leading-relaxed text-muted">
@@ -185,7 +197,7 @@ function PantallaResultado({ image, analysis, agentePedido, motor, elapsedS, ras
   const maxPeso = Math.max(...filas.map(([, p]) => p), 1e-9);
 
   return (
-    <div className="mt-5 grid grid-cols-[1.4fr_1fr] gap-0 overflow-hidden rounded-xl border border-border bg-panel"
+    <div className="mt-4 grid grid-cols-[1.4fr_1fr] gap-0 overflow-hidden rounded-xl border border-border bg-panel"
       style={{ animation: "jg-fade-rise 280ms cubic-bezier(.16,1,.3,1) both" }}>
       <div className="relative aspect-[3/2] bg-elevated">
         <img

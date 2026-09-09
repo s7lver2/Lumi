@@ -21,29 +21,20 @@ import { comprobarActualizacion, dispararActualizacionSilenciosa, errorActualiza
 import { DebugOrb } from "./dev/DebugOrb";
 import { useServer } from "./lib/store";
 import { useWorkspace } from "./lib/workspace";
-import { api, type Analysis, type Hello, type Me, type Sample, type TaskStatus } from "./lib/api";
+import { api, type Hello, type Me, type Sample, type TaskStatus } from "./lib/api";
 import { announcePresence, fetchLumiAvatarDataUrl, setAuth } from "./lib/bridge";
 import { loadSession, updateServerAvatar, updateSession } from "./lib/session";
 import { ProjectPicker } from "./work/ProjectPicker";
 import { ProjectView } from "./work/ProjectView";
 import { CaseView } from "./work/CaseView";
-import { AgentesView } from "./work/AgentesView";
 import { Rail } from "./work/Rail";
 import { InviteDrawer } from "./work/InviteDrawer";
 import type { DrawerId } from "./work/Drawer";
-import type { Image } from "./lib/api";
 
 export default function App() {
   const [step, setStep] = useState(0);
   const [resuming, setResuming] = useState(true);
-  const [mode, setMode] = useState<"entry" | "wizard" | "picker" | "project" | "case" | "agentes" | "admin" | "profile">("entry");
-  /** La imagen y el análisis del modo Agentes — nacen al elegir el agente en
-   *  `AgentPickerPopup` (abierto desde `CaseView`) y mueren al volver a él.
-   *  El análisis ya viene lanzado: la elección es un popup, no una fase
-   *  interna de esta pantalla. Viven aquí y no en `useWorkspace` porque son
-   *  de esta sola pantalla, no del proyecto/caso abierto en general. */
-  const [agentesImagen, setAgentesImagen] = useState<Image | null>(null);
-  const [agentesAnalysis, setAgentesAnalysis] = useState<Analysis | null>(null);
+  const [mode, setMode] = useState<"entry" | "wizard" | "picker" | "project" | "case" | "admin" | "profile">("entry");
   const [adminBusy, setAdminBusy] = useState(false);
   const [runtimeDone, setRuntimeDone] = useState(false);
   const [terminando, setTerminando] = useState(false);
@@ -214,7 +205,7 @@ export default function App() {
         // el wizard del owner, `StatusOverlay` ya cubre esto con reintento
         // manual, y no tiene sentido "desloguear" a quien está instalando.
         const kicked = modeRef.current === "picker" || modeRef.current === "project" ||
-          modeRef.current === "case" || modeRef.current === "agentes" || modeRef.current === "admin";
+          modeRef.current === "case" || modeRef.current === "admin";
         // Un reinicio disparado a propósito desde Redes (#85): la primera
         // falla de sondeo ya confirma que el servidor se fue a reiniciar,
         // así que no tiene sentido fingir que es un problema de conexión
@@ -286,7 +277,7 @@ export default function App() {
   }
 
   const blockedByDisconnect = status !== "ok" &&
-    (mode === "picker" || mode === "project" || mode === "case" || mode === "agentes" || mode === "admin");
+    (mode === "picker" || mode === "project" || mode === "case" || mode === "admin");
 
   const { project: proyectoActual, case_: casoActual } = useWorkspace();
   /** Las migas de la barra de título salen del modo, no de cada pantalla: la
@@ -301,14 +292,11 @@ export default function App() {
           ? [{ label: "Proyectos", onClick: () => { setAjustesAbiertos(false); setMode("picker"); } }, { label: "Perfil y sesiones" }]
         : mode === "picker" || !proyectoActual
           ? [{ label: "Proyectos" }]
-          : (mode === "case" || mode === "agentes") && casoActual
+          : mode === "case" && casoActual
             ? [
                 { label: "Proyectos", onClick: () => toProjects() },
                 { label: proyectoActual.name, onClick: () => { setAjustesAbiertos(false); useWorkspace.getState().setCase(null); setMode("project"); } },
-                mode === "agentes"
-                  ? { label: casoActual.name, onClick: () => { setAgentesImagen(null); setMode("case"); } }
-                  : { label: casoActual.name },
-                ...(mode === "agentes" ? [{ label: "Agentes" }] : []),
+                { label: casoActual.name },
               ]
             : [{ label: "Proyectos", onClick: () => toProjects() }, { label: proyectoActual.name }];
 
@@ -321,7 +309,7 @@ export default function App() {
           en cuanto se abre un caso, así que el planeta seguía animando cinco
           `radial-gradient` apilados en bucle de 70s debajo de algo que nunca
           se ve -- coste de composición puro, sin efecto visual ninguno. */}
-      {mode !== "admin" && mode !== "profile" && mode !== "case" && mode !== "agentes" && <PlanetBackground dead={status !== "ok"} />}
+      {mode !== "admin" && mode !== "profile" && mode !== "case" && <PlanetBackground dead={status !== "ok"} />}
       {/* Una sola franja arriba para todo: migas, estado del servidor,
           notificaciones, cuenta y los botones de la ventana. La telemetría ya
           no es una franja permanente de 70 px — vive en su píldora. */}
@@ -355,7 +343,7 @@ export default function App() {
         // rediseño: centrarlo lo dejaba flotando con dos paneles a media asta.
         // El panel de administración tampoco se centra: es una pantalla
         // completa con su propia barra lateral, no una tarjeta flotante.
-        mode === "project" || mode === "case" || mode === "picker" || mode === "admin" || mode === "agentes"
+        mode === "project" || mode === "case" || mode === "picker" || mode === "admin"
           ? "" : "items-center justify-center overflow-y-auto"
       } ${blockedByDisconnect ? "pointer-events-none opacity-50" : ""}`}>
       {resuming ? <LoadingScreen /> : status !== "ok" && !blockedByDisconnect && mode !== "entry" ? (
@@ -441,20 +429,6 @@ export default function App() {
       ) : mode === "picker" ? (
         <ProjectPicker refresh={projectsTick}
           onOpen={(p) => { useWorkspace.getState().setProject(p); setMode("project"); }} />
-      ) : mode === "agentes" && agentesImagen && agentesAnalysis ? (
-        // Pantalla completa, sin rail ni cajón lateral — decisión explícita
-        // del owner (ver el spec del panel de agentes). El caso sigue en
-        // `useWorkspace`: volver atrás no lo pierde. La elección de agente ya
-        // pasó (popup, en `CaseView`): esto nace con el análisis en marcha.
-        <AgentesView
-          token={useServer.getState().token ?? undefined}
-          caseId={useWorkspace.getState().case_!.id}
-          caseName={useWorkspace.getState().case_!.name}
-          image={agentesImagen}
-          isAdmin={isAdmin}
-          analysisInicial={agentesAnalysis}
-          onBack={() => { setAgentesImagen(null); setAgentesAnalysis(null); setMode("case"); }}
-          onIrAModelos={() => { setAgentesImagen(null); setAgentesAnalysis(null); leaveProject(); setMode("admin"); }} />
       ) : (
         (() => {
           const { project, case_ } = useWorkspace.getState();
@@ -482,7 +456,6 @@ export default function App() {
           return mode === "case" && case_ ? (
             <CaseView project={project} case_={case_} rail={rail} drawer={cajon}
               drawerId={drawer} setDrawer={setDrawer}
-              onAgentes={(img, analysis) => { setAgentesImagen(img); setAgentesAnalysis(analysis); setMode("agentes"); }}
               onIrAModelos={() => { leaveProject(); setMode("admin"); }} />
           ) : (
             <ProjectView project={project} rail={rail} drawer={cajon}

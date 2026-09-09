@@ -112,6 +112,14 @@ const PATHS: Record<string, React.JSX.Element> = {
       <path d="M8 9h8M8 12h5" />
     </>
   ),
+  "doc-descarga": (
+    <>
+      <path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+      <path d="M14 3v5h5" />
+      <path d="M9.2 14.5l2.8 2.8 2.8-2.8" />
+      <path d="M12 11v6" />
+    </>
+  ),
   via: (
     <>
       <line x1="12" y1="3" x2="12" y2="21" strokeDasharray="2.4 2.6" />

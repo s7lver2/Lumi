@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listen } from "@tauri-apps/api/event";
 import { api, type Analysis, type Cambio, type Case, type Image, type Project, type Usage } from "../lib/api";
-import { pickPaths, uploadPaths } from "../lib/bridge";
+import { exportCasePdf, pickPaths, uploadPaths } from "../lib/bridge";
 import { KNOWN_MODELS } from "../lib/models";
 import { useServer } from "../lib/store";
 import { useDismissable } from "../lib/useDismissable";
@@ -14,6 +14,7 @@ import { Dock, type ImgState } from "./Dock";
 import { DrawerTab, DRAWER_W, RAIL_W, type DrawerId } from "./Drawer";
 import { DropFrame, DropTarget } from "./DropTarget";
 import { AgentPickerPopup } from "./AgentPickerPopup";
+import { AgentResultPopup } from "./AgentResultPopup";
 import { MapCanvas, type Marker } from "./MapCanvas";
 import { ResultsDrawer } from "./ResultsDrawer";
 import { UploadPopup } from "./UploadPopup";
@@ -21,7 +22,7 @@ import { UploadPopup } from "./UploadPopup";
 const GB = 1024 * 1024 * 1024;
 
 export function CaseView({
-  project, case_, rail, drawer, drawerId, setDrawer, onAgentes, onIrAModelos,
+  project, case_, rail, drawer, drawerId, setDrawer, onIrAModelos,
 }: {
   project: Project;
   case_: Case;
@@ -30,13 +31,8 @@ export function CaseView({
   drawer: React.ReactNode;
   drawerId: DrawerId;
   setDrawer: (d: DrawerId) => void;
-  /** Elegir «Agentes» en el popup de subida abre `AgentPickerPopup` (aquí
-   *  mismo); una vez lanzado el análisis, esto navega a la pantalla completa
-   *  del modo Agentes con la imagen y el análisis ya en marcha — lo decide
-   *  `App`, que es quien sabe cambiar de `mode`. */
-  onAgentes: (image: Image, analysis: Analysis) => void;
   /** El admin de un agente sin motor instalado puede saltar directo a
-   *  Modelos — decide `App`, igual que `onAgentes`. */
+   *  Modelos — decide `App`, que es quien sabe cambiar de `mode`. */
   onIrAModelos: () => void;
 }) {
   const token = useServer((s) => s.token) ?? undefined;
@@ -66,6 +62,32 @@ export function CaseView({
    *  se abre al elegir «Agentes» en `UploadPopup` en vez de encolar directo. */
   const [agentPickerImage, setAgentPickerImage] = useState<Image | null>(null);
   const agentPicker = useDismissable(agentPickerImage !== null, 180);
+  /** El resultado del agente ya lanzado — `null` = popup cerrado. Vive aquí y
+   *  no en `App` (donde vivía antes de la 2.0.36, con un `mode === "agentes"`
+   *  de pantalla completa): los dos popups de agentes (elegir + resultado)
+   *  son ahora hermanos encadenados sobre `CaseView`, igual que `UploadPopup`
+   *  ya vive aquí sin necesitar un `mode` propio. */
+  const [agentResult, setAgentResult] = useState<{ image: Image; analysis: Analysis } | null>(null);
+  const agentResultPopup = useDismissable(agentResult !== null, 180);
+
+  const [exportando, setExportando] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  /** El diálogo de guardado (nativo, del lado Rust) puede volver sin ruta si
+   *  el investigador lo cierra sin elegir nada -- eso no es un error que
+   *  enseñar, solo "no pasó nada". */
+  async function exportarPdf() {
+    if (!token) return;
+    setExportando(true);
+    setExportError(null);
+    try {
+      await exportCasePdf(case_.id, case_.name, token);
+    } catch (e) {
+      setExportError(String(e));
+    } finally {
+      setExportando(false);
+    }
+  }
 
   async function load() {
     try {
@@ -388,6 +410,28 @@ export function CaseView({
       }} />
       {rail}
 
+      {/* Exportar vive junto al resto de acciones de cabecera del caso, no
+          dentro del `Dock` (esa franja es por-imagen, esto es del caso
+          entero) -- se desplaza con el cajón de resultados igual que la
+          pestaña de intentos, para no quedar tapado detrás de él. */}
+      <button onClick={() => void exportarPdf()} disabled={exportando}
+        title="Exportar el caso a PDF" aria-label="Exportar el caso a PDF"
+        style={{ right: detailInset + 12 }}
+        className="jg-press absolute top-3 z-[23] flex items-center gap-1.5 rounded-lg border
+          border-white/15 bg-[rgba(16,18,21,.85)] px-2.5 py-1.5 text-[11px] text-fg backdrop-blur-md
+          transition-[right,border-color] duration-[420ms] ease-expo hover:border-fg disabled:opacity-50">
+        <Icon name="doc-descarga" size={13} className={exportando ? "animate-pulse" : ""} />
+        {exportando ? "Generando…" : "Exportar PDF"}
+      </button>
+      {exportError && (
+        <div style={{ right: detailInset + 12, animation: "jg-fade-rise 240ms cubic-bezier(.16,1,.3,1) both" }}
+          className="absolute top-12 z-[23] flex max-w-[280px] items-start gap-2 rounded-lg
+            border border-danger/40 bg-[rgba(24,18,18,.94)] px-2.5 py-2 backdrop-blur">
+          <p className="text-[10.5px] leading-snug text-danger-fg">{exportError}</p>
+          <button onClick={() => setExportError(null)} className="jg-press shrink-0 text-subtle hover:text-fg">✕</button>
+        </div>
+      )}
+
       {dragging && <DropFrame />}
 
       {vacio ? (
@@ -481,9 +525,20 @@ export function CaseView({
       {agentPicker.rendered && agentPickerImage && (
         <AgentPickerPopup token={token} caseId={case_.id} image={agentPickerImage} isAdmin={isAdmin}
           closing={agentPicker.closing}
-          onLaunched={(a) => { const img = agentPickerImage; setAgentPickerImage(null); onAgentes(img, a); }}
+          onLaunched={(a) => {
+            const img = agentPickerImage;
+            setAgentPickerImage(null);
+            setAgentResult({ image: img, analysis: a });
+          }}
           onClose={() => setAgentPickerImage(null)}
           onIrAModelos={onIrAModelos} />
+      )}
+
+      {agentResultPopup.rendered && agentResult && (
+        <AgentResultPopup token={token} image={agentResult.image} closing={agentResultPopup.closing}
+          analysisInicial={agentResult.analysis}
+          onElegirOtro={() => { const img = agentResult.image; setAgentResult(null); setAgentPickerImage(img); }}
+          onClose={() => setAgentResult(null)} />
       )}
 
       {topeAlcanzado && token && (
