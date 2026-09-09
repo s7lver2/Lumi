@@ -254,7 +254,11 @@ fn spawn_con_payload(app: &App, kind: TaskKind, payload: Option<String>) -> Resu
             }
         }
         // stdout y stderr al mismo log, en orden de llegada: es lo que el
-        // operador quiere leer, no dos flujos que casar a mano.
+        // operador quiere leer, no dos flujos que casar a mano. Cada línea
+        // va TAMBIÉN por `tracing` (categoría propia, ver `logging.rs`) para
+        // que "Instalar runtime" se pueda seguir desde la pestaña de Logs
+        // del panel como cualquier otra actividad del servidor -- antes solo
+        // vivía en el fichero de esta tarea, invisible ahí.
         let out = BufReader::new(child.stdout.take().unwrap());
         let err = BufReader::new(child.stderr.take().unwrap());
         let p1 = path.clone();
@@ -262,12 +266,14 @@ fn spawn_con_payload(app: &App, kind: TaskKind, payload: Option<String>) -> Resu
         let a = tokio::spawn(async move {
             let mut l = out.lines();
             while let Ok(Some(line)) = l.next_line().await {
+                tracing::info!(target: "lumid::tasks", "{line}");
                 let _ = append(&p1, &format!("{line}\n"));
             }
         });
         let b = tokio::spawn(async move {
             let mut l = err.lines();
             while let Ok(Some(line)) = l.next_line().await {
+                tracing::warn!(target: "lumid::tasks", "{line}");
                 let _ = append(&p2, &format!("{line}\n"));
             }
         });

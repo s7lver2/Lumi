@@ -29,6 +29,12 @@ pub const CATEGORIAS: &[Categoria] = &[
     },
     Categoria { id: "red", label: "Red", objetivos: &["lumid::routes::network"] },
     Categoria { id: "modelos", label: "Modelos e índices", objetivos: &["lumid::routes::models", "lumid::routes::indices"] },
+    // La salida de "Instalar runtime" (torch, romatch, paddleocr...) vivía
+    // solo en el fichero propio de esa tarea -- invisible desde aquí, la
+    // pestaña de Logs que ya sirve para seguir cualquier otra cosa del
+    // servidor. `lumid::tasks` es el módulo que la ejecuta y ahora también
+    // la emite por `tracing`, no solo al fichero.
+    Categoria { id: "runtime", label: "Instalación del runtime", objetivos: &["lumid::tasks"] },
     Categoria {
         id: "proyectos",
         label: "Proyectos, casos y claves API",
