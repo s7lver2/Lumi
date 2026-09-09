@@ -109,8 +109,9 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec
                  # PyTorch/CUDA que no es la nuestra (probado a mano: al
                  # instalarlo, degrada torch de 2.14+cu126 a 2.11+cu13 y
                  # rompe todo lo demas que corre sobre ese mismo torch). En
-                 # su lugar, un kernel Triton propio con el mismo contrato:
-                 # github.com/s7lver2/local-corr-lumi -- compila contra el
+                 # su lugar, un kernel Triton propio con el mismo contrato,
+                 # publicado como `local-corr-lumi` en PyPI (código en
+                 # github.com/s7lver2/local-corr-lumi) -- compila contra el
                  # PyTorch/CUDA que YA haya en el entorno, no trae un
                  # binario prebuilt que pueda desincronizarse. Sin esto,
                  # \"roma\" corre igual (cae al fallback en PyTorch puro que
@@ -119,8 +120,7 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec
                  if \"$1/bin/python3\" -c 'import local_corr' 2>/dev/null; then \
                    echo 'local_corr ya instalado, nada que hacer'; \
                  else \
-                   UV_HTTP_TIMEOUT=60 \"$UV\" pip install --python \"$1/bin/python3\" \
-                   git+https://github.com/s7lver2/local-corr-lumi.git; \
+                   UV_HTTP_TIMEOUT=60 \"$UV\" pip install --python \"$1/bin/python3\" local-corr-lumi; \
                  fi; \
                  if \"$1/bin/python3\" -c 'import safetensors' 2>/dev/null; then \
                    echo 'safetensors ya instalado, nada que hacer'; \
