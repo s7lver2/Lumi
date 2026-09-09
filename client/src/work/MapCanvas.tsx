@@ -368,9 +368,19 @@ export function MapCanvas({
 
     let raf = 0;
     let vivo = true;
+    // Rumbo (bearing) y no longitud giraban antes: eso rota la cámara sobre
+    // el eje que cae justo debajo de ella en pantalla, no el eje real del
+    // planeta -- con el centro fuera del ecuador se veía torcido, nada
+    // parecido a cómo gira la Tierra de verdad. Mover la LONGITUD del
+    // centro en vez del rumbo gira el globo sobre su propio eje (norte-sur)
+    // sin importar dónde esté centrada la cámara, en el mismo sentido en el
+    // que gira la Tierra (hacia el este bajo un observador fijo).
+    let lng = m.getCenter().lng;
+    const lat = m.getCenter().lat;
     const girar = () => {
       if (!vivo) return;
-      m.setBearing((m.getBearing() + 0.04) % 360);
+      lng += 0.04;
+      m.jumpTo({ center: [lng, lat], bearing: 0, pitch: 0 });
       raf = requestAnimationFrame(girar);
     };
     // Espera a que termine el alejamiento antes de girar: arrancar los dos
