@@ -589,7 +589,25 @@ impl Queue {
     ) {
         loop {
             tokio::select! {
-                Some(ev) = rx_ev.recv() => self.aplicar(ev).await,
+                Some(ev) = rx_ev.recv() => {
+                    // `Evento::Vectores` dispara el post-proceso ENTERO de un
+                    // análisis (recuperación + verificación y agentes en
+                    // paralelo, con verificación sola midiendo minutos en
+                    // producción, ver el spec de rendimiento). Hacerlo inline
+                    // aquí paraba el bucle entero mientras tanto: no se volvía
+                    // a leer `rx_ev` (los eventos de OTROS trabajadores se
+                    // encolaban sin atender) ni se llamaba a `repartir_ahora`
+                    // (una GPU libre no recibía trabajo nuevo). `self.soltar()`
+                    // dentro de `aplicar` ya liberaba al TRABAJADOR antes de
+                    // este cambio; `tokio::spawn` es lo que faltaba para que el
+                    // BUCLE también quedara libre.
+                    if matches!(ev, Evento::Vectores { .. }) {
+                        let cola = self.clone();
+                        tokio::spawn(async move { cola.aplicar(ev).await });
+                    } else {
+                        self.aplicar(ev).await;
+                    }
+                }
                 Some(_) = rx_avisos.recv() => {}
                 _ = tokio::time::sleep(std::time::Duration::from_secs(TICK_S)) => {}
             }

@@ -54,6 +54,21 @@ pub struct App {
     /// plataforma. Se mantiene vivo entre muestras para que la diferencia
     /// exista.
     pub sysinfo: Arc<Mutex<sysinfo::System>>,
+    /// `None` si no había GPU montada a tiempo en el arranque (ver el
+    /// reintento en `gpus()`) -- en ese caso la telemetría sigue sin sección
+    /// de GPU hasta el próximo reinicio, igual que antes de este cambio.
+    /// `Arc` porque `App` es `Clone` y se reparte a cada tarea/petición.
+    pub nvml: Option<Arc<nvml_wrapper::Nvml>>,
+    /// La última muestra de hardware/cola/mantenimiento, SIN `avisos`
+    /// (personal de quien pregunta -- ver `routes::telemetry::sse`).
+    /// `telemetry::muestrear_en_vivo` la produce UNA vez por segundo pase lo
+    /// que pase; antes cada conexión SSE tenía su propio bucle que llamaba a
+    /// `telemetry::sample()` (NVML + sysinfo + `Disks::new_with_refreshed_list`
+    /// + 5 consultas a la base) por su cuenta, así que el coste se
+    /// multiplicaba por cliente conectado. `watch` y no `broadcast`: a un
+    /// suscriptor nuevo (o que se perdió una muestra) solo le interesa la
+    /// ÚLTIMA, nunca una cola de las que se perdió.
+    pub telemetria: tokio::sync::watch::Sender<Option<lumi_proto::api::Sample>>,
     /// La cola vive tanto como el daemon. Sus trabajadores son procesos hijo
     /// con `kill_on_drop`, así que mueren con él y no dejan VRAM ocupada.
     pub queue: Arc<queue::Queue>,
@@ -123,12 +138,13 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("nivel de log inicial: {filtro_inicial}");
 
     let (tls_cfg, fingerprint) = tls::load(&dir).await?;
-    let gpus = gpus();
+    let (gpus, nvml) = gpus();
     // Antes se creaba después de `Queue::arrancar` — la cola necesita este
     // remitente para avisar a la página de Cola cuando algo cambia
     // (`EventoAdmin::ColaCambio`), así que tiene que existir primero.
     let (admin_eventos, _) = tokio::sync::broadcast::channel(64);
     let queue = queue::Queue::arrancar(store.clone(), dir.clone(), &gpus, admin_eventos.clone());
+    let (telemetria, _) = tokio::sync::watch::channel(None);
     let app = App {
         store,
         fingerprint,
@@ -141,10 +157,12 @@ async fn main() -> anyhow::Result<()> {
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0),
         sysinfo: Arc::new(Mutex::new(sysinfo::System::new_all())),
+        nvml: nvml.map(Arc::new),
         queue,
         indices_en_curso: Arc::new(Mutex::new(None)),
         admin_eventos,
         log_filter,
+        telemetria,
     };
 
     actualizacion::limpiar_estado_colgado_al_arrancar(&app);
@@ -166,6 +184,7 @@ async fn main() -> anyhow::Result<()> {
     });
 
     tokio::spawn(telemetry::muestrear_historial(app.clone()));
+    tokio::spawn(telemetry::muestrear_en_vivo(app.clone()));
     tokio::spawn(actualizacion::tick(app.clone()));
 
     // Latido de diagnostico temporal: si el runtime entero se queda sin
@@ -390,7 +409,16 @@ async fn main() -> anyhow::Result<()> {
 /// vez, al arrancar, y se cachea en `App.gpus`. Cinco intentos con 500ms de
 /// espera (2.5s en el peor caso) cubren ese margen típico sin retrasar de
 /// forma notable un arranque normal donde NVML ya está listo a la primera.
-fn gpus() -> Vec<GpuInfo> {
+// Devuelve también el handle ya montado, no solo la lista: `telemetry::sample`
+// lo necesita una vez por segundo (uso normal del panel abierto) y antes
+// llamaba a `Nvml::init()` por su cuenta en cada muestra -- medido: 8,3ms de
+// mediana, 29,7ms en el peor caso, y se pagaba POR CLIENTE CONECTADO porque
+// cada conexión SSE tenía su propio bucle de muestreo. Reutilizar este mismo
+// handle (guardado en `App.nvml`) es gratis: `nvml_wrapper` no necesita
+// reabrir la librería para leer datos que cambian a cada instante (uso,
+// temperatura, VRAM...), esos ya se piden de nuevo en cada llamada a los
+// métodos del `Device`.
+fn gpus() -> (Vec<GpuInfo>, Option<nvml_wrapper::Nvml>) {
     let mut ultimo_intento = None;
     for intento in 0..5 {
         if intento > 0 {
@@ -406,9 +434,9 @@ fn gpus() -> Vec<GpuInfo> {
     }
     let Some(nvml) = ultimo_intento else {
         tracing::warn!("no se detectó GPU tras 5 intentos; lumid sigue sin GPU hasta el próximo reinicio");
-        return vec![];
+        return (vec![], None);
     };
-    (0..nvml.device_count().unwrap_or(0))
+    let lista = (0..nvml.device_count().unwrap_or(0))
         .filter_map(|i| {
             let d = nvml.device_by_index(i).ok()?;
             Some(GpuInfo {
@@ -418,6 +446,7 @@ fn gpus() -> Vec<GpuInfo> {
                 pcie: d.pci_info().ok()?.bus_id,
             })
         })
-        .collect()
+        .collect();
+    (lista, Some(nvml))
 }
 

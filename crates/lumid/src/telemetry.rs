@@ -6,8 +6,15 @@ use crate::App;
 use lumi_proto::api::{AvisoInfo, GpuSample, Sample};
 
 pub fn sample(app: &App, visto_por: Option<(i64, bool)>) -> Sample {
-    let gpus = match nvml_wrapper::Nvml::init() {
-        Ok(nvml) => (0..nvml.device_count().unwrap_or(0))
+    // `App.nvml` se monta UNA VEZ al arrancar (ver `gpus()` en `main.rs`) y
+    // se reutiliza aquí -- antes esto llamaba a `Nvml::init()` en cada
+    // muestra, y con el SSE de telemetría abriendo un bucle de muestreo por
+    // conexión, el coste (medido: mediana 8,3ms, hasta 29,7ms) se multiplicaba
+    // por cada cliente con el panel abierto. Sin GPU montada a tiempo en el
+    // arranque, `app.nvml` es `None` y la sección de GPU sigue vacía, igual
+    // que cuando `Nvml::init()` fallaba aquí mismo antes de este cambio.
+    let gpus = match &app.nvml {
+        Some(nvml) => (0..nvml.device_count().unwrap_or(0))
             .filter_map(|i| {
                 let d = nvml.device_by_index(i).ok()?;
                 let m = d.memory_info().ok()?;
@@ -32,7 +39,7 @@ pub fn sample(app: &App, visto_por: Option<(i64, bool)>) -> Sample {
                 })
             })
             .collect(),
-        Err(_) => vec![],
+        None => vec![],
     };
 
     // Un `System` nuevo en cada muestra siempre daría 0%: sysinfo calcula el
@@ -79,7 +86,12 @@ pub fn sample(app: &App, visto_por: Option<(i64, bool)>) -> Sample {
 /// pregunta. Se resuelve una vez al abrir la conexión SSE
 /// (`routes::telemetry::sse`), no en cada muestra: la identidad de una
 /// sesión no cambia mientras el stream sigue abierto.
-fn avisos_para(app: &App, visto_por: Option<(i64, bool)>) -> Vec<AvisoInfo> {
+///
+/// Pública porque `routes::telemetry::sse` la llama aparte: la muestra base
+/// (GPU, CPU, cola...) es la misma para todo el mundo y la produce
+/// `muestrear_en_vivo` una sola vez por segundo, pero `avisos` es personal de
+/// quien pregunta y no se puede compartir entre conexiones.
+pub fn avisos_para(app: &App, visto_por: Option<(i64, bool)>) -> Vec<AvisoInfo> {
     let Some((user_id, is_admin)) = visto_por else { return Vec::new() };
     // `c` se suelta al final de este bloque, antes del filtro de abajo: ese
     // filtro llama a `incluye_a`, que vuelve a pedir `app.store.conn()` — si
@@ -141,6 +153,26 @@ fn ahora() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
+}
+
+/// Produce la muestra EN VIVO una sola vez por segundo, pase lo que pase --
+/// antes cada conexión SSE de `routes::telemetry::sse` tenía su propio bucle
+/// de muestreo, así que NVML, `sysinfo`, `Disks::new_with_refreshed_list` y
+/// las consultas de `sample()` se repetían una vez por segundo POR CADA
+/// cliente con el panel abierto. Se difunde por `App.telemetria` (un
+/// `watch`, no un `broadcast`: a cada conexión solo le interesa la última
+/// muestra, nunca una cola de las que se perdió mientras no miraba) SIN
+/// `avisos`, que es lo único que depende de quién pregunta -- cada conexión
+/// SSE lo rellena aparte, con `avisos_para`, que es mucho más barato que el
+/// resto de la muestra.
+pub async fn muestrear_en_vivo(app: App) {
+    loop {
+        let app2 = app.clone();
+        if let Ok(s) = tokio::task::spawn_blocking(move || sample(&app2, None)).await {
+            let _ = app.telemetria.send(Some(s));
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
 }
 
 /// Arrancada una vez en `main.rs`, no por cliente conectado — a diferencia

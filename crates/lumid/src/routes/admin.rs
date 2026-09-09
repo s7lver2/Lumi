@@ -138,16 +138,52 @@ pub async fn list_users(
     headers: HeaderMap,
 ) -> Result<Json<Vec<AdminUser>>, StatusCode> {
     require_admin(&app, &bearer(&headers))?;
-    let ids: Vec<i64> = {
+    // Antes: 1 consulta de ids + `user_row` por cada uno (1 fila + `effective`,
+    // que a su vez son 2 consultas -- una de ellas, `global`, la MISMA
+    // consulta repetida sin ningún dato nuevo en cada vuelta). Con 50
+    // usuarios eran 151 adquisiciones del mutex único del store para listar
+    // una pantalla. Aquí son 3: la fila de cada usuario, el global (una vez),
+    // las anulaciones de todos (una vez).
+    let filas: Vec<(i64, String, Option<String>, i64, i64, i64, i64)> = {
         let c = app.store.conn();
         let mut q = c
-            .prepare("SELECT id FROM users ORDER BY created_at")
+            .prepare(
+                "SELECT id, username, display_name, is_admin, blocked, must_change_password, created_at
+                   FROM users ORDER BY created_at",
+            )
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        let v = q.query_map([], |r| r.get(0)).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        v.flatten().collect()
+        let filas = q
+            .query_map([], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?))
+            })
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .flatten()
+            .collect();
+        filas
     };
-    // Los ids se recogen antes de soltar el mutex: `user_row` vuelve a pedirlo.
-    Ok(Json(ids.into_iter().filter_map(|i| user_row(&app, i)).collect()))
+    let base = crate::limits::global(&app.store);
+    let mut overrides = crate::limits::overrides_de_todos(&app.store);
+    Ok(Json(
+        filas
+            .into_iter()
+            .map(|(id, username, display_name, is_admin, blocked, must_change_password, created_at)| {
+                let mut limits = base.clone();
+                for (k, v) in overrides.remove(&id).unwrap_or_default() {
+                    crate::limits::apply(&mut limits, &k, &v);
+                }
+                AdminUser {
+                    id,
+                    username,
+                    display_name,
+                    is_admin: is_admin == 1,
+                    blocked: blocked == 1,
+                    must_change_password: must_change_password == 1,
+                    created_at,
+                    limits,
+                }
+            })
+            .collect(),
+    ))
 }
 
 pub async fn get_user(

@@ -91,13 +91,15 @@ function Esqueleto() {
   );
 }
 
-export function ResumenView({ token, onIr }: { token: string; onIr: (s: Seccion) => void }) {
-  const [r, setR] = useState<Resumen | null>(null);
+// `resumen`/`error` vienen de `AdminPanel` -- ya los pide para los contadores
+// de la barra lateral, así que pedirlos otra vez aquí era la misma petición
+// dos veces cada vez que se abre el panel.
+export function ResumenView({ token, onIr, resumen: r, error }: {
+  token: string; onIr: (s: Seccion) => void; resumen: Resumen | null; error: string | null;
+}) {
   const [perfil, setPerfil] = useState<ServerProfileSettings | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.get<Resumen>("/v1/admin/resumen", token).then(setR).catch((e) => setError(String(e)));
     api.serverProfileGet(token).then(setPerfil).catch(() => setPerfil(null));
   }, [token]);
 

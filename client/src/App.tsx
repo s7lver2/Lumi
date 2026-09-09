@@ -304,8 +304,12 @@ export default function App() {
     <div className="relative flex h-full flex-col overflow-hidden">
       {/* El panel de administración y «Perfil y sesiones» tienen su propio
           fondo liso: el planeta es la ambientación del trabajo de caso, no
-          de mirar la máquina o gestionar la propia cuenta. */}
-      {mode !== "admin" && mode !== "profile" && <PlanetBackground dead={status !== "ok"} />}
+          de mirar la máquina o gestionar la propia cuenta. Tampoco en "case":
+          `MapCanvas` pinta un fondo OPACO encima (su radial-gradient propio)
+          en cuanto se abre un caso, así que el planeta seguía animando cinco
+          `radial-gradient` apilados en bucle de 70s debajo de algo que nunca
+          se ve -- coste de composición puro, sin efecto visual ninguno. */}
+      {mode !== "admin" && mode !== "profile" && mode !== "case" && <PlanetBackground dead={status !== "ok"} />}
       {/* Una sola franja arriba para todo: migas, estado del servidor,
           notificaciones, cuenta y los botones de la ventana. La telemetría ya
           no es una franja permanente de 70 px — vive en su píldora. */}

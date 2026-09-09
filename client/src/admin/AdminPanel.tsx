@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { api, type EstadoActualizacionLumid, type SecuritySettings } from "../lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { api, type EstadoActualizacionLumid, type Resumen, type SecuritySettings } from "../lib/api";
 import { useServer } from "../lib/store";
 import { Hueco } from "./Hueco";
 import { NotificacionesView } from "./NotificacionesView";
@@ -25,7 +25,6 @@ const PRONTO: Seccion[] = [];
 
 export function AdminPanel({ token }: { token: string }) {
   const [seccion, setSeccion] = useState<Seccion>("resumen");
-  const [cuentas, setCuentas] = useState<Partial<Record<Seccion, { n: number; espera?: boolean }>>>({});
   const [licenciasPendientes, setLicenciasPendientes] = useState(false);
   const [abrirUserId, setAbrirUserId] = useState<number | undefined>(undefined);
   const capIndices = useServer((s) => s.hello?.capabilities.find((c) => c.id === "indices"));
@@ -52,22 +51,32 @@ export function AdminPanel({ token }: { token: string }) {
   }, [token]);
 
   // Los contadores de la barra lateral salen del mismo Resumen que pinta la
-  // primera pantalla: una sola petición alimenta las dos cosas.
+  // primera pantalla: una sola petición alimenta las dos cosas -- antes cada
+  // una pedía `/v1/admin/resumen` por su cuenta (aquí para los contadores,
+  // dentro de `ResumenView` para las fichas), dos peticiones idénticas cada
+  // vez que se abría el panel.
+  const [resumen, setResumen] = useState<Resumen | null>(null);
+  const [resumenError, setResumenError] = useState<string | null>(null);
   useEffect(() => {
-    api.get<import("../lib/api").Resumen>("/v1/admin/resumen", token)
-      .then((r) => setCuentas({
-        indices: { n: r.indices },
-        solicitudes: { n: r.solicitudes_pendientes, espera: r.solicitudes_pendientes > 0 },
-        usuarios: { n: r.usuarios },
-        cola: { n: r.analisis_en_cola },
-        claves: { n: 1, espera: true },
-        // Sin numerito cuando no hay nada que avisar — a diferencia de
-        // "cola", que informa aunque esté en cero, un contador de problemas
-        // en cero no es información útil, solo ruido en la barra lateral.
-        ...(r.problemas_doctor > 0 ? { doctor: { n: r.problemas_doctor, espera: true } } : {}),
-      }))
-      .catch(() => setCuentas({}));
+    api.get<Resumen>("/v1/admin/resumen", token)
+      .then((r) => { setResumen(r); setResumenError(null); })
+      .catch((e) => setResumenError(String(e)));
   }, [token]);
+
+  const cuentas = useMemo((): Partial<Record<Seccion, { n: number; espera?: boolean }>> => {
+    if (!resumen) return {};
+    return {
+      indices: { n: resumen.indices },
+      solicitudes: { n: resumen.solicitudes_pendientes, espera: resumen.solicitudes_pendientes > 0 },
+      usuarios: { n: resumen.usuarios },
+      cola: { n: resumen.analisis_en_cola },
+      claves: { n: 1, espera: true },
+      // Sin numerito cuando no hay nada que avisar — a diferencia de
+      // "cola", que informa aunque esté en cero, un contador de problemas
+      // en cero no es información útil, solo ruido en la barra lateral.
+      ...(resumen.problemas_doctor > 0 ? { doctor: { n: resumen.problemas_doctor, espera: true } } : {}),
+    };
+  }, [resumen]);
 
   useEffect(() => {
     api.get<SecuritySettings>("/v1/admin/security", token).then(setSeguridad).catch(() => setSeguridad(null));
@@ -79,7 +88,7 @@ export function AdminPanel({ token }: { token: string }) {
       <div key={seccion} className="overflow-y-auto"
         style={{ animation: "jg-fade-rise .5s cubic-bezier(.16,1,.3,1) both" }}>
         {PRONTO.includes(seccion) ? <Hueco seccion={seccion} />
-          : seccion === "resumen" ? <ResumenView token={token} onIr={setSeccion} />
+          : seccion === "resumen" ? <ResumenView token={token} onIr={setSeccion} resumen={resumen} error={resumenError} />
           : seccion === "solicitudes" ? <Seccion titulo="Solicitudes" grupo="Personas">
               <RequestsView token={token} /></Seccion>
           : seccion === "usuarios" ? <UsersView token={token} abrirUserId={abrirUserId} />

@@ -382,10 +382,21 @@ export function MapCanvas({
     // se desplaza bajo un observador fijo en el espacio).
     let lng = m.getCenter().lng;
     const lat = m.getCenter().lat;
-    const girar = () => {
+    // A 60fps esto pedía una tesela nueva a MapLibre en cada frame (`jumpTo`
+    // mueve el centro) mientras un análisis está en curso -- justo cuando el
+    // servidor más ocupado está y menos falta hace competir con la API por
+    // conexiones. ~20fps sigue leyéndose como giro continuo y no como algo a
+    // saltos, y es un tercio de las peticiones. `PASO_POR_S` mantiene la
+    // MISMA velocidad angular (2,4°/s) que antes, repartida en menos pasos.
+    const PASO_POR_S = 2.4;
+    let anterior = performance.now();
+    const girar = (ahora: number) => {
       if (!vivo) return;
-      lng -= 0.04;
-      m.jumpTo({ center: [lng, lat], bearing: 0, pitch: 0 });
+      if (ahora - anterior >= 50) {
+        lng -= (PASO_POR_S * (ahora - anterior)) / 1000;
+        m.jumpTo({ center: [lng, lat], bearing: 0, pitch: 0 });
+        anterior = ahora;
+      }
       raf = requestAnimationFrame(girar);
     };
     // Espera a que termine el alejamiento antes de girar: arrancar los dos

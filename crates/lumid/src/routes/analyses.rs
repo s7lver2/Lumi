@@ -76,6 +76,102 @@ fn hypotheses(c: &rusqlite::Connection, analysis_id: i64) -> Vec<lumi_proto::wor
     .unwrap_or_default()
 }
 
+/// Igual que `image_ids`/`hypotheses`/`agentes`, pero para TODOS los análisis
+/// de un caso a la vez -- `list()` los llamaba una vez por fila (3 consultas
+/// y 3 `prepare()` por análisis; un caso de 40 análisis eran 121 consultas
+/// con el mutex único del store agarrado todo el rato). Un `JOIN` contra
+/// `analyses` filtrado por `case_id` reutiliza el mismo filtro que ya aplica
+/// la consulta principal, así que no hace falta construir un `IN (...)`
+/// dinámico con los ids ya traídos.
+fn image_ids_por_caso(c: &rusqlite::Connection, case_id: i64) -> std::collections::HashMap<i64, Vec<i64>> {
+    let Ok(mut q) = c.prepare(
+        "SELECT ai.analysis_id, ai.image_id
+           FROM analysis_images ai JOIN analyses a ON a.id = ai.analysis_id
+          WHERE a.case_id = ?1",
+    ) else {
+        return Default::default();
+    };
+    let Ok(filas) = q.query_map([case_id], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))) else {
+        return Default::default();
+    };
+    let mut mapa: std::collections::HashMap<i64, Vec<i64>> = Default::default();
+    for (analysis_id, image_id) in filas.flatten() {
+        mapa.entry(analysis_id).or_default().push(image_id);
+    }
+    mapa
+}
+
+fn hypotheses_por_caso(
+    c: &rusqlite::Connection, case_id: i64,
+) -> std::collections::HashMap<i64, Vec<lumi_proto::worker::Hipotesis>> {
+    let Ok(mut q) = c.prepare(
+        "SELECT h.analysis_id, h.lat, h.lng, h.radio_m, h.peso, h.indice, h.autor,
+                h.inliers, h.verificador, h.motivo_agente, h.imagen_id
+           FROM analysis_hypotheses h JOIN analyses a ON a.id = h.analysis_id
+          WHERE a.case_id = ?1
+          ORDER BY h.analysis_id, h.orden",
+    ) else {
+        return Default::default();
+    };
+    let Ok(filas) = q.query_map([case_id], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            lumi_proto::worker::Hipotesis {
+                lat: r.get(1)?,
+                lng: r.get(2)?,
+                radio_m: r.get(3)?,
+                peso: r.get(4)?,
+                indice: r.get(5)?,
+                autor: r.get(6)?,
+                inliers: r.get::<_, Option<i64>>(7)?.map(|n| n as u32),
+                verificador: r.get(8)?,
+                motivo_agente: r.get(9)?,
+                imagen_id: r.get(10)?,
+            },
+        ))
+    }) else {
+        return Default::default();
+    };
+    let mut mapa: std::collections::HashMap<i64, Vec<lumi_proto::worker::Hipotesis>> = Default::default();
+    for (analysis_id, hip) in filas.flatten() {
+        mapa.entry(analysis_id).or_default().push(hip);
+    }
+    mapa
+}
+
+fn agentes_por_caso(
+    c: &rusqlite::Connection, case_id: i64,
+) -> std::collections::HashMap<i64, Vec<lumi_proto::api::DichoDeAgente>> {
+    let Ok(mut q) = c.prepare(
+        "SELECT ag.analysis_id, ag.agente, ag.nombre, ag.etiqueta, ag.confianza, ag.tipo, ag.detalle
+           FROM analysis_agents ag JOIN analyses a ON a.id = ag.analysis_id
+          WHERE a.case_id = ?1
+          ORDER BY ag.analysis_id, ag.agente",
+    ) else {
+        return Default::default();
+    };
+    let Ok(filas) = q.query_map([case_id], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            lumi_proto::api::DichoDeAgente {
+                agente: r.get(1)?,
+                nombre: r.get(2)?,
+                etiqueta: r.get(3)?,
+                confianza: r.get(4)?,
+                tipo: r.get(5)?,
+                detalle: r.get(6)?,
+            },
+        ))
+    }) else {
+        return Default::default();
+    };
+    let mut mapa: std::collections::HashMap<i64, Vec<lumi_proto::api::DichoDeAgente>> = Default::default();
+    for (analysis_id, ag) in filas.flatten() {
+        mapa.entry(analysis_id).or_default().push(ag);
+    }
+    mapa
+}
+
 fn agentes(c: &rusqlite::Connection, analysis_id: i64) -> Vec<lumi_proto::api::DichoDeAgente> {
     let Ok(mut q) = c.prepare(
         "SELECT agente, nombre, etiqueta, confianza, tipo, detalle
@@ -115,10 +211,16 @@ pub async fn list(
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
         .flatten()
         .collect();
+    // 3 consultas para el caso ENTERO, no 3 por análisis -- un caso de 40
+    // análisis pasa de 121 consultas (y 121 `prepare()`, con el mutex único
+    // del store agarrado todo el rato) a 4 en total.
+    let mut imagenes = image_ids_por_caso(&c, case_id);
+    let mut hipotesis = hypotheses_por_caso(&c, case_id);
+    let mut dichos = agentes_por_caso(&c, case_id);
     for a in &mut rows {
-        a.image_ids = image_ids(&c, a.id);
-        a.hypotheses = hypotheses(&c, a.id);
-        a.agentes = agentes(&c, a.id);
+        a.image_ids = imagenes.remove(&a.id).unwrap_or_default();
+        a.hypotheses = hipotesis.remove(&a.id).unwrap_or_default();
+        a.agentes = dichos.remove(&a.id).unwrap_or_default();
     }
     Ok(Json(rows))
 }

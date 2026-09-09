@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { api, type QueueView } from "../lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { api, type EventoAdmin, type QueueView } from "../lib/api";
 import { Icon } from "../ui/Icon";
 
 /** PROVISIONAL. El subsistema 3 rehace el panel entero; esto solo tiene que
@@ -13,18 +14,27 @@ export function QueueRow({ token }: { token: string }) {
   const [q, setQ] = useState<QueueView | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let vivo = true;
-    const cargar = () =>
+  const cargar = useCallback(
+    () =>
       api.get<QueueView>("/v1/queue", token)
-        .then((v) => { if (vivo) { setQ(v); setError(null); } })
-        .catch((e) => { if (vivo) setError(String(e)); });
+        .then((v) => { setQ(v); setError(null); })
+        .catch((e) => setError(String(e))),
+    [token]
+  );
+
+  useEffect(() => {
     void cargar();
-    // Cada 2 s y no con el SSE de resultados: este panel es de diagnóstico,
-    // no necesita la latencia de un evento y sondear es más simple.
-    const t = setInterval(cargar, 2000);
-    return () => { vivo = false; clearInterval(t); };
-  }, [token]);
+    // Antes sondeaba cada 2s -- este mismo dato ya llega por SSE
+    // (`ColaCambio` en `admin-events`, el mismo canal que ya usa
+    // `ColaView`), y este panel está montado siempre que Administración
+    // está abierta (`ResumenView` es la sección por defecto), así que el
+    // sondeo corría de fondo aunque nadie mirara la Cola. Mismo patrón que
+    // `ColaView.tsx`, para el mismo evento.
+    const un = listen<EventoAdmin>("admin-events", (e) => {
+      if (e.payload === "ColaCambio") void cargar();
+    });
+    return () => { void un.then((f) => f()); };
+  }, [cargar]);
 
   const pausada = q !== null && !q.trabajadores.some((w) => w.listo);
 

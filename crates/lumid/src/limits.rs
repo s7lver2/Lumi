@@ -42,7 +42,10 @@ fn rows(s: &Store, user_id: Option<i64>) -> HashMap<String, Value> {
         .collect()
 }
 
-fn apply(l: &mut Limits, k: &str, v: &Value) {
+// `pub(crate)`: además de `effective` aquí mismo, `routes::admin::list_users`
+// la necesita para aplicar anulaciones ya traídas en bloque (`overrides_de_todos`)
+// sin volver a pasar por `overrides`, que sería la misma consulta N veces.
+pub(crate) fn apply(l: &mut Limits, k: &str, v: &Value) {
     match k {
         "models" => {
             if let Ok(m) = serde_json::from_value(v.clone()) {
@@ -90,6 +93,30 @@ pub fn effective(s: &Store, user_id: i64) -> Limits {
         apply(&mut l, &k, &v);
     }
     l
+}
+
+/// Como `overrides`, pero para TODOS los usuarios que tengan alguna anulación
+/// a la vez -- para `routes::admin::list_users`, que antes llamaba a
+/// `effective` (y por tanto a `global` Y a `overrides`) una vez POR USUARIO.
+/// `global` no depende del usuario: pedirlo N veces para listar N usuarios
+/// era la misma consulta repetida sin ningún dato nuevo en cada vuelta.
+pub fn overrides_de_todos(s: &Store) -> HashMap<i64, HashMap<String, Value>> {
+    let c = s.conn();
+    let Ok(mut q) = c.prepare("SELECT user_id, key, value FROM limits WHERE user_id IS NOT NULL") else {
+        return Default::default();
+    };
+    let Ok(filas) = q.query_map([], |r| {
+        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
+    }) else {
+        return Default::default();
+    };
+    let mut mapa: HashMap<i64, HashMap<String, Value>> = Default::default();
+    for (user_id, k, v) in filas.flatten() {
+        if let Ok(val) = serde_json::from_str::<Value>(&v) {
+            mapa.entry(user_id).or_default().insert(k, val);
+        }
+    }
+    mapa
 }
 
 pub fn set(s: &Store, user_id: Option<i64>, key: &str, value: &Value) -> Result<()> {

@@ -53,6 +53,15 @@ struct Conn {
     /// `client_flujo_for`: no es una optimización, es que `client` no puede
     /// servir un flujo largo.
     flujo: Option<reqwest::Client>,
+    /// El mismo servidor, pero un `reqwest::Client` APARTE para todo lo que
+    /// pasa por el esquema `lumi://` (miniaturas, teselas del mapa, sprites,
+    /// glyphs) -- ver `client_activos_for`. Antes compartía `client`, el
+    /// mismo que usa cada llamada a la API: una galería de 200 imágenes o un
+    /// mapa girando pedían cientos de miniaturas/teselas a la vez por ese
+    /// MISMO cliente, y como `lumid` no negocia HTTP/2 (solo HTTP/1.1), cada
+    /// una es una conexión TCP+TLS nueva -- un `api.get()` disparado a la vez
+    /// se ponía a la cola detrás de esa ráfaga de handshakes.
+    activos: Option<reqwest::Client>,
     /// El token de sesión vive aquí y no en las URLs del esquema `lumi://`:
     /// es un secreto, y las rutas acaban en logs y trazas de error.
     token: Option<String>,
@@ -429,6 +438,35 @@ fn client_for(fingerprint: &str) -> Result<reqwest::Client, String> {
 /// mudo —la razón por la que existe el timeout de arriba— sin poner techo a un
 /// flujo que va llegando. 45s es holgado frente al keep-alive de 15s que manda
 /// axum, así que un flujo parado pero vivo no se confunde con uno muerto.
+/// Un semáforo global, no por conexión: acota cuántas peticiones del esquema
+/// `lumi://` corren A LA VEZ en toda la app, sin importar cuántas pestañas o
+/// componentes las disparen. 8 es generoso para lo que de verdad hace falta
+/// en pantalla a la vez (una fila de miniaturas, un puñado de teselas
+/// visibles) y evita que una galería grande o un mapa girando saturen las
+/// conexiones del webview y dejen esperando a una petición de API normal
+/// disparada al mismo tiempo.
+static PERMISOS_ACTIVOS: std::sync::OnceLock<Arc<tokio::sync::Semaphore>> = std::sync::OnceLock::new();
+fn permisos_activos() -> Arc<tokio::sync::Semaphore> {
+    PERMISOS_ACTIVOS.get_or_init(|| Arc::new(tokio::sync::Semaphore::new(8))).clone()
+}
+
+/// Mismo anclaje de certificado que `client_for`, pero en un `reqwest::Client`
+/// propio -- ver el campo `Conn::activos`. El pool de conexiones de reqwest
+/// es por instancia de `Client`, así que aunque las dos apunten al mismo
+/// servidor, una ráfaga de miniaturas no compite por conexiones con las
+/// peticiones normales de la API.
+fn client_activos_for(fingerprint: &str) -> Result<reqwest::Client, String> {
+    let cfg = rustls::ClientConfig::builder()
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(PinnedVerifier { fingerprint: fingerprint.into() }))
+        .with_no_client_auth();
+    reqwest::Client::builder()
+        .use_preconfigured_tls(cfg)
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())
+}
+
 fn client_flujo_for(fingerprint: &str) -> Result<reqwest::Client, String> {
     let cfg = rustls::ClientConfig::builder()
         .dangerous()
@@ -464,6 +502,7 @@ async fn connect(addr: &str, fingerprint: &str, state: &Shared, forzar: bool) ->
         c.base = Some(base);
         c.client = Some(client);
         c.flujo = Some(client_flujo_for(fingerprint)?);
+        c.activos = Some(client_activos_for(fingerprint)?);
     }
 
     let propia = env!("CARGO_PKG_VERSION");
@@ -854,7 +893,7 @@ fn main() {
             let state = ctx.app_handle().state::<Shared>();
             let (base, client, token) = {
                 let c = state.lock().unwrap();
-                (c.base.clone(), c.client.clone(), c.token.clone())
+                (c.base.clone(), c.activos.clone(), c.token.clone())
             };
             // `.path()` a secas se comía la query string entera: cualquier ruta
             // de este esquema que dependiera de un parámetro (como el `?theme=`
@@ -878,6 +917,13 @@ fn main() {
                     responder.respond(fallo(503, "sin servidor vinculado"));
                     return;
                 };
+                // Se espera el permiso ANTES de disparar la petición, no
+                // después: es justo lo que acota cuántos handshakes
+                // TCP+TLS concurrentes llegan a abrirse. Si el semáforo
+                // llegó a cerrarse (nunca debería: no hay `close()` en este
+                // proceso), se seguiría sin límite antes que dejar la
+                // miniatura sin cargar para siempre.
+                let _permiso = permisos_activos().acquire_owned().await.ok();
                 let mut rb = client.get(format!("{base}{path}"));
                 if let Some(t) = token {
                     rb = rb.bearer_auth(t);
@@ -891,15 +937,31 @@ fn main() {
                             .and_then(|v| v.to_str().ok())
                             .unwrap_or("application/octet-stream")
                             .to_string();
+                        // `lumid` ya manda `Cache-Control: ...immutable` en
+                        // miniaturas y teselas (son inmutables por id), pero
+                        // esta respuesta se descartaba entera y se reconstruía
+                        // solo con `content-type` -- el webview nunca veía la
+                        // cabecera y no podía cachear nada entre montajes,
+                        // aunque el servidor sí lo permitiera. Se reenvía tal
+                        // cual, sin inventar una si el backend no la mandó.
+                        let cache_control = res
+                            .headers()
+                            .get("cache-control")
+                            .and_then(|v| v.to_str().ok())
+                            .map(|v| v.to_string());
                         let body = res.bytes().await.unwrap_or_default().to_vec();
+                        let mut builder = http::Response::builder()
+                            .status(status)
+                            .header("content-type", ctype)
+                            // El webview de un esquema propio tiene otro
+                            // origen que la app: sin esto, MapLibre no
+                            // puede leer las teselas.
+                            .header("access-control-allow-origin", "*");
+                        if let Some(cc) = cache_control {
+                            builder = builder.header("cache-control", cc);
+                        }
                         responder.respond(
-                            http::Response::builder()
-                                .status(status)
-                                .header("content-type", ctype)
-                                // El webview de un esquema propio tiene otro
-                                // origen que la app: sin esto, MapLibre no
-                                // puede leer las teselas.
-                                .header("access-control-allow-origin", "*")
+                            builder
                                 .body(body)
                                 .unwrap(),
                         );
