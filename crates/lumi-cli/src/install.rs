@@ -30,6 +30,15 @@ RestartSec=3
 User=root
 StateDirectory=lumi
 Environment=LUMI_DATA=/var/lib/lumi
+# lumid lanza sus workers de inferencia (verificacion, agentes) como hijos
+# directos, cada uno cargando GB de pesos. Sin esto, el kernel matando a UNO
+# de esos hijos por falta de memoria (OOMPolicy por defecto es stop) se
+# lleva por delante el daemon entero, que estaba sano -- medido en produccion:
+# el sintoma reportado era conexion perdida unos segundos, varias veces,
+# durante un analisis Pro, y el journal mostraba oom-kill + reinicio del
+# servicio completo. continue deja vivo a lumid cuando muere un hijo suyo;
+# lumid ya trata un worker muerto como fallo del analisis, no del daemon.
+OOMPolicy=continue
 
 [Install]
 WantedBy=multi-user.target

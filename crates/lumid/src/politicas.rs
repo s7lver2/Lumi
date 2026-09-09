@@ -23,7 +23,7 @@ pub fn leer(store: &Store) -> Settings {
         title: store.get_meta("politicas_titulo").unwrap_or_default(),
         content: store
             .get_meta("politicas_contenido")
-            .and_then(|v| serde_json::from_str(&v).ok())
+            .and_then(|v| serde_json::from_str::<serde_json::Value>(&v).ok())
             .unwrap_or_else(doc_vacio),
     }
 }

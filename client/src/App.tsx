@@ -83,10 +83,15 @@ export default function App() {
   }, []);
   const hello = useServer((s) => s.hello);
   const isAdmin = useServer((s) => s.isAdmin);
-  // Suscrito (no `getState().sample` suelto) a propósito: esta es la única
-  // lectura de `sample` en toda la app que necesita repintar en cuanto llega
-  // una muestra nueva, para que la tira aparezca/desaparezca sin refrescar.
-  const sample = useServer((s) => s.sample);
+  // Selector ESTRECHO a propósito: `sample` entero cambia una vez por
+  // segundo (una muestra de telemetría por cliente conectado), y `App` es la
+  // raíz -- suscribirse al objeto completo aquí repintaba todo el árbol
+  // (TitleBar, PlanetBackground, CaseView, AdminPanel, MapCanvas...) cada
+  // segundo, para leer solo estos dos campos. Dos primitivos, no un objeto:
+  // así React solo repinta cuando el valor en sí cambia, no cuando llega
+  // una muestra nueva con el mismo mantenimiento de siempre.
+  const enMantenimiento = useServer((s) => s.sample?.maintenance ?? false);
+  const mensajeMantenimiento = useServer((s) => s.sample?.maintenance_message ?? "");
   const bootstrapToken = useServer((s) => s.bootstrapToken);
   const [status, setStatus] = useState<"ok" | "reboot" | "error" | "sealed" | "lost">("ok");
   const fails = useRef(0);
@@ -318,7 +323,7 @@ export default function App() {
       {mode !== "entry" && actualizacion && !actualizacionCerrada && (
         <ActualizacionBanner estado={actualizacion} onCerrar={() => setActualizacionCerrada(true)} />
       )}
-      {mode !== "entry" && sample?.maintenance && <MantenimientoBanner mensaje={sample.maintenance_message} />}
+      {mode !== "entry" && enMantenimiento && <MantenimientoBanner mensaje={mensajeMantenimiento} />}
       <ResizeHandles />
       {/* Para app/admin, la desconexión es un banner + bloqueo, no una
           pantalla completa: la sesión de un usuario normal no tiene un

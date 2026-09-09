@@ -38,7 +38,7 @@ fn rows(s: &Store, user_id: Option<i64>) -> HashMap<String, Value> {
     it.into_iter()
         .flatten()
         .flatten()
-        .filter_map(|(k, v)| Some((k, serde_json::from_str(&v).ok()?)))
+        .filter_map(|(k, v)| Some((k, serde_json::from_str::<Value>(&v).ok()?)))
         .collect()
 }
 

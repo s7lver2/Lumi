@@ -39,7 +39,7 @@ pub fn bloquea_login(app: &App) -> bool {
 pub fn servicios_habilitados(app: &App) -> Vec<String> {
     app.store
         .get_meta("mantenimiento_servicios")
-        .and_then(|s| serde_json::from_str(&s).ok())
+        .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
         .unwrap_or_default()
 }
 

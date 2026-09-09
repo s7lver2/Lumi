@@ -650,6 +650,14 @@ impl Queue {
                 if !self.es_suyo(&dispositivo, id) {
                     return;
                 }
+                // Instrumentación (Hallazgo 0 del spec de rendimiento): mide
+                // el post-proceso ENTERO de un análisis -- recuperación +
+                // verificación + agentes en paralelo -- que es lo que el
+                // investigador espera de verdad. Antes de esto no había
+                // ninguna medida de extremo a extremo; solo se sabía "el
+                // análisis #51 tardó 186s" contando a mano desde el reloj del
+                // journal.
+                let inicio_analisis = std::time::Instant::now();
                 // El vector viene por fichero y no por la tubería. Se lee y se
                 // borra; el trabajador ya terminó el suyo y queda libre para
                 // el siguiente mientras Rust recupera y agrupa.
@@ -868,6 +876,10 @@ impl Queue {
                                 hip.peso = hip.peso.min(TECHO_CONFIANZA_SIN_VERIFICAR);
                             }
                         }
+                        tracing::info!(
+                            "análisis #{id}: post-proceso completo en {:.1}s",
+                            inicio_analisis.elapsed().as_secs_f64(),
+                        );
                         self.guardar_resultado(id, &h, &respaldo);
                     }
                     // Sin candidatos NO es una avería: es una respuesta.

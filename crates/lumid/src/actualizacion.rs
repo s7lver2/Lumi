@@ -193,7 +193,7 @@ pub fn estado_cacheado(app: &App) -> EstadoActualizacion {
     let mut estado = app
         .store
         .get_meta(META_ESTADO)
-        .and_then(|s| serde_json::from_str(&s).ok())
+        .and_then(|s| serde_json::from_str::<EstadoActualizacion>(&s).ok())
         .unwrap_or_else(|| EstadoActualizacion {
             version_instalada: version_instalada(),
             disponible: None,

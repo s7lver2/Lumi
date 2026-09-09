@@ -57,6 +57,10 @@ RestartSec=3
 User=root
 StateDirectory=lumi
 Environment=LUMI_DATA=/var/lib/lumi
+# lumid lanza workers de inferencia como hijos directos, cada uno cargando
+# GB de pesos; sin esto, el kernel matando a UNO por falta de memoria se
+# lleva por delante el daemon entero (OOMPolicy por defecto es stop).
+OOMPolicy=continue
 
 [Install]
 WantedBy=multi-user.target

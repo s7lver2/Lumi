@@ -62,6 +62,20 @@ struct Conn {
     /// `journalctl -u lumid -f` en el servidor sin cerrar el que ya corría,
     /// duplicando cada línea que llegaba al panel indefinidamente.
     logs_task: Option<tokio::task::JoinHandle<()>>,
+    /// Mismo problema que `logs_task`, para los otros cuatro SSE: cada uno se
+    /// lanzaba con `tokio::spawn` sin guardar el handle, así que un login
+    /// repetido (`announce_presence` desde `App.tsx`, `LoginForm.tsx`,
+    /// `ChangePasswordForm.tsx`, `AdminStep.tsx`) o entrar/salir del panel de
+    /// Administración (`start_admin_events`) apilaba conexiones vivas para
+    /// siempre -- cada una con su propio `loop` de reconexión, y en el
+    /// servidor cada una de telemetría cuesta un `sample()` entero (NVML +
+    /// sysinfo + 5 consultas a la base) por segundo. Es el mecanismo del "la
+    /// app va lenta a veces": empeora con lo que dura la sesión y con cuántas
+    /// veces se entra al panel.
+    telemetry_task: Option<tokio::task::JoinHandle<()>>,
+    queue_task: Option<tokio::task::JoinHandle<()>>,
+    indices_task: Option<tokio::task::JoinHandle<()>>,
+    admin_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 /// Lo llama el lado TS cada vez que cambia la sesión. Sin esto, el esquema
@@ -529,10 +543,18 @@ async fn start_telemetry(
 ) -> Result<(), String> {
     use tauri::Emitter;
     let (base, client) = {
-        let c = state.lock().unwrap();
+        let mut c = state.lock().unwrap();
+        // Sin esto, un login repetido en la misma sesión del cliente (cerrar
+        // sesión y volver a entrar sin cerrar la app) apilaba otra conexión
+        // de telemetría sin cerrar la anterior -- cada una cuesta un
+        // `sample()` entero (NVML + sysinfo + 5 consultas) por segundo en el
+        // servidor. Mismo arreglo que ya tenía `start_logs_stream`.
+        if let Some(anterior) = c.telemetry_task.take() {
+            anterior.abort();
+        }
         (c.base.clone().ok_or("sin servidor")?, c.flujo.clone().ok_or("sin cliente")?)
     };
-    tokio::spawn(async move {
+    let manejador = tokio::spawn(async move {
         loop {
             let res = client.get(format!("{base}/v1/telemetry")).bearer_auth(&token).send().await;
             let Ok(res) = res else {
@@ -568,6 +590,7 @@ async fn start_telemetry(
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         }
     });
+    state.lock().unwrap().telemetry_task = Some(manejador);
     Ok(())
 }
 
@@ -627,10 +650,15 @@ async fn start_queue_events(
     use futures_util::StreamExt;
     use tauri::Emitter;
     let (base, client) = {
-        let c = state.lock().unwrap();
+        let mut c = state.lock().unwrap();
+        // Mismo arreglo que `start_telemetry`: sin esto, un login repetido
+        // apilaba otra conexión a `/v1/queue/events` sin cerrar la anterior.
+        if let Some(anterior) = c.queue_task.take() {
+            anterior.abort();
+        }
         (c.base.clone().ok_or("sin servidor")?, c.flujo.clone().ok_or("sin cliente")?)
     };
-    tokio::spawn(async move {
+    let manejador = tokio::spawn(async move {
         loop {
             let res = client.get(format!("{base}/v1/queue/events")).bearer_auth(&token).send().await;
             let Ok(res) = res else {
@@ -656,6 +684,7 @@ async fn start_queue_events(
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         }
     });
+    state.lock().unwrap().queue_task = Some(manejador);
     Ok(())
 }
 
@@ -670,10 +699,16 @@ async fn start_indices_events(
     use futures_util::StreamExt;
     use tauri::Emitter;
     let (base, client) = {
-        let c = state.lock().unwrap();
+        let mut c = state.lock().unwrap();
+        // Mismo arreglo que `start_telemetry`. Aquí además hay dos llamadores
+        // deliberados (`IndexToast.tsx` e `InstallFlow.tsx`) que antes se
+        // acumulaban entre sí sin que ninguno cerrara al otro.
+        if let Some(anterior) = c.indices_task.take() {
+            anterior.abort();
+        }
         (c.base.clone().ok_or("sin servidor")?, c.flujo.clone().ok_or("sin cliente")?)
     };
-    tokio::spawn(async move {
+    let manejador = tokio::spawn(async move {
         // `indices-down` viaja con el motivo, no vacío: al contrario que la
         // cola, este puente no reintenta, así que si el flujo se corta la
         // barra de instalación se queda quieta y esa cadena es lo único que
@@ -710,6 +745,7 @@ async fn start_indices_events(
         };
         let _ = app.emit("indices-down", motivo);
     });
+    state.lock().unwrap().indices_task = Some(manejador);
     Ok(())
 }
 
@@ -723,10 +759,17 @@ async fn start_admin_events(
     use futures_util::StreamExt;
     use tauri::Emitter;
     let (base, client) = {
-        let c = state.lock().unwrap();
+        let mut c = state.lock().unwrap();
+        // Mismo arreglo que `start_telemetry`. Este es el peor de los cuatro
+        // en la práctica: `AdminEventToast.tsx` lo llama en cada montaje del
+        // panel de Administración, así que entrar y salir N veces apilaba N
+        // conexiones vivas sin ningún `loop` que las cerrara a sí mismas.
+        if let Some(anterior) = c.admin_task.take() {
+            anterior.abort();
+        }
         (c.base.clone().ok_or("sin servidor")?, c.flujo.clone().ok_or("sin cliente")?)
     };
-    tokio::spawn(async move {
+    let manejador = tokio::spawn(async move {
         let Ok(res) = client.get(format!("{base}/v1/admin/events")).bearer_auth(&token).send().await else {
             return;
         };
@@ -745,6 +788,7 @@ async fn start_admin_events(
             }
         }
     });
+    state.lock().unwrap().admin_task = Some(manejador);
     Ok(())
 }
 

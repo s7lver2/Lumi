@@ -45,6 +45,13 @@ pub async fn preguntar(
     if agentes.is_empty() || consulta.is_empty() {
         return Vec::new();
     }
+    // Instrumentación (Hallazgo 0 del spec de rendimiento): antes de esto
+    // `agentar` no registraba tiempo alguno, y era imposible distinguir "los
+    // agentes tardan porque cargan sus motores en frío" de "los agentes
+    // tardan porque el VLM es lento" sin cronometrar a mano. `agentar::LIMITE`
+    // corta a los 120s; este `elapsed` dice cuánto se tardó de verdad,
+    // llegue o no a ese corte.
+    let inicio = std::time::Instant::now();
     // Ajuste `agentes_persistente` (`routes::rendimiento`): por defecto
     // ("0" o ausente) sigue lanzando un proceso por análisis, como siempre.
     let persistente_activo = store.get_meta("agentes_persistente").as_deref() == Some("1");
@@ -57,7 +64,7 @@ pub async fn preguntar(
         } else {
             Box::pin(correr(agentes, consulta, python, pesos))
         };
-    match tokio::time::timeout(LIMITE, tarea).await {
+    let resultado = match tokio::time::timeout(LIMITE, tarea).await {
         Ok(Ok(v)) => v,
         Ok(Err(e)) => {
             tracing::warn!("los agentes no contestaron: {e}");
@@ -67,7 +74,15 @@ pub async fn preguntar(
             tracing::warn!("los agentes tardaron más de {}s; se sigue sin ellos", LIMITE.as_secs());
             Vec::new()
         }
-    }
+    };
+    tracing::info!(
+        "agentes: {} pedidos, {} veredictos, persistente={}, {:.1}s",
+        agentes.len(),
+        resultado.len(),
+        persistente_activo,
+        inicio.elapsed().as_secs_f64(),
+    );
+    resultado
 }
 
 /// Igual que `correr`, pero reutilizando un proceso ya vivo en vez de lanzar

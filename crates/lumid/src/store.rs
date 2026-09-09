@@ -101,6 +101,9 @@ CREATE TABLE IF NOT EXISTS project_members (
     added_at   INTEGER NOT NULL,
     PRIMARY KEY (project_id, user_id)
 );
+-- La PK de arriba es (project_id, user_id): no sirve de prefijo para buscar
+-- por user_id, que es como `routes::projects` resuelve mis proyectos.
+CREATE INDEX IF NOT EXISTS project_members_by_user ON project_members(user_id);
 CREATE TABLE IF NOT EXISTS cases (
     id         INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL,
@@ -153,6 +156,14 @@ CREATE TABLE IF NOT EXISTS project_locks (
 CREATE INDEX IF NOT EXISTS cases_by_project ON cases(project_id);
 CREATE INDEX IF NOT EXISTS images_by_case ON images(case_id);
 CREATE INDEX IF NOT EXISTS analyses_by_case ON analyses(case_id);
+-- `queue::mod` filtra por estado en cada muestra de telemetría (una vez por
+-- segundo y por cliente conectado) y `routes::analyses`/`routes::admin`
+-- filtran por quién pidió el análisis en cada listado -- sin esto los dos son
+-- un escaneo completo de la tabla.
+CREATE INDEX IF NOT EXISTS analyses_by_state ON analyses(state);
+CREATE INDEX IF NOT EXISTS analyses_by_requester ON analyses(requested_by);
+CREATE INDEX IF NOT EXISTS images_by_uploader ON images(uploader_id);
+CREATE INDEX IF NOT EXISTS sessions_by_user ON sessions(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS limits_global ON limits(key) WHERE user_id IS NULL;
 CREATE TABLE IF NOT EXISTS installed_indices (
     paquete      TEXT PRIMARY KEY,
@@ -191,6 +202,12 @@ CREATE TABLE IF NOT EXISTS reference_images (
     fuente  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ref_paquete ON reference_images(paquete);
+-- `queue::mod` busca el respaldo geométrico de cada hipótesis por coordenada
+-- EXACTA (redonda a 6 decimales) contra esta tabla, hasta 12 veces por
+-- análisis en Pro/Vision -- sin índice es un escaneo completo del corpus de
+-- referencia (puede ser millones de filas) en el camino crítico de cada
+-- inferencia.
+CREATE INDEX IF NOT EXISTS idx_ref_coordenada ON reference_images(quadkey, lat, lng);
 -- Las alternativas. La principal NO se duplica aquí: sigue en las columnas
 -- result_* de `analyses`, que el cliente ya lee.
 CREATE TABLE IF NOT EXISTS analysis_hypotheses (
@@ -304,6 +321,18 @@ impl Store {
         // foreign_keys por defecto y rompería ese diseño; se desactiva
         // explícitamente, que es el comportamiento estándar de SQLite.
         c.execute_batch("PRAGMA foreign_keys = OFF;")?;
+        // Medido contra la base real en producción: con el journal de rollback
+        // por defecto y `synchronous=FULL` (el defecto de SQLite), cada commit
+        // hace fsync -- en un filesystem lento (WSL2: ~100ms por fsync) son
+        // ~157ms por escritura, y como hay una sola `Connection` para todo el
+        // daemon (este `Mutex`), esos 157ms congelan cualquier otra petición,
+        // no solo a quien escribe. WAL + NORMAL midió 4,6ms/commit sobre la
+        // misma base -- 34x. NORMAL sigue siendo seguro con WAL: solo se puede
+        // perder la última transacción si el proceso muere a mitad de un
+        // fsync, nunca corromper la base (ver la documentación de SQLite sobre
+        // `synchronous` con WAL).
+        c.pragma_update(None, "journal_mode", "WAL")?;
+        c.pragma_update(None, "synchronous", "NORMAL")?;
         c.execute_batch(SCHEMA)?;
         migrate(&c);
         Ok(Self(Mutex::new(c)))

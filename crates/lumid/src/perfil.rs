@@ -72,7 +72,7 @@ pub fn leer_servidor(store: &Store, app_dir: &Path) -> ServerProfile {
         title: store.get_meta("servidor_titulo").unwrap_or_default(),
         description: store
             .get_meta("servidor_descripcion")
-            .and_then(|v| serde_json::from_str(&v).ok())
+            .and_then(|v| serde_json::from_str::<serde_json::Value>(&v).ok())
             .unwrap_or_else(doc_vacio),
         member_count,
         has_avatar: ruta_avatar_servidor(app_dir).exists(),

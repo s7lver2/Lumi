@@ -52,6 +52,13 @@ pub async fn afinar(
     store: &crate::store::Store,
     persistente: &crate::persistente::Persistente,
 ) -> Result<Vec<Afinado>> {
+    // Instrumentación (Hallazgo 0 del spec de rendimiento): antes de esto no
+    // había un solo `Instant` en toda la verificación, y en el repo convivían
+    // dos cifras contradictorias en dos órdenes de magnitud para el mismo
+    // verificador ("27s por par" en `lumi_verify.py` vs "150-600ms" en el spec
+    // del 5b) sin forma de zanjarlo salvo cronometrar a mano contra el reloj
+    // del journal. Este `elapsed` es la medida directa.
+    let inicio = std::time::Instant::now();
     // Ajuste `verificacion_persistente` (`routes::rendimiento`): por defecto
     // ("0" o ausente) el comportamiento es exactamente el de siempre, abajo.
     // Activado, se reutiliza un proceso ya vivo en vez de lanzar uno nuevo
@@ -134,13 +141,14 @@ pub async fn afinar(
         .max()
         .unwrap_or(0);
     tracing::info!(
-        "verificación geométrica: {} candidatos, {} verificadores, {} veredictos, máximo {} inliers (umbral {}), salida {:?}",
+        "verificación geométrica: {} candidatos, {} verificadores, {} veredictos, máximo {} inliers (umbral {}), salida {:?}, {:.1}s",
         candidatos.len(),
         nivel.geometricos.len(),
         por_candidato.values().map(|v| v.len()).sum::<usize>(),
         max_inliers,
         lumi_index::arbitro::UMBRAL_INLIERS,
         salida.as_ref().map(|s| s.code()),
+        inicio.elapsed().as_secs_f64(),
     );
 
     Ok(construir_afinados(candidatos, rutas, &por_candidato))
@@ -161,6 +169,7 @@ async fn afinar_persistente(
     pesos: &Path,
     persistente: &crate::persistente::Persistente,
 ) -> Result<Vec<Afinado>> {
+    let inicio = std::time::Instant::now();
     let script = crate::assets::ruta("workers/lumi_verify.py");
     let lista: Vec<serde_json::Value> = candidatos
         .iter()
@@ -194,12 +203,13 @@ async fn afinar_persistente(
 
     let max_inliers = por_candidato.values().flatten().map(|v| v.inliers).max().unwrap_or(0);
     tracing::info!(
-        "verificación geométrica (persistente): {} candidatos, {} verificadores, {} veredictos, máximo {} inliers (umbral {})",
+        "verificación geométrica (persistente): {} candidatos, {} verificadores, {} veredictos, máximo {} inliers (umbral {}), {:.1}s",
         candidatos.len(),
         nivel.geometricos.len(),
         por_candidato.values().map(|v| v.len()).sum::<usize>(),
         max_inliers,
         lumi_index::arbitro::UMBRAL_INLIERS,
+        inicio.elapsed().as_secs_f64(),
     );
 
     Ok(construir_afinados(candidatos, rutas, &por_candidato))
