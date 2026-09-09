@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listen } from "@tauri-apps/api/event";
 import { api, type Analysis, type Cambio, type Case, type Image, type Project, type Usage } from "../lib/api";
-import { exportCasePdf, pickPaths, uploadPaths } from "../lib/bridge";
+import { exportCasePdf, pickPaths, uploadPaths, type ExportInformeOpts } from "../lib/bridge";
 import { KNOWN_MODELS } from "../lib/models";
 import { useServer } from "../lib/store";
 import { useDismissable } from "../lib/useDismissable";
@@ -15,6 +15,7 @@ import { DrawerTab, DRAWER_W, RAIL_W, type DrawerId } from "./Drawer";
 import { DropFrame, DropTarget } from "./DropTarget";
 import { AgentPickerPopup } from "./AgentPickerPopup";
 import { AgentResultPopup } from "./AgentResultPopup";
+import { ExportInformePopup } from "./ExportInformePopup";
 import { MapCanvas, type Marker } from "./MapCanvas";
 import { ResultsDrawer } from "./ResultsDrawer";
 import { UploadPopup } from "./UploadPopup";
@@ -37,6 +38,7 @@ export function CaseView({
 }) {
   const token = useServer((s) => s.token) ?? undefined;
   const isAdmin = useServer((s) => s.isAdmin);
+  const username = useServer((s) => s.username);
   const rawModels = useServer((s) => s.limits?.models) ?? [];
   // El servidor deja pasar cualquier modelo a un administrador; la cuenta del
   // owner nace con `["mini"]` porque nunca pasa por «aprobar una solicitud»,
@@ -70,23 +72,19 @@ export function CaseView({
   const [agentResult, setAgentResult] = useState<{ image: Image; analysis: Analysis } | null>(null);
   const agentResultPopup = useDismissable(agentResult !== null, 180);
 
-  const [exportando, setExportando] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
+  /** `true` = el popup de exportación está abierto. Reemplaza al viejo
+   *  disparo directo: ahora hay que elegir qué lleva el informe y
+   *  previsualizarlo antes de guardar (ver `ExportInformePopup`). */
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportPopup = useDismissable(exportOpen, 180);
 
   /** El diálogo de guardado (nativo, del lado Rust) puede volver sin ruta si
    *  el investigador lo cierra sin elegir nada -- eso no es un error que
    *  enseñar, solo "no pasó nada". */
-  async function exportarPdf() {
+  async function guardarInforme(opts: ExportInformeOpts) {
     if (!token) return;
-    setExportando(true);
-    setExportError(null);
-    try {
-      await exportCasePdf(case_.id, case_.name, token);
-    } catch (e) {
-      setExportError(String(e));
-    } finally {
-      setExportando(false);
-    }
+    const ruta = await exportCasePdf(case_.id, case_.name, opts, token);
+    if (ruta !== null) setExportOpen(false);
   }
 
   async function load() {
@@ -414,23 +412,15 @@ export function CaseView({
           dentro del `Dock` (esa franja es por-imagen, esto es del caso
           entero) -- se desplaza con el cajón de resultados igual que la
           pestaña de intentos, para no quedar tapado detrás de él. */}
-      <button onClick={() => void exportarPdf()} disabled={exportando}
-        title="Exportar el caso a PDF" aria-label="Exportar el caso a PDF"
+      <button onClick={() => setExportOpen(true)}
+        title="Exportar el caso a un informe forense en PDF" aria-label="Exportar informe"
         style={{ right: detailInset + 12 }}
         className="jg-press absolute top-3 z-[23] flex items-center gap-1.5 rounded-lg border
           border-white/15 bg-[rgba(16,18,21,.85)] px-2.5 py-1.5 text-[11px] text-fg backdrop-blur-md
           transition-[right,border-color] duration-[420ms] ease-expo hover:border-fg disabled:opacity-50">
-        <Icon name="doc-descarga" size={13} className={exportando ? "animate-pulse" : ""} />
-        {exportando ? "Generando…" : "Exportar PDF"}
+        <Icon name="doc-descarga" size={13} />
+        Exportar informe
       </button>
-      {exportError && (
-        <div style={{ right: detailInset + 12, animation: "jg-fade-rise 240ms cubic-bezier(.16,1,.3,1) both" }}
-          className="absolute top-12 z-[23] flex max-w-[280px] items-start gap-2 rounded-lg
-            border border-danger/40 bg-[rgba(24,18,18,.94)] px-2.5 py-2 backdrop-blur">
-          <p className="text-[10.5px] leading-snug text-danger-fg">{exportError}</p>
-          <button onClick={() => setExportError(null)} className="jg-press shrink-0 text-subtle hover:text-fg">✕</button>
-        </div>
-      )}
 
       {dragging && <DropFrame />}
 
@@ -539,6 +529,13 @@ export function CaseView({
           analysisInicial={agentResult.analysis}
           onElegirOtro={() => { const img = agentResult.image; setAgentResult(null); setAgentPickerImage(img); }}
           onClose={() => setAgentResult(null)} />
+      )}
+
+      {exportPopup.rendered && (
+        <ExportInformePopup token={token} caseId={case_.id} caseName={case_.name}
+          firmadoPorDefecto={username} closing={exportPopup.closing}
+          onClose={() => setExportOpen(false)}
+          onGuardar={guardarInforme} />
       )}
 
       {topeAlcanzado && token && (

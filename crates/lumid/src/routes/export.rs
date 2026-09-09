@@ -4,15 +4,13 @@
 //! para entregarse a un tercero como evidencia, así que un análisis sin
 //! terminar o que falló se dice tal cual, nunca se omite.
 //!
-//! ponytail: `printpdf` 0.12 (la "segunda iteración" de su API) solo trae
-//! ajuste de línea automático de verdad con la feature `text_layout`, que
-//! arrastra el motor de layout de `azul` -- mucho más de lo que un informe de
-//! texto plano en una fuente estándar necesita. Aquí el ajuste de línea es
-//! por cuenta de caracteres (`envolver`), no por métrica real de la fuente:
-//! una aproximación razonable para Helvetica a tamaño fijo, no un motor
-//! tipográfico. No se intenta pintar un mapa real -- ni tesela ni proveedor
-//! externo caben en un PDF generado del lado del servidor sin clave de
-//! ninguna API -- las coordenadas en texto son la evidencia, no una postal.
+//! El documento se compila con `tectonic` (binario único autocontenido, sin
+//! TeX Live/MiKTeX completo) a partir de una plantilla LaTeX rellenada con
+//! `tera` -- ver `templates/informe.tex.tera`. Es la misma frontera de
+//! proceso externo que ya usa el proyecto con los workers de Python
+//! (`workers/`): un `std::process::Command`, entrada/salida por disco en un
+//! directorio temporal propio de esta petición, nunca un `unwrap` sobre su
+//! resultado.
 
 use crate::routes::analyses::{agentes_por_caso, hypotheses_por_caso, image_ids_por_caso, row_to_analysis};
 use crate::routes::cases::guard_case;
@@ -20,36 +18,28 @@ use crate::routes::images::{dir_for, row_to_image};
 use crate::routes::projects::{err, Fail};
 use crate::App;
 use axum::extract::{Path, State};
-use axum::{http::HeaderMap, http::StatusCode};
-use lumi_proto::api::{Analysis, DichoDeAgente, Image};
-use printpdf::*;
-
-const PAGE_W_MM: f32 = 210.0;
-const PAGE_H_MM: f32 = 297.0;
-const MARGIN_MM: f32 = 18.0;
-const CONTENT_TOP_MM: f32 = PAGE_H_MM - MARGIN_MM;
-const THUMB_W_MM: f32 = 65.0;
-const LINE_H_MM: f32 = 5.4;
-const FONT_TITLE: f32 = 16.0;
-const FONT_HEAD: f32 = 11.0;
-const FONT_BODY: f32 = 9.5;
-/// Ancho de línea aproximado, en caracteres, a `FONT_BODY` sobre el ancho de
-/// contenido -- ver el `ponytail` de arriba: no es una métrica real.
-const MAX_CHARS_BODY: usize = 100;
+use axum::{http::HeaderMap, http::StatusCode, Json};
+use lumi_proto::api::{Analysis, DichoDeAgente, ExportInformeReq, Image};
+use serde::Serialize;
+use std::path::{Path as FsPath, PathBuf};
+use std::process::Command;
 
 pub async fn export_pdf(
     State(app): State<App>,
     Path(case_id): Path<i64>,
     headers: HeaderMap,
+    Json(req): Json<ExportInformeReq>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), Fail> {
     // Mismo guardián que el resto de rutas de caso: cualquier miembro del
     // proyecto puede pedir el informe, no solo el administrador.
     let (_, pid, _) = guard_case(&app, &headers, case_id)?;
 
-    let case_name: String = app
+    let (case_name, case_created_at): (String, i64) = app
         .store
         .conn()
-        .query_row("SELECT name FROM cases WHERE id = ?1", [case_id], |r| r.get(0))
+        .query_row("SELECT name, created_at FROM cases WHERE id = ?1", [case_id], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe ese caso"))?;
 
     let images: Vec<Image> = {
@@ -111,11 +101,26 @@ pub async fn export_pdf(
         })
         .collect();
 
-    // Decodificar cada miniatura y maquetar el PDF es CPU, no red -- al
-    // pool de `spawn_blocking`, igual que `procesar_imagen` en la subida.
-    let bytes = tokio::task::spawn_blocking(move || generar_pdf(&case_name, &filas))
-        .await
-        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    // Montar el `.tex`, escribir los ficheros del trabajo y compilar es CPU +
+    // un subproceso, no red -- al pool de `spawn_blocking`, igual que
+    // `procesar_imagen` en la subida.
+    let case_id_para_log = case_id;
+    let resultado = tokio::task::spawn_blocking(move || {
+        generar_pdf(&case_name, case_created_at, &filas, &req, &analyses)
+    })
+    .await
+    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+
+    let bytes = resultado.map_err(|fallo| match fallo {
+        FalloInforme::FaltaTectonic(m) => {
+            tracing::warn!(case_id = case_id_para_log, "export.pdf sin tectonic: {m}");
+            err(StatusCode::SERVICE_UNAVAILABLE, &m)
+        }
+        FalloInforme::Compilacion(m) => {
+            tracing::warn!(case_id = case_id_para_log, "export.pdf: tectonic falló: {m}");
+            err(StatusCode::INTERNAL_SERVER_ERROR, &format!("no se pudo generar el informe: {m}"))
+        }
+    })?;
 
     Ok((
         [
@@ -126,48 +131,75 @@ pub async fn export_pdf(
     ))
 }
 
-fn generar_pdf(caso: &str, filas: &[(Image, Option<Vec<u8>>, Vec<Analysis>)]) -> Vec<u8> {
-    let mut doc = PdfDocument::new(&format!("Lumi -- informe forense -- {caso}"));
-    let mut warnings = Vec::new();
-
-    // Un caso sin imágenes deja la portada sola: sigue siendo un PDF válido,
-    // no un error -- el investigador pidió el informe de ESTE caso tal como
-    // está, no una condición de "no hay nada que exportar".
-    let mut paginas = vec![portada(caso, filas.len())];
-    for (img, thumb, analyses) in filas {
-        paginas.extend(paginas_de_imagen(&mut doc, img, thumb.as_deref(), analyses, &mut warnings));
-    }
-
-    let mut save_warnings = Vec::new();
-    doc.with_pages(paginas).save(&PdfSaveOptions::default(), &mut save_warnings)
+enum FalloInforme {
+    /// El binario no está disponible en este servidor -- accionable: hay que
+    /// reinstalar, no un fallo transitorio de compilación.
+    FaltaTectonic(String),
+    Compilacion(String),
 }
 
-fn portada(caso: &str, n_imagenes: usize) -> PdfPage {
-    let mut ops = vec![Op::StartTextSection];
-    let mut y = CONTENT_TOP_MM - 40.0;
-    linea(&mut ops, &mut y, "Lumi -- informe forense", FONT_TITLE, true);
-    y -= 6.0;
-    linea(&mut ops, &mut y, &format!("Caso: {caso}"), FONT_HEAD, true);
-    linea(&mut ops, &mut y, &format!("Imágenes incluidas: {n_imagenes}"), FONT_BODY, false);
-    linea(&mut ops, &mut y, &format!("Generado: {}", fecha_legible(now())), FONT_BODY, false);
-    y -= 8.0;
-    linea(
-        &mut ops,
-        &mut y,
-        "Documento generado por Lumi. Cada hipótesis de geolocalización y cada",
-        FONT_BODY,
-        false,
-    );
-    linea(
-        &mut ops,
-        &mut y,
-        "veredicto de agente son inferencias automáticas, no una confirmación",
-        FONT_BODY,
-        false,
-    );
-    linea(&mut ops, &mut y, "pericial -- se entregan con su nivel de confianza declarado.", FONT_BODY, false);
-    ops.push(Op::EndTextSection);
-    PdfPage::new(Mm(PAGE_W_MM), Mm(PAGE_H_MM), ops)
+// ------------------------------------------------------------- contexto --
+// Lo que ve la plantilla `informe.tex.tera`. Nombres en español porque la
+// plantilla también lo está, y son lo mismo que un investigador leería en el
+// documento final.
+
+#[derive(Serialize)]
+struct Contexto {
+    caso: String,
+    generado: String,
+    firmado_por: String,
+    n_imagenes: usize,
+    incluir_estadisticas: bool,
+    estadisticas: Option<Estadisticas>,
+    imagenes: Vec<ImagenCtx>,
+}
+
+#[derive(Serialize)]
+struct ModeloCount {
+    modelo: String,
+    n: usize,
+}
+
+#[derive(Serialize)]
+struct Estadisticas {
+    creado_en: String,
+    por_modelo: Vec<ModeloCount>,
+    /// Ya redondeada a un entero de porcentaje -- `None` cuando NINGÚN
+    /// análisis de geolocalización dejó una confianza registrada, nunca un
+    /// 0 inventado (principio "nunca se inventa" del proyecto).
+    confianza_media_pct: Option<i64>,
+    agentes_total: usize,
+    agentes_respondieron: usize,
+    agentes_abstuvieron: usize,
+}
+
+#[derive(Serialize, Clone)]
+struct Linea {
+    texto: String,
+    /// `"cabecera"` (negrita) o `"cuerpo"` (texto normal) -- las dos únicas
+    /// variantes que usaba `linea()` en la versión de `printpdf`, portadas
+    /// tal cual.
+    variante: &'static str,
+}
+
+#[derive(Serialize)]
+struct ImagenCtx {
+    filename: String,
+    /// Nombre de fichero relativo, ya escrito junto al `.tex`, de la
+    /// miniatura -- `None` si no hay miniatura en disco o no se pudo
+    /// decodificar como imagen real (nunca se referencia un fichero que no
+    /// se sabe abrir: un `\includegraphics` roto tira la compilación del
+    /// informe ENTERO, no solo esa página).
+    thumb_file: Option<String>,
+    exif_lineas: Vec<Linea>,
+    analisis_lineas: Vec<Linea>,
+}
+
+fn cabecera(texto: String) -> Linea {
+    Linea { texto, variante: "cabecera" }
+}
+fn cuerpo(texto: String) -> Linea {
+    Linea { texto, variante: "cuerpo" }
 }
 
 fn now() -> i64 {
@@ -177,8 +209,7 @@ fn now() -> i64 {
         .unwrap_or(0)
 }
 
-/// Fecha legible sin arrastrar `chrono`/`time` solo para esto -- el epoch ya
-/// va también en el texto crudo si alguien necesita precisión.
+/// Fecha legible sin arrastrar `chrono`/`time` solo para esto.
 fn fecha_legible(epoch_s: i64) -> String {
     let dias_desde_epoch = epoch_s.div_euclid(86400);
     let secs_del_dia = epoch_s.rem_euclid(86400);
@@ -198,72 +229,15 @@ fn fecha_legible(epoch_s: i64) -> String {
     format!("{year:04}-{mth:02}-{d:02} {h:02}:{m:02}:{s:02} UTC")
 }
 
-/// Todas las páginas de una imagen: al menos una, más las que hagan falta si
-/// el texto (EXIF + análisis) no cabe en la primera.
-fn paginas_de_imagen(
-    doc: &mut PdfDocument, imagen: &Image, thumb: Option<&[u8]>, analyses: &[Analysis],
-    warnings: &mut Vec<PdfWarnMsg>,
-) -> Vec<PdfPage> {
-    let mut paginas = Vec::new();
-    let mut ops = vec![Op::StartTextSection];
-    let mut y = CONTENT_TOP_MM;
-
-    linea(&mut ops, &mut y, &format!("Imagen: {}", imagen.filename), FONT_TITLE, true);
-    y -= 4.0;
-
-    // La miniatura va fuera de la sección de texto: es un XObject, no texto.
-    ops.push(Op::EndTextSection);
-    if let Some(bytes) = thumb {
-        match RawImage::decode_from_bytes(bytes, warnings) {
-            Ok(raw) if raw.width > 0 && raw.height > 0 => {
-                let ancho_px = raw.width as f32;
-                let alto_px = raw.height as f32;
-                let alto_mm = THUMB_W_MM * alto_px / ancho_px;
-                if y - alto_mm < MARGIN_MM {
-                    salto_de_pagina(&mut paginas, &mut ops, &mut y, imagen);
-                }
-                let dpi = ancho_px * 25.4 / THUMB_W_MM;
-                let id = doc.add_image(&raw);
-                let y_bottom_mm = y - alto_mm;
-                ops.push(Op::UseXobject {
-                    id,
-                    transform: XObjectTransform {
-                        translate_x: Some(Mm(MARGIN_MM).into()),
-                        translate_y: Some(Mm(y_bottom_mm).into()),
-                        dpi: Some(dpi),
-                        ..Default::default()
-                    },
-                });
-                y = y_bottom_mm - 6.0;
-            }
-            _ => {
-                ops.push(Op::StartTextSection);
-                linea(&mut ops, &mut y, "(la miniatura no se pudo decodificar)", FONT_BODY, false);
-                ops.push(Op::EndTextSection);
-                y -= 2.0;
-            }
-        }
-    } else {
-        ops.push(Op::StartTextSection);
-        linea(&mut ops, &mut y, "(sin miniatura en disco para esta imagen)", FONT_BODY, false);
-        ops.push(Op::EndTextSection);
-        y -= 2.0;
-    }
-    ops.push(Op::StartTextSection);
-
-    // EXIF: el GPS declarado, aparte del inferido, nunca mezclado con él
-    // (mismo principio que `exif.rs`). El resto del EXIF es un mapa de
-    // etiqueta→texto entero (ver `exif::read`); solo se citan aquí los
-    // campos simples que de verdad importan a un informe forense, y solo si
-    // el fichero los trae -- no se inventa ninguno que falte.
-    check_salto(&mut paginas, &mut ops, &mut y, imagen);
+/// Las líneas de EXIF de una imagen -- GPS declarado por la cámara (aparte
+/// del inferido, nunca mezclado con él, mismo principio que `exif.rs`) y los
+/// campos simples que de verdad importan a un informe forense. Solo se citan
+/// si el fichero los trae -- no se inventa ninguno que falte.
+fn lineas_exif(imagen: &Image) -> Vec<Linea> {
+    let mut out = Vec::new();
     match (imagen.exif_lat, imagen.exif_lng) {
-        (Some(lat), Some(lng)) => linea(
-            &mut ops, &mut y,
-            &format!("GPS declarado por la cámara: {lat:.6}, {lng:.6}"),
-            FONT_BODY, false,
-        ),
-        _ => linea(&mut ops, &mut y, "GPS declarado por la cámara: no consta en el EXIF", FONT_BODY, false),
+        (Some(lat), Some(lng)) => out.push(cuerpo(format!("GPS declarado por la cámara: {lat:.6}, {lng:.6}"))),
+        _ => out.push(cuerpo("GPS declarado por la cámara: no consta en el EXIF".into())),
     }
     if let Some(obj) = imagen.exif.as_ref().and_then(|v| v.as_object()) {
         for (etiqueta, clave) in
@@ -271,61 +245,64 @@ fn paginas_de_imagen(
         {
             if let Some(valor) = obj.get(clave).and_then(|v| v.as_str()) {
                 if !valor.trim().is_empty() {
-                    check_salto(&mut paginas, &mut ops, &mut y, imagen);
-                    linea(&mut ops, &mut y, &format!("{etiqueta}: {valor}"), FONT_BODY, false);
+                    out.push(cuerpo(format!("{etiqueta}: {valor}")));
                 }
             }
         }
     }
-    y -= 3.0;
+    out
+}
 
+/// Las líneas de todos los análisis de una imagen que la configuración deja
+/// pasar. Los que no -- geolocalización con `hipotesis_geolocalizacion`
+/// apagado, o `agentes` con `veredictos_agentes` apagado -- se cuentan aparte
+/// para poder decir POR QUÉ no aparecen, en vez de dejar la sección muda como
+/// si nunca se hubiera lanzado nada.
+fn lineas_analisis(analyses: &[Analysis], req: &ExportInformeReq) -> Vec<Linea> {
+    let mut out = Vec::new();
     if analyses.is_empty() {
-        check_salto(&mut paginas, &mut ops, &mut y, imagen);
-        linea(&mut ops, &mut y, "Sin análisis lanzados sobre esta imagen.", FONT_BODY, false);
+        out.push(cuerpo("Sin análisis lanzados sobre esta imagen.".into()));
+        return out;
     }
-    for a in analyses {
-        check_salto(&mut paginas, &mut ops, &mut y, imagen);
-        y -= 1.5;
-        check_salto(&mut paginas, &mut ops, &mut y, imagen);
-        linea(&mut ops, &mut y, &format!("Análisis · modelo {}", a.model), FONT_HEAD, true);
 
+    let incluidos: Vec<&Analysis> = analyses
+        .iter()
+        .filter(|a| if a.model == "agentes" { req.veredictos_agentes } else { req.hipotesis_geolocalizacion })
+        .collect();
+
+    if incluidos.is_empty() {
+        out.push(cuerpo("Los análisis de esta imagen no se incluyen según la configuración de este informe.".into()));
+        return out;
+    }
+
+    for a in incluidos {
+        out.push(cabecera(format!("Análisis · modelo {}", a.model)));
         match a.state.as_str() {
             "pendiente" => {
-                check_salto(&mut paginas, &mut ops, &mut y, imagen);
-                linea(&mut ops, &mut y, "Estado: pendiente -- todavía no ha empezado a correr.", FONT_BODY, false);
+                out.push(cuerpo("Estado: pendiente -- todavía no ha empezado a correr.".into()));
                 continue;
             }
             "en_curso" => {
-                check_salto(&mut paginas, &mut ops, &mut y, imagen);
-                linea(&mut ops, &mut y, "Estado: en curso en el momento de generar este informe.", FONT_BODY, false);
+                out.push(cuerpo("Estado: en curso en el momento de generar este informe.".into()));
                 continue;
             }
             "error" => {
                 let motivo = a.error.as_deref().unwrap_or("sin motivo registrado");
-                for l in envolver(&format!("Estado: error -- {motivo}"), MAX_CHARS_BODY) {
-                    check_salto(&mut paginas, &mut ops, &mut y, imagen);
-                    linea(&mut ops, &mut y, &l, FONT_BODY, false);
-                }
+                out.push(cuerpo(format!("Estado: error -- {motivo}")));
                 continue;
             }
             _ => {}
         }
-
         if a.model == "agentes" {
-            escribir_agentes(&mut paginas, &mut ops, &mut y, imagen, &a.agentes, a.agente.as_deref());
+            lineas_agentes(&mut out, &a.agentes, a.agente.as_deref());
         } else {
-            escribir_geolocalizacion(&mut paginas, &mut ops, &mut y, imagen, a);
+            lineas_geolocalizacion(&mut out, a);
         }
     }
-
-    ops.push(Op::EndTextSection);
-    paginas.push(PdfPage::new(Mm(PAGE_W_MM), Mm(PAGE_H_MM), ops));
-    paginas
+    out
 }
 
-fn escribir_geolocalizacion(
-    paginas: &mut Vec<PdfPage>, ops: &mut Vec<Op>, y: &mut f32, imagen: &Image, a: &Analysis,
-) {
+fn lineas_geolocalizacion(out: &mut Vec<Linea>, a: &Analysis) {
     match (a.result_lat, a.result_lng) {
         (Some(lat), Some(lng)) => {
             let radio = a.result_radius_m.map(|r| format!("{r:.0} m")).unwrap_or_else(|| "sin radio".into());
@@ -333,108 +310,220 @@ fn escribir_geolocalizacion(
                 .result_confidence
                 .map(|c| format!("{:.0}%", c * 100.0))
                 .unwrap_or_else(|| "sin confianza registrada".into());
-            check_salto(paginas, ops, y, imagen);
-            linea(ops, y, &format!("Hipótesis principal: {lat:.6}, {lng:.6}"), FONT_BODY, false);
-            check_salto(paginas, ops, y, imagen);
-            linea(ops, y, &format!("Radio: {radio} · confianza: {confianza}"), FONT_BODY, false);
+            out.push(cuerpo(format!("Hipótesis principal: {lat:.6}, {lng:.6}")));
+            out.push(cuerpo(format!("Radio: {radio} · confianza: {confianza}")));
             if let (Some(inliers), Some(verif)) = (a.result_inliers, a.result_verificador.as_deref()) {
-                check_salto(paginas, ops, y, imagen);
-                linea(ops, y, &format!("Respaldo geométrico: {inliers} correspondencias ({verif})"), FONT_BODY, false);
+                out.push(cuerpo(format!("Respaldo geométrico: {inliers} correspondencias ({verif})")));
             }
         }
-        _ => {
-            check_salto(paginas, ops, y, imagen);
-            linea(ops, y, "Sin hipótesis: el motor no encontró un candidato.", FONT_BODY, false);
-        }
+        _ => out.push(cuerpo("Sin hipótesis: el motor no encontró un candidato.".into())),
     }
     if !a.hypotheses.is_empty() {
-        check_salto(paginas, ops, y, imagen);
-        linea(ops, y, "Alternativas:", FONT_BODY, true);
+        out.push(cabecera("Alternativas:".into()));
         for h in &a.hypotheses {
-            let linea_txt = format!(
-                "  · {:.6}, {:.6} · radio {:.0} m · peso {:.0}%",
+            out.push(cuerpo(format!(
+                "· {:.6}, {:.6} · radio {:.0} m · peso {:.0}%",
                 h.lat, h.lng, h.radio_m, h.peso * 100.0,
-            );
-            check_salto(paginas, ops, y, imagen);
-            linea(ops, y, &linea_txt, FONT_BODY, false);
+            )));
         }
     }
 }
 
-fn escribir_agentes(
-    paginas: &mut Vec<PdfPage>, ops: &mut Vec<Op>, y: &mut f32, imagen: &Image,
-    dichos: &[DichoDeAgente], agente_pedido: Option<&str>,
-) {
+fn lineas_agentes(out: &mut Vec<Linea>, dichos: &[DichoDeAgente], agente_pedido: Option<&str>) {
     if dichos.is_empty() {
-        check_salto(paginas, ops, y, imagen);
-        linea(ops, y, "El agente no contestó a tiempo.", FONT_BODY, false);
+        out.push(cuerpo("El agente no contestó a tiempo.".into()));
         return;
     }
     let dicho = dichos.iter().find(|d| Some(d.agente.as_str()) == agente_pedido).unwrap_or(&dichos[0]);
-    check_salto(paginas, ops, y, imagen);
-    linea(ops, y, &format!("Agente: {}", dicho.nombre), FONT_BODY, false);
+    out.push(cuerpo(format!("Agente: {}", dicho.nombre)));
     if dicho.etiqueta == "abstiene" {
-        check_salto(paginas, ops, y, imagen);
-        linea(ops, y, "Veredicto: se abstuvo -- no llegó a su umbral de confianza.", FONT_BODY, false);
+        out.push(cuerpo("Veredicto: se abstuvo -- no llegó a su umbral de confianza.".into()));
     } else {
-        check_salto(paginas, ops, y, imagen);
-        linea(ops, y, &format!("Veredicto: {} ({:.0}%)", dicho.etiqueta, dicho.confianza * 100.0), FONT_BODY, false);
+        out.push(cuerpo(format!("Veredicto: {} ({:.0}%)", dicho.etiqueta, dicho.confianza * 100.0)));
     }
     if !dicho.detalle.is_empty() {
-        for l in envolver(&format!("Detalle: {}", dicho.detalle), MAX_CHARS_BODY) {
-            check_salto(paginas, ops, y, imagen);
-            linea(ops, y, &l, FONT_BODY, false);
+        out.push(cuerpo(format!("Detalle: {}", dicho.detalle)));
+    }
+}
+
+/// Agregados de TODO el caso -- independientes de qué per-imagen se termine
+/// mostrando: son un resumen del caso real, no de la vista filtrada por los
+/// interruptores del popup. Cada estadística que no tiene datos de verdad se
+/// omite entera (`Option`/vacío), nunca se dibuja un cero inventado.
+fn calcular_estadisticas(case_created_at: i64, analyses: &[Analysis]) -> Estadisticas {
+    let mut por_modelo: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    let mut confianzas: Vec<f64> = Vec::new();
+    let (mut respondieron, mut abstuvieron) = (0usize, 0usize);
+    for a in analyses {
+        *por_modelo.entry(a.model.clone()).or_default() += 1;
+        if a.model != "agentes" {
+            if let Some(c) = a.result_confidence {
+                if a.result_lat.is_some() && a.result_lng.is_some() {
+                    confianzas.push(c as f64);
+                }
+            }
+        } else {
+            for d in &a.agentes {
+                if d.etiqueta == "abstiene" {
+                    abstuvieron += 1;
+                } else {
+                    respondieron += 1;
+                }
+            }
         }
     }
-}
-
-/// Nueva página si lo que sigue ya no cabe -- se comprueba ANTES de escribir
-/// cada línea, no después, así nunca se llega a pintar fuera del margen.
-fn check_salto(paginas: &mut Vec<PdfPage>, ops: &mut Vec<Op>, y: &mut f32, imagen: &Image) {
-    if *y - LINE_H_MM < MARGIN_MM {
-        salto_de_pagina(paginas, ops, y, imagen);
+    let confianza_media_pct =
+        if confianzas.is_empty() { None } else { Some((confianzas.iter().sum::<f64>() / confianzas.len() as f64 * 100.0).round() as i64) };
+    Estadisticas {
+        creado_en: fecha_legible(case_created_at),
+        por_modelo: por_modelo.into_iter().map(|(modelo, n)| ModeloCount { modelo, n }).collect(),
+        confianza_media_pct,
+        agentes_total: respondieron + abstuvieron,
+        agentes_respondieron: respondieron,
+        agentes_abstuvieron: abstuvieron,
     }
 }
 
-fn salto_de_pagina(paginas: &mut Vec<PdfPage>, ops: &mut Vec<Op>, y: &mut f32, imagen: &Image) {
-    ops.push(Op::EndTextSection);
-    let contenido = std::mem::replace(ops, vec![Op::StartTextSection]);
-    paginas.push(PdfPage::new(Mm(PAGE_W_MM), Mm(PAGE_H_MM), contenido));
-    *y = CONTENT_TOP_MM;
-    linea(ops, y, &format!("{} (continúa)", imagen.filename), FONT_HEAD, true);
-    *y -= 3.0;
-}
-
-/// Coloca el cursor y escribe una línea completa -- sin ajuste automático,
-/// ver el `ponytail` al principio del fichero. Deja el cursor listo para la
-/// siguiente línea.
-fn linea(ops: &mut Vec<Op>, y: &mut f32, texto: &str, tam: f32, negrita: bool) {
-    let fuente = if negrita { BuiltinFont::HelveticaBold } else { BuiltinFont::Helvetica };
-    ops.push(Op::SetFont { font: PdfFontHandle::Builtin(fuente), size: Pt(tam) });
-    ops.push(Op::SetTextCursor { pos: Point::new(Mm(MARGIN_MM), Mm(*y)) });
-    ops.push(Op::ShowText { items: vec![TextItem::Text(texto.to_string())] });
-    *y -= LINE_H_MM;
-}
-
-/// Ajuste de línea por cuenta de caracteres, palabra a palabra -- ver el
-/// `ponytail` al principio del fichero.
-fn envolver(texto: &str, max_chars: usize) -> Vec<String> {
-    let mut salida = Vec::new();
-    let mut actual = String::new();
-    for palabra in texto.split_whitespace() {
-        if !actual.is_empty() && actual.len() + 1 + palabra.len() > max_chars {
-            salida.push(std::mem::take(&mut actual));
+/// Escapa lo que va dentro de comandos LaTeX -- registrado como filtro `tex`
+/// de Tera y usado en la plantilla para TODO texto que no haya escrito Lumi
+/// mismo (nombre de caso, de fichero, detalle de un agente, motivo de
+/// error...). Sin esto, un nombre de fichero con un `_` o un `%` rompe la
+/// compilación entera, y uno con `\` puede inyectar comandos LaTeX propios.
+fn escapar_tex(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\textbackslash{}"),
+            '{' => out.push_str("\\{"),
+            '}' => out.push_str("\\}"),
+            '$' => out.push_str("\\$"),
+            '&' => out.push_str("\\&"),
+            '#' => out.push_str("\\#"),
+            '^' => out.push_str("\\^{}"),
+            '_' => out.push_str("\\_"),
+            '~' => out.push_str("\\~{}"),
+            '%' => out.push_str("\\%"),
+            '\n' => out.push_str("\\\\\n"),
+            _ => out.push(c),
         }
-        if !actual.is_empty() {
-            actual.push(' ');
+    }
+    out
+}
+
+const PLANTILLA: &str = include_str!("../../templates/informe.tex.tera");
+
+fn tera() -> Result<tera::Tera, String> {
+    let mut t = tera::Tera::default();
+    t.register_filter("tex", |val: &str, _: tera::Kwargs, _: &tera::State| escapar_tex(val));
+    t.add_raw_template("informe.tex", PLANTILLA).map_err(|e| format!("plantilla del informe inválida: {e}"))?;
+    Ok(t)
+}
+
+/// Dónde vive el binario de `tectonic`. Mismo criterio que `assets::ruta`:
+/// primero la instalación real (`lumi install` lo deja en
+/// `/var/lib/lumi/tectonic/tectonic`), luego una variable de entorno para
+/// desarrollo -- útil en Windows, donde no hay instalador de servidor y este
+/// binario se coloca a mano para probar --, y por último el PATH del
+/// sistema, por si alguien lo puso ahí.
+fn tectonic_bin() -> PathBuf {
+    if let Ok(p) = std::env::var("LUMI_TECTONIC") {
+        return PathBuf::from(p);
+    }
+    let instalado = PathBuf::from("/var/lib/lumi/tectonic/tectonic");
+    if instalado.exists() {
+        return instalado;
+    }
+    PathBuf::from("tectonic")
+}
+
+fn compilar_con_tectonic(dir: &FsPath) -> Result<Vec<u8>, FalloInforme> {
+    let bin = tectonic_bin();
+    let salida = Command::new(&bin).args(["-o", ".", "informe.tex"]).current_dir(dir).output();
+    let salida = match salida {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(FalloInforme::FaltaTectonic(format!(
+                "falta el binario tectonic para generar informes ({bin:?} no existe o no es ejecutable) -- reinstala el servidor, o define LUMI_TECTONIC con su ruta"
+            )));
         }
-        actual.push_str(palabra);
+        Err(e) => return Err(FalloInforme::Compilacion(format!("no se pudo lanzar tectonic: {e}"))),
+    };
+    if !salida.status.success() {
+        let log = String::from_utf8_lossy(&salida.stderr);
+        // Solo la cola: un fallo de paquete puede volcar miles de líneas de
+        // "downloading X" antes del error real.
+        let cola: String = {
+            let chars: Vec<char> = log.chars().collect();
+            let desde = chars.len().saturating_sub(4000);
+            chars[desde..].iter().collect()
+        };
+        return Err(FalloInforme::Compilacion(cola));
     }
-    if !actual.is_empty() {
-        salida.push(actual);
+    std::fs::read(dir.join("informe.pdf"))
+        .map_err(|e| FalloInforme::Compilacion(format!("tectonic terminó sin error pero no dejó informe.pdf: {e}")))
+}
+
+fn generar_pdf(
+    caso: &str, case_created_at: i64, filas: &[(Image, Option<Vec<u8>>, Vec<Analysis>)], req: &ExportInformeReq,
+    analyses_del_caso: &[Analysis],
+) -> Result<Vec<u8>, FalloInforme> {
+    let job = std::env::temp_dir().join(format!("lumi-informe-{}-{}", now(), rand::random::<u32>()));
+    std::fs::create_dir_all(&job).map_err(|e| FalloInforme::Compilacion(format!("no se pudo crear el directorio de trabajo: {e}")))?;
+    // Se limpia al salir de esta función por cualquier camino (éxito o
+    // error) -- nunca se acumulan directorios de un informe fallido.
+    let _limpieza = TmpDirGuard(job.clone());
+
+    let mut imagenes = Vec::with_capacity(filas.len());
+    for (img, thumb, analyses) in filas {
+        // La miniatura solo se referencia si de verdad es una imagen
+        // decodificable -- un `\includegraphics` sobre un fichero corrupto
+        // tira la compilación del informe ENTERO, no solo esta página.
+        let thumb_file = thumb.as_deref().and_then(|bytes| {
+            if image::load_from_memory(bytes).is_err() {
+                return None;
+            }
+            let nombre = format!("thumb_{}.jpg", img.id);
+            std::fs::write(job.join(&nombre), bytes).ok()?;
+            Some(nombre)
+        });
+        imagenes.push(ImagenCtx {
+            filename: img.filename.clone(),
+            thumb_file,
+            exif_lineas: if req.exif_por_imagen { lineas_exif(img) } else { Vec::new() },
+            analisis_lineas: lineas_analisis(analyses, req),
+        });
     }
-    if salida.is_empty() {
-        salida.push(String::new());
+
+    let estadisticas = if req.portada_estadisticas { Some(calcular_estadisticas(case_created_at, analyses_del_caso)) } else { None };
+
+    let ctx = Contexto {
+        caso: caso.to_string(),
+        generado: fecha_legible(now()),
+        firmado_por: req.firmado_por.trim().to_string(),
+        n_imagenes: imagenes.len(),
+        incluir_estadisticas: req.portada_estadisticas,
+        estadisticas,
+        imagenes,
+    };
+
+    let t = tera().map_err(FalloInforme::Compilacion)?;
+    let contexto_tera = tera::Context::from_serialize(&ctx)
+        .map_err(|e| FalloInforme::Compilacion(format!("no se pudo montar el contexto de la plantilla: {e}")))?;
+    let tex = t
+        .render("informe.tex", &contexto_tera)
+        .map_err(|e| FalloInforme::Compilacion(format!("no se pudo rellenar la plantilla del informe: {e}")))?;
+    std::fs::write(job.join("informe.tex"), &tex)
+        .map_err(|e| FalloInforme::Compilacion(format!("no se pudo escribir el .tex del informe: {e}")))?;
+
+    compilar_con_tectonic(&job)
+}
+
+/// Borra el directorio de trabajo del informe al salir de `generar_pdf`,
+/// tanto si terminó bien como si tectonic falló -- si no, un informe fallado
+/// deja basura en el disco del servidor para siempre.
+struct TmpDirGuard(PathBuf);
+impl Drop for TmpDirGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
     }
-    salida
 }

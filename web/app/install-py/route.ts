@@ -66,6 +66,15 @@ OOMPolicy=continue
 WantedBy=multi-user.target
 """
 
+# Mismo criterio que Qdrant justo abajo: binario único autocontenido,
+# versión y sha256 fijados a mano, sin unidad de systemd propia -- no es un
+# servicio, lumid lo invoca como subproceso solo al generar el informe
+# forense en PDF (GET /v1/cases/:id/export.pdf).
+TECTONIC_VERSION = "tectonic%400.17.0"
+TECTONIC_ASSET = "tectonic-0.17.0-x86_64-unknown-linux-gnu.tar.gz"
+TECTONIC_SHA256 = "1a715688baf591e650c8aeb160ae934e181685eecbb38b317de30b269ac5d606"
+TECTONIC_DIR = f"{DATA}/tectonic"
+
 QDRANT_VERSION = "v1.19.0"
 QDRANT_ASSET = "qdrant-x86_64-unknown-linux-gnu.tar.gz"
 QDRANT_SHA256 = "e4405091f67d02f96fb941695ef8a6974e677632507ff7b04a3fcbb332ad9c19"
@@ -540,6 +549,29 @@ def _instalar_qdrant():
     return False
 
 
+def _instalar_tectonic():
+    """Idempotente, igual que `_instalar_qdrant`: si el binario ya está en su
+    sitio no vuelve a bajar los ~60 MB en cada reinstalación. Un fallo aquí no
+    aborta la instalación de Station entera -- `export.rs` ya sabe devolver un
+    error accionable si el binario no aparece cuando alguien pide un informe,
+    igual que cualquier otra capacidad recortada."""
+    os.makedirs(TECTONIC_DIR, exist_ok=True)
+    bin_path = f"{TECTONIC_DIR}/tectonic"
+    if os.path.exists(bin_path):
+        return True
+    try:
+        url = f"https://github.com/tectonic-typesetting/tectonic/releases/download/{TECTONIC_VERSION}/{TECTONIC_ASSET}"
+        with tempfile.TemporaryDirectory() as tmp:
+            tarball = os.path.join(tmp, TECTONIC_ASSET)
+            _descargar_verificado(url, TECTONIC_SHA256, tarball)
+            _extraer_tar_seguro(tarball, TECTONIC_DIR)
+        os.chmod(bin_path, 0o755)
+        return os.path.exists(bin_path)
+    except Exception as e:
+        warn(f"no se pudo instalar tectonic: {_detalle_error(e)}")
+        return False
+
+
 def _detalle_error(e):
     """str(e) a secas puede ser inútil o directamente engañoso -- un
     OSError(2) sin mensaje se queda en solo '2'. Para HTTPError, el cuerpo
@@ -684,6 +716,10 @@ def instalar(auto: bool, version: str) -> str:
 
     qdrant_vivo = _instalar_qdrant()
     ok("qdrant.service activo · escuchando en 127.0.0.1:6333" if qdrant_vivo else "qdrant.service arrancó pero no responde todavía")
+
+    tectonic_ok = _instalar_tectonic()
+    ok("tectonic listo · exportar caso a PDF ya puede compilar el informe" if tectonic_ok
+       else "tectonic no se pudo instalar; exportar caso a PDF fallará con un error explicando cómo arreglarlo")
 
     for _ in range(20):
         db = sqlite3.connect(f"{DATA}/lumi.db", timeout=30)

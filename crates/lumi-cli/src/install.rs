@@ -53,6 +53,16 @@ const QDRANT_ASSET: &str = "qdrant-x86_64-unknown-linux-gnu.tar.gz";
 const QDRANT_SHA256: &str = "e4405091f67d02f96fb941695ef8a6974e677632507ff7b04a3fcbb332ad9c19";
 const QDRANT_DIR: &str = "/var/lib/lumi/qdrant";
 
+/// Igual criterio que Qdrant justo arriba: versión y hash fijados a mano,
+/// nunca "el último release" resuelto en tiempo de instalación. `tectonic` es
+/// un binario único autocontenido (descarga sus paquetes LaTeX bajo demanda a
+/// su propia caché) -- no hace falta una distro TeX Live/MiKTeX completa para
+/// que `lumid` pueda compilar el informe forense en PDF.
+const TECTONIC_VERSION: &str = "tectonic@0.17.0";
+const TECTONIC_ASSET: &str = "tectonic-0.17.0-x86_64-unknown-linux-gnu.tar.gz";
+const TECTONIC_SHA256: &str = "1a715688baf591e650c8aeb160ae934e181685eecbb38b317de30b269ac5d606";
+const TECTONIC_DIR: &str = "/var/lib/lumi/tectonic";
+
 const QDRANT_UNIT: &str = "\
 [Unit]
 Description=Qdrant vector database (Lumi)
@@ -262,6 +272,15 @@ pub fn run(auto: bool, version: Option<&str>) -> Result<PairKey> {
         ui::ok("qdrant.service activo · escuchando en 127.0.0.1:6333");
     } else {
         ui::warn("qdrant.service arrancó pero no responde todavía; revisa journalctl -u qdrant");
+    }
+
+    let pb = ui::step("instalando tectonic (informe forense en PDF)");
+    let tectonic_ok = instalar_tectonic().unwrap_or(false);
+    pb.finish_and_clear();
+    if tectonic_ok {
+        ui::ok("tectonic listo · exportar caso a PDF ya puede compilar el informe");
+    } else {
+        ui::warn("no se pudo instalar tectonic; exportar caso a PDF fallará con un error explicando cómo arreglarlo");
     }
 
     ui::head("capacidades");
@@ -492,6 +511,55 @@ fn instalar_qdrant() -> Result<bool> {
         }
     }
     Ok(false)
+}
+
+/// Baja y verifica el binario de `tectonic` que compila el informe forense en
+/// PDF (`GET /v1/cases/:id/export.pdf` en `lumid`). Mismo criterio que
+/// `instalar_qdrant`: idempotente (no vuelve a bajar los ~60 MB si el binario
+/// ya está en su sitio), sha256 fijado a mano, sin unidad de systemd propia
+/// -- no es un servicio, `lumid` lo invoca como subproceso solo cuando alguien
+/// pide un informe. Un fallo aquí no aborta la instalación de Station
+/// entera: el endpoint de exportar ya sabe devolver un error accionable si el
+/// binario no aparece, igual que cualquier otra capacidad recortada.
+fn instalar_tectonic() -> Result<bool> {
+    fs::create_dir_all(TECTONIC_DIR).context("no se pudo crear el directorio de tectonic")?;
+    let bin = format!("{TECTONIC_DIR}/tectonic");
+    if Path::new(&bin).exists() {
+        return Ok(true);
+    }
+    let tarball = format!("{TECTONIC_DIR}/{TECTONIC_ASSET}");
+    let url = format!(
+        "https://github.com/tectonic-typesetting/tectonic/releases/download/{}/{TECTONIC_ASSET}",
+        urlencoding_arroba(TECTONIC_VERSION),
+    );
+    if run_ok("curl", &["-fsSL", "-o", &tarball, &url]).is_err() {
+        return Ok(false);
+    }
+
+    let bytes = match fs::read(&tarball) {
+        Ok(b) => b,
+        Err(_) => return Ok(false),
+    };
+    use sha2::{Digest, Sha256};
+    let hash = format!("{:x}", Sha256::digest(&bytes));
+    if hash != TECTONIC_SHA256 {
+        let _ = fs::remove_file(&tarball);
+        bail!("el sha256 de tectonic no coincide (esperado {TECTONIC_SHA256}, obtenido {hash}) — nada se instala");
+    }
+
+    run_ok("tar", &["-xzf", &tarball, "-C", TECTONIC_DIR]).context("no se pudo extraer tectonic")?;
+    let _ = fs::remove_file(&tarball);
+    run_quiet("chmod", &["+x", &bin]);
+    Ok(Path::new(&bin).exists())
+}
+
+/// El tag del release de tectonic va como `tectonic@0.17.0` en la URL de
+/// GitHub, pero el `@` tiene que viajar como `%40` -- GitHub lo acepta sin
+/// codificar en el navegador (redirige), pero no en una petición directa de
+/// `curl`. Sin depender de una crate de percent-encoding solo por este único
+/// carácter.
+fn urlencoding_arroba(tag: &str) -> String {
+    tag.replace('@', "%40")
 }
 
 /// `registros/` y `workers/` no son parte del binario: son datos y scripts

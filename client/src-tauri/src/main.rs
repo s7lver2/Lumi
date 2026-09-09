@@ -205,25 +205,22 @@ async fn upload_server_banner_bytes(data_base64: String, state: tauri::State<'_,
     subir_bytes("/v1/admin/server-profile/banner", &data_base64, &state).await
 }
 
-/// Simétrico a `subir_bytes`, al revés: bytes del daemon a disco, con un
-/// diálogo nativo de guardado en medio. El PDF entero pasa por aquí (no por
-/// `request`, que devuelve texto -- `res.text()` con bytes binarios de
-/// verdad los corrompería) y nunca por el canal de IPC de Tauri hacia TS.
-///
-/// `Ok(None)` es "el investigador cerró el diálogo sin elegir nada" -- no un
-/// error que mostrar, ver `ExportarPdfBoton.tsx`.
-#[tauri::command]
-async fn exportar_caso_pdf(
-    case_id: i64, sugerido: String, token: String,
-    app: tauri::AppHandle, state: tauri::State<'_, Shared>,
-) -> Result<Option<String>, String> {
+/// El POST a `/v1/cases/:id/export.pdf` que hacen `previsualizar_informe_pdf`
+/// y `exportar_caso_pdf` -- factorizado porque hasta la 2.0.37 esto era un
+/// `GET` sin cuerpo; ahora el investigador elige qué secciones lleva el
+/// informe desde `ExportInformePopup.tsx`, y las dos rutas (previsualizar,
+/// guardar) mandan la MISMA config para que lo que se ve en el `<embed>` sea
+/// exactamente lo que se termina guardando.
+async fn pedir_informe(case_id: i64, opts_json: String, token: &str, state: &Shared) -> Result<Vec<u8>, String> {
     let (base, client) = {
         let c = state.lock().unwrap();
         (c.base.clone().ok_or("sin servidor vinculado")?, c.client.clone().ok_or("sin cliente")?)
     };
     let res = client
-        .get(format!("{base}/v1/cases/{case_id}/export.pdf"))
+        .post(format!("{base}/v1/cases/{case_id}/export.pdf"))
         .bearer_auth(token)
+        .header("content-type", "application/json")
+        .body(opts_json)
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -232,6 +229,36 @@ async fn exportar_caso_pdf(
     if !status.is_success() {
         return Err(String::from_utf8_lossy(&bytes).to_string());
     }
+    Ok(bytes.to_vec())
+}
+
+/// Genera el PDF con la config actual y lo devuelve en base64 -- nunca a
+/// disco. Es lo que `ExportInformePopup` mete en un blob URL para el
+/// `<embed>`; base64 sobre el canal de IPC de Tauri es aceptable aquí porque
+/// un informe de un caso normal son unas pocas páginas, no las decenas de MB
+/// de subir imágenes originales (eso sí va por ruta, ver `upload_images`).
+#[tauri::command]
+async fn previsualizar_informe_pdf(
+    case_id: i64, opts_json: String, token: String, state: tauri::State<'_, Shared>,
+) -> Result<String, String> {
+    let bytes = pedir_informe(case_id, opts_json, &token, &state).await?;
+    use base64::Engine;
+    Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
+}
+
+/// Simétrico a `subir_bytes`, al revés: bytes del daemon a disco, con un
+/// diálogo nativo de guardado en medio. El PDF entero pasa por aquí (no por
+/// `request`, que devuelve texto -- `res.text()` con bytes binarios de
+/// verdad los corrompería) y nunca por el canal de IPC de Tauri hacia TS.
+///
+/// `Ok(None)` es "el investigador cerró el diálogo sin elegir nada" -- no un
+/// error que mostrar, ver `ExportInformePopup.tsx`.
+#[tauri::command]
+async fn exportar_caso_pdf(
+    case_id: i64, sugerido: String, opts_json: String, token: String,
+    app: tauri::AppHandle, state: tauri::State<'_, Shared>,
+) -> Result<Option<String>, String> {
+    let bytes = pedir_informe(case_id, opts_json, &token, &state).await?;
 
     // El diálogo de guardado es por callback, no bloqueante: la versión que
     // bloquea el hilo está pensada para el hilo principal de la UI nativa, no
@@ -1023,7 +1050,7 @@ fn main() {
             pair, pair_card, reconnect, request, start_telemetry, start_task_log,
             start_queue_events, start_indices_events, start_admin_events, start_logs_stream, set_auth,
             upload_images, read_image_as_data_url, upload_avatar_bytes, upload_server_avatar_bytes,
-            upload_server_banner_bytes, exportar_caso_pdf, comprobar_actualizacion, error_actualizacion_pendiente, disparar_actualizacion_silenciosa,
+            upload_server_banner_bytes, exportar_caso_pdf, previsualizar_informe_pdf, comprobar_actualizacion, error_actualizacion_pendiente, disparar_actualizacion_silenciosa,
             disparar_actualizacion_a_version, version_cliente, historial_actualizaciones,
             sin_autoactualizar_este_arranque, autoarranque_leer, autoarranque_fijar
         ])

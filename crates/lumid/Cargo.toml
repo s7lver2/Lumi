@@ -40,7 +40,9 @@ rustls-pemfile = "2"
 rustls-pki-types = "1"
 bytes = "1"
 console-subscriber = { version = "0.4", optional = true }
-printpdf = { version = "0.12.8", default-features = false, features = ["jpeg", "images"] }
+# Motor de plantillas para el informe forense en LaTeX -- sintaxis Jinja2,
+# nada de `tera`/`handlebars` estaba ya en el workspace.
+tera = "2.3.0"
 
 [features]
 # Aparte por defecto: exige compilar con `--cfg tokio_unstable` (API de

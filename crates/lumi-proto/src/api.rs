@@ -1190,3 +1190,37 @@ pub struct PatchCpuReq {
     #[serde(default)]
     pub confirmado: bool,
 }
+
+fn si() -> bool {
+    true
+}
+
+/// `POST /v1/cases/:id/export.pdf` -- qué secciones lleva el informe forense.
+/// Todo `true` por defecto salvo que el investigador apague algo desde el
+/// popup de exportación; `firmado_por` vacío es "sin firma" (esa sección
+/// entera se omite del documento, ver `routes::export`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportInformeReq {
+    #[serde(default = "si")]
+    pub portada_estadisticas: bool,
+    #[serde(default = "si")]
+    pub exif_por_imagen: bool,
+    #[serde(default = "si")]
+    pub hipotesis_geolocalizacion: bool,
+    #[serde(default = "si")]
+    pub veredictos_agentes: bool,
+    #[serde(default)]
+    pub firmado_por: String,
+}
+
+impl Default for ExportInformeReq {
+    fn default() -> Self {
+        Self {
+            portada_estadisticas: true,
+            exif_por_imagen: true,
+            hipotesis_geolocalizacion: true,
+            veredictos_agentes: true,
+            firmado_por: String::new(),
+        }
+    }
+}

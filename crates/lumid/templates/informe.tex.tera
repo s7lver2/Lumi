@@ -1,0 +1,148 @@
+% Plantilla del informe forense de Lumi -- LaTeX rellenado por Tera y
+% compilado con `tectonic` (ver `routes::export`). Documento IMPRIMIBLE: fondo
+% claro, tipografía editorial seria, un único acento discreto de marca -- el
+% dark theme de DESIGN.md es solo para la interfaz en pantalla, no para esto.
+%
+% ponytail: sin `babel`/patrones de guionado en español -- el bundle por
+% defecto de tectonic no trae los patrones de partición silábica de
+% `spanish.ldf`, y pedirlos añade una dependencia externa a la compilación
+% por un matiz puramente tipográfico (peor justificación en párrafos largos,
+% nada más). El texto entero es español sin acentos rotos ni caracteres mal
+% escapados -- eso es lo que de verdad importa en un informe forense.
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage{lmodern}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{parskip}
+\usepackage{fancyhdr}
+\usepackage{array}
+
+\definecolor{lumiaccent}{HTML}{2F6DA3}
+\definecolor{lumigris}{HTML}{6A6C70}
+
+\setlength{\parindent}{0pt}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancyfoot[C]{\small\color{lumigris}{{ caso | tex }} \textperiodcentered\ p\'agina \thepage}
+
+% El destello de cuatro puntas ya usado por `MarcoVentanaLumi`
+% (`web/components/AgentesVisual.tsx`), redibujado en TikZ a partir de las
+% mismas cuatro curvas de B\'ezier del `path` SVG original -- no se inventa
+% iconograf\'ia nueva, ver la orden de la tarea. Se usa una sola vez, en la
+% portada, así que va inline en vez de como macro con parámetro: un
+% `\newcommand` de un argumento numérico (`#1`) dentro de una plantilla Tera
+% obliga a escapar el `#` para que el lexer de Tera no lo confunda con nada
+% -- más ruido que la única vez que hacía falta.
+\begin{document}
+
+% ---------------------------------------------------------------- Portada --
+\begin{titlepage}
+\thispagestyle{empty}
+\vspace*{2.5cm}
+\begin{center}
+\begin{tikzpicture}[x=3cm/24,y=3cm/24]
+  \fill[lumiaccent] (12,2)
+    .. controls (12.7,6.4) and (14.7,8.4) .. (19,9)
+    .. controls (14.7,9.7) and (12.7,11.7) .. (12,16)
+    .. controls (11.3,11.6) and (9.3,9.6) .. (5,9)
+    .. controls (9.3,8.3) and (11.3,6.3) .. (12,2) -- cycle;
+\end{tikzpicture}
+
+\vspace{1cm}
+{\Huge\bfseries Lumi}\\[2pt]
+{\Large informe forense}
+
+\vspace{1.4cm}
+{\large\bfseries {{ caso | tex }}}\\[6pt]
+{{ n_imagenes }} {% if n_imagenes == 1 %}imagen incluida{% else %}im\'agenes incluidas{% endif %}\\
+Generado: {{ generado | tex }}
+
+\vspace{1.6cm}
+\begin{minipage}{0.72\textwidth}
+\centering\small\color{lumigris}
+Documento generado por Lumi. Cada hip\'otesis de geolocalizaci\'on y cada
+veredicto de agente son inferencias autom\'aticas, no una confirmaci\'on
+pericial -- se entregan con su nivel de confianza declarado.
+\end{minipage}
+
+{% if incluir_estadisticas and estadisticas %}
+\vspace{1.8cm}
+\begin{minipage}{0.85\textwidth}
+\centering
+{\large\bfseries Resumen del caso}
+
+\vspace{8pt}
+\begin{tabular}{r l}
+Caso creado: & {{ estadisticas.creado_en | tex }} \\
+{% if estadisticas.confianza_media_pct is defined and estadisticas.confianza_media_pct %}
+Confianza media de hip\'otesis principales: & {{ estadisticas.confianza_media_pct }}\,\% \\
+{% endif %}
+{% if estadisticas.agentes_total > 0 %}
+Agentes: & {{ estadisticas.agentes_respondieron }} respondieron \textperiodcentered\ {{ estadisticas.agentes_abstuvieron }} se abstuvieron \\
+{% endif %}
+\end{tabular}
+
+{% if estadisticas.por_modelo %}
+\vspace{10pt}
+\begin{tikzpicture}
+\begin{axis}[
+  ybar, bar width=16pt, width=9.5cm, height=5.5cm,
+  symbolic x coords={ {% for m in estadisticas.por_modelo %}{{ m.modelo }}{% if not loop.last %},{% endif %}{% endfor %} },
+  xtick=data, ymin=0, ylabel={an\'alisis}, nodes near coords,
+  enlarge x limits=0.22, axis lines*=left, tick style={draw=none},
+  bar shift=0pt, every axis plot/.append style={fill=lumiaccent,draw=none},
+]
+\addplot coordinates { {% for m in estadisticas.por_modelo %}({{ m.modelo }},{{ m.n }}) {% endfor %} };
+\end{axis}
+\end{tikzpicture}
+{% endif %}
+\end{minipage}
+{% endif %}
+\end{center}
+\end{titlepage}
+
+% ------------------------------------------------------------ Por imagen --
+{% for img in imagenes %}
+\clearpage
+\subsection*{Imagen: {{ img.filename | tex }}}
+
+{% if img.thumb_file %}
+\begin{center}
+\includegraphics[width=6.5cm,height=6.5cm,keepaspectratio]{ {{- img.thumb_file -}} }
+\end{center}
+{% else %}
+\textit{(sin miniatura disponible para esta imagen)}\\[4pt]
+{% endif %}
+
+{% for l in img.exif_lineas %}
+{% if l.variante == "cabecera" %}\textbf{ {{- l.texto | tex -}} }\\[2pt]
+{% else %}{{ l.texto | tex }}\\
+{% endif %}
+{% endfor %}
+
+\vspace{6pt}
+{% for l in img.analisis_lineas %}
+{% if l.variante == "cabecera" %}\vspace{4pt}\textbf{ {{- l.texto | tex -}} }\\[2pt]
+{% else %}{{ l.texto | tex }}\\
+{% endif %}
+{% endfor %}
+{% endfor %}
+
+% ------------------------------------------------------------------ Firma --
+{% if firmado_por %}
+\clearpage
+\vspace*{\fill}
+\begin{center}
+\rule{5cm}{0.4pt}\\[10pt]
+Firmado por: {{ firmado_por | tex }}\\
+Fecha de generaci\'on: {{ generado | tex }}
+\end{center}
+\vspace*{\fill}
+{% endif %}
+
+\end{document}

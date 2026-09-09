@@ -129,13 +129,34 @@ function nombreDeArchivo(caso: string): string {
   return limpio || "caso";
 }
 
-/** Pide a `lumid` el informe forense del caso en PDF y lo guarda donde elija
- *  el investigador (diálogo nativo, del lado Rust — ver `exportar_caso_pdf`
- *  en `client/src-tauri/src/main.rs`). `null` es "cerró el diálogo sin
- *  elegir nada", no un error. */
-export function exportCasePdf(caseId: number, caseName: string, token: string): Promise<string | null> {
+/** Qué secciones lleva el informe -- mismo campo a campo que
+ *  `lumi_proto::api::ExportInformeReq`, ver `ExportInformePopup.tsx`. */
+export interface ExportInformeOpts {
+  portada_estadisticas: boolean;
+  exif_por_imagen: boolean;
+  hipotesis_geolocalizacion: boolean;
+  veredictos_agentes: boolean;
+  firmado_por: string;
+}
+
+/** Pide a `lumid` el informe forense del caso en PDF con la config actual,
+ *  en base64 -- nunca a disco, es solo para el `<embed>` de la
+ *  previsualización (`ExportInformePopup` lo convierte a blob URL). Se
+ *  regenera solo al pulsar «Generar previsualización» o cambiar un
+ *  interruptor, nunca en cada tecla del campo de firma. */
+export function previewInformePdf(caseId: number, opts: ExportInformeOpts, token: string): Promise<string> {
+  return invoke<string>("previsualizar_informe_pdf", { caseId, optsJson: JSON.stringify(opts), token });
+}
+
+/** Pide a `lumid` el informe forense del caso en PDF con la config actual y
+ *  lo guarda donde elija el investigador (diálogo nativo, del lado Rust —
+ *  ver `exportar_caso_pdf` en `client/src-tauri/src/main.rs`). `null` es
+ *  "cerró el diálogo sin elegir nada", no un error. */
+export function exportCasePdf(
+  caseId: number, caseName: string, opts: ExportInformeOpts, token: string,
+): Promise<string | null> {
   const sugerido = `lumi-informe-${nombreDeArchivo(caseName)}.pdf`;
-  return invoke<string | null>("exportar_caso_pdf", { caseId, sugerido, token });
+  return invoke<string | null>("exportar_caso_pdf", { caseId, sugerido, optsJson: JSON.stringify(opts), token });
 }
 
 /** Como `pickPaths`, pero para un único archivo — foto de perfil, avatar o
