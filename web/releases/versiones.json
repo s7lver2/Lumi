@@ -1198,7 +1198,43 @@
           "sha256": "b82f2bb591b529ddbe79caf1dd25cf283a906eca0d3ebd565263ede44cba5fc9"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.35",
+      "publicado": "2026-09-09T19:54:40Z",
+      "notas": "Panel de agentes: elige un agente del registro y hazle su pregunta cerrada a una imagen, sin geolocalizacion. Distribucion de confianza real (no inventada) y rasgos reales (OCR/profundidad) cuando el motor los tiene.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.35/app.exe",
+          "bytes": 15904768,
+          "sha256": "90b074623e51db59e48e0987849cb4f1557110c27f5fe8d8404b2d19a422da67"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.35",
+      "publicado": "2026-09-09T19:54:40Z",
+      "notas": "Panel de agentes: elige un agente del registro y hazle su pregunta cerrada a una imagen, sin geolocalizacion. Distribucion de confianza real (no inventada) y rasgos reales (OCR/profundidad) cuando el motor los tiene.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.35/lumid",
+          "bytes": 21720512,
+          "sha256": "9f08720243bba6b1c5b6b255822f45299ef2312293f23b673aa4f6c0a670ea72"
+        },
+        {
+          "plataforma": "assets",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.35/lumid-assets.tar.gz",
+          "bytes": 142023,
+          "sha256": "ee2754de844a532a37c29b55475a6f4d07325435a21fa3d7a009e64e4362e8a0"
+        }
+      ]
     }
   ],
-  "firma": "62pmPQUUuftg8amqZcSb8GSDi6ZCtmLIaGuuQ908SOIlfP1i/bJjbYsyKbnzsQspyEuWZbp+PmRFuzIQ2H0VCQ=="
+  "firma": "lnO3MApEGTA6oVsfWWB8VPQypna+uSig/WZBxTQGU6KUPLOIo112IEQCIx/0LED1getnWhgcaIvzlaa4m7HtCQ=="
 }
