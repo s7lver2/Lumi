@@ -322,12 +322,14 @@ export function CaseView({
     return out;
   }, [mine, image, shown]);
 
-  /** Lo que se está mirando tiene un análisis sin terminar. `sel` y no
-   *  `shown.state`: mientras el primer intento corre no hay ningún análisis
-   *  "mostrado" todavía (`shown` cae al último de la lista sin filtrar por
-   *  estado), y da igual cuál de los intentos de esta imagen sea el que está
-   *  en curso — el mapa se aleja igual. */
-  const procesando = sel !== null && (estados.get(sel) === "pendiente" || estados.get(sel) === "en_curso");
+  /** Lo que se está mirando tiene un análisis sin terminar. `shown.state` y
+   *  no el estado agregado de `estados` (el más avanzado entre TODOS los
+   *  intentos de esta imagen): con más de un intento, uno ya "hecho" tapaba
+   *  a otro que seguía corriendo si era ESE el seleccionado en el carril —
+   *  el mapa se quedaba quieto aunque el intento que se estaba mirando
+   *  todavía no había terminado. `shown` ya resuelve justo eso: cuál de los
+   *  intentos es el que el cajón de resultados enseña ahora mismo. */
+  const procesando = shown?.state === "pendiente" || shown?.state === "en_curso";
 
   const flyTo = useMemo(
     () =>

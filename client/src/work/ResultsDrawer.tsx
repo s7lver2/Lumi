@@ -59,29 +59,35 @@ function TarjetaPrincipal({ principal, image, onAbrir }: {
   principal: Hipotesis; image: Image | null; onAbrir: () => void;
 }) {
   return (
-    <button onClick={onAbrir} className="flex w-full flex-col gap-2.5 rounded-[10px] border border-border p-3 text-left
-      transition-colors duration-300 ease-expo hover:border-white/20">
+    <div className="flex w-full flex-col gap-2.5 rounded-[10px] border border-border p-3">
       {principal.imagen_id != null && image ? (
         <CompareSlider
           izquierda={lumiUrl(`/v1/images/${image.id}/thumb`)}
           derecha={lumiUrl(`/v1/reference-images/${principal.imagen_id}/thumb`)}
           etiquetaIzquierda="tuya" etiquetaDerecha="referencia" />
       ) : null}
-      <div className="font-mono text-[18px] leading-none text-fg">
-        {principal.lat.toFixed(4)}, {principal.lng.toFixed(4)}
-      </div>
-      <div className="flex gap-4">
-        <div>
-          <div className="text-[8px] uppercase tracking-[.08em] text-subtle">Radio</div>
-          <div className="mt-0.5 font-mono text-[12.5px] text-fg">± {Math.round(principal.radio_m)} m</div>
+      {/* Antes el `<button>` envolvía TAMBIÉN el comparador de arriba: soltar
+          el arrastre encima de él (un pointerdown+pointerup sin apenas
+          moverse) contaba como clic y saltaba al detalle sin querer, a media
+          comparación. Ahora solo el texto de abajo es lo que lleva ahí. */}
+      <button onClick={onAbrir} className="flex flex-col gap-2.5 rounded-lg text-left
+        transition-colors duration-300 ease-expo hover:text-fg">
+        <div className="font-mono text-[18px] leading-none text-fg">
+          {principal.lat.toFixed(4)}, {principal.lng.toFixed(4)}
         </div>
-        <div>
-          <div className="text-[8px] uppercase tracking-[.08em] text-subtle">Confianza</div>
-          <div className="mt-0.5 font-mono text-[12.5px] text-fg">{principal.peso.toFixed(1)}×</div>
+        <div className="flex gap-4">
+          <div>
+            <div className="text-[8px] uppercase tracking-[.08em] text-subtle">Radio</div>
+            <div className="mt-0.5 font-mono text-[12.5px] text-fg">± {Math.round(principal.radio_m)} m</div>
+          </div>
+          <div>
+            <div className="text-[8px] uppercase tracking-[.08em] text-subtle">Confianza</div>
+            <div className="mt-0.5 font-mono text-[12.5px] text-fg">{principal.peso.toFixed(1)}×</div>
+          </div>
         </div>
-      </div>
-      <InsigniaVerificacion h={principal} />
-    </button>
+        <InsigniaVerificacion h={principal} />
+      </button>
+    </div>
   );
 }
 
@@ -115,10 +121,13 @@ function ListaAlternativas({ alternativas, maxPeso, onAbrir }: {
 
 /** Una hipótesis sola, a fondo: se centra en el mapa al entrar (recupera
  *  `onCenter`, que la firma de `ResultsDrawer` ya aceptaba pero nadie
- *  disparaba desde aquí) y se enseña toda su info. Sin foto de comparación:
- *  el slider es cosa de la vista Comparar, no se duplica. */
-function VistaDetalle({ h, onCenter, onVolver }: {
-  h: Hipotesis; onCenter: (lat: number, lng: number) => void; onVolver: () => void;
+ *  disparaba desde aquí) y se enseña toda su info. El comparador SÍ se
+ *  repite aquí para una alternativa (antes solo vivía en la principal): una
+ *  alternativa trae su propio `imagen_id` igual que la principal, y sin el
+ *  comparador no había forma de ver contra qué foto de referencia se estaba
+ *  comparando esa hipótesis en concreto. */
+function VistaDetalle({ h, image, onCenter, onVolver }: {
+  h: Hipotesis; image: Image | null; onCenter: (lat: number, lng: number) => void; onVolver: () => void;
 }) {
   useEffect(() => { onCenter(h.lat, h.lng); }, [h.lat, h.lng, onCenter]);
   return (
@@ -128,6 +137,12 @@ function VistaDetalle({ h, onCenter, onVolver }: {
           text-subtle transition-colors duration-300 ease-expo hover:text-fg">
         <Icon name="back" size={11} /> Volver
       </button>
+      {h.imagen_id != null && image ? (
+        <CompareSlider
+          izquierda={lumiUrl(`/v1/images/${image.id}/thumb`)}
+          derecha={lumiUrl(`/v1/reference-images/${h.imagen_id}/thumb`)}
+          etiquetaIzquierda="tuya" etiquetaDerecha="referencia" />
+      ) : null}
       <div className="font-mono text-[18px] leading-none text-fg">
         {h.lat.toFixed(4)}, {h.lng.toFixed(4)}
       </div>
@@ -280,7 +295,7 @@ export function ResultsDrawer({
       )}
 
       {vista === "detalle" && seleccionada ? (
-        <VistaDetalle h={seleccionada} onCenter={onCenter} onVolver={() => setVista("comparar")} />
+        <VistaDetalle h={seleccionada} image={image} onCenter={onCenter} onVolver={() => setVista("comparar")} />
       ) : (
         <>
           {principal && (

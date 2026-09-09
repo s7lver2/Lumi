@@ -26,6 +26,12 @@ const TICK_S: u64 = 2;
 /// Cuántas veces vuelve un trabajo a la cola tras morírsele el trabajador.
 const MAX_REQUEUES: i64 = 1;
 
+/// Techo de confianza para un resultado sin verificación geométrica real
+/// detrás -- `agrupar::confianza` puede devolver hasta 10.0 con un solo
+/// grupo (nada con qué compararlo), y eso no es lo mismo que "estoy seguro":
+/// es "no hay con qué dudar todavía". Verificado sí puede llegar al máximo.
+const TECHO_CONFIANZA_SIN_VERIFICAR: f64 = 3.0;
+
 /// Plazo por defecto para que un trabajador diga `listo`. Va en `meta`
 /// (`queue_listo_s`) y no compilado: un modelo grande en un disco lento puede
 /// tardar más, y eso no debería obligar a recompilar el daemon.
@@ -846,7 +852,22 @@ impl Queue {
                                 }
                             })
                             .collect();
-                        let h: Vec<_> = h.into_iter().map(|(hip, _)| hip).collect();
+                        let mut h: Vec<_> = h.into_iter().map(|(hip, _)| hip).collect();
+                        // `agrupar::confianza` compara al ganador contra el
+                        // segundo candidato -- sin uno (un solo grupo tras
+                        // agrupar) se topaba directamente al máximo (10.0),
+                        // tratando "no hay con qué comparar" como sinónimo de
+                        // "estoy seguro". Un candidato sin verificación
+                        // geométrica real detrás es justo el caso contrario:
+                        // nada lo respalda más allá de la propia recuperación.
+                        // Se topa aparte, aquí, porque `agrupar::confianza` no
+                        // conoce el veredicto del verificador -- eso solo lo
+                        // tiene esta función, vía `respaldo_de`.
+                        if let Some(((_, verificador, _), hip)) = respaldo.first().zip(h.first_mut()) {
+                            if verificador.is_none() {
+                                hip.peso = hip.peso.min(TECHO_CONFIANZA_SIN_VERIFICAR);
+                            }
+                        }
                         self.guardar_resultado(id, &h, &respaldo);
                     }
                     // Sin candidatos NO es una avería: es una respuesta.
