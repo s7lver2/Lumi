@@ -1,6 +1,11 @@
 # workflow/ es un repo aparte (ClaudeChan), clonado por el bootstrap
 workflow/
 
+# local-corr-lumi/ es un repo aparte: el kernel Triton que sustituye a
+# `local_corr` (la extensión CUDA de romatch que no compila sola, ver el
+# verificador "roma" en workers/lumi_verify.py).
+local-corr-lumi/
+
 recovery.txt
 
 node_modules/
