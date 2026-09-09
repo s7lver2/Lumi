@@ -402,10 +402,24 @@ export function MapCanvas({
     // Espera a que termine el alejamiento antes de girar: arrancar los dos
     // `easeTo`/rotación a la vez los hace pelearse por la cámara.
     const t = setTimeout(() => { raf = requestAnimationFrame(girar); }, 1400);
+    // Quien arrastra gana, siempre: sin esto, agarrar el globo mientras
+    // `pro` verifica (varios minutos ahora mismo, ver el spec de
+    // rendimiento) se sentía como un mapa bloqueado -- el arrastre movía la
+    // cámara un instante y el siguiente `jumpTo` del giro automático la
+    // devolvía a su sitio, 20 veces por segundo. `dragstart` dispara con el
+    // primer píxel de intención de arrastre (ratón o táctil, MapLibre los
+    // normaliza igual), así que el giro se para en cuanto alguien toca el
+    // mapa, no al terminar el análisis.
+    const detener = () => {
+      vivo = false;
+      cancelAnimationFrame(raf);
+    };
+    m.on("dragstart", detener);
     return () => {
       vivo = false;
       clearTimeout(t);
       cancelAnimationFrame(raf);
+      m.off("dragstart", detener);
       setProj({ type: globe ? "globe" : "mercator", name: globe ? "globe" : "mercator" });
     };
   }, [procesando, globe]);
