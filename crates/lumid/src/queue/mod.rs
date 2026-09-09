@@ -715,6 +715,10 @@ impl Queue {
                         let pesos = crate::assets::pesos_dir(&self.store, &self.dir);
                         let registro_verif = crate::assets::ruta("registros/verificadores");
                         let python = interprete_python(&self.store);
+                        // Clonado fuera del `await`: `self.verificadores` es un
+                        // `std::sync::Mutex` (no `Send` a través de un punto de
+                        // espera), y la lista completa son unos pocos KB.
+                        let verificadores = self.verificadores.lock().unwrap().clone();
                         let (afinados, dictamen) = tokio::join!(
                             crate::verificar::afinar(
                                 &nivel,
@@ -725,6 +729,7 @@ impl Queue {
                                 &dispositivo,
                                 &registro_verif,
                                 &pesos,
+                                &verificadores,
                                 &self.store,
                                 &self.verif_persistente,
                             ),
@@ -773,7 +778,17 @@ impl Queue {
                                     Some((clave(g.lat, g.lng), (g.inliers, g.verificador.clone())))
                                 })
                                 .collect();
-                        let usar: Vec<_> = if vivos.is_empty() {
+                        // Se recuerda ANTES de que `usar` cambie más abajo
+                        // (los agentes reescalan `similitud`, pero eso no
+                        // aporta ninguna verificación geométrica nueva): sin
+                        // esto no había forma de distinguir, en el punto
+                        // donde se agrupa, entre "un grupo verificado que
+                        // resultó tener un solo candidato" y "nadie verificó
+                        // nada" -- los dos acaban con `vivos` vacío o lleno
+                        // según el caso, pero solo el segundo debe evitar
+                        // `en_grupos`.
+                        let sin_verificar = vivos.is_empty();
+                        let usar: Vec<_> = if sin_verificar {
                             afinados.into_iter().map(|a| a.candidato).collect()
                         } else {
                             vivos
@@ -825,7 +840,17 @@ impl Queue {
                         );
 
                         self.guardar_agentes(id, &dictamen);
-                        let h = crate::recuperar::hipotesis(&usar);
+                        // Sin ningún candidato verificado, agrupar por
+                        // vecindad de tesela funde una ciudad entera en una
+                        // sola isla (una tesela z14 mide 1,8 km a la latitud
+                        // de León): doce sitios posibles sin verificar son
+                        // más honestos que un círculo de dos kilómetros que
+                        // no señala a ninguno de ellos en particular.
+                        let h = if sin_verificar {
+                            crate::recuperar::hipotesis_sin_agrupar(&usar)
+                        } else {
+                            crate::recuperar::hipotesis(&usar)
+                        };
                         // Para TODAS las hipótesis, principal incluida: antes
                         // solo se calculaba para las alternativas (`skip(1)`)
                         // porque `analyses` no tenía dónde guardar el
@@ -843,24 +868,52 @@ impl Queue {
                         // encontraba nada. Se busca en cada miembro real del
                         // grupo (`recuperar::hipotesis` los trae aparte) y se
                         // usa el de más inliers, no el punto ya promediado.
-                        let respaldo: Vec<(Option<u32>, Option<String>, Option<String>)> = h
+                        // Cuarto elemento (`Option<i64>`, aparte de la
+                        // tripleta que ya esperan `guardar_resultado`/
+                        // `guardar_hipotesis`): el id del MISMO candidato que
+                        // aporta el respaldo, no el de más similitud que
+                        // `agrupar::resumir` puso por defecto en
+                        // `Hipotesis::imagen_id`. Antes el panel podía enseñar
+                        // la foto de un candidato y el respaldo geométrico
+                        // («verificado por roma · 897 correspondencias») de
+                        // otro candidato distinto del mismo grupo -- la
+                        // prueba A etiquetada con el respaldo de la B.
+                        let respaldo_y_foto: Vec<(Option<u32>, Option<String>, Option<String>, Option<i64>)> = h
                             .iter()
                             .map(|(_, miembros)| {
                                 let mejor = miembros
                                     .iter()
-                                    .filter_map(|&(lat, lng)| respaldo_de.get(&clave(lat, lng)))
-                                    .max_by_key(|(inliers, _)| *inliers);
+                                    .filter_map(|&(cand_id, lat, lng)| {
+                                        respaldo_de.get(&clave(lat, lng)).map(|b| (cand_id, b))
+                                    })
+                                    .max_by_key(|(_, (inliers, _))| *inliers);
                                 let motivo = miembros
                                     .iter()
-                                    .find_map(|&(lat, lng)| motivo_de.get(&clave(lat, lng)))
+                                    .find_map(|&(_, lat, lng)| motivo_de.get(&clave(lat, lng)))
                                     .cloned();
                                 match mejor {
-                                    Some((i, v)) => (Some(*i), Some(v.clone()), motivo),
-                                    None => (None, None, motivo),
+                                    Some((cand_id, (i, v))) => (Some(*i), Some(v.clone()), motivo, Some(cand_id)),
+                                    None => (None, None, motivo, None),
                                 }
                             })
                             .collect();
+                        let respaldo: Vec<(Option<u32>, Option<String>, Option<String>)> = respaldo_y_foto
+                            .iter()
+                            .map(|(i, v, m, _)| (*i, v.clone(), m.clone()))
+                            .collect();
                         let mut h: Vec<_> = h.into_iter().map(|(hip, _)| hip).collect();
+                        // Sobrescribe `imagen_id` con el candidato del
+                        // respaldo cuando lo hay: la foto que se enseña tiene
+                        // que ser la de quien de verdad se pudo verificar, no
+                        // la de quien solo se parecía más. Sin respaldo (nadie
+                        // verificado en el grupo), se queda el de más
+                        // similitud que ya trae `agrupar::resumir` -- sigue
+                        // siendo el único criterio disponible en ese caso.
+                        for (hip, (_, _, _, foto)) in h.iter_mut().zip(respaldo_y_foto.iter()) {
+                            if let Some(cand_id) = foto {
+                                hip.imagen_id = Some(*cand_id);
+                            }
+                        }
                         // `agrupar::confianza` compara al ganador contra el
                         // segundo candidato -- sin uno (un solo grupo tras
                         // agrupar) se topaba directamente al máximo (10.0),

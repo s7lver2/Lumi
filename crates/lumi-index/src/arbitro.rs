@@ -44,13 +44,49 @@ pub struct Ganador {
 /// a que cada instalación tenga el suyo y a que dos servidores den
 /// respuestas distintas al mismo caso, que en una herramienta forense es lo
 /// último que se quiere.
+///
+/// Esta calibración es de `tiny-roma` (es lo único que corría cuando se
+/// midió, el 04-09, antes de que Pro cargara `roma` de verdad el mismo día
+/// por la tarde) y sigue siendo el valor por defecto para cualquier
+/// verificador que no declare el suyo (`Verificador::umbral_inliers`). No
+/// sirve para `roma`/`roma-v2`: el `roma` completo corre denso con
+/// *upsample* a 864×864 y produce correspondencias en otro orden de
+/// magnitud — medido en producción, 897 y 1742 inliers sobre candidatos que
+/// NO eran el sitio correcto (12 de 12 y 10 de 12 "verificados" a más de
+/// 1 km de distancia entre sí). Esos dos verificadores declaran su propio
+/// umbral en su ficha de registro, puesto por ahora por encima de esos dos
+/// falsos positivos con margen — mismo criterio de "por encima de lo peor
+/// medido, no a medio camino" que fijó este número, pero con solo dos
+/// puntos de datos (ambos negativos) en vez de 16. Repetir el proceso de
+/// arriba con pares reales verificados con `roma` (no con `tiny-roma`) es
+/// trabajo pendiente, igual que lo fue este número antes del commit
+/// `078cae0`.
 pub const UMBRAL_INLIERS: u32 = 200;
 
 /// `None` significa «este candidato se cae»: ninguno llegó al umbral.
+///
+/// Compatibilidad: usa `UMBRAL_INLIERS` para todos, como si ningún
+/// verificador declarara el suyo propio. Ver `arbitrar_con_umbrales` para el
+/// caso real, donde cada verificador puede traer el suyo.
 pub fn arbitrar(veredictos: &[Veredicto]) -> Option<Ganador> {
+    arbitrar_con_umbrales(veredictos, &|_| UMBRAL_INLIERS)
+}
+
+/// Igual que `arbitrar`, pero el umbral se pregunta por nombre de
+/// verificador en vez de ser el mismo número para todos.
+///
+/// Necesario porque `UMBRAL_INLIERS` se calibró contra `tiny-roma` (positivos
+/// 126-2920, negativos 55-143) y el `roma` completo produce correspondencias
+/// en otro orden de magnitud (denso, con *upsample* a 864×864): en
+/// producción, `tiny-roma` dio 78 inliers sobre la catedral de León (por
+/// debajo incluso de los negativos de `tiny-roma`, correctamente descartado)
+/// mientras que `roma` dio 897-1742 sobre el mismo tipo de error — un solo
+/// número no discrimina para los dos, y con el umbral compartido `roma`
+/// aprobaba 12 de 12 candidatos repartidos por 3 km de ciudad.
+pub fn arbitrar_con_umbrales(veredictos: &[Veredicto], umbral_de: &dyn Fn(&str) -> u32) -> Option<Ganador> {
     veredictos
         .iter()
-        .filter(|v| v.inliers >= UMBRAL_INLIERS)
+        .filter(|v| v.inliers >= umbral_de(&v.verificador))
         // El desempate por nombre es deliberado: el orden en que lleguen los
         // veredictos no puede decidir la respuesta de un informe.
         .max_by(|a, b| a.inliers.cmp(&b.inliers).then(b.verificador.cmp(&a.verificador)))
@@ -106,5 +142,22 @@ mod tests {
         let a = arbitrar(&[v("roma", UMBRAL_INLIERS, 1.0), v("efficient-loftr", UMBRAL_INLIERS, 2.0)]).unwrap();
         let b = arbitrar(&[v("efficient-loftr", UMBRAL_INLIERS, 2.0), v("roma", UMBRAL_INLIERS, 1.0)]).unwrap();
         assert_eq!(a.verificador, b.verificador, "el orden de entrada no puede decidir");
+    }
+
+    #[test]
+    fn cada_verificador_puede_traer_su_propio_umbral() {
+        // Caso real de producción: 1742 inliers de "roma" sobre un candidato
+        // que NO era el sitio correcto. Con el umbral compartido (200) eso
+        // aprobaba; con el umbral propio de "roma" (más alto), se cae, y un
+        // "lightglue-aliked" que sí llega a SU umbral (más bajo) puede seguir
+        // ganando -- el umbral alto de uno no penaliza al otro.
+        let umbral_de = |id: &str| if id == "roma" { 3000 } else { UMBRAL_INLIERS };
+        assert!(
+            arbitrar_con_umbrales(&[v("roma", 1742, 42.60)], &umbral_de).is_none(),
+            "1742 no llega al umbral propio de roma (3000)",
+        );
+        let g = arbitrar_con_umbrales(&[v("roma", 1742, 42.60), v("lightglue-aliked", 250, 42.59)], &umbral_de)
+            .unwrap();
+        assert_eq!(g.verificador, "lightglue-aliked", "roma se cae por su propio umbral, lightglue-aliked no");
     }
 }

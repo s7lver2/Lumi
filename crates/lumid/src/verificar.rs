@@ -10,8 +10,9 @@ use std::process::Stdio;
 
 use anyhow::Result;
 use lumi_index::agrupar::Candidato;
-use lumi_index::arbitro::{arbitrar, Ganador, Veredicto};
+use lumi_index::arbitro::{arbitrar_con_umbrales, Ganador, Veredicto};
 use lumi_index::niveles::Nivel;
+use lumi_index::registro::Verificador;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
 pub struct Afinado {
@@ -49,6 +50,7 @@ pub async fn afinar(
     dispositivo: &str,
     registro: &Path,
     pesos: &Path,
+    verificadores: &[Verificador],
     store: &crate::store::Store,
     persistente: &crate::persistente::Persistente,
 ) -> Result<Vec<Afinado>> {
@@ -65,8 +67,10 @@ pub async fn afinar(
     // por análisis — mismo protocolo de entrada/salida, solo cambia quién
     // lo lanza y cuándo muere.
     if store.get_meta("verificacion_persistente").as_deref() == Some("1") {
-        return afinar_persistente(nivel, consulta, candidatos, rutas, python, dispositivo, registro, pesos, persistente)
-            .await;
+        return afinar_persistente(
+            nivel, consulta, candidatos, rutas, python, dispositivo, registro, pesos, verificadores, persistente,
+        )
+        .await;
     }
 
     let mut hijo = tokio::process::Command::new(python)
@@ -151,7 +155,7 @@ pub async fn afinar(
         inicio.elapsed().as_secs_f64(),
     );
 
-    Ok(construir_afinados(candidatos, rutas, &por_candidato))
+    Ok(construir_afinados(candidatos, rutas, &por_candidato, verificadores))
 }
 
 /// El mismo trámite de siempre (mandar la orden, recoger un veredicto por
@@ -167,6 +171,7 @@ async fn afinar_persistente(
     dispositivo: &str,
     registro: &Path,
     pesos: &Path,
+    verificadores: &[Verificador],
     persistente: &crate::persistente::Persistente,
 ) -> Result<Vec<Afinado>> {
     let inicio = std::time::Instant::now();
@@ -212,19 +217,28 @@ async fn afinar_persistente(
         inicio.elapsed().as_secs_f64(),
     );
 
-    Ok(construir_afinados(candidatos, rutas, &por_candidato))
+    Ok(construir_afinados(candidatos, rutas, &por_candidato, verificadores))
 }
 
 fn construir_afinados(
     candidatos: Vec<Candidato>,
     rutas: &[(i64, String)],
     por_candidato: &std::collections::HashMap<i64, Vec<Veredicto>>,
+    verificadores: &[Verificador],
 ) -> Vec<Afinado> {
+    // Una tabla, no una búsqueda lineal por candidato: `verificadores` es la
+    // lista entera del registro (todos los niveles), no solo los de este
+    // nivel, así que sin esto se recorrería de más en cada candidato.
+    let umbrales: std::collections::HashMap<&str, u32> = verificadores
+        .iter()
+        .map(|v| (v.id.as_str(), v.umbral_inliers.unwrap_or(lumi_index::arbitro::UMBRAL_INLIERS)))
+        .collect();
+    let umbral_de = |id: &str| umbrales.get(id).copied().unwrap_or(lumi_index::arbitro::UMBRAL_INLIERS);
     candidatos
         .into_iter()
         .zip(rutas.iter())
         .map(|(candidato, (id, _))| {
-            let ganador = por_candidato.get(id).and_then(|v| arbitrar(v));
+            let ganador = por_candidato.get(id).and_then(|v| arbitrar_con_umbrales(v, &umbral_de));
             Afinado { candidato, ganador }
         })
         .collect()

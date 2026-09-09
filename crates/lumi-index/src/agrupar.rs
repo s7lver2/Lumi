@@ -1,13 +1,17 @@
 //! De candidatos recuperados a hipótesis.
 //!
-//! Se agrupa por VECINDAD DE TESELA y no por un radio en metros elegido a
-//! dedo: el producto entero habla en teselas z14 desde el 7a, y dos fotos en
-//! teselas contiguas están en el mismo sitio por la definición del formato. Un
-//! umbral en metros sería un número más que explicar y afinar.
-
-use std::collections::BTreeMap;
-
-use crate::tiles::xy_de_quadkey;
+//! Se agrupa por DISTANCIA REAL, no por vecindad de tesela z14 -- lo primero
+//! que se probó, con el argumento de que el producto entero habla en teselas
+//! z14 desde el 7a y dos fotos en teselas contiguas están en el mismo sitio
+//! por definición del formato. Eso es cierto para la COBERTURA del formato
+//! (qué corpus toca instalar), pero no para la IDENTIDAD de un lugar: una
+//! tesela z14 mide 1,8 km a la latitud de León, y con vecindad-8 y
+//! transitividad, cualquier conjunto de candidatos repartido por una ciudad
+//! entera acababa en una sola isla. Medido en producción: doce candidatos de
+//! `cosplace` sobre una foto de la catedral de León, ninguno verificado
+//! geométricamente, formaron un único grupo con centroide a ~850 m de la
+//! catedral real y radio de 1924 m -- literalmente la dispersión de la
+//! ciudad, no un lugar.
 
 #[derive(Debug, Clone)]
 pub struct Candidato {
@@ -38,31 +42,37 @@ pub struct Grupo {
     /// elegido por un criterio distinto — un grupo ya tiene un solo autor y un
     /// solo índice, y esto es la misma regla aplicada a la foto.
     pub imagen_id: i64,
-    /// Coordenada original de cada candidato que aportó a este grupo -- el
-    /// centroide de arriba (`lat`/`lng`) es un promedio ponderado y casi
+    /// Id y coordenada original de cada candidato que aportó a este grupo --
+    /// el centroide de arriba (`lat`/`lng`) es un promedio ponderado y casi
     /// nunca coincide con la de ninguno en concreto, así que quien necesite
     /// buscar algo asociado a UN candidato del grupo (p. ej. su respaldo
-    /// geométrico) tiene que mirar aquí, no al centroide.
-    pub miembros: Vec<(f64, f64)>,
+    /// geométrico, o cuál de ellos es realmente `imagen_id` una vez se sabe
+    /// cuál tiene el respaldo) tiene que mirar aquí, no al centroide.
+    pub miembros: Vec<(i64, f64, f64)>,
 }
 
-/// Islas contiguas en el plano de teselas: dos candidatos caen en el mismo
-/// grupo si sus quadkeys son iguales o vecinos, y los grupos salen de la
-/// transitividad de esa relación.
+/// Dos candidatos caen en el mismo grupo si están a menos de esto entre sí, y
+/// los grupos salen de la transitividad de esa relación (islas conexas, no
+/// "todos a menos de X del centroide" -- una fachada larga fotografiada de
+/// punta a punta sigue siendo un solo sitio aunque sus extremos disten más
+/// que esto).
+///
+/// El valor: lo bastante amplio para no partir una misma fachada o plaza en
+/// dos grupos (una manzana urbana típica), lo bastante estrecho para que
+/// "el mismo grupo" siga significando "el mismo sitio" y no "la misma
+/// ciudad". No calibrado contra pares reales todavía -- a diferencia de
+/// `arbitro::UMBRAL_INLIERS`, que si lo está: es geometría de sentido común
+/// (el tamaño de una manzana), no una medida de un modelo. Nombrado aparte y
+/// no repartido como número mágico para que el día que haga falta afinarlo,
+/// haya un único sitio que tocar.
+pub const RADIO_MISMO_SITIO_M: f64 = 150.0;
+
+/// Islas conexas por distancia real: dos candidatos caen en el mismo grupo si
+/// hay una cadena entre ellos donde cada salto mide menos de
+/// `RADIO_MISMO_SITIO_M`. `O(n²)` a propósito -- `n` es como mucho
+/// `recuperar::A_VERIFICAR` (12), nunca el corpus entero, así que una
+/// tabla espacial sería complejidad sin causa.
 pub fn en_grupos(cands: &[Candidato]) -> Vec<Grupo> {
-    let xy: Vec<(i64, i64)> = cands
-        .iter()
-        .map(|c| {
-            let (x, y) = xy_de_quadkey(&c.quadkey);
-            (x as i64, y as i64)
-        })
-        .collect();
-
-    let mut de_celda: BTreeMap<(i64, i64), Vec<usize>> = BTreeMap::new();
-    for (i, p) in xy.iter().enumerate() {
-        de_celda.entry(*p).or_default().push(i);
-    }
-
     let mut visto = vec![false; cands.len()];
     let mut grupos = Vec::new();
     for raiz in 0..cands.len() {
@@ -74,15 +84,10 @@ pub fn en_grupos(cands: &[Candidato]) -> Vec<Grupo> {
         visto[raiz] = true;
         while let Some(i) = pila.pop() {
             isla.push(i);
-            let (x, y) = xy[i];
-            for dx in -1..=1 {
-                for dy in -1..=1 {
-                    for &j in de_celda.get(&(x + dx, y + dy)).map(|v| &v[..]).unwrap_or(&[]) {
-                        if !visto[j] {
-                            visto[j] = true;
-                            pila.push(j);
-                        }
-                    }
+            for j in 0..cands.len() {
+                if !visto[j] && metros_entre(cands[i].lat, cands[i].lng, cands[j].lat, cands[j].lng) < RADIO_MISMO_SITIO_M {
+                    visto[j] = true;
+                    pila.push(j);
                 }
             }
         }
@@ -119,8 +124,16 @@ fn resumir(cands: &[Candidato], isla: &[usize]) -> Grupo {
         candidatos: isla.len(),
         indice: cands[mejor].indice.clone(),
         autor: cands[mejor].autor.clone(),
+        // `imagen_id` sale del mismo candidato de más similitud que decide
+        // `indice`/`autor` arriba -- el criterio POR DEFECTO, para cuando
+        // nadie tiene respaldo geométrico. Cuando sí lo hay, `queue::mod` lo
+        // sobrescribe con el candidato de más inliers usando `miembros` de
+        // abajo: son dos preguntas distintas ("¿quién se parece más?" vs
+        // "¿a quién de verdad se puede verificar?"), y mostrar la foto del
+        // primero con el respaldo del segundo era enseñar la prueba
+        // equivocada etiquetada con el respaldo de otra.
         imagen_id: cands[mejor].id,
-        miembros: isla.iter().map(|&i| (cands[i].lat, cands[i].lng)).collect(),
+        miembros: isla.iter().map(|&i| (cands[i].id, cands[i].lat, cands[i].lng)).collect(),
     }
 }
 
@@ -162,19 +175,25 @@ mod tests {
         Grupo {
             lat: 0.0, lng: 0.0, radio_m: 100.0, peso,
             candidatos: 1, indice: "A".into(), autor: "@ana".into(), imagen_id: 1,
-            miembros: vec![(0.0, 0.0)],
+            miembros: vec![(1, 0.0, 0.0)],
         }
     }
 
     #[test]
-    fn dos_teselas_contiguas_son_el_mismo_sitio_y_una_lejana_no() {
+    fn cerca_de_verdad_es_el_mismo_sitio_y_cerca_de_tesela_no_basta() {
+        // 1 y 2 están a ~24 m -- la misma fachada. 3 está a ~810 m de 1: LA
+        // MISMA CIUDAD (y, con el viejo criterio de vecindad de tesela z14,
+        // habría podido caer en una tesela contigua a la de 1 o 2 -- una
+        // tesela z14 mide 1,8 km a esta latitud) pero NO el mismo sitio. Este
+        // es justo el caso que rompía antes de este cambio: "cerca en el
+        // mapa de teselas" no es "el mismo lugar".
         let c = vec![
-            cand(1, "03131010101010", 43.36, -8.41, 0.90, "A", "@ana"),
-            cand(2, "03131010101011", 43.36, -8.40, 0.80, "A", "@ana"),
-            cand(3, "12000000000000", 10.00, 20.00, 0.70, "B", "@bea"),
+            cand(1, "03131010101010", 43.36000, -8.41000, 0.90, "A", "@ana"),
+            cand(2, "03131010101011", 43.36000, -8.40970, 0.80, "A", "@ana"),
+            cand(3, "03131010101011", 43.36000, -8.40000, 0.70, "B", "@bea"),
         ];
         let g = en_grupos(&c);
-        assert_eq!(g.len(), 2, "las dos contiguas van juntas");
+        assert_eq!(g.len(), 2, "1 y 2 van juntos; 3 es un sitio distinto pese a compartir quadkey");
         assert_eq!(g[0].candidatos, 2, "el grupo mayor va primero");
         assert!(g[0].peso > g[1].peso);
         // La atribución sale del candidato que más pesa dentro del grupo.
@@ -182,6 +201,21 @@ mod tests {
         assert_eq!(g[0].autor, "@ana");
         // Y su foto es la de ESE mismo candidato, no la de cualquiera del grupo.
         assert_eq!(g[0].imagen_id, 1);
+    }
+
+    #[test]
+    fn una_cadena_de_saltos_cortos_sigue_siendo_un_grupo_aunque_los_extremos_disten_mas() {
+        // Islas CONEXAS, no "todos a menos de X del centroide": una fachada
+        // larga fotografiada de punta a punta no se debe partir en dos solo
+        // porque el primer y el último punto disten más que el radio.
+        let c = vec![
+            cand(1, "q", 43.36000, -8.41000, 0.90, "A", "@ana"),
+            cand(2, "q", 43.36000, -8.40880, 0.80, "A", "@ana"), // ~97 m de 1
+            cand(3, "q", 43.36000, -8.40760, 0.70, "A", "@ana"), // ~97 m de 2, ~194 m de 1
+        ];
+        let g = en_grupos(&c);
+        assert_eq!(g.len(), 1, "la cadena entera es un solo grupo aunque 1 y 3 disten >150 m");
+        assert_eq!(g[0].candidatos, 3);
     }
 
     #[test]

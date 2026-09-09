@@ -120,12 +120,16 @@ pub async fn candidatos(
 /// Agrupación por vecindad de tesela y atribución. Ya no consulta Qdrant, así
 /// que deja de ser `async`.
 ///
-/// Cada hipótesis viaja con las coordenadas ORIGINALES de los candidatos que
-/// formaron su grupo (`Grupo::miembros`) -- el centroide ponderado de arriba
-/// no coincide con la de ninguno en concreto, así que `queue::mod` (que es
-/// quien tiene los veredictos del verificador y busca respaldo por
-/// coordenada exacta) necesita esta lista, no solo el punto final.
-pub fn hipotesis(cands: &[Candidato]) -> Vec<(Hipotesis, Vec<(f64, f64)>)> {
+/// Cada hipótesis viaja con el id y las coordenadas ORIGINALES de los
+/// candidatos que formaron su grupo (`Grupo::miembros`) -- el centroide
+/// ponderado de arriba no coincide con la de ninguno en concreto, así que
+/// `queue::mod` (que es quien tiene los veredictos del verificador y busca
+/// respaldo por coordenada exacta) necesita esta lista, no solo el punto
+/// final. El id es lo que permite, además, saber A QUÉ candidato pertenece
+/// el respaldo encontrado -- antes solo se sabía la coordenada, y
+/// `Hipotesis::imagen_id` (elegido por similitud en `agrupar::resumir`)
+/// podía señalar a un candidato distinto del que de verdad se verificó.
+pub fn hipotesis(cands: &[Candidato]) -> Vec<(Hipotesis, Vec<(i64, f64, f64)>)> {
     let grupos = en_grupos(cands);
     let conf = confianza(&grupos);
     grupos
@@ -153,6 +157,51 @@ pub fn hipotesis(cands: &[Candidato]) -> Vec<(Hipotesis, Vec<(f64, f64)>)> {
                     motivo_agente: None,
                 },
                 g.miembros,
+            )
+        })
+        .collect()
+}
+
+/// Igual que `hipotesis`, pero SIN pasar por `en_grupos`: cada candidato es
+/// su propia hipótesis, nunca se funde con otro por vecindad de tesela.
+///
+/// Para el caso en que ningún candidato tiene verificación geométrica
+/// (`queue::mod` lo llama entonces en vez de `hipotesis`): agrupar por tesela
+/// asume que estar cerca en el mapa de teselas significa "el mismo sitio", y
+/// esa suposición depende de que la verificación ya haya descartado el
+/// ruido. Sin ella, una tesela z14 mide 1,8 km a la latitud de León -- doce
+/// candidatos repartidos por una ciudad entera acababan siendo UNA isla, con
+/// un centroide que no es el sitio de ninguno de los doce y un radio que es
+/// literalmente la dispersión de la ciudad (medido en producción: 1924 m
+/// sobre la catedral de León, con la referencia real a menos de 150 m de
+/// distancia, perdida dentro del promedio). Doce candidatos sin verificar
+/// son doce sitios posibles, no un círculo de dos kilómetros que no significa
+/// nada -- mostrar eso es más honesto que inventar una certeza que no existe.
+pub fn hipotesis_sin_agrupar(cands: &[Candidato]) -> Vec<(Hipotesis, Vec<(i64, f64, f64)>)> {
+    let mut ordenados: Vec<&Candidato> = cands.iter().collect();
+    // Mismo orden que `agrupar::en_grupos` ya deja (más peso primero): la
+    // principal es el candidato que más se parece, aunque nadie lo verificó.
+    ordenados.sort_by(|a, b| b.similitud.total_cmp(&a.similitud));
+    ordenados
+        .into_iter()
+        .map(|c| {
+            (
+                Hipotesis {
+                    lat: c.lat,
+                    lng: c.lng,
+                    // Mismo suelo que `agrupar::resumir` usa para un grupo de
+                    // un único candidato: un punto solo no tiene dispersión
+                    // que medir, pero tampoco es exacto a cero metros.
+                    radio_m: 50.0,
+                    peso: c.similitud,
+                    indice: c.indice.clone(),
+                    autor: c.autor.clone(),
+                    imagen_id: Some(c.id),
+                    inliers: None,
+                    verificador: None,
+                    motivo_agente: None,
+                },
+                vec![(c.id, c.lat, c.lng)],
             )
         })
         .collect()

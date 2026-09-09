@@ -124,6 +124,18 @@ pub struct Verificador {
     /// futuro exige algo distinto de un token.
     #[serde(default)]
     pub puerta: Option<String>,
+    /// `None` significa «usa `arbitro::UMBRAL_INLIERS`», la constante que se
+    /// calibró contra `tiny-roma`. Verificado en producción: `tiny-roma` dio
+    /// 78 inliers sobre un candidato que no era el sitio correcto (por
+    /// debajo del umbral, se descartó bien) y el `roma` completo dio
+    /// 897-1742 inliers sobre EL MISMO tipo de error (12 de 12 candidatos
+    /// "verificados" a 1,2 km del sitio real) — corre denso con *upsample*
+    /// a 864×864 y produce correspondencias en otro orden de magnitud, así
+    /// que un solo número no puede discriminar para los dos. Cada
+    /// verificador declara el suyo aquí, calibrado contra sus propios pares
+    /// de control; ninguno se inventa por interpolación del de otro.
+    #[serde(default)]
+    pub umbral_inliers: Option<u32>,
 }
 
 fn leer_dir<T: serde::de::DeserializeOwned>(dir: &Path) -> Vec<T> {
