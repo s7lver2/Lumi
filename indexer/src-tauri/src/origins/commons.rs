@@ -46,9 +46,34 @@ struct Coordenada {
 // `pub(crate)`: `monumentos.rs` pagina imageinfo por lotes con la misma forma
 // exacta de respuesta (`iiprop=url|size|extmetadata`) y reutiliza estos dos
 // tipos en vez de duplicarlos — es la misma API, la misma consulta.
+/// Un campo de `extmetadata`. `value` se acepta como JSON CUALQUIERA, no como
+/// cadena: Commons documenta estos valores como texto pero no lo cumple —
+/// `CommonsMetadataExtension` viene como número (`1.2`) en prácticamente todo
+/// fichero con metadatos. Con `Option<String>` serde rechazaba la respuesta
+/// entera («invalid type: floating point `1.2`, expected a string»), así que
+/// CUALQUIER tesela con al menos una foto fallaba al deserializar y el sondeo
+/// la daba por vacía. Solo las teselas realmente sin fotos «funcionaban».
+///
+/// De aquí solo se leen campos que sí son texto (`Artist`, `LicenseShortName`,
+/// `DateTimeOriginal`); los demás no se usan, pero tienen que poder ATRAVESAR
+/// el parseo. Regla general para todo adaptador: los metadatos que no usamos
+/// no pueden tumbar los que sí.
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct Campo {
-    pub(crate) value: Option<String>,
+    #[serde(default)]
+    pub(crate) value: Option<serde_json::Value>,
+}
+
+impl Campo {
+    /// El valor como texto, o `None` si no lo hay. Un número se formatea en
+    /// vez de descartarse: `DateTimeOriginal` llega a veces como año suelto.
+    pub(crate) fn texto(&self) -> Option<String> {
+        match self.value.as_ref()? {
+            serde_json::Value::String(s) => Some(s.clone()),
+            serde_json::Value::Null => None,
+            otro => Some(otro.to_string()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -154,6 +179,29 @@ impl Commons {
     /// páginas candidatas, la propia búsqueda de `geosearch`. Por eso se
     /// repite la consulta añadiendo los cursores hasta que la API deja de
     /// pedirlos, fusionando cada página con los campos que le falten.
+    /// Solo la búsqueda geográfica, sin `prop`: es lo único que hace falta
+    /// para CONTAR. `geosearch` topa en `ggslimit` y no continúa por su
+    /// cuenta (lo que pagina son los submódulos de `prop`), así que esto es
+    /// siempre UNA petición, frente a las hasta 60 de `paginas()` — medido en
+    /// el centro de León: 1,2 s contra 18,3 s por tesela, con el mismo número.
+    /// Con el limitador de Commons (1 a la vez, 2 req/s) esa diferencia son
+    /// minutos de área gris por cada área que se sondea.
+    async fn contar(&self, tesela: &str) -> Result<usize> {
+        let b = bbox_de_tesela(tesela);
+        let url = format!(
+            "{API}?action=query&format=json&formatversion=1\
+             &generator=geosearch&ggsbbox={}%7C{}%7C{}%7C{}&ggslimit={LIMITE}&ggsnamespace=6&ggsprimary=all",
+            b.norte, b.oeste, b.sur, b.este
+        );
+        let _g = self.ctx.limitador.permiso().await;
+        let r = self.ctx.cliente.get(&url).send().await?;
+        if !r.status().is_success() {
+            anyhow::bail!("Commons respondió {}", r.status());
+        }
+        let cuerpo: RespuestaCommons = r.json().await?;
+        Ok(cuerpo.query.map(|q| q.pages.len()).unwrap_or(0))
+    }
+
     async fn paginas(&self, tesela: &str) -> Result<Vec<Pagina>> {
         let mut fusionadas: std::collections::HashMap<i64, Pagina> = std::collections::HashMap::new();
         let mut cont: Option<std::collections::HashMap<String, String>> = None;
@@ -201,7 +249,7 @@ impl OrigenDeRed for Commons {
     }
 
     async fn sondear(&self, tesela: &str) -> Result<Disponibilidad> {
-        let n = self.paginas(tesela).await?.len() as u32;
+        let n = self.contar(tesela).await? as u32;
         // Aunque la cuenta parezca exacta se declara como muestreo: la consulta
         // está topada a 500 y la respuesta no dice si había más.
         Ok(Disponibilidad::Muestreo { nivel: Nivel::de(n), estimadas: n })
@@ -222,7 +270,7 @@ impl OrigenDeRed for Commons {
             // descarga no ahorraría ni ancho de banda ni cuota, que es justo
             // para lo que existe este módulo.
             let cats: Vec<String> = p.categories.iter().map(|c| c.title.clone()).collect();
-            let licencia = i.meta.get("LicenseShortName").and_then(|c| c.value.clone());
+            let licencia = i.meta.get("LicenseShortName").and_then(Campo::texto);
             let cand = candidata_de(i.width, i.height, &cats, licencia.as_deref());
             if let Veredicto::Fuera(motivo) = Reglas::por_defecto().evaluar(&cand) {
                 log::debug!("commons {}: descartada, {motivo}", p.title);
@@ -236,7 +284,7 @@ impl OrigenDeRed for Commons {
                     continue;
                 }
             };
-            let campo = |k: &str| i.meta.get(k).and_then(|c| c.value.clone());
+            let campo = |k: &str| i.meta.get(k).and_then(Campo::texto);
             fuera.push(Captura {
                 fuente: "commons",
                 id_origen: p.pageid.to_string(),
@@ -317,6 +365,35 @@ mod tests {
         let b = pagina_vacia(1);
         fusionar(&mut a, &b);
         assert_eq!(a.coordinates[0].lat, 1.0);
+    }
+
+    /// La regresión que dejó a Commons devolviendo 0 en TODAS partes: Commons
+    /// documenta `extmetadata[*].value` como texto y no lo cumple —
+    /// `CommonsMetadataExtension` llega como número. Con `Option<String>` esto
+    /// no deserializaba, y como la respuesta se parsea entera de una vez,
+    /// bastaba UNA foto con metadatos para perder la tesela completa. Las
+    /// únicas teselas que «funcionaban» eran las que no tenían ninguna foto.
+    #[test]
+    fn un_valor_numerico_en_extmetadata_no_tumba_la_respuesta() {
+        let j = r#"{"thumburl":"https://x/a.jpg","url":"https://x/a.jpg","width":2048,"height":1536,
+          "extmetadata":{"LicenseShortName":{"value":"CC BY-SA 4.0"},
+                         "CommonsMetadataExtension":{"value":1.2,"source":"extension"}}}"#;
+        let i: InfoImagen = serde_json::from_str(j).expect("un número en un campo que no usamos no puede tumbar el parseo");
+        assert_eq!(i.meta.get("LicenseShortName").and_then(Campo::texto).as_deref(), Some("CC BY-SA 4.0"));
+        assert_eq!(i.meta.get("CommonsMetadataExtension").and_then(Campo::texto).as_deref(), Some("1.2"));
+    }
+
+    /// El sondeo NO puede pedir la consulta pesada: cuenta lo mismo con una
+    /// sola petición en vez de hasta 60.
+    #[test]
+    fn la_url_de_contar_no_pide_metadatos() {
+        let b = bbox_de_tesela("03133320022212");
+        let u = format!(
+            "{API}?action=query&format=json&formatversion=1\
+             &generator=geosearch&ggsbbox={}%7C{}%7C{}%7C{}&ggslimit={LIMITE}&ggsnamespace=6&ggsprimary=all",
+            b.norte, b.oeste, b.sur, b.este
+        );
+        assert!(!u.contains("extmetadata") && !u.contains("prop="), "{u}");
     }
 
     #[test]

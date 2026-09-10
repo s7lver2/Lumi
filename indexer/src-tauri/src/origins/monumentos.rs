@@ -327,7 +327,7 @@ impl OrigenDeRed for Monumentos {
             for p in paginas {
                 let Some(i) = p.imageinfo.first() else { continue };
                 let Some(url) = i.thumb.clone().or_else(|| i.url.clone()) else { continue };
-                let licencia = i.meta.get("LicenseShortName").and_then(|c: &Campo| c.value.clone());
+                let licencia = i.meta.get("LicenseShortName").and_then(Campo::texto);
                 let cand = Candidata {
                     ancho: i.width,
                     alto: i.height,
@@ -354,7 +354,7 @@ impl OrigenDeRed for Monumentos {
                         continue;
                     }
                 };
-                let campo = |k: &str| i.meta.get(k).and_then(|c| c.value.clone());
+                let campo = |k: &str| i.meta.get(k).and_then(Campo::texto);
                 fuera.push(Captura {
                     fuente: "monumentos",
                     id_origen: p.pageid.to_string(),
