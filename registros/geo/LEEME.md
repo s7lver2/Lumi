@@ -1,7 +1,8 @@
 # Datos geográficos
 
-Tres ficheros. `lado.json` viene en el repositorio; los otros dos los pone el propietario, porque
-pesan y porque su licencia obliga a atribuir la fuente donde el usuario la vea.
+Cuatro ficheros. `lado.json` y `orto-wms.json` vienen en el repositorio; `paises.json` y
+`koppen.bin` los pone el propietario, porque pesan y porque su licencia obliga a atribuir la
+fuente donde el usuario la vea.
 
 **Sin estos ficheros el daemon arranca igual.** Cada resolutor que se quede sin datos devuelve
 «no lo sé», y un agente cuyo resolutor no sabe nada se abstiene: no repondera, no descarta, y en
@@ -27,3 +28,18 @@ Clima, para saber si un candidato cae en zona tropical, árida, templada, contin
   columnas de oeste (−180°) a este (180°). El byte es la **letra del grupo** en ASCII: `A`, `B`,
   `C`, `D` o `E`. `0` significa «sin dato», que es lo que va en el océano. Un fichero de cualquier
   otro tamaño se descarta entero: leerlo torcido pondría el Sáhara en Laponia.
+
+## `orto-wms.json`
+
+Tabla de servicios WMS de ortofoto nacional, para el origen `wms-orto` del Indexer
+(`indexer/src-tauri/src/origins/wms_orto.rs`). Es dato, no código: qué servicio cubre qué
+territorio no debería obligar a recompilar nada. **Opcional** — sin este fichero (o con uno
+corrupto), el origen degrada a "no hay" en cualquier tesela en vez de fallar.
+
+- **Fuente:** uno por país/organismo, añadido a mano según se van verificando. Hoy solo trae
+  PNOA (IGN, España).
+- **Formato:** `{"servicios": [{"id", "nombre", "url", "capa", "formato", "crs", "version",
+  "licencia", "atribucion", "cobertura": [[oeste, sur], [este, norte]]}]}`. `licencia` y
+  `atribucion` se rellenan a mano por servicio, igual que `fichero_url`/`licencia`/`sha256` en el
+  registro de modelos — no hay forma automática de verificar la licencia real de un WMS de
+  terceros.
