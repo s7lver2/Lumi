@@ -9,6 +9,9 @@ export const PALETA: Record<string, string> = {
   "mapbox-satelite": "#4a4d52",
   commons: "#6ea8fe",
   flickr: "#f472a6",
+  monumentos: "#c9a86a",
+  wikipedia: "#f2c14e",
+  "wms-orto": "#7a8b99",
 };
 
 export const NOMBRES: Record<string, string> = {
@@ -18,6 +21,8 @@ export const NOMBRES: Record<string, string> = {
   "mapbox-satelite": "Mapbox Satellite",
   commons: "Wikimedia Commons",
   flickr: "Flickr",
+  monumentos: "Wikidata → Commons",
+  wikipedia: "Wikipedia",
 };
 
 export const nombre = (id: string) => NOMBRES[id] ?? id;
@@ -30,10 +35,12 @@ export const LIMITES: Record<string, string> = {
   "mapbox-satelite": "16 req/s · 8 a la vez",
   commons: "2 req/s · 1 a la vez",
   flickr: "4 req/s · 2 a la vez",
+  monumentos: "2 req/s · 1 a la vez",
+  wikipedia: "2 req/s · 1 a la vez",
 };
 
-/** Los dos que funcionan sin credencial. No se les pide una que no existe. */
-export const SIN_CLAVE = new Set(["kartaview", "commons"]);
+/** Los que funcionan sin credencial. No se les pide una que no existe. */
+export const SIN_CLAVE = new Set(["kartaview", "commons", "monumentos", "wikipedia"]);
 
 /** Ninguno comparte clave con otro: cada proveedor tiene su propia fila,
  *  incluido Mapbox Satellite frente al mapa base (que no es un "origen" de
@@ -41,5 +48,6 @@ export const SIN_CLAVE = new Set(["kartaview", "commons"]);
 export const COMPARTE_CLAVE = new Set<string>();
 
 export const ORDEN = [
-  "mapillary", "kartaview", "google", "mapbox-satelite", "commons", "flickr",
+  "mapillary", "kartaview", "google", "mapbox-satelite", "commons",
+  "monumentos", "wikipedia", "flickr",
 ];

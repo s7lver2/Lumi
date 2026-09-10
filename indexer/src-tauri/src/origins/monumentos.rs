@@ -1,12 +1,17 @@
-//! Monumentos vía Wikidata → Commons: la fuente que pregunta por MONUMENTO, no
-//! por coordenada.
+//! Wikidata → Commons: la fuente que pregunta por ENTIDAD (con coordenada
+//! propia en Wikidata), no por coordenada de cámara.
+//!
+//! El nombre del `id` («monumentos») se queda por compatibilidad — ya está
+//! escrito en fichas publicadas y en la tabla `sondeos` de cualquiera que use
+//! el Indexer — pero no describe bien lo que hace: el SPARQL de
+//! `url_sparql` es `SERVICE wikibase:around` sobre CUALQUIER entidad con
+//! coordenada (`P625`), sin filtro de clase. Un monumento es solo el caso más
+//! frecuente. De cada entidad se sigue uno de dos caminos hasta sus fotos:
+//! `P373` (categoría de Commons, listada entera) y/o `P18` (imagen principal
+//! declarada en el propio ítem) — un ítem puede tener uno, el otro, los dos.
 //!
 //! Ninguna cantidad de street view enseña una fachada porque una coordenada no
-//! sabe que ahí hay una catedral. Este origen sí lo sabe: primero pregunta a
-//! Wikidata qué monumentos hay en la tesela (`SERVICE wikibase:around` sobre
-//! `P625`), y luego baja todas las vistas catalogadas de cada uno desde su
-//! categoría de Commons (`P373`), reutilizando la lógica de filtrado y de
-//! `imageinfo` por lotes que `commons.rs` ya tiene.
+//! sabe que ahí hay una catedral. Este origen sí lo sabe.
 //!
 //! Es la misma infraestructura donada que Commons (2 req/s, concurrencia 1,
 //! `User-Agent` identificable) más el propio SPARQL de Wikidata, que también
@@ -22,11 +27,11 @@ use lumi_index::coverage::Atribucion;
 use lumi_index::filter::{Candidata, Reglas, Veredicto};
 use lumi_index::manifest::Tipo;
 use lumi_index::network::{Captura, Disponibilidad, Nivel, Redistribucion, Tarifa};
-use lumi_index::tiles::{bbox_de_tesela, Bbox};
+use lumi_index::tiles::bbox_de_tesela;
 use serde::Deserialize;
 
-use super::commons::{Campo, InfoImagen, API as COMMONS_API};
-use super::{Ctx, OrigenDeRed};
+use super::commons::{imageinfo_por_lotes, Campo, API as COMMONS_API};
+use super::{centro_y_radio_km, Ctx, OrigenDeRed};
 
 const SPARQL: &str = "https://query.wikidata.org/sparql";
 
@@ -39,26 +44,15 @@ const SPARQL: &str = "https://query.wikidata.org/sparql";
 /// geométrico no puede emparejar con una foto de móvil. Si esta lista deja
 /// fuera demasiado, la salida es la revisión por excepción que ya existe, no
 /// una lista más larga.
-const PREFIJOS_SUBCAT_VISTA: [&str; 5] = ["exterior", "facade", "views of", "fachada", "vistas"];
+const PREFIJOS_SUBCAT_VISTA: [&str; 13] = [
+    "exterior", "facade", "views of", "fachada", "vistas",
+    "exteriors", "outside", "panorama", "street view of",
+    "general views", "vista general", "edificio", "building",
+];
 
 fn es_subcat_de_vista(titulo: &str) -> bool {
     let t = titulo.strip_prefix("Category:").unwrap_or(titulo).trim().to_lowercase();
     PREFIJOS_SUBCAT_VISTA.iter().any(|p| t.starts_with(p))
-}
-
-/// Centro y radio (en km) que cubren una tesela con margen, para
-/// `SERVICE wikibase:around`. Aproximación plana, igual que
-/// `lumi_index::tiles::area_km2`: a la escala de una tesela z14 el error
-/// frente a una fórmula geodésica exacta es insignificante.
-fn centro_y_radio_km(b: Bbox) -> (f64, f64, f64) {
-    let lat = (b.norte + b.sur) / 2.0;
-    let lng = (b.oeste + b.este) / 2.0;
-    let ancho_km = (b.este - b.oeste) * 111.320 * lat.to_radians().cos();
-    let alto_km = (b.norte - b.sur) * 110.574;
-    let radio = (ancho_km.powi(2) + alto_km.powi(2)).sqrt() / 2.0;
-    // 20% de margen: un monumento justo en el borde de la tesela no debe
-    // perderse por un radio calculado al milímetro.
-    (lat, lng, (radio * 1.2).max(0.05))
 }
 
 fn parsear_punto(wkt: &str) -> Option<(f64, f64)> {
@@ -100,17 +94,22 @@ struct RespuestaSparql {
     results: ResultadosSparql,
 }
 
-/// Un monumento en la tesela: su coordenada (`P625`, la del EDIFICIO) y, si la
-/// tiene, su categoría de Commons (`P373`) — el único camino hasta sus fotos.
+/// Un monumento en la tesela: su coordenada (`P625`, la del EDIFICIO) y sus
+/// dos caminos posibles hasta una foto — `categoria` (`P373`, listado de
+/// `categorymembers`) e `imagen` (`P18`, la imagen principal declarada en el
+/// propio ítem de Wikidata). Un ítem puede tener uno, otro, los dos o
+/// ninguno; `monumentos_de` ya filtra con `FILTER(BOUND(?img) || BOUND(?cat))`
+/// así que al menos uno de los dos siempre está presente aquí.
 #[derive(Debug, Clone, PartialEq)]
 struct Monumento {
     lat: f64,
     lng: f64,
-    /// `None` cuando el monumento solo trae `P18` (imagen principal) y no
-    /// categoría: sin categoría no hay `categorymembers` que listar, así que
-    /// hoy no aporta capturas. Es la lectura literal de "Paso 2" del spec:
-    /// la fuente de vistas es la categoría, no la imagen principal sola.
     categoria: Option<String>,
+    /// Título del fichero de Commons de `P18`, ya como `File:...`. Antes de
+    /// este campo, un ítem con SOLO `P18` (sin categoría) se descartaba
+    /// entero en `sondear`/`descargar` — medido: 38 de 142 ítems útiles en
+    /// una tesela urbana (27%), ver el spec de 2026-09-11.
+    imagen: Option<String>,
 }
 
 fn monumentos_de(cuerpo: RespuestaSparql) -> Vec<Monumento> {
@@ -121,7 +120,13 @@ fn monumentos_de(cuerpo: RespuestaSparql) -> Vec<Monumento> {
         .filter_map(|b| {
             let (lat, lng) = b.get("loc").and_then(|v| parsear_punto(&v.value))?;
             let categoria = b.get("cat").map(|v| v.value.clone());
-            Some(Monumento { lat, lng, categoria })
+            // `P18` llega como una URL de Special:FilePath; el título de
+            // fichero es el último segmento, decodificado como URL.
+            let imagen = b.get("img").and_then(|v| {
+                let ultimo = v.value.rsplit('/').next()?;
+                urlencoding::decode(ultimo).ok().map(|t| format!("File:{t}"))
+            });
+            Some(Monumento { lat, lng, categoria, imagen })
         })
         .collect()
 }
@@ -147,25 +152,6 @@ struct RespuestaCategoryMembers {
     query: Option<ConsultaCategoryMembers>,
     #[serde(rename = "continue")]
     continuar: Option<ContinuarCm>,
-}
-
-#[derive(Debug, Deserialize)]
-struct PaginaImg {
-    pageid: i64,
-    title: String,
-    #[serde(default)]
-    imageinfo: Vec<InfoImagen>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ConsultaImg {
-    #[serde(default)]
-    pages: HashMap<String, PaginaImg>,
-}
-
-#[derive(Debug, Deserialize)]
-struct RespuestaImg {
-    query: Option<ConsultaImg>,
 }
 
 pub struct Monumentos {
@@ -247,30 +233,6 @@ impl Monumentos {
         }
         Ok(titulos)
     }
-
-    /// `imageinfo` por lotes de 50 títulos — el tope del propio MediaWiki —
-    /// con los mismos `iiprop`/`iiurlwidth` que usa `commons.rs`.
-    async fn imageinfo_por_lotes(&self, titulos: &[String]) -> Result<Vec<PaginaImg>> {
-        let mut fuera = Vec::new();
-        for lote in titulos.chunks(50) {
-            let titles = lote.join("|");
-            let url = format!(
-                "{COMMONS_API}?action=query&format=json&formatversion=1\
-                 &prop=imageinfo&iiprop=url%7Csize%7Cextmetadata&iiurlwidth=2048&titles={}",
-                urlencoding::encode(&titles)
-            );
-            let _g = self.ctx.limitador.permiso().await;
-            let r = self.ctx.cliente.get(&url).send().await?;
-            if !r.status().is_success() {
-                anyhow::bail!("Commons respondió {} a imageinfo", r.status());
-            }
-            let cuerpo: RespuestaImg = r.json().await?;
-            if let Some(q) = cuerpo.query {
-                fuera.extend(q.pages.into_values());
-            }
-        }
-        Ok(fuera)
-    }
 }
 
 #[async_trait]
@@ -297,8 +259,12 @@ impl OrigenDeRed for Monumentos {
         let monumentos = self.monumentos_en_tesela(tesela).await?;
         let mut total = 0u32;
         for m in &monumentos {
-            let Some(categoria) = &m.categoria else { continue };
-            total += self.titulos_de_monumento(categoria).await.map(|v| v.len()).unwrap_or(0) as u32;
+            if let Some(categoria) = &m.categoria {
+                total += self.titulos_de_monumento(categoria).await.map(|v| v.len()).unwrap_or(0) as u32;
+            }
+            if m.imagen.is_some() {
+                total += 1;
+            }
         }
         Ok(Disponibilidad::Muestreo { nivel: Nivel::de(total), estimadas: total })
     }
@@ -306,21 +272,28 @@ impl OrigenDeRed for Monumentos {
     async fn descargar(&self, tesela: &str, tope: &Presupuesto) -> Result<Vec<Captura>> {
         let mut fuera = Vec::new();
         for m in self.monumentos_en_tesela(tesela).await? {
-            let Some(categoria) = &m.categoria else { continue };
-            let titulos = match self.titulos_de_monumento(categoria).await {
-                Ok(t) => t,
-                Err(e) => {
-                    log::warn!("monumentos {categoria}: {e}");
-                    continue;
+            let mut titulos = Vec::new();
+            if let Some(categoria) = &m.categoria {
+                match self.titulos_de_monumento(categoria).await {
+                    Ok(t) => titulos.extend(t),
+                    Err(e) => log::warn!("monumentos {categoria}: {e}"),
                 }
-            };
+            }
+            if let Some(imagen) = &m.imagen {
+                titulos.push(imagen.clone());
+            }
+            // `P18` suele estar TAMBIÉN dentro de su propia categoría: sin
+            // este dedup se bajaría dos veces el mismo fichero con el mismo
+            // `pageid`, contando doble en la estimación y en el gasto.
+            titulos.sort();
+            titulos.dedup();
             if titulos.is_empty() {
                 continue;
             }
-            let paginas = match self.imageinfo_por_lotes(&titulos).await {
+            let paginas = match imageinfo_por_lotes(&self.ctx, &titulos).await {
                 Ok(p) => p,
                 Err(e) => {
-                    log::warn!("monumentos {categoria}: {e}");
+                    log::warn!("monumentos {:?}: {e}", m.categoria.as_deref().or(m.imagen.as_deref()));
                     continue;
                 }
             };
@@ -388,6 +361,7 @@ impl OrigenDeRed for Monumentos {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lumi_index::tiles::Bbox;
 
     #[test]
     fn el_punto_wkt_se_parsea_como_lat_lng() {
@@ -452,5 +426,18 @@ mod tests {
         assert_eq!(monumentos.len(), 2);
         assert_eq!(monumentos[0].categoria.as_deref(), Some("Cathedral of León"));
         assert_eq!(monumentos[1].categoria, None, "Q2 solo trae P18, sin categoría que listar");
+    }
+
+    #[test]
+    fn un_item_solo_con_p18_produce_un_titulo_de_fichero() {
+        let json = r#"{"results":{"bindings":[
+            {"loc":{"value":"Point(-5.57 42.60)"},
+             "img":{"value":"http://commons.wikimedia.org/wiki/Special:FilePath/Catedral%20de%20Leon.jpg"}}
+        ]}}"#;
+        let cuerpo: RespuestaSparql = serde_json::from_str(json).unwrap();
+        let m = monumentos_de(cuerpo);
+        assert_eq!(m.len(), 1);
+        assert_eq!(m[0].categoria, None);
+        assert_eq!(m[0].imagen.as_deref(), Some("File:Catedral de Leon.jpg"));
     }
 }
