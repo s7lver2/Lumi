@@ -1,120 +1,245 @@
 % Plantilla del informe forense de Lumi -- LaTeX rellenado por Tera y
-% compilado con `tectonic` (ver `routes::export`). Dos temas posibles
-% (`{{ tema }}`, ver `ExportInformeReq::tema`):
-%   - "claro": el documento IMPRIMIBLE de siempre -- fondo blanco, tipografía
-%     editorial seria, un único acento discreto. Sin cambios de fondo desde
-%     antes de este interruptor.
-%   - "oscuro" (por defecto): el mismo lenguaje visual que la app --
-%     `DESIGN.md`, sin cajas con borde, números grandes como protagonistas.
-% El branching de color vive en UN solo sitio (los `\definecolor` de más
-% abajo) -- el resto de la plantilla (secciones, condicionales de
-% `ExportInformeReq`) es compartido entre los dos temas; ver
-% `docs/superpowers/specs/2026-09-10-informe-tema-oscuro-design.md`.
+% compilado con `tectonic` (ver `routes::export`). Rediseño de
+% `docs/superpowers/specs/2026-09-10-informe-pdf-refinado-design.md`, que
+% sustituye al spec del tema oscuro (`737b1b9`). Dos temas con dos oficios
+% distintos (`{{ tema }}`, ver `ExportInformeReq::tema`):
+%   - "oscuro" (por defecto): pantalla y correo -- 17x24cm, cajas `surface`
+%     sin borde, iconos, ámbar donde hay algo que mirar.
+%   - "claro": imprimir -- A4, sin superficies ni iconos, sin ámbar (filete
+%     + versalita + peso en su lugar).
+% A4 y 17x24cm comparten proporción (0.707 / 0.708 -- no es casualidad, ver
+% §1 del spec): los dos temas comparten la estructura entera de la maqueta y
+% solo cambian el tratamiento. El branching de color y de las tres macros
+% por tema (`\lumibloque`, `\lumietiqueta`, `\lumifilete`) vive en el
+% preámbulo; el cuerpo del documento (portada, bucle de imágenes, notas,
+% firma) es compartido y solo llama a esas macros.
 %
 % ponytail: sin `babel`/patrones de guionado en español -- el bundle por
 % defecto de tectonic no trae los patrones de partición silábica de
 % `spanish.ldf`, y pedirlos añade una dependencia externa a la compilación
-% por un matiz puramente tipográfico (peor justificación en párrafos largos,
-% nada más). El texto entero es español sin acentos rotos ni caracteres mal
-% escapados -- eso es lo que de verdad importa en un informe forense.
+% por un matiz puramente tipográfico. El texto entero es español sin
+% acentos rotos ni caracteres mal escapados -- eso es lo que de verdad
+% importa en un informe forense.
+%
+% ponytail: sin `needspace` -- el flujo continuo (§2 del spec: nada de
+% `\clearpage` incondicional entre imágenes) se implementa como
+% `\begin{minipage}[t]{\linewidth}...\end{minipage}` envolviendo cada
+% bloque de imagen entero. LaTeX ya trata una `minipage` como una caja
+% indivisible al decidir saltos de página (no la parte a media altura salvo
+% que sea más alta que la página entera, en cuyo caso LaTeX la desborda por
+% su cuenta -- "partir es mejor que desbordar el margen", como pide el
+% spec, y es justo lo que pasa sin intervención cuando una minipage no
+% cabe: sigue en la página siguiente en vez de cortarse a la mitad). Eso
+% evita un paquete de más en el bundle por un salto de página.
 \documentclass[11pt]{article}
-\usepackage[a4paper,margin=2.2cm]{geometry}
-\usepackage{lmodern}
+\usepackage{fontspec}
 \usepackage{xcolor}
 \usepackage{graphicx}
 \usepackage{tikz}
-\usepackage{pgfplots}
-\pgfplotsset{compat=1.18}
 \usepackage{parskip}
 \usepackage{fancyhdr}
 \usepackage{array}
+\usetikzlibrary{calc}
 
-% ------------------------------------------------------------- Paleta --
-% Único punto de rama entre los dos temas -- ver cabecera del fichero.
+% ------------------------------------------------------- Tipografía (§3) --
+% `tectonic` corre XeTeX por debajo, así que `fontspec` funciona y puede
+% cargar ficheros de fuente por ruta -- `routes::export::copiar_fuentes` los
+% deja junto a este `.tex` con estos nombres exactos. Un solo `\IfFileExists`
+% (sobre el regular de Inter, que se copia en el mismo lote atómico que el
+% resto) decide entre las fuentes reales y el fallback: un informe que no
+% compila es peor que uno con la fuente equivocada (degradación obligatoria
+% del spec). Sin las fuentes, `fontspec` ya usa Latin Modern por defecto --
+% no hace falta pedir `lmodern` a mano bajo XeTeX.
+\IfFileExists{Inter-Regular.ttf}{
+  \setmainfont{Inter-Regular.ttf}[BoldFont=Inter-SemiBold.ttf]
+  \newfontfamily\lumiintermedium{Inter-Medium.ttf}
+  \newfontfamily\lumiintersemibold{Inter-SemiBold.ttf}
+}{
+  \newcommand{\lumiintermedium}{\bfseries}
+  \newcommand{\lumiintersemibold}{\bfseries}
+}
+\IfFileExists{JetBrainsMono-Regular.ttf}{
+  \setmonofont{JetBrainsMono-Regular.ttf}[BoldFont=JetBrainsMono-Medium.ttf]
+}{}
+
+% ----------------------------------------------------------- Paleta (§4) --
+% Único punto de rama de color entre los dos temas. Tokens reales de
+% `DESIGN.md`, sin el token `draw` (`#378add`/`#85b7eb`) -- nunca fue color
+% de marca, y el spec lo retira del informe entero: el color solo aparece
+% cuando algo va mal.
 {% if tema == "claro" %}
-\definecolor{lumiaccent}{HTML}{2F6DA3}
-\definecolor{lumiaccent2}{HTML}{2F6DA3}
+\definecolor{lumifg}{HTML}{111111}
 \definecolor{lumigris}{HTML}{6A6C70}
 \definecolor{lumiborde}{HTML}{CCCCCC}
-\definecolor{lumifg}{HTML}{111111}
-\definecolor{lumiaviso}{HTML}{8A5A00}
 {% else %}
-% Tokens reales de DESIGN.md, no inventados.
-\definecolor{lumiaccent}{HTML}{378ADD}
-\definecolor{lumiaccent2}{HTML}{85B7EB}
-\definecolor{lumigris}{HTML}{9A9A95}
-\definecolor{lumitenue}{HTML}{6A6C70}
-\definecolor{lumiborde}{HTML}{26282C}
 \definecolor{lumibg}{HTML}{0E0F11}
+\definecolor{lumisurface}{HTML}{15171A}
+\definecolor{lumiborde}{HTML}{26282C}
 \definecolor{lumifg}{HTML}{E8E8E6}
-\definecolor{lumiaviso}{HTML}{EFB968}
+\definecolor{lumigris}{HTML}{9A9A95}
+% `warning`/`warning-fg` de `DESIGN.md` -- relleno sólido (barra, círculo
+% del localizador) y texto de aviso respectivamente, mismo par que usa el
+% resto del producto para "atención".
+\definecolor{lumiaviso}{HTML}{EF9F27}
+\definecolor{lumiavisotxt}{HTML}{EFB968}
 \pagecolor{lumibg}
 \color{lumifg}
 {% endif %}
 
+% ------------------------------------------------------- Página (§1, §2) --
+% A4 e imprimible en el tema claro; 17x24cm y para pantalla en el oscuro.
+% Comparten proporción (0.707/0.708) a propósito -- la maqueta entera puede
+% ser compartida y solo cambian márgenes y tratamiento.
+{% if tema == "claro" %}
+\usepackage[a4paper,margin=2.2cm]{geometry}
+{% else %}
+\usepackage[paperwidth=17cm,paperheight=24cm,margin=1.6cm]{geometry}
+{% endif %}
 \setlength{\parindent}{0pt}
 
-% --------------------------------------------------------------- Cabecera --
-% Tema claro: sin cambios -- solo el pie de siempre, sin cabecera real.
-% Tema oscuro: cabecera con destello en miniatura + caso + página, línea fina
-% debajo (reemplaza la cabecera de solo-texto); pie con el número de página
-% en mono a la derecha (ver "Página por imagen" del spec).
+% ------------------------------------------------ Macros de tema (§6, §8) --
+% Las tres piezas que el cuerpo compartido llama sin volver a preguntar en
+% qué tema está: `\lumifilete` (la regla que separa cabecera de contenido),
+% `\lumietiqueta{texto}` (la etiqueta versalita de cada bloque de datos) y
+% `\lumibloque{icono}{etiqueta}{contenido}` (el bloque de datos en sí --
+% caja `surface` sin borde con icono en oscuro, filete + versalita sin caja
+% ni icono en claro). `\lumietiqueta` no usa el `\scshape` real de las
+% versalitas OpenType -- ninguna de las dos fuentes garantiza esas glifos, y
+% depender de ellas es frágil -- así que la "versalita" se simula con
+% mayúsculas trackeadas a tamaño reducido, que es la lectura visual que pide
+% el spec sin abrir esa dependencia (ponytail).
+{% if tema == "claro" %}
+% ponytail / nota de sintaxis: `\lumifilete`/`\lumietiqueta` NO llevan un
+% grupo extra de llaves alrededor del cuerpo del `\newcommand` -- LaTeX lo
+% aceptaría igual (grupo redundante), pero Tera lee dos llaves de apertura
+% SEGUIDAS como el inicio de una expresión suya, sin mirar si están dentro
+% de un `\newcommand` -- dos llaves de apertura seguidas en CUALQUIER punto
+% del fichero (hasta en un comentario `%`, que Tera no conoce) rompen el
+% parseo entero. Un solo par de llaves por macro, aquí y abajo.
+\newcommand{\lumifilete}{\color{lumiborde}\rule{\linewidth}{0.6pt}}
+\newcommand{\lumietiqueta}[1]{\lumiintersemibold\footnotesize\MakeUppercase{\relax#1}}
+% ponytail / nota de sintaxis (continúa): el idioma clásico de LaTeX para
+% que un `\newcommand` no arrastre un espacio de más -- terminar la línea
+% justo tras la llave de apertura con un signo de comentario pegado a ella
+% -- también choca con Tera: esa combinación exacta abre una etiqueta suya.
+% La llave de apertura se mueve a la línea SIGUIENTE en su lugar (LaTeX
+% descarta el espacio en blanco entre un argumento y la llave que lo abre
+% al buscarla, así que el resultado tipografiado no cambia).
+%
+% Segunda colisión del mismo tipo, más traicionera: una llave de apertura
+% seguida INMEDIATAMENTE del símbolo de un parámetro de macro (almohadilla
+% más número) es indistinguible de un comentario de Tera, que también se
+% abre con esos dos caracteres pegados -- y un comentario sin cerrar se
+% traga todo el resto del fichero hasta el primer cierre que encuentre, en
+% vez de fallar de inmediato donde debería. La salida es anteponer
+% `\relax` al parámetro dentro de cada llave: `\relax` no hace nada en
+% LaTeX, solo separa la llave de la almohadilla para que Tera no las lea
+% juntas.
+\newcommand{\lumibloque}[3]
+{\par\vspace{9pt}\noindent{\color{lumiborde}\rule{\linewidth}{0.6pt}}\\[5pt]%
+  \lumietiqueta{\relax#2}\\[4pt]%
+  {\small\relax#3}%
+}
+{% else %}
+\newcommand{\lumifilete}{\color{lumiborde}\rule{\linewidth}{0.4pt}}
+\newcommand{\lumietiqueta}[1]{\lumiintermedium\footnotesize\color{lumigris}\MakeUppercase{\relax#1}}
+\newcommand{\lumibloque}[3]
+{\par\vspace{8pt}\noindent%
+  \begin{tikzpicture}
+  \node[fill=lumisurface, rounded corners=6pt, inner sep=9pt, align=left, anchor=north west,
+        text width=\dimexpr\linewidth-18pt\relax] at (0,0)
+        {\raisebox{-.15em}{\relax#1}\hspace{4pt}\lumietiqueta{\relax#2}\\[5pt]%
+    {\small\color{lumifg}\relax#3}%
+  };
+  \end{tikzpicture}%
+}
+{% endif %}
+
+% ------------------------------------------------------------- Cabecera --
+% Tema claro: sin cabecera real, pie con "página / total" (es el único de
+% los dos temas pensado para imprimirse, ver §2 del spec).
+% Tema oscuro: sin pie de página -- ya no hay paginación citable por imagen
+% (flujo continuo), así que un número de página en el pie no dice nada útil.
 \pagestyle{fancy}
 \fancyhf{}
 {% if tema == "claro" %}
 \renewcommand{\headrulewidth}{0pt}
-\fancyfoot[C]{\small\color{lumigris}{{ caso | tex }} \textperiodcentered\ p\'agina \thepage}
+\fancyfoot[C]{\small\color{lumigris}{{ caso | tex }} \textperiodcentered\ p\'agina \thepage\ / \pageref{LumiUltimaPagina}}
 {% else %}
-\renewcommand{\headrulewidth}{0.4pt}
-\renewcommand{\headrule}{ {\color{lumiborde}\hrule height\headrulewidth width\headwidth} }
-\fancyhead[L]{\raisebox{-.15em}{\begin{tikzpicture}[x=0.85em/24,y=0.85em/24]
-  \fill[lumiaccent] (12,2)
-    .. controls (12.7,6.4) and (14.7,8.4) .. (19,9)
-    .. controls (14.7,9.7) and (12.7,11.7) .. (12,16)
-    .. controls (11.3,11.6) and (9.3,9.6) .. (5,9)
-    .. controls (9.3,8.3) and (11.3,6.3) .. (12,2) -- cycle;
-\end{tikzpicture}}}
-\fancyhead[C]{\small\ttfamily\color{lumigris}{{ caso | tex }}}
-\fancyhead[R]{\small\ttfamily\color{lumigris}p\'agina \thepage}
-\fancyfoot[R]{\small\ttfamily\color{lumitenue}\thepage}
+\renewcommand{\headrulewidth}{0pt}
 {% endif %}
+
+\begin{document}
 
 % El destello de cuatro puntas ya usado por `MarcoVentanaLumi`
 % (`web/components/AgentesVisual.tsx`), redibujado en TikZ a partir de las
 % mismas cuatro curvas de B\'ezier del `path` SVG original -- no se inventa
-% iconograf\'ia nueva, ver la orden de la tarea. Los iconos de dato (EXIF,
-% integridad, hip\'otesis, agente) del tema oscuro siguen el mismo criterio:
-% son los mismos trazos que ya usa `client/src/ui/Icon.tsx` (`clock`, `lock`,
-% `via`, `bocadillo`), pasados a TikZ a mano en vez de con una fuente de
-% iconos -- ponytail: no son una reproducci\'on B\'ezier exacta del `path`
-% SVG (arcos/curvas se aproximan con l\'ineas y `controls` sencillos), el
-% original es una miniatura de ~11pt en una p\'agina, no un icono a pantalla
+% iconograf\'ia nueva. Los iconos de dato (EXIF, integridad, hip\'otesis,
+% agente) del tema oscuro siguen el mismo criterio: son los mismos trazos
+% que ya usa `client/src/ui/Icon.tsx` (`clock`, `lock`, `via`, `bocadillo`),
+% pasados a TikZ a mano -- ponytail: no son una reproducci\'on B\'ezier
+% exacta del `path` SVG (arcos/curvas se aproximan con l\'ineas y `controls`
+% sencillos), el original es una miniatura de ~11pt, no un icono a pantalla
 % completa donde se note la diferencia.
-\begin{document}
+\newcommand{\lumidestello}[1]
+{\begin{tikzpicture}[x=#1/24,y=#1/24]
+    \fill[lumifg] (12,2)
+      .. controls (12.7,6.4) and (14.7,8.4) .. (19,9)
+      .. controls (14.7,9.7) and (12.7,11.7) .. (12,16)
+      .. controls (11.3,11.6) and (9.3,9.6) .. (5,9)
+      .. controls (9.3,8.3) and (11.3,6.3) .. (12,2) -- cycle;
+  \end{tikzpicture}%
+}
+\newcommand{\lumiiconoreloj}{\begin{tikzpicture}[x=0.8em/24,y=0.8em/24]
+  \color{lumigris}
+  \draw[line width=1.6pt,line cap=round,line join=round] (12,12) circle (9);
+  \draw[line width=1.6pt,line cap=round,line join=round] (12,7) -- (12,12) -- (15,14);
+\end{tikzpicture}}
+\newcommand{\lumiiconocandado}{\begin{tikzpicture}[x=0.8em/24,y=0.8em/24]
+  \color{lumigris}
+  \draw[line width=1.6pt,rounded corners=1pt] (5,11) rectangle (19,20);
+  \draw[line width=1.6pt] (8,11) .. controls (8,4) and (16,4) .. (16,11);
+\end{tikzpicture}}
+\newcommand{\lumiiconochincheta}{\begin{tikzpicture}[x=0.8em/24,y=0.8em/24]
+  \color{lumigris}
+  \draw[line width=1.4pt,dash pattern=on 1.6pt off 1.6pt] (12,3) -- (12,21);
+  \draw[line width=1.6pt,rounded corners=1pt] (14.5,7) rectangle (19.5,15);
+  \fill (17,8.4) circle (0.6);
+\end{tikzpicture}}
+\newcommand{\lumiiconobocadillo}{\begin{tikzpicture}[x=0.8em/24,y=0.8em/24]
+  \color{lumigris}
+  \draw[line width=1.6pt,rounded corners=1pt] (4,5) -- (20,5) -- (20,15) -- (9,15) -- (5,19) -- (5,15) -- (4,15) -- cycle;
+  \draw[line width=1.4pt] (8,9) -- (16,9);
+  \draw[line width=1.4pt] (8,12) -- (13,12);
+\end{tikzpicture}}
 
-% ---------------------------------------------------------------- Portada --
+% -------------------------------------------------- El localizador (§7) --
+% `img.mapa` llega ya proyectado a coordenadas de dibujo desde `export.rs`
+% (`construir_mapa`) -- la plantilla no sabe de latitudes/longitudes, solo
+% dibuja fracciones de `MAPA_ANCHO_PT` (86pt) en los dos ejes, con ejes
+% ISÓTROPOS (`x=86pt,y=86pt`, no `x=86pt,y=62pt`) para que el círculo de
+% radio salga circular -- ver el bucle por imagen más abajo, donde se dibuja
+% inline (contorno + círculo + punto) en los dos sitios que lo necesitan
+% (ficha compacta y ficha banda). `mapa` es `None` sin `paises.json`, con la
+% coordenada en el mar, o sin hipótesis -- entonces no se dibuja nada y no
+% queda hueco (degradación obligatoria del spec).
+
+% ------------------------------------------------------------- Portada --
 \begin{titlepage}
 \thispagestyle{empty}
-\vspace*{2.5cm}
+\vspace*{2.2cm}
 \begin{center}
-\begin{tikzpicture}[x=3cm/24,y=3cm/24]
-  \fill[lumiaccent] (12,2)
-    .. controls (12.7,6.4) and (14.7,8.4) .. (19,9)
-    .. controls (14.7,9.7) and (12.7,11.7) .. (12,16)
-    .. controls (11.3,11.6) and (9.3,9.6) .. (5,9)
-    .. controls (9.3,8.3) and (11.3,6.3) .. (12,2) -- cycle;
-\end{tikzpicture}
+\lumidestello{3cm}
 
 \vspace{1cm}
-{\Huge\bfseries Lumi}\\[2pt]
-{\Large informe forense}
+{\Huge\lumiintersemibold Lumi}\\[2pt]
+{\Large\lumiintermedium\MakeUppercase{informe forense}}
 
 \vspace{1.4cm}
-{\large\bfseries {{ caso | tex }}}\\[6pt]
-{{ n_imagenes }} {% if n_imagenes == 1 %}imagen incluida{% else %}im\'agenes incluidas{% endif %}\\
-Generado: {{ generado | tex }}
+{\large\lumiintersemibold {{ caso | tex }}}\\[6pt]
+{\ttfamily\color{lumigris}{{ n_imagenes }} {% if n_imagenes == 1 %}imagen incluida{% else %}im\'agenes incluidas{% endif %} \textperiodcentered\ generado {{ generado | tex }}}
 
-\vspace{1.6cm}
+\vspace{1.5cm}
 \begin{minipage}{0.72\textwidth}
 \centering\small\color{lumigris}
 Documento generado por Lumi. Cada hip\'otesis de geolocalizaci\'on y cada
@@ -124,87 +249,75 @@ pericial -- se entregan con su nivel de confianza declarado.
 
 {% if incluir_estadisticas and estadisticas %}
 {% if tema == "claro" %}
-\vspace{1.8cm}
-\begin{minipage}{0.85\textwidth}
-\centering
-{\large\bfseries Resumen del caso}
-
-\vspace{8pt}
+% --------------------------------------------- Portada imprimible (claro) --
+\vspace{1.6cm}
+\begin{minipage}{0.8\textwidth}
+{\color{black}\rule{\linewidth}{0.8pt}}\\[10pt]
 \begin{tabular}{r l}
-Caso creado: & {{ estadisticas.creado_en | tex }} \\
+Caso creado: & \ttfamily{{ estadisticas.creado_en | tex }} \\
+Im\'agenes incluidas: & \ttfamily{{ n_imagenes }} \\
+Con hip\'otesis: & \ttfamily{{ estadisticas.n_con_hipotesis }} \\
+Con veredicto de agente: & \ttfamily{{ estadisticas.n_con_agente }} \\
+\textbf{Sin resolver:} & \textbf{\ttfamily {{ estadisticas.n_sin_resolver }}} \\
 {% if estadisticas.confianza_media_pct is defined and estadisticas.confianza_media_pct %}
-Confianza media de hip\'otesis principales: & {{ estadisticas.confianza_media_pct }}\,\% \\
+Confianza media: & \ttfamily{{ estadisticas.confianza_media_pct }}\,\% \\
 {% endif %}
-{% if estadisticas.agentes_total > 0 %}
-Agentes: & {{ estadisticas.agentes_respondieron }} respondieron \textperiodcentered\ {{ estadisticas.agentes_abstuvieron }} se abstuvieron \\
-{% endif %}
-\end{tabular}
-
-{% if estadisticas.por_modelo %}
-\vspace{10pt}
-\begin{tikzpicture}
-\begin{axis}[
-  ybar, bar width=16pt, width=9.5cm, height=5.5cm,
-  symbolic x coords={ {% for m in estadisticas.por_modelo %}{{ m.modelo }}{% if not loop.last %},{% endif %}{% endfor %} },
-  xtick=data, ymin=0, ylabel={an\'alisis}, nodes near coords,
-  enlarge x limits=0.22, axis lines*=left, tick style={draw=none},
-  bar shift=0pt, every axis plot/.append style={fill=lumiaccent,draw=none},
-]
-\addplot coordinates { {% for m in estadisticas.por_modelo %}({{ m.modelo }},{{ m.n }}) {% endfor %} };
-\end{axis}
-\end{tikzpicture}
-{% endif %}
+\end{tabular}\\[10pt]
+{\color{lumiborde}\rule{\linewidth}{0.4pt}}
 \end{minipage}
 {% else %}
-% --------------------------------------- Portada editorial (tema oscuro) --
+% --------------------------------------------- Portada editorial (oscuro) --
 % Cuatro n\'umeros grandes en fila, mono -- "sin resolver" nunca se funde en
-% los otros totales (requisito expl\'icito del owner: un informe de
-% evidencia no puede esconder qu\'e no se resolvi\'o dentro de una cifra de
-% \'exito). Ver `resumen_oscuro`/`ResumenOscuro` en `export.rs`.
-\vspace{1.6cm}
+% los otros totales (requisito expl\'icito: un informe de evidencia no puede
+% esconder qu\'e no se resolvi\'o dentro de una cifra de \'exito). Ver
+% `resumen_oscuro`/`ResumenOscuro` en `export.rs`.
+\vspace{1.5cm}
 \noindent
 \begin{minipage}[t]{0.23\textwidth}\centering
-{\fontsize{30}{30}\selectfont\ttfamily\bfseries\color{lumifg}{{ n_imagenes }}}\\[4pt]
+{\fontsize{28}{28}\selectfont\ttfamily\lumiintersemibold\color{lumifg}{{ n_imagenes }}}\\[4pt]
 {\footnotesize\color{lumigris}im\'agenes}
 \end{minipage}\hfill
 \begin{minipage}[t]{0.23\textwidth}\centering
-{\fontsize{30}{30}\selectfont\ttfamily\bfseries\color{lumifg}{{ estadisticas.n_con_hipotesis }}}\\[4pt]
+{\fontsize{28}{28}\selectfont\ttfamily\lumiintersemibold\color{lumifg}{{ estadisticas.n_con_hipotesis }}}\\[4pt]
 {\footnotesize\color{lumigris}con hip\'otesis}
 \end{minipage}\hfill
 \begin{minipage}[t]{0.23\textwidth}\centering
-{\fontsize{30}{30}\selectfont\ttfamily\bfseries\color{lumifg}{{ estadisticas.n_con_agente }}}\\[4pt]
+{\fontsize{28}{28}\selectfont\ttfamily\lumiintersemibold\color{lumifg}{{ estadisticas.n_con_agente }}}\\[4pt]
 {\footnotesize\color{lumigris}con agente}
 \end{minipage}\hfill
 \begin{minipage}[t]{0.23\textwidth}\centering
-{\fontsize{30}{30}\selectfont\ttfamily\bfseries\color{lumiaviso}{{ estadisticas.n_sin_resolver }}}\\[4pt]
-{\footnotesize\color{lumiaviso}sin resolver}
+{\fontsize{28}{28}\selectfont\ttfamily\lumiintersemibold\color{lumiavisotxt}{{ estadisticas.n_sin_resolver }}}\\[4pt]
+{\footnotesize\color{lumiavisotxt}sin resolver}
 \end{minipage}
 
-{% if estadisticas.por_modelo %}
-\vspace{16pt}
-\begin{tikzpicture}
-\begin{axis}[
-  ybar, bar width=16pt, width=9.5cm, height=5.5cm,
-  symbolic x coords={ {% for m in estadisticas.por_modelo %}{{ m.modelo }}{% if not loop.last %},{% endif %}{% endfor %} },
-  xtick=data, ymin=0, ylabel={an\'alisis}, nodes near coords,
-  enlarge x limits=0.22, axis lines*=left,
-  tick style={draw=lumiborde}, axis line style={draw=lumiborde},
-  every tick label/.append style={color=lumigris,font=\ttfamily\footnotesize},
-  every axis label/.append style={color=lumigris},
-  nodes near coords style={color=lumifg,font=\ttfamily\footnotesize},
-  bar shift=0pt, every axis plot/.append style={fill=lumiaccent,draw=none},
-]
-\addplot coordinates { {% for m in estadisticas.por_modelo %}({{ m.modelo }},{{ m.n }}) {% endfor %} };
-\end{axis}
+% Tira apilada: resuelto (blanco) / sin resolver (\'ambar) -- un solo
+% gr\'afico, una sola lectura.
+\vspace{18pt}
+{% set resueltas = n_imagenes - estadisticas.n_sin_resolver %}
+\begin{tikzpicture}[x=1pt,y=1pt]
+  \def\anchobarra{280}
+  {# `* 1.0` fuerza división en coma flotante -- Tera trunca int/int como Rust. #}
+  {% if n_imagenes > 0 %}{% set frac_resuelto = resueltas * 1.0 / n_imagenes %}{% else %}{% set frac_resuelto = 1.0 %}{% endif %}
+  \fill[lumiborde] (0,0) rectangle (\anchobarra,5);
+  \fill[lumifg] (0,0) rectangle ({{ frac_resuelto * 280 }},5);
+  \fill[lumiaviso] ({{ frac_resuelto * 280 }},0) rectangle (\anchobarra,5);
+\end{tikzpicture}\\[4pt]
+{\footnotesize\ttfamily\color{lumigris}{{ resueltas }} resuelt{% if resueltas == 1 %}a{% else %}as{% endif %} \textperiodcentered\ \color{lumiavisotxt}{{ estadisticas.n_sin_resolver }} sin resolver}
+
+% Franja de confianza: un punto por imagen sobre un eje 0-100 -- ense\~na la
+% forma del caso de un vistazo (ver `PuntoFranjaCtx` en `export.rs`).
+{% if franja %}
+\vspace{18pt}
+\begin{tikzpicture}[x=1pt,y=1pt]
+  \draw[lumiborde,line width=0.6pt] (0,0) -- (280,0);
+  \foreach \x/\lbl in {0/0,140/50,280/100} {
+    \draw[lumiborde,line width=0.6pt] (\x,-2) -- (\x,2);
+    \node[below,font=\ttfamily\tiny,text=lumigris,yshift=-3pt] at (\x,-2) {\lbl};
+  }
+  {% for p in franja %}
+  \fill[{% if p.sin_resuelto %}lumiaviso{% else %}lumifg{% endif %}] ({{ p.pct * 2.8 }},0) circle (1.6pt);
+  {% endfor %}
 \end{tikzpicture}
-{% endif %}
-
-{% if estadisticas.n_sin_resolver > 0 %}
-\vspace{12pt}
-\begin{minipage}{0.75\textwidth}
-\centering\small\color{lumiaviso}
-{{ estadisticas.n_errores }} error{% if estadisticas.n_errores != 1 %}es{% endif %} \textperiodcentered\ {{ estadisticas.n_abstenciones }} abstenci\'on{% if estadisticas.n_abstenciones != 1 %}es{% endif %} sin resolver en este informe.
-\end{minipage}
 {% endif %}
 {% endif %}
 {% endif %}
@@ -214,190 +327,165 @@ Agentes: & {{ estadisticas.agentes_respondieron }} respondieron \textperiodcente
 \end{center}
 \end{titlepage}
 
-% ------------------------------------------------------------ Por imagen --
+% ------------------------------------------------------ Flujo por imagen --
+% Sin `\clearpage` incondicional (§2 del spec): cada imagen es una
+% `minipage` que LaTeX trata como bloque indivisible al paginar. Dos
+% im\'agenes flacas comparten p\'agina; una con todos los bloques se lleva
+% la suya. Se pierde la paginaci\'on citable por imagen -- se compensa con
+% el n\'umero de orden en la cabecera mono de cada bloque.
 {% for img in imagenes %}
-\clearpage
-{% if tema == "claro" %}
-\subsection*{Imagen: {{ img.filename | tex }}}
-{% else %}
-{\small\ttfamily\color{lumigris}{{ img.orden }} \textemdash\ {{ img.filename | tex }}}\\[10pt]
-{% endif %}
+\begin{minipage}[t]{\linewidth}
+{\small\ttfamily\color{lumigris}{{ img.orden }} \textemdash\ {{ img.filename | tex }}}\\[4pt]
+\lumifilete\\[8pt]
 
-{% if img.thumb_file %}
-\begin{center}
-\includegraphics[width=6.5cm,height=6.5cm,keepaspectratio]{ {{- img.thumb_file -}} }
-\end{center}
-{% else %}
-\textit{(sin miniatura disponible para esta imagen)}\\[4pt]
-{% endif %}
-
-{% if tema == "claro" %}
-{% if img.sha256 %}
-{\small\ttfamily\color{lumigris}sha256 (original): {{ img.sha256 }}}\\[4pt]
-{% endif %}
-
-{% for l in img.exif_lineas %}
-{% if l.variante == "cabecera" %}\textbf{ {{- l.texto | tex -}} }\\[2pt]
-{% else %}{{ l.texto | tex }}\\
-{% endif %}
-{% endfor %}
-
-\vspace{6pt}
-{% for l in img.analisis_lineas %}
-{% if l.variante == "cabecera" %}\vspace{4pt}\textbf{ {{- l.texto | tex -}} }\\[2pt]
-{% else %}{{ l.texto | tex }}\\
-{% endif %}
-{% endfor %}
-
-{% for r in img.rasgos_graficos %}
-\vspace{6pt}
-{% if r.tipo == "ocr" %}
-\textbf{Rasgos detectados ({{ r.agente | tex }}):}\\[3pt]
-{% if img.thumb_file %}
-\begin{center}
+{% set usar_banda = disposicion == "banda" and img.thumb_file %}
+{% if usar_banda %}
+% --------------------------------------------------- Ficha banda (§6b) --
 \begin{tikzpicture}
-\node[anchor=south west,inner sep=0] (rasgo-img) {\includegraphics[width=6.5cm,height=6.5cm,keepaspectratio]{ {{- img.thumb_file -}} }};
-\begin{scope}[x={(rasgo-img.south east)},y={(rasgo-img.north west)}]
-{% for c in r.cajas %}
-\draw[lumiaccent,thick] ({{ c.x1 }},{{ c.y1 }}) rectangle ({{ c.x2 }},{{ c.y2 }});
-{% endfor %}
-\end{scope}
-\end{tikzpicture}
-\end{center}
-{% else %}
-\textit{(sin miniatura sobre la que dibujar los recuadros)}\\[4pt]
-{% endif %}
-{% elif r.tipo == "profundidad" %}
-\textbf{Mapa de profundidad ({{ r.agente | tex }}):}\\[3pt]
-\begin{center}
-\includegraphics[width=6.5cm,height=6.5cm,keepaspectratio]{ {{- r.archivo -}} }
-\end{center}
-{% endif %}
-{% endfor %}
-{% else %}
-% ------------------------------------------------ Página editorial (oscura) --
+\node[anchor=south west,inner sep=0] (lumifoto) {\includegraphics[width=\linewidth,height=150pt,keepaspectratio]{ {{- img.thumb_file -}} }};
 {% if img.confianza_pct is defined and img.confianza_pct %}
-\vspace{6pt}
-\begin{center}
-{\fontsize{34}{34}\selectfont\bfseries\ttfamily\color{lumiaccent}{{ img.confianza_pct }}\%}%
-\quad{\ttfamily\footnotesize\color{lumigris}{{ img.coord_txt | tex }}\\[1pt]radio {{ img.radio_txt | tex }}}
-\end{center}
-\vspace{8pt}
+\node[anchor=south west,inner sep=6pt,font=\ttfamily\lumiintersemibold\fontsize{20}{20}\selectfont,text=lumifg]
+  at (lumifoto.south west) {{ '{' }}{{ img.confianza_pct }}\%{{ '}' }};
 {% endif %}
+{% if img.coord_txt %}
+\node[anchor=south east,inner sep=6pt,font=\ttfamily\footnotesize,text=lumigris]
+  at (lumifoto.south east) {{ '{' }}{{ img.coord_txt | tex }}{{ '}' }};
+{% endif %}
+{% if img.confianza_pct is defined and img.confianza_pct %}
+\fill[lumiborde] (lumifoto.south west) rectangle ($(lumifoto.south east)+(0,2pt)$);
+\fill[lumifg] (lumifoto.south west) rectangle ($(lumifoto.south west)+({{ img.confianza_pct * 1.0 / 100 }}\linewidth,2pt)$);
+{% endif %}
+\end{tikzpicture}
+\vspace{10pt}
 
 {% if img.mostrar_aviso_sin_resuelto %}
-\begin{center}
-\begin{minipage}{0.82\textwidth}
-\small\color{lumiaviso}
-An\'alisis sin resolver: {{ img.motivo_sin_resuelto | tex }}
-\end{minipage}
-\end{center}
-\vspace{6pt}
+{% if tema == "claro" %}
+\noindent{\color{black}\rule{\linewidth}{1pt}}\\[4pt]
+\textbf{An\'alisis sin resolver:} {{ img.motivo_sin_resuelto | tex }}\\[4pt]
+{% else %}
+\noindent\color{lumiavisotxt}\small An\'alisis sin resolver: {{ img.motivo_sin_resuelto | tex }}\\[6pt]
 {% endif %}
-
-% Un bloque por dato, cada uno con su propio icono TikZ -- sin dato real
-% que mostrar, el bloque entero se omite (nunca un placeholder en blanco).
-{% if img.exif_lineas %}
-\vspace{8pt}\noindent
-\raisebox{-.15em}{\begin{tikzpicture}[x=0.8em/24,y=0.8em/24]
-  \color{lumigris}
-  \draw[line width=1.6pt,line cap=round,line join=round] (12,12) circle (9);
-  \draw[line width=1.6pt,line cap=round,line join=round] (12,7) -- (12,12) -- (15,14);
-\end{tikzpicture}}\hspace{4pt}{\small\bfseries\color{lumigris}EXIF}\\[3pt]
-{\small
-{% for l in img.exif_lineas %}
-{{ l.texto | tex }}\\
-{% endfor %}
+{% else %}
+\noindent
+\begin{minipage}[t]{0.48\linewidth}
+{% if img.exif_lineas %}\lumibloque{\lumiiconoreloj}{EXIF}{ {%- for l in img.exif_lineas -%}{{ l.texto | tex }}\\{%- endfor -%} }{% endif %}
+{% if img.sha256 %}\lumibloque{\lumiiconocandado}{Integridad}{\ttfamily sha256 (original): {{ img.sha256 }}}{% endif %}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\linewidth}
+{% if img.coord_txt or img.hipotesis_extra %}
+\lumibloque{\lumiiconochincheta}{Hip\'otesis de geolocalizaci\'on}{
+  {% if img.mapa %}\begin{tikzpicture}[x=86pt,y=86pt]
+    {% for anillo in img.mapa.contorno %}\draw[lumiborde,line width=0.5pt] {% for pt in anillo %}({{ pt.x }},{{ pt.y }}) -- {% endfor %}cycle;{% endfor %}
+    \draw[lumiaviso,line width=0.6pt,fill=lumiaviso,fill opacity=0.5] ({{ img.mapa.punto.x }},{{ img.mapa.punto.y }}) circle ({{ img.mapa.radio }});
+    \fill[lumiaviso] ({{ img.mapa.punto.x }},{{ img.mapa.punto.y }}) circle (1.4pt);
+  \end{tikzpicture}\\[4pt]{% endif %}
+  \ttfamily{{ img.coord_txt | tex }}\\radio {{ img.radio_txt | tex }}
+  {% if img.hipotesis_extra %}\\[4pt]\normalfont{% for l in img.hipotesis_extra %}{% if l.variante == "cabecera" %}\lumiintermedium {{ l.texto | tex }}\\[2pt]{% else %}{{ l.texto | tex }}\\{% endif %}{% endfor %}{% endif %}
 }
 {% endif %}
+{% if img.agente_lineas %}
+\lumibloque{\lumiiconobocadillo}{Agente}{
+  {% for l in img.agente_lineas %}{% if l.variante == "cabecera" %}\lumiintermedium {{ l.texto | tex }}\\[2pt]{% else %}{{ l.texto | tex }}\\{% endif %}{% endfor %}
+  {% for r in img.rasgos_graficos %}\vspace{6pt}{% if r.tipo == "ocr" and img.thumb_file %}\begin{center}\begin{tikzpicture}
+    \node[anchor=south west,inner sep=0] (rasgoimg) {\includegraphics[width=5cm,height=5cm,keepaspectratio]{ {{- img.thumb_file -}} }};
+    \begin{scope}[x={(rasgoimg.south east)},y={(rasgoimg.north west)}]
+    {% for c in r.cajas %}\draw[lumifg,thick] ({{ c.x1 }},{{ c.y1 }}) rectangle ({{ c.x2 }},{{ c.y2 }});{% endfor %}
+    \end{scope}\end{tikzpicture}\end{center}
+  {% elif r.tipo == "profundidad" %}\begin{center}\includegraphics[width=5cm,height=5cm,keepaspectratio]{ {{- r.archivo -}} }\end{center}{% endif %}{% endfor %}
+}
+{% endif %}
+\end{minipage}
+{% endif %}
+{% else %}
+% ------------------------------------------------- Ficha compacta (§6a) --
+\noindent
+\begin{minipage}[t]{130pt}
+{% if img.thumb_file %}\includegraphics[width=130pt,height=130pt,keepaspectratio]{ {{- img.thumb_file -}} }{% else %}\textit{\small\color{lumigris}(sin miniatura)}{% endif %}
+\end{minipage}\hfill
+\begin{minipage}[t]{\dimexpr\linewidth-140pt\relax}
+{% if img.confianza_pct is defined and img.confianza_pct %}
+{\fontsize{30}{30}\selectfont\ttfamily\lumiintersemibold\color{lumifg}{{ img.confianza_pct }}\%}\\[3pt]
+{% if tema != "claro" %}
+\begin{tikzpicture}[x=1pt,y=1pt]
+\fill[lumiborde] (0,0) rectangle (140,2);
+\fill[lumifg] (0,0) rectangle ({{ img.confianza_pct * 1.4 }},2);
+\end{tikzpicture}\\[5pt]
+{% endif %}
+{\ttfamily\footnotesize\color{lumigris}{{ img.coord_txt | tex }}\\radio {{ img.radio_txt | tex }}}
+{% else %}
+{\small\color{lumigris}Sin hip\'otesis de geolocalizaci\'on en este informe.}
+{% endif %}
+\end{minipage}
+\vspace{10pt}
 
-{% if img.sha256 %}
-\vspace{8pt}\noindent
-\raisebox{-.15em}{\begin{tikzpicture}[x=0.8em/24,y=0.8em/24]
-  \color{lumigris}
-  \draw[line width=1.6pt,rounded corners=1pt] (5,11) rectangle (19,20);
-  \draw[line width=1.6pt] (8,11) .. controls (8,4) and (16,4) .. (16,11);
-\end{tikzpicture}}\hspace{4pt}{\small\bfseries\color{lumigris}Integridad}\\[3pt]
-{\small\ttfamily sha256 (original): {{ img.sha256 }}}
+{% if img.mostrar_aviso_sin_resuelto %}
+{% if tema == "claro" %}
+\noindent{\color{black}\rule{\linewidth}{1pt}}\\[4pt]
+\textbf{An\'alisis sin resolver:} {{ img.motivo_sin_resuelto | tex }}\\[4pt]
+{% else %}
+\noindent\color{lumiavisotxt}\small An\'alisis sin resolver: {{ img.motivo_sin_resuelto | tex }}\\[6pt]
+{% endif %}
+{% else %}
+{% if img.exif_lineas and img.sha256 %}
+\noindent
+\begin{minipage}[t]{0.48\linewidth}\lumibloque{\lumiiconoreloj}{EXIF}{ {%- for l in img.exif_lineas -%}{{ l.texto | tex }}\\{%- endfor -%} }\end{minipage}\hfill
+\begin{minipage}[t]{0.48\linewidth}\lumibloque{\lumiiconocandado}{Integridad}{\ttfamily sha256 (original): {{ img.sha256 }}}\end{minipage}
+{% elif img.exif_lineas %}
+\lumibloque{\lumiiconoreloj}{EXIF}{ {%- for l in img.exif_lineas -%}{{ l.texto | tex }}\\{%- endfor -%} }
+{% elif img.sha256 %}
+\lumibloque{\lumiiconocandado}{Integridad}{\ttfamily sha256 (original): {{ img.sha256 }}}
 {% endif %}
 
-{% if img.hipotesis_extra %}
-\vspace{8pt}\noindent
-\raisebox{-.15em}{\begin{tikzpicture}[x=0.8em/24,y=0.8em/24]
-  \color{lumigris}
-  \draw[line width=1.4pt,dash pattern=on 1.6pt off 1.6pt] (12,3) -- (12,21);
-  \draw[line width=1.6pt,rounded corners=1pt] (14.5,7) rectangle (19.5,15);
-  \fill (17,8.4) circle (0.6);
-\end{tikzpicture}}\hspace{4pt}{\small\bfseries\color{lumigris}Hip\'otesis de geolocalizaci\'on}\\[3pt]
-{\small
-{% for l in img.hipotesis_extra %}
-{% if l.variante == "cabecera" %}\textbf{ {{- l.texto | tex -}} }\\[2pt]
-{% else %}{{ l.texto | tex }}\\
-{% endif %}
-{% endfor %}
+{% if img.hipotesis_extra or img.mapa %}
+\lumibloque{\lumiiconochincheta}{Hip\'otesis de geolocalizaci\'on}{
+  \noindent\begin{minipage}[t]{95pt}
+  {% if img.mapa %}\begin{tikzpicture}[x=86pt,y=86pt]
+    {% for anillo in img.mapa.contorno %}\draw[lumiborde,line width=0.5pt] {% for pt in anillo %}({{ pt.x }},{{ pt.y }}) -- {% endfor %}cycle;{% endfor %}
+    \draw[lumiaviso,line width=0.6pt,fill=lumiaviso,fill opacity=0.5] ({{ img.mapa.punto.x }},{{ img.mapa.punto.y }}) circle ({{ img.mapa.radio }});
+    \fill[lumiaviso] ({{ img.mapa.punto.x }},{{ img.mapa.punto.y }}) circle (1.4pt);
+  \end{tikzpicture}{% else %}\phantom{x}{% endif %}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{\dimexpr\linewidth-100pt\relax}\small
+  {% for l in img.hipotesis_extra %}{% if l.variante == "cabecera" %}\lumiintermedium {{ l.texto | tex }}\\[2pt]{% else %}{{ l.texto | tex }}\\{% endif %}{% endfor %}
+  \end{minipage}
 }
 {% endif %}
 
 {% if img.agente_lineas %}
-\vspace{8pt}\noindent
-\raisebox{-.15em}{\begin{tikzpicture}[x=0.8em/24,y=0.8em/24]
-  \color{lumigris}
-  \draw[line width=1.6pt,rounded corners=1pt] (4,5) -- (20,5) -- (20,15) -- (9,15) -- (5,19) -- (5,15) -- (4,15) -- cycle;
-  \draw[line width=1.4pt] (8,9) -- (16,9);
-  \draw[line width=1.4pt] (8,12) -- (13,12);
-\end{tikzpicture}}\hspace{4pt}{\small\bfseries\color{lumigris}Agente}\\[3pt]
-{\small
-{% for l in img.agente_lineas %}
-{% if l.variante == "cabecera" %}\textbf{ {{- l.texto | tex -}} }\\[2pt]
-{% else %}{{ l.texto | tex }}\\
-{% endif %}
-{% endfor %}
-{% for r in img.rasgos_graficos %}
-% "Rasgos como imagen" se embebe DENTRO de este mismo bloque "Agente",
-% debajo del texto del veredicto -- decisión del spec, no una sección
-% aparte (ver el comentario de implementación en el `.md` del diseño).
-\vspace{6pt}
-{% if r.tipo == "ocr" %}
-{% if img.thumb_file %}
-\begin{center}
-\begin{tikzpicture}
-\node[anchor=south west,inner sep=0] (rasgo-img) {\includegraphics[width=6.5cm,height=6.5cm,keepaspectratio]{ {{- img.thumb_file -}} }};
-\begin{scope}[x={(rasgo-img.south east)},y={(rasgo-img.north west)}]
-{% for c in r.cajas %}
-\draw[lumiaccent,thick] ({{ c.x1 }},{{ c.y1 }}) rectangle ({{ c.x2 }},{{ c.y2 }});
-{% endfor %}
-\end{scope}
-\end{tikzpicture}
-\end{center}
-{% endif %}
-{% elif r.tipo == "profundidad" %}
-\begin{center}
-\includegraphics[width=6.5cm,height=6.5cm,keepaspectratio]{ {{- r.archivo -}} }
-\end{center}
-{% endif %}
-{% endfor %}
+\lumibloque{\lumiiconobocadillo}{Agente}{
+  \small{% for l in img.agente_lineas %}{% if l.variante == "cabecera" %}\lumiintermedium {{ l.texto | tex }}\\[2pt]{% else %}{{ l.texto | tex }}\\{% endif %}{% endfor %}
+  {% for r in img.rasgos_graficos %}\vspace{6pt}{% if r.tipo == "ocr" and img.thumb_file %}\begin{center}\begin{tikzpicture}
+    \node[anchor=south west,inner sep=0] (rasgoimg) {\includegraphics[width=5cm,height=5cm,keepaspectratio]{ {{- img.thumb_file -}} }};
+    \begin{scope}[x={(rasgoimg.south east)},y={(rasgoimg.north west)}]
+    {% for c in r.cajas %}\draw[lumifg,thick] ({{ c.x1 }},{{ c.y1 }}) rectangle ({{ c.x2 }},{{ c.y2 }});{% endfor %}
+    \end{scope}\end{tikzpicture}\end{center}
+  {% elif r.tipo == "profundidad" %}\begin{center}\includegraphics[width=5cm,height=5cm,keepaspectratio]{ {{- r.archivo -}} }\end{center}{% endif %}{% endfor %}
 }
 {% endif %}
 {% endif %}
+{% endif %}
+\end{minipage}
+\vspace{14pt}\par\nopagebreak[0]
+
 {% endfor %}
 
 % -------------------------------------------------------- Notas libres --
 {% if notas %}
-\clearpage
-\subsection*{Notas del investigador}
+\vspace{10pt}
+{\lumiintersemibold\large Notas del investigador}\\[6pt]
+\lumifilete\\[8pt]
 {{ notas | tex }}\\
 {% endif %}
 
 % ------------------------------------------------------------------ Firma --
 {% if firmado_por %}
-\clearpage
-\vspace*{\fill}
+\vspace{20pt}
 \begin{center}
 \rule{5cm}{0.4pt}\\[10pt]
 Firmado por: {{ firmado_por | tex }}\\
 Fecha de generaci\'on: {{ generado | tex }}
 \end{center}
-\vspace*{\fill}
 {% endif %}
 
+\label{LumiUltimaPagina}
 \end{document}

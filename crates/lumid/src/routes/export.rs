@@ -19,7 +19,8 @@ use crate::routes::projects::{err, Fail};
 use crate::App;
 use axum::extract::{Path, State};
 use axum::{http::HeaderMap, http::StatusCode, Json};
-use lumi_proto::api::{Analysis, DichoDeAgente, ExportInformeReq, Image};
+use lumi_index::geo::{dentro, Pais, Paises};
+use lumi_proto::api::{Analysis, ExportInformeReq, Image};
 use lumi_proto::worker::Rasgos;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -129,12 +130,17 @@ pub async fn export_pdf(
         analyses
     };
 
+    // Contornos de país para el localizador (§7 del spec) -- se lee el mutex
+    // UNA sola vez por informe y se clona lo que haga falta, no una vez por
+    // imagen (mismo criterio que ya sigue `queue::mod` con este mutex).
+    let paises: Option<Paises> = app.queue.geo.lock().unwrap().paises.clone();
+
     // Montar el `.tex`, escribir los ficheros del trabajo y compilar es CPU +
     // un subproceso, no red -- al pool de `spawn_blocking`, igual que
     // `procesar_imagen` en la subida.
     let case_id_para_log = case_id;
     let resultado = tokio::task::spawn_blocking(move || {
-        generar_pdf(&case_name, case_created_at, &dir, &filas, &req, &analyses_para_pdf)
+        generar_pdf(&case_name, case_created_at, &dir, &filas, &req, &analyses_para_pdf, &paises)
     })
     .await
     .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
@@ -180,6 +186,13 @@ struct Contexto {
     incluir_estadisticas: bool,
     estadisticas: Option<Estadisticas>,
     imagenes: Vec<ImagenCtx>,
+    /// Un punto por imagen para la «franja de confianza» de la portada
+    /// oscura (§5 del spec) -- solo imágenes con una confianza real o
+    /// `sin_resuelto` entran aquí; una imagen cuyo análisis está pendiente
+    /// no tiene ningún valor que enseñar y se omite (principio "nunca se
+    /// inventa" del proyecto, por encima de la lectura literal de "un punto
+    /// por imagen" del spec). Vacío cuando `incluir_estadisticas` es falso.
+    franja: Vec<PuntoFranjaCtx>,
     /// Notas libres del investigador -- vacío significa que la plantilla no
     /// dibuja la sección entera, no que se dibuje una en blanco.
     notas: String,
@@ -188,12 +201,29 @@ struct Contexto {
     /// normaliza aquí a `"claro"` en vez de propagar un valor desconocido a
     /// la plantilla -- ver `ExportInformeReq::tema`.
     tema: String,
+    /// `"compacta"` o `"banda"` -- ver `ExportInformeReq::disposicion`.
+    /// Normalizada aquí, no en la plantilla: `"banda"` solo tiene sentido en
+    /// el tema oscuro (el claro es siempre para imprimir), así que un
+    /// informe claro fuerza `"compacta"` sin importar lo que pida el
+    /// cliente.
+    disposicion: String,
 }
 
 #[derive(Serialize)]
 struct ModeloCount {
     modelo: String,
     n: usize,
+}
+
+/// Un punto de la «franja de confianza» de la portada oscura -- eje 0–100,
+/// `sin_resuelto` en ámbar y a `pct = 0` (decisión de diseño no especificada
+/// literalmente en el spec: un caso sin resolver no tiene una confianza que
+/// situar en el eje, y `0` es la lectura honesta -- "no hubo señal" -- en
+/// vez de omitir el punto o inventar un valor intermedio).
+#[derive(Serialize)]
+struct PuntoFranjaCtx {
+    pct: i64,
+    sin_resuelto: bool,
 }
 
 #[derive(Serialize)]
@@ -247,10 +277,6 @@ struct ImagenCtx {
     /// archivo no se pudo leer del disco (nunca un hash inventado).
     sha256: Option<String>,
     exif_lineas: Vec<Linea>,
-    /// Usado tal cual por el tema claro (bloque único "Análisis" tabular).
-    /// El tema oscuro NO usa este campo -- separa hipótesis y agente en sus
-    /// propios bloques con icono, ver `hipotesis_extra`/`agente_lineas`.
-    analisis_lineas: Vec<Linea>,
     /// Rasgos reales de agentes (recuadros OCR, mapa de profundidad) para
     /// dibujar como gráfico -- vacío cuando `rasgos_como_imagen` está
     /// apagado o ningún agente de esta imagen trajo rasgos de verdad.
@@ -281,13 +307,47 @@ struct ImagenCtx {
     confianza_pct: Option<i64>,
     coord_txt: Option<String>,
     radio_txt: Option<String>,
+    /// Numéricos, para el localizador TikZ (§7 del spec) -- `coord_txt`
+    /// sigue siendo lo que se IMPRIME, esto es lo que se PROYECTA. `None` en
+    /// los mismos casos que `coord_txt`/`radio_txt`.
+    lat: Option<f64>,
+    lng: Option<f64>,
+    radio_km: Option<f64>,
+    /// Contorno del país + punto + radio ya proyectados a coordenadas de
+    /// dibujo -- `None` cuando no hay hipótesis, no hay `paises.json`
+    /// instalado, o la coordenada cae fuera de todo país (mar). Nunca deja
+    /// hueco en la plantilla: sin esto solo faltan las líneas del contorno,
+    /// la coordenada y el radio en mono se siguen imprimiendo igual.
+    mapa: Option<MapaCtx>,
     /// Alternativas y respaldo geométrico de la hipótesis principal -- todo
     /// lo que no es "el número grande" ni la coordenada/radio de cabecera.
     hipotesis_extra: Vec<Linea>,
-    /// Nombre, veredicto y detalle del agente -- mismo contenido que
-    /// producía `lineas_agentes` para el tema claro, aparte para poder
-    /// dibujarlo en su propio bloque con icono.
+    /// Nombre, veredicto y detalle del agente.
     agente_lineas: Vec<Linea>,
+}
+
+/// Contorno de país + hipótesis, ya proyectados al espacio de dibujo del
+/// localizador -- ver `construir_mapa`. Todas las coordenadas comparten la
+/// MISMA unidad (fracción del ancho del lienzo, `MAPA_ANCHO_PT`), para que
+/// dibujarlas en TikZ con ejes isótropos (`x=<ancho>pt,y=<ancho>pt`, no
+/// `x=ancho,y=alto`) reproduzca el mismo factor de escala en los dos ejes y
+/// el círculo de radio salga circular, no una elipse.
+#[derive(Serialize)]
+struct MapaCtx {
+    /// Uno por anillo del país (normalmente uno solo: el contorno exterior).
+    contorno: Vec<Vec<Punto>>,
+    punto: Punto,
+    radio: f64,
+}
+
+/// `{x, y}` en vez de una tupla `(f64, f64)` -- Tera no admite acceso por
+/// índice numérico tras un punto (`pt.0`), solo por nombre de campo, así
+/// que una tupla se serializa a un array de JSON al que la plantilla no
+/// puede llegar sin esa sintaxis.
+#[derive(Serialize, Clone, Copy)]
+struct Punto {
+    x: f64,
+    y: f64,
 }
 
 /// Un recuadro OCR ya convertido a coordenadas TikZ (origen abajo-izquierda,
@@ -378,105 +438,31 @@ fn lineas_exif(imagen: &Image) -> Vec<Linea> {
     out
 }
 
-/// Las líneas de todos los análisis de una imagen que la configuración deja
-/// pasar. Los que no -- geolocalización con `hipotesis_geolocalizacion`
-/// apagado, o `agentes` con `veredictos_agentes` apagado -- se cuentan aparte
-/// para poder decir POR QUÉ no aparecen, en vez de dejar la sección muda como
-/// si nunca se hubiera lanzado nada.
-fn lineas_analisis(analyses: &[Analysis], req: &ExportInformeReq) -> Vec<Linea> {
-    let mut out = Vec::new();
-    if analyses.is_empty() {
-        out.push(cuerpo("Sin análisis lanzados sobre esta imagen.".into()));
-        return out;
-    }
+// ponytail / decisión de diseño no especificada literalmente en el spec:
+// antes de este rediseño, `lineas_analisis`/`lineas_geolocalizacion`/
+// `lineas_agentes` alimentaban un bloque "Análisis" tabular EXCLUSIVO del
+// tema claro, mientras que `resumen_oscuro` (debajo) calculaba lo mismo por
+// separado para el tema oscuro -- dos caminos de datos para la misma
+// pregunta. El spec (§6a) dice que el tema claro pasa a usar "los mismos
+// bloques, en el mismo orden" que el oscuro (EXIF/Integridad/Hipótesis/
+// Agente), así que las tres funciones de arriba quedan sin ningún llamador y
+// se retiran aquí -- los dos temas comparten ahora `ResumenOscuro` como
+// única fuente de la ficha de resultado. Efecto secundario aceptado: el
+// texto expl\u{ed}cito de "pendiente"/"en curso" que ese camino imprim\u{ed}a para el
+// tema claro desaparece -- el tema oscuro ya no lo mostraba (un an\u{e1}lisis sin
+// terminar simplemente no deja hip\u{f3}tesis que imprimir), y unificar bajo el
+// mismo criterio es mejor que mantener dos comportamientos distintos por
+// tema para el mismo caso.
+//
+// Lo mismo aplica a `Estadisticas::por_modelo`: el spec pide expl\u{ed}citamente
+// mantenerlo en la struct sin consumidor (se elimina el gr\u{a}fico de barras),
+// as\u{ed} que no se ha tocado.
 
-    let incluidos: Vec<&Analysis> = analyses
-        .iter()
-        .filter(|a| if a.model == "agentes" { req.veredictos_agentes } else { req.hipotesis_geolocalizacion })
-        .collect();
-
-    if incluidos.is_empty() {
-        out.push(cuerpo("Los análisis de esta imagen no se incluyen según la configuración de este informe.".into()));
-        return out;
-    }
-
-    for a in incluidos {
-        out.push(cabecera(format!("Análisis · modelo {}", a.model)));
-        match a.state.as_str() {
-            "pendiente" => {
-                out.push(cuerpo("Estado: pendiente -- todavía no ha empezado a correr.".into()));
-                continue;
-            }
-            "en_curso" => {
-                out.push(cuerpo("Estado: en curso en el momento de generar este informe.".into()));
-                continue;
-            }
-            "error" => {
-                let motivo = a.error.as_deref().unwrap_or("sin motivo registrado");
-                out.push(cuerpo(format!("Estado: error -- {motivo}")));
-                continue;
-            }
-            _ => {}
-        }
-        if a.model == "agentes" {
-            lineas_agentes(&mut out, &a.agentes, a.agente.as_deref());
-        } else {
-            lineas_geolocalizacion(&mut out, a);
-        }
-    }
-    out
-}
-
-fn lineas_geolocalizacion(out: &mut Vec<Linea>, a: &Analysis) {
-    match (a.result_lat, a.result_lng) {
-        (Some(lat), Some(lng)) => {
-            let radio = a.result_radius_m.map(|r| format!("{r:.0} m")).unwrap_or_else(|| "sin radio".into());
-            let confianza = a
-                .result_confidence
-                .map(|c| format!("{:.0}%", c * 100.0))
-                .unwrap_or_else(|| "sin confianza registrada".into());
-            out.push(cuerpo(format!("Hipótesis principal: {lat:.6}, {lng:.6}")));
-            out.push(cuerpo(format!("Radio: {radio} · confianza: {confianza}")));
-            if let (Some(inliers), Some(verif)) = (a.result_inliers, a.result_verificador.as_deref()) {
-                out.push(cuerpo(format!("Respaldo geométrico: {inliers} correspondencias ({verif})")));
-            }
-        }
-        _ => out.push(cuerpo("Sin hipótesis: el motor no encontró un candidato.".into())),
-    }
-    if !a.hypotheses.is_empty() {
-        out.push(cabecera("Alternativas:".into()));
-        for h in &a.hypotheses {
-            out.push(cuerpo(format!(
-                "· {:.6}, {:.6} · radio {:.0} m · peso {:.0}%",
-                h.lat, h.lng, h.radio_m, h.peso * 100.0,
-            )));
-        }
-    }
-}
-
-fn lineas_agentes(out: &mut Vec<Linea>, dichos: &[DichoDeAgente], agente_pedido: Option<&str>) {
-    if dichos.is_empty() {
-        out.push(cuerpo("El agente no contestó a tiempo.".into()));
-        return;
-    }
-    let dicho = dichos.iter().find(|d| Some(d.agente.as_str()) == agente_pedido).unwrap_or(&dichos[0]);
-    out.push(cuerpo(format!("Agente: {}", dicho.nombre)));
-    if dicho.etiqueta == "abstiene" {
-        out.push(cuerpo("Veredicto: se abstuvo -- no llegó a su umbral de confianza.".into()));
-    } else {
-        out.push(cuerpo(format!("Veredicto: {} ({:.0}%)", dicho.etiqueta, dicho.confianza * 100.0)));
-    }
-    if !dicho.detalle.is_empty() {
-        out.push(cuerpo(format!("Detalle: {}", dicho.detalle)));
-    }
-}
-
-/// Lo que necesita la página por imagen (y los cuatro números de portada) del
-/// tema oscuro: una sola hipótesis principal, un solo veredicto de agente, y
-/// si ambos -- o alguno -- terminaron en error o abstención total, para poder
-/// sustituir sus bloques por un único aviso ámbar en vez de dejarlos vacíos o
-/// a medias. Deliberadamente NO toca `analisis_lineas`/`lineas_analisis`: esa
-/// ruta la sigue usando el tema claro tal cual estaba, sin tocar su salida.
+/// Lo que necesita la ficha por imagen (y los cuatro números de portada de
+/// la portada oscura) de los DOS temas: una sola hipótesis principal, un
+/// solo veredicto de agente, y si ambos -- o alguno -- terminaron en error o
+/// abstención total, para poder sustituir sus bloques por un único aviso en
+/// vez de dejarlos vacíos o a medias.
 struct ResumenOscuro {
     sin_resuelto: bool,
     es_error: bool,
@@ -486,6 +472,9 @@ struct ResumenOscuro {
     confianza_pct: Option<i64>,
     coord_txt: Option<String>,
     radio_txt: Option<String>,
+    lat: Option<f64>,
+    lng: Option<f64>,
+    radio_km: Option<f64>,
     hipotesis_extra: Vec<Linea>,
     agente_lineas: Vec<Linea>,
 }
@@ -522,6 +511,9 @@ fn resumen_oscuro(analyses: &[Analysis], req: &ExportInformeReq) -> ResumenOscur
     let mut confianza_pct = None;
     let mut coord_txt = None;
     let mut radio_txt = None;
+    let mut lat_out = None;
+    let mut lng_out = None;
+    let mut radio_km = None;
     let mut hipotesis_extra = Vec::new();
     if req.hipotesis_geolocalizacion && !sin_resuelto {
         if let Some(a) = geo {
@@ -530,6 +522,9 @@ fn resumen_oscuro(analyses: &[Analysis], req: &ExportInformeReq) -> ResumenOscur
                 coord_txt = Some(format!("{lat:.6}, {lng:.6}"));
                 radio_txt =
                     Some(a.result_radius_m.map(|r| format!("{r:.0} m")).unwrap_or_else(|| "sin radio".into()));
+                lat_out = Some(lat);
+                lng_out = Some(lng);
+                radio_km = a.result_radius_m.map(|r| r as f64 / 1000.0);
                 if let (Some(inliers), Some(verif)) = (a.result_inliers, a.result_verificador.as_deref()) {
                     hipotesis_extra.push(cuerpo(format!("Respaldo geom\u{e9}trico: {inliers} correspondencias ({verif})")));
                 }
@@ -570,6 +565,9 @@ fn resumen_oscuro(analyses: &[Analysis], req: &ExportInformeReq) -> ResumenOscur
         confianza_pct,
         coord_txt,
         radio_txt,
+        lat: lat_out,
+        lng: lng_out,
+        radio_km,
         hipotesis_extra,
         agente_lineas,
     }
@@ -728,9 +726,10 @@ fn sha256_de_fichero(path: &FsPath) -> Option<String> {
 
 /// Los rasgos reales (recuadros OCR, mapa de profundidad) de los agentes que
 /// corrieron sobre esta imagen y que la configuración deja pasar -- mismo
-/// filtro que `lineas_analisis` (`veredictos_agentes`), porque un rasgo es
-/// parte del veredicto del agente, no una sección aparte. Escribe los PNG de
-/// profundidad que haga falta junto al `.tex`, en `job`.
+/// filtro (`veredictos_agentes`) que usa `resumen_oscuro` para el resto del
+/// veredicto, porque un rasgo es parte de ese veredicto, no una sección
+/// aparte. Escribe los PNG de profundidad que haga falta junto al `.tex`, en
+/// `job`.
 fn rasgos_graficos_de(analyses: &[Analysis], req: &ExportInformeReq, job: &FsPath, img_id: i64) -> Vec<RasgoImgCtx> {
     if !req.rasgos_como_imagen || !req.veredictos_agentes {
         return Vec::new();
@@ -775,17 +774,142 @@ fn rasgos_graficos_de(analyses: &[Analysis], req: &ExportInformeReq, job: &FsPat
     out
 }
 
+/// Ficheros que la plantilla carga con `fontspec` -- copiados al directorio
+/// del job igual que las miniaturas, ver `registros/fuentes/LEEME.md`. Un
+/// fichero que falte simplemente no se copia; `\IfFileExists` en la
+/// plantilla decide entonces caer a `lmodern` (§3 del spec).
+const FICHEROS_FUENTES: [&str; 5] =
+    ["Inter-Regular.ttf", "Inter-Medium.ttf", "Inter-SemiBold.ttf", "JetBrainsMono-Regular.ttf", "JetBrainsMono-Medium.ttf"];
+
+fn copiar_fuentes(job: &FsPath) {
+    for nombre in FICHEROS_FUENTES {
+        let origen = crate::assets::ruta(&format!("registros/fuentes/{nombre}"));
+        // Se ignora el error a propósito: sin el fichero, la plantilla cae a
+        // `lmodern` -- un informe que no compila es peor que uno con la
+        // fuente equivocada (mismo criterio que ya usa el resto de export.rs
+        // con recursos opcionales).
+        let _ = std::fs::copy(&origen, job.join(nombre));
+    }
+}
+
+/// Ancho del lienzo del localizador, en puntos -- ver el comentario de
+/// `MapaCtx`. El alto (62pt) solo entra en el cálculo de encaje del
+/// contorno; las coordenadas que salen de aquí están todas en fracción de
+/// ESTE ancho, nunca del alto, para que los dos ejes compartan la misma
+/// unidad física y el círculo de radio salga circular.
+const MAPA_ANCHO_PT: f64 = 86.0;
+const MAPA_ALTO_PT: f64 = 62.0;
+/// Margen alrededor del contorno + el círculo de radio, como fracción del
+/// tamaño del contenido -- para que no toquen el borde del lienzo.
+const MAPA_MARGEN: f64 = 0.12;
+const KM_POR_GRADO_LAT: f64 = 111.32;
+
+/// El país cuyo contorno contiene `(lat, lng)` -- mismo trazado de rayos que
+/// `Paises::iso_de`, pero devolviendo el `Pais` entero (con sus anillos, que
+/// hace falta dibujar) en vez de solo el ISO.
+fn pais_conteniendo(paises: &Paises, lat: f64, lng: f64) -> Option<&Pais> {
+    paises.paises.iter().find(|p| p.anillos.iter().any(|a| dentro(a, lat, lng)))
+}
+
+/// Proyecta el contorno del país que contiene `(lat, lng)`, el punto y el
+/// círculo de radio (`radio_km`) al espacio de dibujo del localizador --
+/// ver §7 del spec y el comentario de `MapaCtx`. Se hace en Rust, no en la
+/// plantilla, mismo criterio que ya sigue `rasgos_graficos_de` con las cajas
+/// OCR: Tera no tiene que saber de convenciones de coordenadas.
+///
+/// `None` sin agitar ninguna alarma cuando: no hay `paises.json` cargado, la
+/// coordenada no cae dentro de ningún país (mar), o el país resuelto es
+/// degenerado (un único punto/línea, sin área) -- los tres casos son "no se
+/// dibuja el localizador", nunca un error de exportación.
+///
+/// Proyección: equirectangular simple (sin corrección de longitud por
+/// latitud MÁS ALLÁ de un único factor de escala en el centro del país,
+/// suficiente a escala 1:110m) a un espacio local en kilómetros, encajado
+/// después en un lienzo de `MAPA_ANCHO_PT` × `MAPA_ALTO_PT` con UN SOLO
+/// factor de escala isótropo (mismo pt/km en los dos ejes) -- así el círculo
+/// de radio sale circular, no una elipse. Las coordenadas finales se
+/// expresan como fracción de `MAPA_ANCHO_PT` en los dos ejes (nunca de
+/// `MAPA_ALTO_PT`, que solo entra al calcular el encaje): dibujarlas en TikZ
+/// con ejes isótropos `x=<MAPA_ANCHO_PT>pt,y=<MAPA_ANCHO_PT>pt` reproduce el
+/// mismo factor físico en los dos ejes.
+fn construir_mapa(paises: &Option<Paises>, lat: f64, lng: f64, radio_km: f64) -> Option<MapaCtx> {
+    let paises = paises.as_ref()?;
+    let pais = pais_conteniendo(paises, lat, lng)?;
+
+    let (mut lat_min, mut lat_max, mut lng_min, mut lng_max) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
+    for anillo in &pais.anillos {
+        for &(alng, alat) in anillo {
+            lat_min = lat_min.min(alat);
+            lat_max = lat_max.max(alat);
+            lng_min = lng_min.min(alng);
+            lng_max = lng_max.max(alng);
+        }
+    }
+    if !(lat_min < lat_max && lng_min < lng_max) {
+        return None;
+    }
+
+    // Un solo factor lng->km, fijado en la latitud media del país -- es la
+    // aproximación que hace "simple" a esta proyección (spec §7): correcta
+    // en el centro, se degrada suavemente hacia los bordes, y a escala
+    // 1:110m ("norte de España", no un mapa de calle) el error no importa.
+    let lat_ref = (lat_min + lat_max) / 2.0;
+    let km_por_grado_lng = KM_POR_GRADO_LAT * lat_ref.to_radians().cos().max(0.01);
+    let a_km = |lng_p: f64, lat_p: f64| ((lng_p - lng_min) * km_por_grado_lng, (lat_p - lat_min) * KM_POR_GRADO_LAT);
+
+    let (x_km, y_km) = a_km(lng, lat);
+    let ancho_pais_km = (lng_max - lng_min) * km_por_grado_lng;
+    let alto_pais_km = (lat_max - lat_min) * KM_POR_GRADO_LAT;
+
+    // El rectángulo a encajar cubre el país Y el círculo de radio -- si la
+    // hipótesis cae cerca del borde, el círculo puede salirse del contorno.
+    let (min_x, max_x) = ((x_km - radio_km).min(0.0), (x_km + radio_km).max(ancho_pais_km));
+    let (min_y, max_y) = ((y_km - radio_km).min(0.0), (y_km + radio_km).max(alto_pais_km));
+    let ancho_km = ((max_x - min_x) * (1.0 + MAPA_MARGEN * 2.0)).max(0.001);
+    let alto_km = ((max_y - min_y) * (1.0 + MAPA_MARGEN * 2.0)).max(0.001);
+    // Escala isótropa: la MENOR de las dos, para que el rectángulo encaje
+    // entero en el lienzo sin desbordar ningún eje.
+    let escala = (MAPA_ANCHO_PT / ancho_km).min(MAPA_ALTO_PT / alto_km);
+
+    let (centro_x_km, centro_y_km) = ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0);
+    let a_frac = |x_km: f64, y_km: f64| -> Punto {
+        let px = (x_km - centro_x_km) * escala + MAPA_ANCHO_PT / 2.0;
+        let py = (y_km - centro_y_km) * escala + MAPA_ALTO_PT / 2.0;
+        Punto { x: px / MAPA_ANCHO_PT, y: py / MAPA_ANCHO_PT }
+    };
+
+    let contorno = pais
+        .anillos
+        .iter()
+        .map(|anillo| {
+            anillo
+                .iter()
+                .map(|&(alng, alat)| {
+                    let (xk, yk) = a_km(alng, alat);
+                    a_frac(xk, yk)
+                })
+                .collect()
+        })
+        .collect();
+    let punto = a_frac(x_km, y_km);
+    let radio = (radio_km * escala) / MAPA_ANCHO_PT;
+
+    Some(MapaCtx { contorno, punto, radio })
+}
+
 fn generar_pdf(
     caso: &str, case_created_at: i64, originales_dir: &FsPath, filas: &[(Image, Option<Vec<u8>>, Vec<Analysis>)],
-    req: &ExportInformeReq, analyses_del_caso: &[Analysis],
+    req: &ExportInformeReq, analyses_del_caso: &[Analysis], paises: &Option<Paises>,
 ) -> Result<Vec<u8>, FalloInforme> {
     let job = std::env::temp_dir().join(format!("lumi-informe-{}-{}", now(), rand::random::<u32>()));
     std::fs::create_dir_all(&job).map_err(|e| FalloInforme::Compilacion(format!("no se pudo crear el directorio de trabajo: {e}")))?;
     // Se limpia al salir de esta función por cualquier camino (éxito o
     // error) -- nunca se acumulan directorios de un informe fallido.
     let _limpieza = TmpDirGuard(job.clone());
+    copiar_fuentes(&job);
 
     let mut imagenes = Vec::with_capacity(filas.len());
+    let mut franja = Vec::with_capacity(filas.len());
     // Agregados para los cuatro números de portada del tema oscuro -- se
     // suman aquí, imagen a imagen, en vez de recorrer `analyses_del_caso`
     // aparte (esa lista es plana y no agrupada por imagen; `filas` sí lo
@@ -821,13 +945,21 @@ fn generar_pdf(
                 n_abstenciones += 1;
             }
         }
+        let mapa = match (r.lat, r.lng, r.radio_km) {
+            (Some(lat), Some(lng), Some(radio_km)) => construir_mapa(paises, lat, lng, radio_km),
+            _ => None,
+        };
+        if let Some(pct) = r.confianza_pct {
+            franja.push(PuntoFranjaCtx { pct, sin_resuelto: false });
+        } else if r.sin_resuelto {
+            franja.push(PuntoFranjaCtx { pct: 0, sin_resuelto: true });
+        }
         imagenes.push(ImagenCtx {
             orden: orden + 1,
             filename: img.filename.clone(),
             thumb_file,
             sha256,
             exif_lineas: if req.exif_por_imagen { lineas_exif(img) } else { Vec::new() },
-            analisis_lineas: lineas_analisis(analyses, req),
             rasgos_graficos: rasgos_graficos_de(analyses, req, &job, img.id),
             sin_resuelto: r.sin_resuelto,
             mostrar_aviso_sin_resuelto: r.sin_resuelto && (req.hipotesis_geolocalizacion || req.veredictos_agentes),
@@ -835,6 +967,10 @@ fn generar_pdf(
             confianza_pct: r.confianza_pct,
             coord_txt: r.coord_txt,
             radio_txt: r.radio_txt,
+            lat: r.lat,
+            lng: r.lng,
+            radio_km: r.radio_km,
+            mapa,
             hipotesis_extra: r.hipotesis_extra,
             agente_lineas: r.agente_lineas,
         });
@@ -854,6 +990,11 @@ fn generar_pdf(
     // -- es el tema por defecto y el que corresponde a un cliente viejo que
     // no manda el campo (`tema_oscuro()` en `ExportInformeReq`).
     let tema = if req.tema == "claro" { "claro".to_string() } else { "oscuro".to_string() };
+    // "banda" solo existe en el tema oscuro (§1 del spec: el claro es
+    // siempre para imprimir, siempre compacto) -- cualquier otro valor, o
+    // "banda" pedida sobre tema claro, cae a "compacta".
+    let disposicion =
+        if tema == "oscuro" && req.disposicion == "banda" { "banda".to_string() } else { "compacta".to_string() };
 
     let ctx = Contexto {
         caso: caso.to_string(),
@@ -863,8 +1004,10 @@ fn generar_pdf(
         incluir_estadisticas: req.portada_estadisticas,
         estadisticas,
         imagenes,
+        franja: if req.portada_estadisticas { franja } else { Vec::new() },
         notas: req.notas.trim().to_string(),
         tema,
+        disposicion,
     };
 
     let t = tera().map_err(FalloInforme::Compilacion)?;

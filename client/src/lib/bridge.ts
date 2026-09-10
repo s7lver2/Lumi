@@ -178,6 +178,10 @@ export interface ExportInformeOpts {
   /** `"oscuro"` (editorial, por defecto) o `"claro"` (el documento
    *  imprimible de siempre) -- ver `ExportInformeReq::tema` en el backend. */
   tema: "oscuro" | "claro";
+  /** `"compacta"` (miniatura al lado, por defecto) o `"banda"` (foto a
+   *  ancho completo) -- solo tiene efecto con `tema: "oscuro"`, ver
+   *  `ExportInformeReq::disposicion` en el backend. */
+  disposicion: "compacta" | "banda";
 }
 
 /** Pide a `lumid` el informe forense del caso en PDF con la config actual,
