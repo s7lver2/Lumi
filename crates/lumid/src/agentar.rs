@@ -30,6 +30,17 @@ pub const LIMITE: Duration = Duration::from_secs(120);
 /// una espera eterna.
 pub const LIMITE_STANDALONE: Duration = Duration::from_secs(240);
 
+/// Los dos ajustes booleanos que `correr`/`correr_persistente` necesitan,
+/// juntos en un struct en vez de dos parámetros sueltos más -- sin esto,
+/// añadir `calibracion_activo` (spec 2026-09-10 §4c) cruzaba el umbral de
+/// clippy de argumentos por función. Ninguno de los dos cambia entre las dos
+/// funciones de una misma llamada, así que agruparlos no pierde nada.
+#[derive(Clone, Copy)]
+struct Ajustes {
+    limpieza_activo: bool,
+    calibracion_activo: bool,
+}
+
 /// Un veredicto por agente, con su detalle. Vacío significa «no hubo agentes»,
 /// que es un estado legítimo y no un fallo.
 ///
@@ -70,14 +81,37 @@ pub async fn preguntar(
     // anterior, este nace ACTIVADO -- la ausencia de la clave cuenta como
     // "activado", solo un "0" explícito lo apaga.
     let limpieza_activo = store.get_meta("limpieza_por_presion").as_deref() != Some("0");
+    // Debug de calibración (spec 2026-09-10 §4c): `respuesta_cruda` solo se
+    // pide al trabajador con el modo activo -- de lo contrario ni siquiera
+    // se manda el env var, así que un trabajador antiguo o uno nuevo se
+    // comportan igual cuando el modo está apagado.
+    let calibracion_activo = crate::routes::features::activo(store, crate::routes::features::CLAVE_CALIBRACION);
+    let ajustes = Ajustes { limpieza_activo, calibracion_activo };
     // `if`/`else` con dos `async fn` da dos tipos `impl Future` distintos
     // aunque devuelvan lo mismo — de ahí el `Box::pin` en vez de un `if`
     // directo sobre las llamadas.
     let tarea: std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Vec<(Veredicto, String)>>> + Send>> =
         if persistente_activo {
-            Box::pin(correr_persistente(agentes, consulta, python, pesos, dispositivo, persistente, limpieza_activo))
+            Box::pin(correr_persistente(
+                agentes,
+                consulta,
+                python,
+                pesos,
+                dispositivo,
+                persistente,
+                ajustes.limpieza_activo,
+                ajustes.calibracion_activo,
+            ))
         } else {
-            Box::pin(correr(agentes, consulta, python, pesos, dispositivo, limpieza_activo))
+            Box::pin(correr(
+                agentes,
+                consulta,
+                python,
+                pesos,
+                dispositivo,
+                ajustes.limpieza_activo,
+                ajustes.calibracion_activo,
+            ))
         };
     let resultado = match tokio::time::timeout(limite, tarea).await {
         Ok(Ok(v)) => v,
@@ -105,7 +139,7 @@ pub async fn preguntar(
 /// lo relanza solo si murió a mitad de una petición anterior.
 async fn correr_persistente(
     agentes: &[String], consulta: &str, python: &Path, pesos: &Path, dispositivo: &str,
-    persistente: &crate::persistente::Persistente, limpieza_activo: bool,
+    persistente: &crate::persistente::Persistente, limpieza_activo: bool, calibracion_activo: bool,
 ) -> anyhow::Result<Vec<(Veredicto, String)>> {
     let script = crate::assets::ruta("workers/lumi_agentes.py");
     let registro = crate::assets::ruta("registros/agentes");
@@ -116,21 +150,23 @@ async fn correr_persistente(
         "agentes": agentes,
     });
     let limpieza_env = Path::new(if limpieza_activo { "1" } else { "0" });
-    let envs: [(&str, &Path); 4] = [
+    let calibracion_env = Path::new(if calibracion_activo { "1" } else { "0" });
+    let envs: [(&str, &Path); 5] = [
         ("LUMI_REGISTRO_AGENTES", &registro),
         ("LUMI_PESOS", pesos),
         ("LUMI_DEVICE", Path::new(dispositivo)),
         ("LUMI_LIMPIEZA_PRESION", limpieza_env),
+        ("LUMI_MODO_CALIBRACION", calibracion_env),
     ];
     let msgs = persistente.pedir(&orden, python, &script, &envs).await?;
     Ok(msgs
         .into_iter()
         .filter_map(|msg| {
             if let lumi_proto::worker::Msg::Agente {
-                agente, etiqueta, confianza, detalle, alternativas, rasgos, ..
+                agente, etiqueta, confianza, detalle, alternativas, rasgos, respuesta_cruda, ..
             } = msg
             {
-                Some((Veredicto { agente, etiqueta, confianza, alternativas, rasgos }, detalle))
+                Some((Veredicto { agente, etiqueta, confianza, alternativas, rasgos, respuesta_cruda }, detalle))
             } else {
                 None
             }
@@ -140,6 +176,7 @@ async fn correr_persistente(
 
 async fn correr(
     agentes: &[String], consulta: &str, python: &Path, pesos: &Path, dispositivo: &str, limpieza_activo: bool,
+    calibracion_activo: bool,
 ) -> anyhow::Result<Vec<(Veredicto, String)>> {
     let mut hijo = tokio::process::Command::new(python)
         .arg(crate::assets::ruta("workers/lumi_agentes.py"))
@@ -157,6 +194,8 @@ async fn correr(
         // desalojar a mitad de vida) -- se pasa igual por consistencia con el
         // camino persistente.
         .env("LUMI_LIMPIEZA_PRESION", if limpieza_activo { "1" } else { "0" })
+        // Debug de calibración (spec 2026-09-10 §4c): ver `agentar::preguntar`.
+        .env("LUMI_MODO_CALIBRACION", if calibracion_activo { "1" } else { "0" })
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -196,10 +235,10 @@ async fn correr(
                 continue;
             };
             if let lumi_proto::worker::Msg::Agente {
-                agente, etiqueta, confianza, detalle, alternativas, rasgos, ..
+                agente, etiqueta, confianza, detalle, alternativas, rasgos, respuesta_cruda, ..
             } = msg
             {
-                fuera.push((Veredicto { agente, etiqueta, confianza, alternativas, rasgos }, detalle));
+                fuera.push((Veredicto { agente, etiqueta, confianza, alternativas, rasgos, respuesta_cruda }, detalle));
             }
         }
     }

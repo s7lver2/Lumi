@@ -3,6 +3,6 @@
   "nombre": "Lumi Mini",
   "recuperacion": ["cosplace"],
   "geometricos": ["tiny-roma"],
-  "agentes": ["idioma", "lado-conduccion", "clima-aparente", "hora-sombras"],
+  "agentes": ["texto-en-escena", "indicios-viales", "condiciones-ambientales", "hora-sombras"],
   "cae_a": null
 }

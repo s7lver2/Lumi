@@ -26,6 +26,11 @@ pub struct AgenteVista {
     /// `instalado` es `true`, o cuando el registro de motores no trae ningún
     /// motor de esa clase (no se puede pedir descargar lo que no existe).
     pub requiere: Option<String>,
+    /// Los ids de sus sub-preguntas, si es un agente fusionado (vacío en
+    /// los seis que no lo son). El picker los enseña como una lista corta
+    /// bajo el nombre en vez de la única línea de `pregunta`, que en un
+    /// fusionado es el JSON compuesto entero y no algo legible en una tarjeta.
+    pub sub_preguntas: Vec<String>,
 }
 
 pub async fn listar(
@@ -49,6 +54,7 @@ pub async fn listar(
             );
             let motor = motores.iter().find(|m| m.clase == a.motor);
             let instalado = necesarios.iter().all(|id| instalados.contains(id));
+            let sub_preguntas = a.sub_preguntas.iter().map(|s| s.id.clone()).collect();
             AgenteVista {
                 id: a.id,
                 nombre: a.nombre,
@@ -58,6 +64,7 @@ pub async fn listar(
                 umbral_confianza: a.umbral_confianza,
                 instalado,
                 requiere: if instalado { None } else { motor.map(|m| m.nombre.clone()) },
+                sub_preguntas,
             }
         })
         .collect();

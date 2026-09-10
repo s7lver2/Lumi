@@ -15,6 +15,12 @@ export function AgenteIcono({ agente, etiqueta, apagado, size = 26 }: {
   agente: string; etiqueta?: string; apagado: boolean; size?: number;
 }) {
   const color = apagado ? "#6a6c70" : "#e8e8e6";
+  // Un veredicto de agente fusionado llega como "<fusionado>.<sub>" (p.ej.
+  // "condiciones-ambientales.clima-aparente") — la sub-pregunta es la que
+  // tiene un icono propio y significativo, así que se usa esa mitad para
+  // decidir el dibujo. Un id sin punto (agente suelto, o la propia tarjeta
+  // fusionada en el picker) se queda tal cual.
+  agente = agente.includes(".") ? agente.split(".").pop()! : agente;
   if (agente === "hora-sombras") {
     const m = etiqueta ? /(\d{1,2})(?::\d{2})?/.exec(etiqueta) : null;
     const hora = m ? Number(m[1]) : 12;
@@ -31,10 +37,13 @@ export function AgenteIcono({ agente, etiqueta, apagado, size = 26 }: {
       </svg>
     );
   }
-  if (agente === "clima-aparente") {
+  // Tarjetas del picker de las tres fichas fusionadas (spec 2026-09-10 §1):
+  // el icono es el de la primera de sus sub-preguntas, no uno nuevo — es la
+  // misma cara que ya tenía esa pregunta cuando era un agente suelto.
+  if (agente === "condiciones-ambientales" || agente === "clima-aparente") {
     return <Icon name="cloud" size={size} className={apagado ? "text-subtle" : "text-fg"} />;
   }
-  if (agente === "lado-conduccion") {
+  if (agente === "indicios-viales" || agente === "lado-conduccion") {
     return <Icon name="via" size={size} className={apagado ? "text-subtle" : "text-fg"} />;
   }
   if (agente === "meteorologia") {
@@ -101,7 +110,7 @@ export function AgenteIcono({ agente, etiqueta, apagado, size = 26 }: {
       </svg>
     );
   }
-  if (agente === "toponimos") {
+  if (agente === "texto-en-escena" || agente === "toponimos") {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.7}
         strokeLinecap="round" strokeLinejoin="round" className="shrink-0">

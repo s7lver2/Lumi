@@ -434,15 +434,19 @@ export default function App() {
           const { project, case_ } = useWorkspace.getState();
           if (!project) { setMode("picker"); return null; }
           const rail = (
-            <Rail active={drawer === "invite" ? "members" : drawer === "export" ? "export" : "cases"}
+            <Rail active={
+              drawer === "invite" ? "members" : drawer === "media" ? "media" : drawer === "export" ? "export" : "cases"
+            }
               canManage={project.role === "owner"} isAdmin={isAdmin}
               onCases={() => {
                 setDrawer(null);
                 if (mode === "case") { useWorkspace.getState().setCase(null); setMode("project"); }
               }}
               onMembers={() => setDrawer(drawer === "invite" ? null : "invite")}
-              // Solo hay algo que exportar dentro de un caso -- en la lista
-              // de casos (`mode === "project"`) este botón no se pasa.
+              // Media (spec 2026-09-10 §3) y Exportar comparten el mismo
+              // criterio: solo dentro de un caso -- en la lista de casos
+              // (`mode === "project"`) ninguno de los dos botones se pasa.
+              onMedia={mode === "case" ? () => setDrawer(drawer === "media" ? null : "media") : undefined}
               onExport={mode === "case" ? () => setDrawer(drawer === "export" ? null : "export") : undefined}
               // El panel de administración es una parada aparte: mientras se
               // está ahí no se está trabajando en el proyecto, así que se

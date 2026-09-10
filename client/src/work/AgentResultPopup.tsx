@@ -6,7 +6,7 @@ import { Backdrop, FloatingCard, Pop } from "../ui/FloatingCard";
 import { Icon } from "../ui/Icon";
 import { Center } from "../ui/layout";
 import { AgenteIcono } from "./AgenteIcono";
-import { BetaPill } from "./AgentPickerPopup";
+import { BetaPill, etiquetaCortaDe } from "./AgentPickerPopup";
 
 /** El resultado del modo Agentes, como popup — hasta 2.0.35 esto era la
  *  segunda pantalla de `AgentesView` (pantalla completa); el owner probó esa
@@ -120,7 +120,7 @@ export function AgentResultPopup({
  *  no, la etiqueta ganadora en grande. No hace falta una pieza distinta para
  *  los doce agentes desde el primer día (fuera de alcance del diseño). */
 function WidgetAgente({ agenteId, dicho }: { agenteId: string; dicho: DichoDeAgente }) {
-  const detalleLargo = agenteId === "toponimos" && dicho.detalle.length > 0;
+  const detalleLargo = agenteId.endsWith("toponimos") && dicho.detalle.length > 0;
   return (
     <div className="flex items-center gap-3 rounded-md border border-border bg-black/[.15] p-3">
       <AgenteIcono agente={agenteId} etiqueta={dicho.etiqueta} apagado={false} size={24} />
@@ -184,6 +184,20 @@ function PantallaResultado({ image, analysis, agentePedido, motor, elapsedS, ras
           {analysis.error ?? "El agente no contestó a tiempo."}
         </p>
       </div>
+    );
+  }
+
+  // Un agente fusionado (spec 2026-09-10 §1) no deja ningún `agente ===
+  // agentePedido` exacto: cada sub-respuesta llega como
+  // "<agentePedido>.<sub>". Se agrupan bajo un solo card en vez de caer al
+  // primer `analysis.agentes[0]` de abajo, que es el camino de un agente
+  // suelto.
+  const subRespuestas = agentePedido
+    ? analysis.agentes.filter((d) => d.agente.startsWith(`${agentePedido}.`))
+    : [];
+  if (subRespuestas.length > 0) {
+    return (
+      <PantallaResultadoFusionado image={image} motor={motor} subRespuestas={subRespuestas} />
     );
   }
 
@@ -281,8 +295,101 @@ function PantallaResultado({ image, analysis, agentePedido, motor, elapsedS, ras
               <Icon name="check" size={12} className="text-fg" />
               <span className="text-[10.5px] text-fg">verificado por {motor ?? "el motor del agente"}</span>
             </div>
+            {!abstiene && dicho.respuesta_cruda && <VerCrudo texto={dicho.respuesta_cruda} />}
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** Sección colapsada "Ver crudo" (spec 2026-09-10 §4c) -- aparece únicamente
+ *  si el veredicto trae `respuesta_cruda` relleno, que solo pasa con
+ *  `modo_calibracion` activo en el servidor. Mono, como cualquier dato de
+ *  máquina (CLAUDE.md). */
+function VerCrudo({ texto }: { texto: string }) {
+  const [abierto, setAbierto] = useState(false);
+  return (
+    <div className="border-t border-border pt-2">
+      <button onClick={() => setAbierto((v) => !v)}
+        className="jg-press flex items-center gap-1.5 text-[10px] uppercase tracking-[.06em] text-subtle hover:text-fg">
+        <Icon name="chevron" size={9} className={abierto ? "rotate-180" : ""} />
+        Ver crudo
+      </button>
+      {abierto && (
+        <pre className="mt-1.5 max-h-[160px] overflow-auto whitespace-pre-wrap rounded-md bg-black/[.25]
+          p-2 font-mono text-[10px] leading-relaxed text-muted">
+          {texto}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+/** El resultado de un agente fusionado (spec 2026-09-10 §1): un único card
+ *  con una fila por sub-pregunta, en vez de un card suelto por cada una —
+ *  es la misma pantalla de dos columnas, pero la columna de la derecha lista
+ *  en vez de mostrar una sola respuesta con hipótesis alternativas (cada
+ *  sub-pregunta ya es su propia respuesta cerrada, sin alternativas que
+ *  enseñar aparte). */
+function PantallaResultadoFusionado({ image, motor, subRespuestas }: {
+  image: Image;
+  motor: string | null;
+  subRespuestas: DichoDeAgente[];
+}) {
+  return (
+    <div className="mt-4 grid grid-cols-[1.4fr_1fr] gap-0 overflow-hidden rounded-xl border border-border bg-panel"
+      style={{ animation: "jg-fade-rise 280ms cubic-bezier(.16,1,.3,1) both" }}>
+      <div className="relative aspect-[3/2] bg-elevated">
+        <img src={lumiUrl(`/v1/images/${image.id}/thumb`)} alt=""
+          className="h-full w-full object-cover" />
+      </div>
+      <div className="flex flex-col gap-3 p-6">
+        <div className="flex items-center gap-2.5 rounded-lg bg-white/[.03] p-2"
+          style={{ animation: "jg-fade-rise 280ms ease-expo both 40ms" }}>
+          <img src={lumiUrl(`/v1/images/${image.id}/thumb`)} alt=""
+            className="h-9 w-11 shrink-0 rounded object-cover" />
+          <div className="min-w-0">
+            <div className="truncate font-mono text-[10.5px] text-fg">{image.filename}</div>
+            <div className="mt-0.5 font-mono text-[9px] text-subtle">motor · {motor ?? "?"}</div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2.5">
+          {subRespuestas.map((d, i) => {
+            const subId = d.agente.split(".").pop() ?? d.agente;
+            const abstiene = d.etiqueta === "abstiene";
+            return (
+              <div key={d.agente} className="flex items-center gap-2.5 rounded-md border border-border
+                  bg-black/[.15] p-2.5"
+                style={{ animation: `jg-fade-rise 280ms ease-expo both ${90 + i * 45}ms` }}>
+                <AgenteIcono agente={subId} etiqueta={abstiene ? undefined : d.etiqueta} apagado={abstiene} size={18} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[9px] uppercase tracking-[.06em] text-subtle">{etiquetaCortaDe(subId)}</div>
+                  <div className={`mt-0.5 truncate text-[12.5px] ${abstiene ? "text-subtle italic" : "text-fg"}`}>
+                    {abstiene ? "sin suficiente confianza" : (d.detalle || d.etiqueta)}
+                  </div>
+                </div>
+                {!abstiene && (
+                  <span className="shrink-0 font-mono text-[10px] text-subtle">{Math.round(d.confianza * 100)}%</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-auto flex items-center gap-1.5 border-t border-border pt-3"
+          style={{ animation: "jg-fade-rise 280ms ease-expo both 220ms" }}>
+          <Icon name="check" size={12} className="text-fg" />
+          <span className="text-[10.5px] text-fg">verificado por {motor ?? "el motor del agente"}</span>
+        </div>
+        {/* Las sub-respuestas de una misma llamada comparten el mismo JSON
+            crudo (una sola llamada de inferencia, spec 2026-09-10 §1) -- se
+            enseña una vez para el grupo, no repetido por fila. */}
+        {(() => {
+          const crudo = subRespuestas.find((d) => d.respuesta_cruda)?.respuesta_cruda;
+          return crudo ? <VerCrudo texto={crudo} /> : null;
+        })()}
       </div>
     </div>
   );

@@ -1,0 +1,12 @@
+{
+  "id": "real-esrgan",
+  "nombre": "Real-ESRGAN x4",
+  "clase": "upscalador",
+  "licencia": "BSD-3-Clause",
+  "fichero_url": "",
+  "licencia_url": "https://github.com/xinntao/Real-ESRGAN/blob/master/LICENSE",
+  "licencia_texto": "",
+  "puerta": null,
+  "gestion_propia": false,
+  "hf_repo": "ai-forever/Real-ESRGAN"
+}

@@ -1,6 +1,6 @@
 import { Icon } from "../ui/Icon";
 
-export type RailItem = "cases" | "members" | "admin" | "export";
+export type RailItem = "cases" | "members" | "admin" | "media" | "export";
 
 /** 44 px, iconos sin etiqueta, translúcido sobre el mapa. Es el carril de la
  *  v1: la navegación no ocupa sitio porque el mapa es el trabajo.
@@ -8,7 +8,7 @@ export type RailItem = "cases" | "members" | "admin" | "export";
  *  Ya no lleva el logotipo: eso vive ahora en la barra de título, que cruza
  *  toda la ventana por encima de este carril. */
 export function Rail({
-  active, canManage, isAdmin, onCases, onMembers, onAdmin, onLeave, onExport,
+  active, canManage, isAdmin, onCases, onMembers, onAdmin, onLeave, onMedia, onExport,
 }: {
   active: RailItem;
   canManage: boolean;
@@ -17,6 +17,9 @@ export function Rail({
   onMembers: () => void;
   onAdmin: () => void;
   onLeave: () => void;
+  /** Panel Media (spec 2026-09-10 §3): mismo criterio que `onExport`, solo
+   *  dentro de un caso -- `undefined` en `ProjectView`. */
+  onMedia?: () => void;
   /** Solo hay algo que exportar dentro de un caso -- `undefined` en
    *  `ProjectView` (la lista de casos), donde este botón no pinta nada. */
   onExport?: () => void;
@@ -27,6 +30,9 @@ export function Rail({
       <RailBtn icon="layers" title="Casos del proyecto" on={active === "cases"} onClick={onCases} />
       {canManage && (
         <RailBtn icon="users" title="Quién entra en el proyecto" on={active === "members"} onClick={onMembers} />
+      )}
+      {onMedia && (
+        <RailBtn icon="images" title="Media" on={active === "media"} onClick={onMedia} />
       )}
       {onExport && (
         <RailBtn icon="doc-descarga" title="Exportar informe" on={active === "export"} onClick={onExport} />
@@ -42,7 +48,7 @@ export function Rail({
 }
 
 function RailBtn({ icon, title, on, onClick }: {
-  icon: "layers" | "users" | "shield" | "logout" | "doc-descarga";
+  icon: "layers" | "users" | "shield" | "logout" | "doc-descarga" | "images";
   title: string; on: boolean; onClick: () => void;
 }) {
   return (

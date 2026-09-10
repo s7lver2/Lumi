@@ -190,6 +190,80 @@ async fn subir_bytes(url_path: &str, data_base64: &str, state: &Shared) -> Resul
     }
 }
 
+/// Editor pre-subida (spec 2026-09-10 §2): a diferencia de `upload_images`
+/// (que sube por RUTA), el resultado del editor es un `<canvas>` exportado a
+/// blob en memoria, sin ruta en disco -- mismo caso que ya resolvía
+/// `subir_bytes` para el avatar/banner, aquí generalizado con un nombre de
+/// fichero real (para que el servidor guarde la extensión correcta) y
+/// devolviendo el `Image` creado en vez de nada.
+async fn subir_bytes_imagen(
+    url_path: &str, data_base64: &str, file_name: &str, state: &Shared,
+) -> Result<String, String> {
+    let (base, client, token) = {
+        let c = state.lock().unwrap();
+        (
+            c.base.clone().ok_or("sin servidor vinculado")?,
+            c.client.clone().ok_or("sin cliente")?,
+            c.token.clone().ok_or("sin sesión")?,
+        )
+    };
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data_base64)
+        .map_err(|e| e.to_string())?;
+    let form = reqwest::multipart::Form::new()
+        .part("file", reqwest::multipart::Part::bytes(bytes).file_name(file_name.to_string()));
+    let res = client
+        .post(format!("{base}{url_path}"))
+        .bearer_auth(token)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    let status = res.status();
+    let text = res.text().await.unwrap_or_default();
+    if status.is_success() { Ok(text) } else { Err(text) }
+}
+
+/// Sube la imagen ya editada (recorte/blur del `ImageEditorPopup`, canvas
+/// exportado a bytes) a un caso -- mismo endpoint que `upload_images`
+/// (`POST /v1/cases/:id/images`), solo que el origen es memoria y no disco.
+/// Devuelve el `Vec<Image>` (uno solo) tal cual lo manda el servidor.
+#[tauri::command]
+async fn upload_case_image_bytes(
+    case_id: i64, data_base64: String, file_name: String, state: tauri::State<'_, Shared>,
+) -> Result<String, String> {
+    subir_bytes_imagen(&format!("/v1/cases/{case_id}/images"), &data_base64, &file_name, &state).await
+}
+
+/// Botón "Mejorar calidad" del editor: sube la imagen ya recortada/con blur
+/// aplicado a `POST /v1/cases/:id/images/upscale`, que la encola como un
+/// trabajo real de la cola existente y devuelve el `Analysis` (`pendiente`)
+/// para que el popup pueda seguir su estado como cualquier otro análisis.
+#[tauri::command]
+async fn upscale_image_bytes(
+    case_id: i64, data_base64: String, file_name: String, state: tauri::State<'_, Shared>,
+) -> Result<String, String> {
+    subir_bytes_imagen(&format!("/v1/cases/{case_id}/images/upscale"), &data_base64, &file_name, &state).await
+}
+
+/// "Sobrescribir" desde el panel Media (spec 2026-09-10 §3): reemplaza los
+/// bytes de una imagen YA EXISTENTE, mismo `id`.
+#[tauri::command]
+async fn overwrite_image_bytes(
+    image_id: i64, data_base64: String, file_name: String, state: tauri::State<'_, Shared>,
+) -> Result<String, String> {
+    subir_bytes_imagen(&format!("/v1/images/{image_id}/sobrescribir"), &data_base64, &file_name, &state).await
+}
+
+/// "Guardar como copia" desde el panel Media: fila nueva, la original intacta.
+#[tauri::command]
+async fn copy_image_bytes(
+    image_id: i64, data_base64: String, file_name: String, state: tauri::State<'_, Shared>,
+) -> Result<String, String> {
+    subir_bytes_imagen(&format!("/v1/images/{image_id}/copiar"), &data_base64, &file_name, &state).await
+}
+
 #[tauri::command]
 async fn upload_avatar_bytes(data_base64: String, state: tauri::State<'_, Shared>) -> Result<(), String> {
     subir_bytes("/v1/me/avatar", &data_base64, &state).await
@@ -1056,6 +1130,7 @@ fn main() {
             pair, pair_card, reconnect, request, start_telemetry, start_task_log,
             start_queue_events, start_indices_events, start_admin_events, start_logs_stream, set_auth,
             upload_images, read_image_as_data_url, upload_avatar_bytes, upload_server_avatar_bytes,
+            upload_case_image_bytes, upscale_image_bytes, overwrite_image_bytes, copy_image_bytes,
             upload_server_banner_bytes, exportar_caso_pdf, previsualizar_informe_pdf, comprobar_actualizacion, error_actualizacion_pendiente, disparar_actualizacion_silenciosa,
             disparar_actualizacion_a_version, version_cliente, historial_actualizaciones,
             sin_autoactualizar_este_arranque, autoarranque_leer, autoarranque_fijar

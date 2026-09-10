@@ -16,7 +16,7 @@ const kb = (b: number) => (b < 1024 * 1024 ? `${Math.round(b / 1024)} KB` : `${(
  *  servidor sabe leer el EXIF y hacer la miniatura, así que un popup previo a
  *  la subida no podría enseñar ni el GPS declarado ni la foto. */
 export function UploadPopup({
-  images, caseName, models, closing, busy, error,
+  images, caseName, models, closing, busy, error, calibracionActivo,
   onAddMore, onDiscard, onAnalyze, onClose,
 }: {
   images: Image[];
@@ -25,12 +25,19 @@ export function UploadPopup({
   closing: boolean;
   busy: boolean;
   error: string | null;
+  /** Spec 2026-09-10 §4d: con `modo_calibracion` apagado (o ausente en un
+   *  servidor viejo), el selector de motor/dispositivo forzado ni siquiera se
+   *  monta -- no es una función capada con explicación, es tooling que este
+   *  servidor no ha activado. */
+  calibracionActivo?: boolean;
   onAddMore: () => void;
   onDiscard: (id: number) => void;
-  onAnalyze: (model: string) => void;
+  onAnalyze: (model: string, forzar?: { motor?: string; dispositivo?: string }) => void;
   onClose: () => void;
 }) {
   const [model, setModel] = useState(models[0] ?? "");
+  const [forzarMotor, setForzarMotor] = useState("");
+  const [forzarDispositivo, setForzarDispositivo] = useState("");
 
   return (
     <>
@@ -53,6 +60,17 @@ export function UploadPopup({
           </div>
 
           <ModelPicker models={models} value={model} onChange={setModel} />
+
+          {calibracionActivo && (
+            <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-dashed border-white/15 p-2.5">
+              <input value={forzarMotor} onChange={(e) => setForzarMotor(e.target.value)}
+                placeholder="forzar motor (opcional)"
+                className="w-full rounded-md border border-border bg-elevated px-2 py-1 font-mono text-[10.5px] text-fg outline-none focus:border-white/40" />
+              <input value={forzarDispositivo} onChange={(e) => setForzarDispositivo(e.target.value)}
+                placeholder="forzar dispositivo (opcional)"
+                className="w-full rounded-md border border-border bg-elevated px-2 py-1 font-mono text-[10.5px] text-fg outline-none focus:border-white/40" />
+            </div>
+          )}
 
           <p className="mt-3 text-[12px] text-fg">
             {images.length} {images.length === 1 ? "imagen seleccionada" : "imágenes seleccionadas"}
@@ -99,7 +117,9 @@ export function UploadPopup({
               className="jg-press rounded-lg border border-white/15 px-4 py-2 text-[11.5px] text-fg disabled:opacity-40">
               Añadir más
             </button>
-            <button onClick={() => onAnalyze(model)}
+            <button onClick={() => onAnalyze(model, calibracionActivo
+              ? { motor: forzarMotor || undefined, dispositivo: forzarDispositivo || undefined }
+              : undefined)}
               disabled={busy || images.length === 0 || models.length === 0}
               className="jg-press rounded-lg bg-accent px-5 py-2 text-[11.5px] font-medium text-black disabled:opacity-40">
               {busy ? "Un momento…" : images.length === 1 ? "Analizar" : `Analizar ${images.length}`}

@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listen } from "@tauri-apps/api/event";
-import { api, type Analysis, type Cambio, type Case, type Image, type Project, type Usage } from "../lib/api";
-import { exportCasePdf, pickPaths, uploadPaths, type ExportInformeOpts } from "../lib/bridge";
+import { api, type Analysis, type Cambio, type Case, type FeatureFlags, type Image, type Project, type Usage } from "../lib/api";
+import {
+  blobToBase64, exportCasePdf, lumiUrl, pickPaths, readImageAsDataUrl, uploadCaseImageBytes, uploadPaths,
+  upscaleImageBytes, type ExportInformeOpts,
+} from "../lib/bridge";
+import { ImageEditorPopup } from "./ImageEditorPopup";
 import { KNOWN_MODELS } from "../lib/models";
 import { useServer } from "../lib/store";
 import { useDismissable } from "../lib/useDismissable";
@@ -17,6 +21,7 @@ import { AgentPickerPopup } from "./AgentPickerPopup";
 import { AgentResultPopup } from "./AgentResultPopup";
 import { ExportDrawer } from "./ExportDrawer";
 import { MapCanvas, type Marker } from "./MapCanvas";
+import { MediaDrawer } from "./MediaDrawer";
 import { ResultsDrawer } from "./ResultsDrawer";
 import { UploadPopup } from "./UploadPopup";
 
@@ -60,6 +65,116 @@ export function CaseView({
   /** Las imágenes que el popup tiene delante. `null` = popup cerrado. */
   const [staged, setStaged] = useState<number[] | null>(null);
   const popup = useDismissable(staged !== null, 180);
+
+  // Editor pre-subida (spec 2026-09-10 §2): una cola de rutas locales
+  // pendientes de pasar por el editor, una detrás de otra -- `editorSrc` es
+  // la que se está enseñando ahora mismo (`null` = editor cerrado).
+  const [editorPath, setEditorPath] = useState<string | null>(null);
+  const [editorSrc, setEditorSrc] = useState<string | null>(null);
+  const editorPop = useDismissable(editorSrc !== null, 180);
+  const edicionResultados = useRef<Image[]>([]);
+  const [features, setFeatures] = useState<FeatureFlags | null>(null);
+  useEffect(() => { api.get<FeatureFlags>("/v1/features", token).then(setFeatures).catch(() => {}); }, [token]);
+
+  function nombreDeRuta(ruta: string): string {
+    return ruta.split(/[\\/]/).pop() || "imagen.jpg";
+  }
+
+  const editorQueueRef = useRef<string[]>([]);
+
+  async function avanzarEdicion(restantes: string[]) {
+    if (restantes.length === 0) {
+      const nuevas = edicionResultados.current;
+      edicionResultados.current = [];
+      setEditorPath(null);
+      setEditorSrc(null);
+      if (nuevas.length) {
+        setImages((v) => [...(v ?? []), ...nuevas]);
+        setSel(nuevas[0].id);
+        setStaged((s) => [...(s ?? []), ...nuevas.map((n) => n.id)]);
+      }
+      api.get<Usage>("/v1/me/usage", token).then(setUsage).catch(() => {});
+      return;
+    }
+    const [siguiente, ...resto] = restantes;
+    setEditorPath(siguiente);
+    try {
+      setEditorSrc(await readImageAsDataUrl(siguiente));
+    } catch (e) {
+      setError(String(e));
+      void avanzarEdicion(resto);
+      return;
+    }
+    // Se guarda para cuando termine ESTA imagen -- `editorQueueRef` en vez de
+    // estado porque no hace falta repintar nada con ella.
+    editorQueueRef.current = resto;
+  }
+
+  /** Punto de entrada nuevo de la subida: en vez de subir directo, cada ruta
+   *  pasa antes por el editor (opcional en cada una, "Omitir" salta sin
+   *  tocarla). Sustituye la llamada directa a `add()` que había antes en
+   *  `pick()`/el soltar sobre la ventana. */
+  function iniciarEdicion(paths: string[]) {
+    if (paths.length === 0) return;
+    edicionResultados.current = [];
+    void avanzarEdicion(paths);
+  }
+
+  async function omitirEdicionActual() {
+    if (!editorPath) return;
+    setBusy(true); setError(null);
+    try {
+      const subidas = await uploadPaths(case_.id, [editorPath]);
+      edicionResultados.current.push(...subidas);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+      void avanzarEdicion(editorQueueRef.current);
+    }
+  }
+
+  async function exportarEdicionActual(blob: Blob) {
+    if (!editorPath) return;
+    setBusy(true); setError(null);
+    try {
+      const base64 = await blobToBase64(blob);
+      const img = await uploadCaseImageBytes(case_.id, base64, nombreDeRuta(editorPath));
+      edicionResultados.current.push(img);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+      void avanzarEdicion(editorQueueRef.current);
+    }
+  }
+
+  /** El botón "Mejorar calidad" del editor: sube lo que hay en el canvas,
+   *  espera a que el trabajo de cola real termine (mismo evento
+   *  `queue-change` que ya sigue el resto de la app) y devuelve los bytes
+   *  del resultado para que el editor los cargue de vuelta en el lienzo.
+   *  ponytail: esto ya deja la imagen guardada en el caso (el upscaler
+   *  reutiliza la cola real, que es case-scoped) -- si además se pulsa
+   *  "Usar esta versión" después, se sube una segunda copia con lo que haya
+   *  en el lienzo en ese momento. Documentado como simplificación conocida:
+   *  la vía correcta para evitar la copia extra es un endpoint que edite en
+   *  el sitio, fuera de alcance de esta entrega. */
+  async function mejorarCalidad(blob: Blob): Promise<Blob> {
+    const base64 = await blobToBase64(blob);
+    const analisis = await upscaleImageBytes(case_.id, base64, editorPath ? nombreDeRuta(editorPath) : "editada.jpg");
+    let estado = analisis;
+    while (estado.state === "pendiente" || estado.state === "en_curso") {
+      await new Promise((r) => setTimeout(r, 1200));
+      estado = await api.get<Analysis>(`/v1/analyses/${analisis.id}`, token);
+    }
+    if (estado.state !== "hecho") throw new Error(estado.error ?? "el upscaler no terminó");
+    const imagenId = estado.result_imagen_id ?? estado.image_ids[0];
+    const res = await fetch(lumiUrl(`/v1/images/${imagenId}`));
+    if (!res.ok) throw new Error("no se pudo leer el resultado del upscaler");
+    // Se refresca la lista: el upscale ya insertó esta imagen en el caso.
+    api.get<Image[]>(`/v1/cases/${case_.id}/images`, token).then(setImages).catch(() => {});
+    return await res.blob();
+  }
   /** La imagen para la que se está eligiendo agente. `null` = popup cerrado —
    *  se abre al elegir «Agentes» en `UploadPopup` en vez de encolar directo. */
   const [agentPickerImage, setAgentPickerImage] = useState<Image | null>(null);
@@ -115,28 +230,13 @@ export function CaseView({
 
   const list = images ?? [];
 
-  async function add(paths: string[]) {
-    if (paths.length === 0) return;
-    setBusy(true); setError(null);
-    try {
-      const nuevas = await uploadPaths(case_.id, paths);
-      if (nuevas.length) {
-        setImages((v) => [...(v ?? []), ...nuevas]);
-        setSel(nuevas[0].id);
-        setStaged((s) => [...(s ?? []), ...nuevas.map((n) => n.id)]);
-      }
-      api.get<Usage>("/v1/me/usage", token).then(setUsage).catch(() => {});
-    } catch (e) {
-      setError(String(e));
-      if (staged === null) setStaged([]);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function pick() {
     try {
-      await add(await pickPaths());
+      // Editor pre-subida (spec 2026-09-10 §2): cada ruta pasa antes por
+      // `ImageEditorPopup` en vez de subirse directa -- `add()` sigue
+      // existiendo para el uso interno del propio editor (Omitir) y para el
+      // arrastrar-y-soltar de abajo.
+      iniciarEdicion(await pickPaths());
     } catch (e) {
       setError(String(e));
     }
@@ -171,7 +271,7 @@ export function CaseView({
       else if (e.payload.type === "leave") setDragging(false);
       else if (e.payload.type === "drop") {
         setDragging(false);
-        void add(e.payload.paths);
+        iniciarEdicion(e.payload.paths);
       }
     });
     return () => { void un.then((f) => f()); };
@@ -195,14 +295,26 @@ export function CaseView({
   }
 
   /** Un análisis por imagen: el motor todavía no sabe cruzar varias. */
-  async function analyze(model: string, ids: number[]) {
+  async function analyze(
+    model: string,
+    ids: number[],
+    forzar?: { motor?: string; dispositivo?: string },
+  ) {
     if (ids.length === 0) return;
     setBusy(true); setError(null);
     try {
       const nuevos: Analysis[] = [];
       for (const id of ids) {
         nuevos.push(await api.post<Analysis>(
-          `/v1/cases/${case_.id}/analyses`, { image_ids: [id], model }, token,
+          `/v1/cases/${case_.id}/analyses`,
+          {
+            image_ids: [id], model,
+            // Spec 2026-09-10 §4d: con `modo_calibracion` apagado en el
+            // servidor, estos dos campos se ignoran en silencio del lado del
+            // backend -- se mandan igual y nunca rompen un servidor viejo.
+            forzar_motor: forzar?.motor, forzar_dispositivo: forzar?.dispositivo,
+          },
+          token,
         ));
       }
       setAnalyses((v) => [...nuevos, ...v]);
@@ -434,6 +546,19 @@ export function CaseView({
             busy={busy}
             onAnalyze={() => (sel !== null ? setStaged([sel]) : void pick())}
             onCenter={(lat, lng) => setFly({ lat, lng, zoom: 14 })} />
+          <MediaDrawer token={token} caseId={case_.id} projectId={project.id}
+            imagenesDelCaso={list} features={features}
+            open={drawerId === "media"} onClose={() => setDrawer(null)}
+            onAnalizar={(imgs) => {
+              setDrawer(null);
+              if (imgs.length === 1) { setAgentPickerImage(imgs[0]); return; }
+              // Varias: una petición de análisis por imagen (reutiliza el
+              // endpoint actual, sin endpoint de lote nuevo) con el modelo
+              // por defecto -- elegir agente/modelo por imagen individual es
+              // el flujo de siempre (click izquierdo en una sola).
+              void analyze(models[0] ?? "mini", imgs.map((i) => i.id));
+            }}
+            onCambio={() => void load()} />
           <ExportDrawer token={token} caseId={case_.id} caseName={case_.name} images={list}
             firmadoPorDefecto={username} open={drawerId === "export"}
             onClose={() => setDrawer(null)} onGuardar={guardarInforme} />
@@ -469,14 +594,22 @@ export function CaseView({
 
       <ContextMenu state={menu} onClose={() => setMenu(null)} />
 
+      {editorPop.rendered && editorSrc && editorPath && (
+        <ImageEditorPopup srcDataUrl={editorSrc} fileName={nombreDeRuta(editorPath)} closing={editorPop.closing}
+          upscaler={features?.upscaler_activo ? { onUpscale: mejorarCalidad } : null}
+          onExportar={(blob) => void exportarEdicionActual(blob)}
+          onOmitir={() => void omitirEdicionActual()}
+          onCerrar={() => void omitirEdicionActual()} />
+      )}
+
       {popup.rendered && (
         <UploadPopup
           images={stagedImages.length > 0 ? stagedImages : lastStaged.current}
           caseName={case_.name} models={models} closing={popup.closing}
-          busy={busy} error={error}
+          busy={busy} error={error} calibracionActivo={features?.modo_calibracion}
           onAddMore={() => void pick()}
           onDiscard={(id) => void discard(id)}
-          onAnalyze={(m) => {
+          onAnalyze={(m, forzar) => {
             // El modo Agentes solo trabaja con una imagen a la vez (multi-
             // selección se descartó en el diseño) -- si el popup traía
             // varias en cola, se lanza sobre la primera y el resto se queda
@@ -490,7 +623,7 @@ export function CaseView({
               if (img) setAgentPickerImage(img);
               return;
             }
-            void analyze(m, staged ?? []);
+            void analyze(m, staged ?? [], forzar);
           }}
           onClose={() => { setStaged(null); setError(null); }} />
       )}

@@ -1,0 +1,39 @@
+{
+  "id": "indicios-viales",
+  "nombre": "Indicios viales",
+  "motor": "vlm",
+  "pregunta": "Mira la foto y responde con un JSON con estas claves exactas: {\"lado-conduccion\": \"...\", \"senalizacion\": \"...\", \"matricula\": \"...\"}. Para \"lado-conduccion\", por qué lado de la calzada circulan los vehículos o dónde está el volante si se ve el interior de uno, elige una de: izquierda, derecha, no visible. Para \"senalizacion\", por la forma, el color y el borde de las señales de tráfico que se vean, a qué convenio pertenecen, elige una de: Viena (Europa continental), británica, MUTCD (Norteamérica), australiana, japonesa, no se ven señales. Para \"matricula\", mirando las matrículas de los vehículos, de qué formato son por su proporción, color de fondo y franjas laterales, elige una de: banda azul UE, blanca alargada sin banda, cuadrada norteamericana, amarilla trasera, negra o antigua, no legible. Responde solo con el JSON, sin texto alrededor, y para cada clave solo con una de sus opciones.",
+  "tipo": "describe",
+  "sub_preguntas": [
+    {
+      "id": "lado-conduccion",
+      "etiquetas": ["izquierda", "derecha", "no visible"],
+      "restriccion": "lado_conduccion",
+      "mapa": { "izquierda": ["izquierda"], "derecha": ["derecha"] },
+      "umbral_confianza": 0.75
+    },
+    {
+      "id": "senalizacion",
+      "etiquetas": ["Viena (Europa continental)", "británica", "MUTCD (Norteamérica)", "australiana", "japonesa", "no se ven señales"],
+      "restriccion": "pais",
+      "mapa": {
+        "británica": ["GBR", "IRL", "MLT", "CYP", "HKG", "SGP", "NZL", "ZAF", "IND"],
+        "MUTCD (Norteamérica)": ["USA", "CAN", "MEX", "PRI"],
+        "australiana": ["AUS", "NZL"],
+        "japonesa": ["JPN"]
+      },
+      "umbral_confianza": 0.8
+    },
+    {
+      "id": "matricula",
+      "etiquetas": ["banda azul UE", "blanca alargada sin banda", "cuadrada norteamericana", "amarilla trasera", "negra o antigua", "no legible"],
+      "restriccion": "pais",
+      "mapa": {
+        "banda azul UE": ["ESP", "PRT", "FRA", "ITA", "DEU", "AUT", "BEL", "NLD", "LUX", "IRL", "DNK", "SWE", "FIN", "EST", "LVA", "LTU", "POL", "CZE", "SVK", "HUN", "SVN", "HRV", "ROU", "BGR", "GRC", "CYP", "MLT"],
+        "cuadrada norteamericana": ["USA", "CAN", "MEX"],
+        "amarilla trasera": ["GBR", "NLD", "LUX", "ISR"]
+      },
+      "umbral_confianza": 0.8
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "id": "condiciones-ambientales",
+  "nombre": "Condiciones ambientales",
+  "motor": "vlm",
+  "pregunta": "Mira la foto y responde con un JSON con estas claves exactas: {\"clima-aparente\": \"...\", \"meteorologia\": \"...\", \"estacion\": \"...\", \"vegetacion\": \"...\"}. Para \"clima-aparente\", por la vegetación, el suelo y la construcción, elige una de: tropical, arido, templado, continental, polar o alta montaña, no se puede decir. Para \"meteorologia\", qué tiempo hace, elige una de: despejado, nublado, lluvia, nieve, niebla, no se puede decir. Para \"estacion\", por el estado de la vegetación, la ropa de la gente y la luz, elige una de: primavera, verano, otoño, invierno, no se puede decir. Para \"vegetacion\", qué vegetación domina la escena, elige una de: palmeras, coníferas, frondosas de hoja caduca, matorral seco, estepa o pradera, selva, sin vegetación. Responde solo con el JSON, sin texto alrededor, y para cada clave solo con una de sus opciones.",
+  "tipo": "describe",
+  "sub_preguntas": [
+    {
+      "id": "clima-aparente",
+      "etiquetas": ["tropical", "arido", "templado", "continental", "polar o alta montaña", "no se puede decir"],
+      "restriccion": "clima_koppen",
+      "mapa": {
+        "tropical": ["A"],
+        "arido": ["B"],
+        "templado": ["C"],
+        "continental": ["D"],
+        "polar o alta montaña": ["E"]
+      },
+      "umbral_confianza": 0.8
+    },
+    {
+      "id": "meteorologia",
+      "etiquetas": ["despejado", "nublado", "lluvia", "nieve", "niebla", "no se puede decir"],
+      "restriccion": "",
+      "mapa": {},
+      "umbral_confianza": 0.5
+    },
+    {
+      "id": "estacion",
+      "etiquetas": ["primavera", "verano", "otoño", "invierno", "no se puede decir"],
+      "restriccion": "",
+      "mapa": {},
+      "umbral_confianza": 0.5
+    },
+    {
+      "id": "vegetacion",
+      "etiquetas": ["palmeras", "coníferas", "frondosas de hoja caduca", "matorral seco", "estepa o pradera", "selva", "sin vegetación"],
+      "restriccion": "clima_koppen",
+      "mapa": {
+        "palmeras": ["A", "B", "C"],
+        "coníferas": ["C", "D", "E"],
+        "selva": ["A"],
+        "matorral seco": ["B", "C"],
+        "frondosas de hoja caduca": ["C", "D"]
+      },
+      "umbral_confianza": 0.8
+    }
+  ]
+}

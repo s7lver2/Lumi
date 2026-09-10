@@ -145,9 +145,10 @@ pub(crate) fn hypotheses_por_caso(
 /// análisis viejo (columna recién migrada) o un JSON corrupto se convierten
 /// en «vacío»/`None` en un solo sitio, en vez de un `Result` que cada
 /// llamador tendría que decidir cómo tragarse.
+#[allow(clippy::too_many_arguments)]
 fn agente_de_fila(
     agente: String, nombre: String, etiqueta: String, confianza: f64, tipo: String, detalle: String,
-    alternativas: Option<String>, rasgos: Option<String>,
+    alternativas: Option<String>, rasgos: Option<String>, respuesta_cruda: Option<String>,
 ) -> lumi_proto::api::DichoDeAgente {
     lumi_proto::api::DichoDeAgente {
         agente,
@@ -160,6 +161,7 @@ fn agente_de_fila(
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default(),
         rasgos: rasgos.and_then(|s| serde_json::from_str(&s).ok()),
+        respuesta_cruda,
     }
 }
 
@@ -168,7 +170,7 @@ pub(crate) fn agentes_por_caso(
 ) -> std::collections::HashMap<i64, Vec<lumi_proto::api::DichoDeAgente>> {
     let Ok(mut q) = c.prepare(
         "SELECT ag.analysis_id, ag.agente, ag.nombre, ag.etiqueta, ag.confianza, ag.tipo, ag.detalle,
-                ag.alternativas, ag.rasgos
+                ag.alternativas, ag.rasgos, ag.respuesta_cruda
            FROM analysis_agents ag JOIN analyses a ON a.id = ag.analysis_id
           WHERE a.case_id = ?1
           ORDER BY ag.analysis_id, ag.agente",
@@ -179,7 +181,7 @@ pub(crate) fn agentes_por_caso(
         Ok((
             r.get::<_, i64>(0)?,
             agente_de_fila(
-                r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?,
+                r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?,
             ),
         ))
     }) else {
@@ -194,14 +196,14 @@ pub(crate) fn agentes_por_caso(
 
 fn agentes(c: &rusqlite::Connection, analysis_id: i64) -> Vec<lumi_proto::api::DichoDeAgente> {
     let Ok(mut q) = c.prepare(
-        "SELECT agente, nombre, etiqueta, confianza, tipo, detalle, alternativas, rasgos
+        "SELECT agente, nombre, etiqueta, confianza, tipo, detalle, alternativas, rasgos, respuesta_cruda
            FROM analysis_agents WHERE analysis_id = ?1 ORDER BY agente",
     ) else {
         return Vec::new();
     };
     let Ok(filas) = q.query_map([analysis_id], |r| {
         Ok(agente_de_fila(
-            r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?,
+            r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?,
         ))
     }) else {
         return Vec::new();
@@ -352,12 +354,38 @@ pub async fn create(
 
     let t = now();
     let via_api = is_api_key(&app.store, &bearer(&headers));
+    // Debug de calibración (spec 2026-09-10 §4d): "ignorados en silencio" se
+    // cumple aquí mismo, no más abajo en la cola -- con el modo apagado
+    // estos dos ni siquiera se guardan, así que no hay nada que el
+    // enrutado automático tenga que acordarse de comprobar.
+    let calibracion_activo = crate::routes::features::activo(&app.store, crate::routes::features::CLAVE_CALIBRACION);
+    let (forzar_motor, forzar_dispositivo) = if calibracion_activo {
+        (req.forzar_motor.clone(), req.forzar_dispositivo.clone())
+    } else {
+        (None, None)
+    };
+    // Panel Media (spec 2026-09-10 §3): el sha256 que tiene la imagen AHORA,
+    // para poder avisar más tarde si alguien la sobrescribió después de este
+    // análisis. Solo tiene sentido con exactamente una imagen -- un análisis
+    // multi-imagen (que hoy no existe, ver el comentario de
+    // `imagen_del_analisis`) se queda sin este dato, no con uno adivinado.
+    let imagen_sha256: Option<String> = if req.image_ids.len() == 1 {
+        app.store
+            .conn()
+            .query_row("SELECT sha256 FROM images WHERE id = ?1", [req.image_ids[0]], |r| r.get(0))
+            .ok()
+    } else {
+        None
+    };
     let id = {
         let c = app.store.conn();
         c.execute(
-            "INSERT INTO analyses (case_id, requested_by, model, agente, state, created_at, via_api)
-             VALUES (?1, ?2, ?3, ?4, 'pendiente', ?5, ?6)",
-            rusqlite::params![case_id, uid, req.model, req.agente, t, via_api],
+            "INSERT INTO analyses (case_id, requested_by, model, agente, state, created_at, via_api,
+                                    forzar_motor, forzar_dispositivo, imagen_sha256)
+             VALUES (?1, ?2, ?3, ?4, 'pendiente', ?5, ?6, ?7, ?8, ?9)",
+            rusqlite::params![
+                case_id, uid, req.model, req.agente, t, via_api, forzar_motor, forzar_dispositivo, imagen_sha256
+            ],
         )
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
         let id = c.last_insert_rowid();

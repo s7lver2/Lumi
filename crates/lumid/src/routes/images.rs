@@ -17,26 +17,26 @@ const THUMB: u32 = 320;
 const MAX_BYTES: usize = 64 * 1024 * 1024;
 
 pub(crate) const COLS: &str = "id, case_id, filename, bytes, width, height, mime,
-                    exif_lat, exif_lng, exif_json, created_at";
+                    exif_lat, exif_lng, exif_json, created_at, sha256, folder_id";
 
 pub(crate) fn dir_for(app: &App, project_id: i64) -> std::path::PathBuf {
     app.dir.join("projects").join(project_id.to_string())
 }
 
-struct ImagenProcesada {
-    mime: String,
-    w: i64,
-    h: i64,
-    ex: crate::exif::ExifRead,
-    sha: String,
-    thumb: Option<Vec<u8>>,
+pub(crate) struct ImagenProcesada {
+    pub(crate) mime: String,
+    pub(crate) w: i64,
+    pub(crate) h: i64,
+    pub(crate) ex: crate::exif::ExifRead,
+    pub(crate) sha: String,
+    pub(crate) thumb: Option<Vec<u8>>,
 }
 
 /// Todo el trabajo de CPU de una subida: detectar formato, decodificar,
 /// generar la miniatura, leer EXIF y calcular el hash. Nada de esto es
 /// async de verdad — se llama desde `upload` a través de
 /// `tokio::task::spawn_blocking`, no inline en el hilo del runtime.
-fn procesar_imagen(data: &[u8], filename: &str) -> Result<ImagenProcesada, String> {
+pub(crate) fn procesar_imagen(data: &[u8], filename: &str) -> Result<ImagenProcesada, String> {
     let fmt = image::guess_format(data).map_err(|_| format!("{filename} no es una imagen"))?;
     let decoded = image::load_from_memory_with_format(data, fmt)
         .map_err(|e| format!("{filename}: {e}"))?;
@@ -54,6 +54,53 @@ fn procesar_imagen(data: &[u8], filename: &str) -> Result<ImagenProcesada, Strin
         }
     };
     Ok(ImagenProcesada { mime, w, h, ex, sha, thumb })
+}
+
+/// Reemplaza los bytes de una imagen YA EXISTENTE en el sitio (mismo `id`,
+/// mismo archivo en disco), recalculando miniatura/sha256/dimensiones/mime.
+/// Comparten esta función el upscaler (que sustituye el original por su
+/// versión mejorada, spec 2026-09-10 §2) y "Sobrescribir" del panel Media
+/// (§3): los análisis previos de esta imagen NO se tocan ni se re-etiquetan
+/// aquí -- la desincronía la detecta quien lea `analyses` comparando su
+/// `sha256` guardado contra el actual de la imagen (mismo mecanismo que ya
+/// usa `export::integridad_sha256`), no este helper.
+///
+/// Toma `store`/`base_dir` sueltos y no `&App` a propósito: lo llama tanto
+/// una ruta HTTP (que sí tiene `App`) como `queue::Queue` al terminar un
+/// trabajo de upscale, y `Queue` no posee un `App` (es al revés: `App`
+/// posee la cola) — pedir `&App` aquí sería una dependencia que no existe.
+pub(crate) fn sobrescribir_bytes(
+    store: &crate::store::Store,
+    base_dir: &std::path::Path,
+    image_id: i64,
+    data: &[u8],
+) -> Result<Image, String> {
+    let (pid, filename): (i64, String) = store
+        .conn()
+        .query_row(
+            "SELECT k.project_id, i.filename FROM images i JOIN cases k ON k.id = i.case_id WHERE i.id = ?1",
+            [image_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .map_err(|_| "no existe esa imagen".to_string())?;
+    let procesada = procesar_imagen(data, &filename)?;
+    let dir = base_dir.join("projects").join(pid.to_string());
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join(image_id.to_string()), data).map_err(|e| e.to_string())?;
+    if let Some(thumb) = &procesada.thumb {
+        let _ = std::fs::write(dir.join(format!("{image_id}.thumb")), thumb);
+    }
+    store
+        .conn()
+        .execute(
+            "UPDATE images SET bytes = ?2, sha256 = ?3, width = ?4, height = ?5, mime = ?6 WHERE id = ?1",
+            rusqlite::params![image_id, data.len() as i64, procesada.sha, procesada.w, procesada.h, procesada.mime],
+        )
+        .map_err(|e| e.to_string())?;
+    store
+        .conn()
+        .query_row(&format!("SELECT {COLS} FROM images WHERE id = ?1"), [image_id], row_to_image)
+        .map_err(|e| e.to_string())
 }
 
 fn usage(app: &App, uid: i64) -> Usage {
@@ -78,6 +125,8 @@ pub(crate) fn row_to_image(r: &rusqlite::Row) -> rusqlite::Result<Image> {
         exif_lng: r.get(8)?,
         exif: raw.and_then(|s| serde_json::from_str(&s).ok()),
         created_at: r.get(10)?,
+        sha256: r.get(11)?,
+        folder_id: r.get(12)?,
     })
 }
 
@@ -115,7 +164,7 @@ pub async fn project_gallery(
     let mut q = c
         .prepare(
             "SELECT i.id, i.case_id, i.filename, i.bytes, i.width, i.height, i.mime,
-                    i.exif_lat, i.exif_lng, i.exif_json, i.created_at, k.name
+                    i.exif_lat, i.exif_lng, i.exif_json, i.created_at, i.sha256, i.folder_id, k.name
              FROM images i JOIN cases k ON k.id = i.case_id
              WHERE k.project_id = ?1
              ORDER BY i.created_at DESC",
@@ -123,7 +172,7 @@ pub async fn project_gallery(
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
     let rows = q
         .query_map([pid], |r| {
-            Ok(ProjectImage { image: row_to_image(r)?, case_name: r.get(11)? })
+            Ok(ProjectImage { image: row_to_image(r)?, case_name: r.get(13)? })
         })
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
         .flatten()
@@ -303,6 +352,121 @@ pub async fn upload(
         rusqlite::params![now(), pid],
     );
     Ok(Json(out))
+}
+
+/// El editor pre-subida (spec 2026-09-10 §2), botón "Mejorar calidad": sube
+/// la imagen YA recortada/con blur aplicado y la encola como un trabajo
+/// normal del sistema de colas existente (subsistema 4) -- exactamente el
+/// mismo camino que `POST /v1/cases/:id/analyses` con `model: "agentes"`
+/// (ver `queue::Queue::repartir_ahora`, rama `modelo == "upscale"`), no una
+/// cola nueva.
+///
+/// Necesita `case_id` en la URL (a diferencia de la redacción literal del
+/// spec, `POST /v1/images/upscale`) porque `analyses`/`analysis_images` son
+/// case-scoped por esquema (`analyses.case_id NOT NULL`) — reusar la cola
+/// real significaba aceptar esa restricción en vez de inventar una tabla de
+/// trabajos paralela sin dueño. La imagen entra al caso igual que una subida
+/// normal (mismo `procesar_imagen`, misma cuota) y sus bytes se SUSTITUYEN en
+/// el sitio cuando el trabajo termina (`sobrescribir_bytes`, llamada desde
+/// `queue::Queue::correr_upscale`) -- no queda una imagen "original" y otra
+/// "mejorada" por separado.
+pub async fn upscale(
+    State(app): State<App>,
+    Path(case_id): Path<i64>,
+    headers: HeaderMap,
+    mut mp: Multipart,
+) -> Result<Json<lumi_proto::api::Analysis>, Fail> {
+    if app.store.get_meta(crate::routes::features::CLAVE_UPSCALER).as_deref() != Some("1") {
+        return Err(err(StatusCode::FORBIDDEN, "el upscaler no está activado en este servidor"));
+    }
+    let (uid, pid, _) = guard_case(&app, &headers, case_id)?;
+    let is_admin = require_session(&app, &bearer(&headers)).map(|(_, a)| a).unwrap_or(false);
+    let dir = dir_for(&app, pid);
+    std::fs::create_dir_all(&dir).map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+
+    let Some(field) = mp.next_field().await.map_err(|e| err(StatusCode::BAD_REQUEST, &e.to_string()))? else {
+        return Err(err(StatusCode::BAD_REQUEST, "hace falta una imagen"));
+    };
+    let filename = field.file_name().unwrap_or("sin-nombre").to_string();
+    let data = field.bytes().await.map_err(|e| err(StatusCode::BAD_REQUEST, &e.to_string()))?;
+    if data.len() > MAX_BYTES {
+        return Err(err(StatusCode::PAYLOAD_TOO_LARGE, "esa imagen pasa de 64 MB"));
+    }
+    if !is_admin {
+        let u = usage(&app, uid);
+        let cap = u.limit_gb * 1024 * 1024 * 1024;
+        if u.used_bytes + data.len() as i64 > cap {
+            return Err(err(StatusCode::INSUFFICIENT_STORAGE, "no cabe en tu cuota"));
+        }
+    }
+
+    let data_proc = data.clone();
+    let filename_proc = filename.clone();
+    let procesada = tokio::task::spawn_blocking(move || procesar_imagen(&data_proc, &filename_proc))
+        .await
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
+        .map_err(|msg| err(StatusCode::UNSUPPORTED_MEDIA_TYPE, &msg))?;
+
+    let t = now();
+    let (image_id, analysis_id) = {
+        let c = app.store.conn();
+        c.execute(
+            "INSERT INTO images
+             (case_id, uploader_id, filename, bytes, sha256, width, height, mime,
+              exif_json, exif_lat, exif_lng, created_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+            rusqlite::params![
+                case_id, uid, filename, data.len() as i64, procesada.sha, procesada.w, procesada.h,
+                procesada.mime, procesada.ex.json, procesada.ex.lat, procesada.ex.lng, t
+            ],
+        )
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+        let image_id = c.last_insert_rowid();
+
+        c.execute(
+            "INSERT INTO analyses (case_id, requested_by, model, agente, state, created_at, via_api)
+             VALUES (?1, ?2, 'upscale', NULL, 'pendiente', ?3, 0)",
+            rusqlite::params![case_id, uid, t],
+        )
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+        let analysis_id = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO analysis_images (analysis_id, image_id) VALUES (?1, ?2)",
+            rusqlite::params![analysis_id, image_id],
+        )
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+        (image_id, analysis_id)
+    };
+
+    std::fs::write(dir.join(image_id.to_string()), &data)
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    if let Some(thumb) = procesada.thumb {
+        let _ = std::fs::write(dir.join(format!("{image_id}.thumb")), thumb);
+    }
+
+    app.queue.avisar();
+    tracing::info!("upscale #{analysis_id} encolado para la imagen #{image_id}");
+    Ok(Json(lumi_proto::api::Analysis {
+        id: analysis_id,
+        case_id,
+        model: "upscale".into(),
+        agente: None,
+        state: "pendiente".into(),
+        error: None,
+        result_lat: None,
+        result_lng: None,
+        result_radius_m: None,
+        result_confidence: None,
+        result_inliers: None,
+        result_verificador: None,
+        result_imagen_id: Some(image_id),
+        image_ids: vec![image_id],
+        hypotheses: vec![],
+        nivel_efectivo: None,
+        agentes: vec![],
+        created_at: t,
+        finished_at: None,
+    }))
 }
 
 pub async fn remove(

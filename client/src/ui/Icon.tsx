@@ -127,6 +127,44 @@ const PATHS: Record<string, React.JSX.Element> = {
       <circle cx="17" cy="8.4" r=".5" fill="currentColor" stroke="none" />
     </>
   ),
+  // Panel Media (spec 2026-09-10 §3): dos fotos superpuestas, no una galería
+  // genérica -- se distingue de "doc-descarga" por su forma, no por color.
+  images: (
+    <>
+      <rect x="3" y="7" width="14" height="14" rx="1.6" />
+      <path d="M7 3h14v14" />
+      <circle cx="8" cy="12" r="1.4" />
+      <path d="M3 17.5 8 13l3 2.5 4-4 2 2" />
+    </>
+  ),
+  // Editor pre-subida (spec 2026-09-10 §2): esquinas de una caja de recorte.
+  crop: (
+    <>
+      <path d="M6 2v14a2 2 0 0 0 2 2h14" />
+      <path d="M18 22V8a2 2 0 0 0-2-2H2" />
+    </>
+  ),
+  blur: (
+    <>
+      <circle cx="9" cy="9" r="6.5" strokeDasharray="2.4 2.2" />
+      <circle cx="15.5" cy="15.5" r="3" />
+    </>
+  ),
+  undo: <path d="M4 10h11a5 5 0 0 1 0 10h-2M4 10l4.5-4.5M4 10l4.5 4.5" />,
+  redo: <path d="M20 10H9a5 5 0 0 0 0 10h2M20 10l-4.5-4.5M20 10l-4.5 4.5" />,
+  sparkle: (
+    <>
+      <path d="M12 3v4M12 17v4M3 12h4M17 12h4" />
+      <path d="M12 8a4 4 0 0 0 4 4 4 4 0 0 0-4 4 4 4 0 0 0-4-4 4 4 0 0 0 4-4Z" />
+    </>
+  ),
+  dots: (
+    <>
+      <circle cx="5" cy="12" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="12" r="1.3" fill="currentColor" stroke="none" />
+    </>
+  ),
 };
 
 export type IconName = keyof typeof PATHS;

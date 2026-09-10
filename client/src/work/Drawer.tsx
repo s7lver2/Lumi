@@ -3,7 +3,7 @@ import { Icon } from "../ui/Icon";
 /** Qué cajón está abierto. Resultados e invitar piden el mismo hueco, así que
  *  solo puede haber uno: abrir cualquiera de los dos recoge el otro sin que
  *  haya que pensarlo, y el dock nunca tiene que decidir a qué borde perseguir. */
-export type DrawerId = "results" | "invite" | "export" | null;
+export type DrawerId = "results" | "invite" | "media" | "export" | null;
 
 export const DRAWER_W = 360;
 export const RAIL_W = 80;

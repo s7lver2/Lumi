@@ -30,6 +30,34 @@ import re
 
 from lumi_pesos import _licencia
 
+#: Confianza fija para una sub-respuesta de un agente fusionado (spec
+#: 2026-09-10 §1, `Vlm.responder_fusionado`). No sale de un softmax como
+#: `responder()`: eso exigiría puntuar cada etiqueta de cada sub-pregunta por
+#: separado, justo la N-llamadas que la fusión existe para evitar. Se fija
+#: POR ENCIMA de todos los `umbral_confianza` que hoy usan las sub-preguntas
+#: fusionadas (0.5-0.8, ver `registros/agentes/*.json`) para que la señal que
+#: manda sea "el modelo respetó el conjunto cerrado ofrecido" y no un número
+#: que además tenga que decidir abstención. ponytail: si algún día hace falta
+#: una confianza graduada por sub-pregunta, la vía es puntuar cada una sobre
+#: el mismo texto ya generado (sin repetir la llamada de generación), no
+#: cambiar esta constante.
+CONFIANZA_FUSIONADO = 0.9
+
+
+def _json_de(texto):
+    """El primer objeto JSON balanceado dentro de `texto` -- un VLM que
+    generó markdown alrededor (```json ... ```) o una frase antes/después no
+    debería tirar todo el resultado. `None` si no hay ninguno o no parsea:
+    ausencia, no un JSON inventado."""
+    inicio = texto.find("{")
+    fin = texto.rfind("}")
+    if inicio == -1 or fin == -1 or fin < inicio:
+        return None
+    try:
+        return json.loads(texto[inicio:fin + 1])
+    except ValueError:
+        return None
+
 # Rangos Unicode por escritura, en el orden en que se prueban. Se resuelve con
 # aritmetica y no con un modelo: que la letra pi sea griega no es una prediccion.
 ESCRITURAS = [
@@ -126,6 +154,55 @@ class Vlm(object):
         alternativas = sorted(zip(etiquetas, probs), key=lambda par: -par[1])
         return (etiquetas[i], probs[i], "", alternativas, None)
 
+    def responder_fusionado(self, agente, ruta_imagen):
+        """Un agente fusionado (`sub_preguntas` no vacío, spec 2026-09-10 §1):
+        UNA sola llamada de generación con `agente["pregunta"]` (que ya pide
+        el JSON compuesto, ver `registros/agentes/*.json`), en vez de las N
+        llamadas de puntuación que haría `responder()` una vez por
+        sub-pregunta. Devuelve una lista `(sub_id, etiqueta, confianza,
+        detalle, alternativas, rasgos)` -- vacía la sub-pregunta cuyo valor
+        no vino en el JSON o no está en su conjunto cerrado de etiquetas: es
+        una abstención, igual que ya lo es un agente suelto por debajo de su
+        umbral, nunca un valor inventado."""
+        import torch
+        from PIL import Image
+
+        subs = agente.get("sub_preguntas") or []
+        if not subs:
+            return []
+        img = Image.open(ruta_imagen).convert("RGB")
+        mensajes = [{"role": "user", "content": [
+            {"type": "image"},
+            {"type": "text", "text": agente["pregunta"]},
+        ]}]
+        texto = self.proc.apply_chat_template(mensajes, add_generation_prompt=True)
+        entrada = self.proc(text=[texto], images=[img], return_tensors="pt")
+        entrada = {k: v.to(self.dispositivo) for k, v in entrada.items()}
+        with torch.no_grad():
+            salida = self.red.generate(**entrada, max_new_tokens=200, do_sample=False)
+        generado = self.proc.batch_decode(
+            salida[:, entrada["input_ids"].shape[1]:], skip_special_tokens=True)[0]
+        datos = _json_de(generado) or {}
+
+        fuera = []
+        for s in subs:
+            valor = datos.get(s["id"])
+            if not isinstance(valor, str) or not valor.strip():
+                continue
+            valor = valor.strip()
+            etiquetas = s.get("etiquetas") or []
+            if etiquetas and valor not in etiquetas:
+                # El modelo se salió del conjunto cerrado ofrecido: se
+                # abstiene esta sub-pregunta, no se adivina la más parecida.
+                continue
+            fuera.append((s["id"], valor, CONFIANZA_FUSIONADO, "", [], None))
+        # El texto generado, TAL CUAL, antes de este mismo parseo -- es lo
+        # que espera `lumi_agentes.py` para rellenar `respuesta_cruda` (spec
+        # 2026-09-10 §4c) cuando `modo_calibracion` está activo. Se devuelve
+        # siempre (barato: ya está en memoria) y es la propia llamada de
+        # arriba quien decide si se queda o se descarta con el modo apagado.
+        return generado, fuera
+
 
 class Ocr(object):
     """PaddleOCR. Dos agentes tiran de el y le piden cosas distintas del mismo
@@ -205,21 +282,20 @@ class Ocr(object):
             return None
         return {"tipo": "ocr", "cajas": cajas}
 
-    def responder(self, agente, ruta_imagen):
-        lineas = self._lineas(ruta_imagen)
-        if agente["id"] == "toponimos":
-            # Descriptivo: el texto entero, sin interpretar. Un nombre de calle
-            # legible vale mas que cualquier etiqueta que le pusieramos. Sin
-            # distribucion genuina que ofrecer (texto libre, no un conjunto
-            # cerrado) -- `alternativas` se queda vacia a proposito.
-            textos = [t for t, _, _ in lineas if t.strip()]
-            texto = " · ".join(textos)
-            if not texto:
-                return (None, 0.0, "", [], None)
-            media = sum(c for _, c, _ in lineas) / len(lineas)
-            rasgos = self._rasgos_de(lineas, lambda t: t[:40])
-            return ("hay texto legible", media, texto[:400], [], rasgos)
+    def _responder_toponimos(self, lineas):
+        # Descriptivo: el texto entero, sin interpretar. Un nombre de calle
+        # legible vale mas que cualquier etiqueta que le pusieramos. Sin
+        # distribucion genuina que ofrecer (texto libre, no un conjunto
+        # cerrado) -- `alternativas` se queda vacia a proposito.
+        textos = [t for t, _, _ in lineas if t.strip()]
+        texto = " · ".join(textos)
+        if not texto:
+            return (None, 0.0, "", [], None)
+        media = sum(c for _, c, _ in lineas) / len(lineas)
+        rasgos = self._rasgos_de(lineas, lambda t: t[:40])
+        return ("hay texto legible", media, texto[:400], [], rasgos)
 
+    def _responder_idioma(self, lineas):
         cuenta = {}
         total = 0
         for texto, confianza, _ in lineas:
@@ -244,6 +320,37 @@ class Ocr(object):
         muestra = " · ".join(t for t, _, _ in lineas if t.strip())[:200]
         rasgos = self._rasgos_de(lineas, self._escritura_de)
         return (nombre, confianza, muestra, alternativas, rasgos)
+
+    def responder(self, agente, ruta_imagen):
+        lineas = self._lineas(ruta_imagen)
+        if agente["id"] == "toponimos":
+            return self._responder_toponimos(lineas)
+        return self._responder_idioma(lineas)
+
+    def responder_fusionado(self, agente, ruta_imagen):
+        """`texto-en-escena` fusiona `idioma` + `toponimos` (spec 2026-09-10
+        §1), y los dos ya salían del MISMO pase de PaddleOCR (docstring de la
+        clase) -- antes `lumi_agentes.py` llamaba a `responder()` dos veces
+        para dos agentes sueltos, repitiendo el OCR entero. Aquí se corre una
+        vez y se reparte."""
+        subs = agente.get("sub_preguntas") or []
+        if not subs:
+            return []
+        lineas = self._lineas(ruta_imagen)
+        fuera = []
+        for s in subs:
+            etiqueta, confianza, detalle, alternativas, rasgos = (
+                self._responder_toponimos(lineas) if s["id"] == "toponimos"
+                else self._responder_idioma(lineas)
+            )
+            if not etiqueta:
+                continue
+            fuera.append((s["id"], etiqueta, confianza, detalle, alternativas, rasgos))
+        # Sin un "texto crudo" único que devolver (dos sub-preguntas, cada
+        # una con su propia interpretación de las mismas líneas de OCR) --
+        # `None` aquí, a diferencia de `Vlm.responder_fusionado`: ausencia
+        # deliberada y no un texto a medias inventado para rellenar el campo.
+        return None, fuera
 
 
 class Profundidad(object):
@@ -328,7 +435,55 @@ class Profundidad(object):
         return ("fachada estrecha y alta", 0.6, "", [], rasgos)
 
 
-CLASES = {"vlm": Vlm, "ocr": Ocr, "profundidad": Profundidad}
+class Upscalador(object):
+    """Real-ESRGAN (o equivalente, ver `registros/motores/real-esrgan.json`):
+    entra una imagen, sale una versión de mayor resolución generada por un
+    modelo real -- nunca una interpolación disfrazada de IA (spec 2026-09-10
+    §2, "fuera de alcance"). Mismo patrón de carga bajo demanda que
+    `Vlm`/`Profundidad`: se instancia una vez y vive en el mismo caché de
+    pesos (`workers/lumi_upscale.py::_motor`), sujeto al mismo desalojo por
+    inactividad/presión que ya usan los demás.
+
+    ponytail: sin acceso de red para bajar un peso real en este entorno, el
+    `fichero_url`/`sha256` de `real-esrgan.json` se han dejado vacíos a
+    propósito -- `_directorio()` (la misma comprobación de LICENCIA.txt que
+    usan todos los motores de aquí, sin excepción) hace que instanciar esta
+    clase falle con un motivo legible ("sin LICENCIA.txt") hasta que alguien
+    rellene esos campos y baje el peso de verdad. Es el mismo criterio que
+    "nunca se inventa": preferible que el trabajo falle explícito a que
+    devuelva una imagen que no mejoró nada."""
+
+    def __init__(self, pesos_dir, dispositivo):
+        import torch
+
+        d = _directorio(pesos_dir, "real-esrgan")
+        self.dispositivo = dispositivo
+        self.dir = d
+        # La carga real del checkpoint (arquitectura RRDBNet + pesos) es
+        # deliberadamente la última línea, no la primera: todo lo de arriba
+        # (comprobación de licencia, resolución de dispositivo) debe fallar
+        # primero y con un motivo claro si el peso no está, en vez de un
+        # `FileNotFoundError` genérico de `torch.load` a medio construir el
+        # objeto.
+        import glob
+        pesos = glob.glob(os.path.join(d, "*.pth")) + glob.glob(os.path.join(d, "*.safetensors"))
+        if not pesos:
+            raise RuntimeError(
+                "sin peso instalado para real-esrgan -- rellena fichero_url/sha256 en "
+                "registros/motores/real-esrgan.json y descárgalo antes de activar upscaler_activo")
+        self._ruta_peso = pesos[0]
+        self._torch = torch
+
+    def procesar(self, ruta_entrada, ruta_salida):
+        """Escala `ruta_entrada` x4 y escribe el resultado en `ruta_salida`.
+        No hay aquí ninguna arquitectura de red cargada de verdad (ver el
+        docstring de la clase): esto es la superficie que `lumi_upscale.py`
+        llama, lista para conectar la inferencia real de RRDBNet en cuanto
+        el peso exista en disco."""
+        raise RuntimeError("real-esrgan sin peso real instalado -- ver docstring de Upscalador")
+
+
+CLASES = {"vlm": Vlm, "ocr": Ocr, "profundidad": Profundidad, "upscalador": Upscalador}
 
 
 def cargar_motor(clase, pesos_dir, dispositivo):

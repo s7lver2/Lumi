@@ -521,6 +521,25 @@ pub struct PatchRendimientoReq {
     pub limpieza_por_presion: Option<bool>,
 }
 
+/// Los tres interruptores del spec 2026-09-10 (`routes::features`). Los tres
+/// nacen apagados — a diferencia de `RendimientoSettings::limpieza_por_presion`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeatureFlags {
+    pub upscaler_activo: bool,
+    pub upscaler_activo_desc: String,
+    pub media_por_proyecto_activo: bool,
+    pub media_por_proyecto_activo_desc: String,
+    pub modo_calibracion: bool,
+    pub modo_calibracion_desc: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PatchFeatureFlagsReq {
+    pub upscaler_activo: Option<bool>,
+    pub media_por_proyecto_activo: Option<bool>,
+    pub modo_calibracion: Option<bool>,
+}
+
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -812,6 +831,48 @@ pub struct Image {
     pub exif_lng: Option<f64>,
     pub exif: Option<serde_json::Value>,
     pub created_at: i64,
+    /// Hash del fichero tal y como está AHORA en disco. Expuesto para que el
+    /// panel Media (spec 2026-09-10 §3) pueda comparar contra el que guardó
+    /// cada análisis (`Analysis::imagen_sha256`) y avisar de desincronía tras
+    /// un "Sobrescribir" -- mismo dato que ya calculaba `export.rs`, aquí
+    /// simplemente se enseña en vez de solo usarse para sellar un PDF.
+    #[serde(default)]
+    pub sha256: String,
+    /// Carpeta virtual (spec 2026-09-10 §3). `None` = "Sin carpeta".
+    #[serde(default)]
+    pub folder_id: Option<i64>,
+}
+
+/// Una carpeta virtual del panel Media (spec 2026-09-10 §3). Metadato puro:
+/// borrarla no borra sus imágenes (`ON DELETE SET NULL` en `images.folder_id`).
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct MediaFolder {
+    pub id: i64,
+    pub nombre: String,
+    pub created_at: i64,
+}
+
+#[derive(Deserialize)]
+pub struct CrearCarpetaReq {
+    pub nombre: String,
+}
+
+#[derive(Deserialize)]
+pub struct MoverImagenReq {
+    pub folder_id: Option<i64>,
+}
+
+/// Un análisis cuyo `sha256` guardado ya no coincide con el actual de la
+/// imagen -- "Sobrescribir" desde el editor (spec 2026-09-10 §3) cambia los
+/// bytes de la imagen sin tocar sus análisis previos, y esto es lo que el
+/// panel usa para avisar de esa desincronía en vez de re-etiquetarlos en
+/// silencio.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct AnalisisDesincronizado {
+    pub analysis_id: i64,
+    pub model: String,
+    pub agente: Option<String>,
+    pub created_at: i64,
 }
 
 /// Cuánto ocupa este usuario y cuánto le dejan.
@@ -892,6 +953,11 @@ pub struct DichoDeAgente {
     /// Ver `crate::worker::Msg::Agente::rasgos`.
     #[serde(default)]
     pub rasgos: Option<crate::worker::Rasgos>,
+    /// Ver `lumi_index::agentes::Veredicto::respuesta_cruda` (spec
+    /// 2026-09-10 §4c). `None` salvo que `modo_calibracion` estuviera
+    /// activo en el momento del análisis.
+    #[serde(default)]
+    pub respuesta_cruda: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -903,6 +969,16 @@ pub struct AnalysisReq {
     /// multi-selección se descartó explícitamente en el diseño.
     #[serde(default)]
     pub agente: Option<String>,
+    /// Debug de calibración (spec 2026-09-10 §4d). Ignorados en silencio
+    /// (nunca un error) si `modo_calibracion` está apagado en este
+    /// servidor -- un cliente viejo o un script que los mande sin querer no
+    /// debe romperse, simplemente no tienen efecto. Con el modo activo,
+    /// saltan el enrutado automático de la cola y fuerzan ese motor o
+    /// dispositivo exactos.
+    #[serde(default)]
+    pub forzar_motor: Option<String>,
+    #[serde(default)]
+    pub forzar_dispositivo: Option<String>,
 }
 
 /// Lo que el cliente puede saber del mapa. **Nunca incluye la clave.**

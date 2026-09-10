@@ -34,24 +34,92 @@ pub struct Agente {
     /// trabajador; en Rust solo se arrastra.
     pub motor: String,
     /// Lo que se le pregunta al VLM. Vacío en `ocr` y `profundidad`, que no
-    /// preguntan nada: miran.
+    /// preguntan nada: miran. En un agente fusionado (`sub_preguntas` no
+    /// vacío) es la pregunta compuesta que pide un único JSON con una clave
+    /// por sub-pregunta, en una sola llamada de inferencia.
     #[serde(default)]
     pub pregunta: String,
-    /// El conjunto cerrado de respuestas válidas.
+    /// El conjunto cerrado de respuestas válidas. Vacío en un agente
+    /// fusionado — el conjunto cerrado vive por sub-pregunta.
+    #[serde(default)]
     pub etiquetas: Vec<String>,
     /// Metadato informativo — hoy siempre `describe`, ningún agente filtra.
     /// Se conserva el campo (JSON, proto, columna) porque quitarlo es una
     /// migración que nadie pidió; el código ya no rama sobre él.
     pub tipo: String,
-    /// `pais`, `lado_conduccion` o `clima_koppen`. Vacío en los descriptivos.
+    /// `pais`, `lado_conduccion` o `clima_koppen`. Vacío en los descriptivos
+    /// y en un agente fusionado (vive por sub-pregunta).
     #[serde(default)]
     pub restriccion: String,
     /// Etiqueta → valores del atributo que la cumplen. Vive en el JSON y no en
     /// el código porque «qué países escriben en griego» es un dato que se
-    /// corrige editando un fichero, no recompilando un daemon.
+    /// corrige editando un fichero, no recompilando un daemon. Vacío en un
+    /// agente fusionado (vive por sub-pregunta).
+    #[serde(default)]
+    pub mapa: HashMap<String, Vec<String>>,
+    /// `0.0` en un agente fusionado — el umbral vive por sub-pregunta.
+    #[serde(default)]
+    pub umbral_confianza: f64,
+    /// Presente SOLO en agentes fusionados (selector de agentes compactado,
+    /// spec 2026-09-10 §1). Cada entrada es una de las preguntas originales,
+    /// con sus propios campos — exactamente los mismos que un `Agente` no
+    /// fusionado tenía antes de fusionarse. Vacío en los seis que no se
+    /// fusionan. `lumi_agentes.py` es quien decompone el JSON compuesto que
+    /// devuelve el VLM en un `Veredicto` por entrada — `aplicar()` nunca ve
+    /// este campo, solo la lista ya aplanada por `aplanar()`.
+    #[serde(default)]
+    pub sub_preguntas: Vec<SubPregunta>,
+}
+
+/// Una de las preguntas originales dentro de un `Agente` fusionado. Mismos
+/// campos que tenía el `Agente` suelto antes de fusionarse, salvo `id`,
+/// `nombre`, `motor`, `pregunta` y `tipo`, que ahora vive a nivel del agente
+/// fusionado (una sola pregunta, un solo motor, un solo nombre de tarjeta).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SubPregunta {
+    /// p.ej. `"clima-aparente"` dentro de `"condiciones-ambientales"`. El
+    /// `Veredicto.agente` de esta sub-pregunta es `"<id-agente>.<id>"`.
+    pub id: String,
+    #[serde(default)]
+    pub etiquetas: Vec<String>,
+    #[serde(default)]
+    pub restriccion: String,
     #[serde(default)]
     pub mapa: HashMap<String, Vec<String>>,
     pub umbral_confianza: f64,
+}
+
+/// Convierte la lista del registro (agentes sueltos + agentes fusionados) en
+/// una lista plana donde cada sub-pregunta de un fusionado aparece como un
+/// `Agente` virtual propio, con `id = "<fusionado>.<sub>"` — exactamente la
+/// forma que ya usan `aplicar()` y el guardado de veredictos (`v.agente`),
+/// que buscan por `id` exacto y no necesitan saber que una fusión existe.
+/// Es la pieza que hace cierta la frase del spec «aguas abajo, en Rust, es
+/// indistinguible de doce agentes sueltos»: en vez de enseñarle a `aplicar()`
+/// a mirar dentro de `sub_preguntas`, se aplana ANTES de llamarlo.
+pub fn aplanar(agentes: &[Agente]) -> Vec<Agente> {
+    let mut fuera = Vec::with_capacity(agentes.len());
+    for a in agentes {
+        if a.sub_preguntas.is_empty() {
+            fuera.push(a.clone());
+            continue;
+        }
+        for s in &a.sub_preguntas {
+            fuera.push(Agente {
+                id: format!("{}.{}", a.id, s.id),
+                nombre: format!("{} — {}", a.nombre, s.id),
+                motor: a.motor.clone(),
+                pregunta: String::new(),
+                etiquetas: s.etiquetas.clone(),
+                tipo: a.tipo.clone(),
+                restriccion: s.restriccion.clone(),
+                mapa: s.mapa.clone(),
+                umbral_confianza: s.umbral_confianza,
+                sub_preguntas: Vec::new(),
+            });
+        }
+    }
+    fuera
 }
 
 /// Lo que un agente contestó sobre la foto de consulta.
@@ -70,6 +138,14 @@ pub struct Veredicto {
     /// ausencia que haya que rellenar.
     #[serde(default)]
     pub rasgos: Option<lumi_proto::worker::Rasgos>,
+    /// El texto/JSON exacto que devolvió el motor antes de interpretarlo
+    /// (spec 2026-09-10 §4c). `None` salvo que `modo_calibracion` estuviera
+    /// activo en el momento del análisis -- `queue::Queue::guardar_agentes`
+    /// lo fuerza a `None` igualmente si el modo está apagado, por si el
+    /// trabajador lo mandara de todos modos (defensa en profundidad, no
+    /// confianza ciega en que el proceso Python respetó el env var).
+    #[serde(default)]
+    pub respuesta_cruda: Option<String>,
 }
 
 /// Cuánto pesa un mismatch con un agente. Compuesto (mismatches múltiples se
@@ -186,6 +262,7 @@ mod tests {
                 .into_iter()
                 .collect(),
             umbral_confianza: 0.6,
+            sub_preguntas: Vec::new(),
         }
     }
 
@@ -202,6 +279,7 @@ mod tests {
                 .into_iter()
                 .collect(),
             umbral_confianza: 0.6,
+            sub_preguntas: Vec::new(),
         }
     }
 
@@ -216,6 +294,7 @@ mod tests {
             restriccion: String::new(),
             mapa: Default::default(),
             umbral_confianza: 0.5,
+            sub_preguntas: Vec::new(),
         }
     }
 
@@ -230,6 +309,7 @@ mod tests {
             confianza,
             alternativas: Vec::new(),
             rasgos: None,
+            respuesta_cruda: None,
         }
     }
 
@@ -388,5 +468,64 @@ mod tests {
         // tanto tampoco puede marcarse "instalada" nunca.
         let necesarios = motores_de_agentes(&["idioma".into()], &[idioma()], &[motor("qwen3-vl", "vlm")]);
         assert!(necesarios.is_empty());
+    }
+
+    fn fusionado() -> Agente {
+        Agente {
+            id: "condiciones-ambientales".into(),
+            nombre: "Condiciones ambientales".into(),
+            motor: "vlm".into(),
+            pregunta: "…".into(),
+            etiquetas: Vec::new(),
+            tipo: "describe".into(),
+            restriccion: String::new(),
+            mapa: Default::default(),
+            umbral_confianza: 0.0,
+            sub_preguntas: vec![
+                SubPregunta {
+                    id: "clima-aparente".into(),
+                    etiquetas: vec!["tropical".into(), "arido".into()],
+                    restriccion: "clima_koppen".into(),
+                    mapa: [("tropical".to_string(), vec!["A".to_string()])].into_iter().collect(),
+                    umbral_confianza: 0.8,
+                },
+                SubPregunta {
+                    id: "meteorologia".into(),
+                    etiquetas: vec!["despejado".into()],
+                    restriccion: String::new(),
+                    mapa: Default::default(),
+                    umbral_confianza: 0.5,
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn aplanar_convierte_un_agente_fusionado_en_uno_por_sub_pregunta() {
+        let planos = aplanar(&[fusionado(), idioma()]);
+        // Dos sub-preguntas del fusionado + el agente suelto, tal cual.
+        assert_eq!(planos.len(), 3);
+        assert_eq!(planos[0].id, "condiciones-ambientales.clima-aparente");
+        assert_eq!(planos[0].umbral_confianza, 0.8);
+        assert_eq!(planos[0].restriccion, "clima_koppen");
+        assert_eq!(planos[1].id, "condiciones-ambientales.meteorologia");
+        assert_eq!(planos[1].umbral_confianza, 0.5);
+        assert_eq!(planos[2].id, "idioma");
+    }
+
+    #[test]
+    fn aplicar_funciona_igual_sobre_la_lista_aplanada_que_sobre_agentes_sueltos() {
+        // La frase del spec a comprobar: "aguas abajo, en Rust, es
+        // indistinguible de doce agentes sueltos" — se pasa la lista ya
+        // aplanada de un fusionado y `aplicar()` no sabe que existe una
+        // fusión, solo ve un `agente` con ese id compuesto.
+        let planos = aplanar(&[fusionado()]);
+        let noruega = Atributos { pais: Some("NOR".into()), lado: None, koppen: Some("D".into()) };
+        let r = aplicar(
+            &planos,
+            &[dice("condiciones-ambientales.clima-aparente", "tropical", 0.9)],
+            &[(noruega, None)],
+        );
+        assert_eq!(r.ajustes[0].factor, PENALIZACION);
     }
 }

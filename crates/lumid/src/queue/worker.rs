@@ -83,6 +83,17 @@ impl Evento {
                 id,
                 motivo: "un trabajador de embebido mandó una marca de fin de trabajo".into(),
             },
+            // ponytail: mismo caso — `Msg::Upscale` es del trabajador del
+            // upscaler (`workers/lumi_upscale.py`, spec 2026-09-10 §2), que
+            // `crate::upscale` habla por su propia tubería. Añadido aquí solo
+            // para que `Msg` siga siendo exhaustivo tras esa variante nueva;
+            // no toca nada más de este fichero (ver aviso en el spec sobre
+            // no tocar `queue::worker` salvo lo imprescindible para compilar).
+            Msg::Upscale { id, .. } => Evento::Fallo {
+                dispositivo: d,
+                id,
+                motivo: "un trabajador de embebido mandó un resultado de upscale".into(),
+            },
         }
     }
 }
@@ -264,7 +275,7 @@ mod tests {
         let (tx_ev, mut rx_ev) = mpsc::unbounded_channel();
         let registro = crate::assets::ruta("registros/modelos");
         let pesos = crate::assets::ruta("registros/modelos");
-        let w = spawn("cpu".into(), &python, &script, log.clone(), tx_ev, &registro, &pesos).unwrap();
+        let w = spawn("cpu".into(), &python, &script, log.clone(), tx_ev, &registro, &pesos, true).unwrap();
 
         // Arranca diciendo que está, todavía sin ningún modelo cargado.
         match rx_ev.recv().await {

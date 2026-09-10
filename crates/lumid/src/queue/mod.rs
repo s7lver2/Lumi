@@ -836,8 +836,15 @@ impl Queue {
                             })
                             .collect();
                         drop(geo);
+                        // Aplanado: un veredicto fusionado trae
+                        // `agente = "<fusionado>.<sub>"`, que no coincide con
+                        // ningún `id` de nivel superior del registro —
+                        // `aplanar()` expone cada sub-pregunta como un
+                        // `Agente` virtual con ese mismo id compuesto, así
+                        // `aplicar()` no necesita saber que la fusión existe.
+                        let planos = lumi_index::agentes::aplanar(&self.agentes.lock().unwrap());
                         let veredicto_final = lumi_index::agentes::aplicar(
-                            &self.agentes.lock().unwrap(), &veredictos, &para_aplicar,
+                            &planos, &veredictos, &para_aplicar,
                         );
                         let motivo_de: std::collections::HashMap<(i64, i64), String> = usar
                             .iter()
@@ -1051,6 +1058,58 @@ impl Queue {
         }
     }
 
+    /// La imagen (única) de un trabajo de upscale — `analysis_images` normal,
+    /// leída por id en vez de por ruta porque `sobrescribir_bytes` necesita
+    /// el id, no el camino en disco.
+    fn imagen_id_del_analisis(&self, id: i64) -> Option<i64> {
+        self.store
+            .conn()
+            .query_row(
+                "SELECT image_id FROM analysis_images WHERE analysis_id = ?1 LIMIT 1",
+                [id],
+                |r| r.get(0),
+            )
+            .ok()
+    }
+
+    /// El camino entero del upscaler (spec 2026-09-10 §2): sin recuperación,
+    /// verificación ni agentes -- una imagen, un motor real de super-
+    /// resolución, y sus bytes sustituidos en el sitio cuando termina. Nunca
+    /// se guarda una hipótesis: el resultado de este análisis es la imagen
+    /// misma, no una coordenada.
+    async fn correr_upscale(&self, dispositivo: String, id: i64, imagen_id: i64, ruta_entrada: String) {
+        let pesos = crate::assets::pesos_dir(&self.store, &self.dir);
+        let python = interprete_python(&self.store);
+        // Un temporal por trabajo: dos upscales en paralelo en la misma caja
+        // no pueden compartir nombre de archivo de salida.
+        let salida = std::env::temp_dir().join(format!("lumi-upscale-{id}.png"));
+        let resultado = crate::upscale::procesar(
+            std::path::Path::new(&ruta_entrada), &salida, &python, &pesos, &dispositivo,
+        )
+        .await;
+        self.soltar(&dispositivo, id);
+        match resultado {
+            Ok(()) => {
+                let leido = std::fs::read(&salida);
+                let _ = std::fs::remove_file(&salida);
+                match leido {
+                    Ok(bytes) => match crate::routes::images::sobrescribir_bytes(&self.store, &self.dir, imagen_id, &bytes) {
+                        Ok(_) => {
+                            let _ = self.store.conn().execute(
+                                "UPDATE analyses SET state = 'hecho', error = NULL, result_imagen_id = ?2, finished_at = ?3 WHERE id = ?1",
+                                rusqlite::params![id, imagen_id, ahora()],
+                            );
+                            self.anunciar(id, "hecho");
+                        }
+                        Err(e) => self.fallar(id, &format!("upscale hecho pero no se pudo guardar: {e}")),
+                    },
+                    Err(e) => self.fallar(id, &format!("no se pudo leer el resultado del upscaler: {e}")),
+                }
+            }
+            Err(e) => self.fallar(id, &e.to_string()),
+        }
+    }
+
     /// El nivel que de verdad se puede correr: el pedido, o el primero por
     /// debajo cuyas capas estén todas instaladas.
     fn nivel_de(&self, pedido: &str) -> Option<lumi_index::niveles::Nivel> {
@@ -1176,7 +1235,18 @@ impl Queue {
     fn guardar_agentes(&self, id: i64, dictamen: &[(lumi_index::agentes::Veredicto, String)]) {
         let c = self.store.conn();
         let _ = c.execute("DELETE FROM analysis_agents WHERE analysis_id = ?1", [id]);
-        let agentes = self.agentes.lock().unwrap();
+        // Mismo aplanado que en `aplicar()`: `v.agente` de una sub-pregunta
+        // es "<fusionado>.<sub>", que no está en `self.agentes` tal cual —
+        // sin esto, todo veredicto de un agente fusionado se descartaba en
+        // silencio aquí (el `find` de abajo nunca encontraba nada).
+        let agentes = lumi_index::agentes::aplanar(&self.agentes.lock().unwrap());
+        // Debug de calibración (spec 2026-09-10 §4c): defensa en profundidad
+        // -- `agentar::preguntar` ya solo pide `respuesta_cruda` al
+        // trabajador con el modo activo, pero esto es lo que de verdad
+        // decide si se PERSISTE, para que un trabajador viejo o mal
+        // configurado que la mande de todos modos no la acumule en la base
+        // de instalaciones que nunca activaron calibración.
+        let calibracion_activo = crate::routes::features::activo(&self.store, crate::routes::features::CLAVE_CALIBRACION);
         for (v, detalle) in dictamen {
             let Some(a) = agentes.iter().find(|a| a.id == v.agente) else { continue };
             let abstiene = v.confianza < a.umbral_confianza;
@@ -1185,10 +1255,11 @@ impl Queue {
             // consultar por campo, solo devolverlo entero al cliente.
             let alternativas = serde_json::to_string(&v.alternativas).unwrap_or_default();
             let rasgos = v.rasgos.as_ref().and_then(|r| serde_json::to_string(r).ok());
+            let respuesta_cruda = if calibracion_activo { v.respuesta_cruda.clone() } else { None };
             let _ = c.execute(
                 "INSERT OR REPLACE INTO analysis_agents
-                    (analysis_id, agente, nombre, etiqueta, confianza, tipo, detalle, alternativas, rasgos)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    (analysis_id, agente, nombre, etiqueta, confianza, tipo, detalle, alternativas, rasgos, respuesta_cruda)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 rusqlite::params![
                     id,
                     &a.id,
@@ -1199,6 +1270,7 @@ impl Queue {
                     detalle,
                     alternativas,
                     rasgos,
+                    respuesta_cruda,
                 ],
             );
         }
@@ -1318,6 +1390,31 @@ impl Queue {
                 continue;
             };
 
+            // Debug de calibración (spec 2026-09-10 §4d): `forzar_dispositivo`
+            // solo puede haber quedado guardado con `modo_calibracion`
+            // activo (`routes::analyses::create` los pone a `NULL` si no) --
+            // aquí no hace falta comprobar el interruptor otra vez, solo
+            // respetar el valor si lo hay. ponytail: en vez de reescribir
+            // `plan::repartir` para que el emparejamiento tenga en cuenta una
+            // preferencia de dispositivo por candidato, se deja pasar el
+            // ciclo si el dispositivo asignado no es el pedido -- el trabajo
+            // sigue `pendiente` y se reintenta en el próximo tic hasta que el
+            // dispositivo exacto quede libre, en vez de forzar un doble
+            // reparto que podría chocar con lo que ya decidió el planificador
+            // para el resto del lote.
+            let (forzar_motor, forzar_dispositivo): (Option<String>, Option<String>) = self
+                .store
+                .conn()
+                .query_row(
+                    "SELECT forzar_motor, forzar_dispositivo FROM analyses WHERE id = ?1",
+                    [a.analysis_id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap_or((None, None));
+            if forzar_dispositivo.as_deref().is_some_and(|d| d != a.dispositivo) {
+                continue;
+            }
+
             // Se marca ANTES de mandarlo: si el trabajador muere entre el
             // UPDATE y el envío, `enterrar` lo devuelve a la cola. Al revés se
             // perdería sin dejar rastro.
@@ -1371,6 +1468,45 @@ impl Queue {
                 continue;
             }
 
+            // El upscaler (spec 2026-09-10 §2): tampoco recupera ni verifica,
+            // una sola imagen de entrada y un archivo de salida que sustituye
+            // sus bytes en el sitio -- mismo motivo que "agentes" para no
+            // compartir el resto de este bucle (`Job::con_modelos` es para el
+            // camino de recuperación, que esto no usa).
+            if modelo == "upscale" {
+                let (Some(imagen_id), Some(ruta)) =
+                    (self.imagen_id_del_analisis(a.analysis_id), imagenes.first().cloned())
+                else {
+                    self.fallar(a.analysis_id, "no se encontró la imagen del trabajo de upscale");
+                    continue;
+                };
+                let ocupado = match self.estado.lock() {
+                    Ok(mut e) => match e.trabajadores.get_mut(&a.dispositivo) {
+                        Some(w) => {
+                            w.trabajo = Some(a.analysis_id);
+                            w.en_curso_desde = Some(Instant::now());
+                            true
+                        }
+                        None => false,
+                    },
+                    Err(_) => false,
+                };
+                if !ocupado {
+                    let _ = self.store.conn().execute(
+                        "UPDATE analyses SET state = 'pendiente' WHERE id = ?1",
+                        [a.analysis_id],
+                    );
+                    continue;
+                }
+                self.anunciar(a.analysis_id, "en_curso");
+                let cola = self.clone();
+                let dispositivo = a.dispositivo.clone();
+                tokio::spawn(async move {
+                    cola.correr_upscale(dispositivo, a.analysis_id, imagen_id, ruta).await;
+                });
+                continue;
+            }
+
             // El campo `modelo` del análisis guarda el NIVEL («mini», «pro»,
             // «vision»), no un id de modelo. Se resuelve contra el registro y
             // se manda la lista. `nivel_de` da `None` cuando ningún índice
@@ -1379,9 +1515,20 @@ impl Queue {
             // trabajador fallaba mucho más abajo con "el modelo mini no está
             // en el registro": cierto en la letra, pero el motivo real es que
             // no hay ningún índice instalado, no un registro roto.
-            let Some(modelos) = self.nivel_de(&modelo).map(|n| n.recuperacion.clone()) else {
-                self.fallar(a.analysis_id, "ningún índice instalado sirve para consultar con este nivel");
-                continue;
+            // Debug de calibración (spec 2026-09-10 §4d): `forzar_motor`
+            // salta el enrutado automático del nivel entero y pide
+            // exactamente ese modelo de recuperación -- no se comprueba
+            // aquí si el índice instalado lo cubre; si no lo cubre, el
+            // trabajador simplemente no encontrará vectores para él, igual
+            // que ya pasa hoy si el registro pidiera un modelo sin índice.
+            let modelos = if let Some(m) = forzar_motor {
+                vec![m]
+            } else {
+                let Some(modelos) = self.nivel_de(&modelo).map(|n| n.recuperacion.clone()) else {
+                    self.fallar(a.analysis_id, "ningún índice instalado sirve para consultar con este nivel");
+                    continue;
+                };
+                modelos
             };
 
             let enviado = match self.estado.lock() {

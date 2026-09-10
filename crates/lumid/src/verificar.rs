@@ -73,7 +73,7 @@ pub async fn afinar(
     if store.get_meta("verificacion_persistente").as_deref() == Some("1") {
         return afinar_persistente(
             nivel, consulta, candidatos, rutas, python, dispositivo, registro, pesos, verificadores, persistente,
-            limpieza_activo,
+            limpieza_activo, store,
         )
         .await;
     }
@@ -164,7 +164,7 @@ pub async fn afinar(
         inicio.elapsed().as_secs_f64(),
     );
 
-    Ok(construir_afinados(candidatos, rutas, &por_candidato, verificadores))
+    Ok(construir_afinados(candidatos, rutas, &por_candidato, verificadores, store))
 }
 
 /// El mismo trámite de siempre (mandar la orden, recoger un veredicto por
@@ -183,6 +183,7 @@ async fn afinar_persistente(
     verificadores: &[Verificador],
     persistente: &crate::persistente::Persistente,
     limpieza_activo: bool,
+    store: &crate::store::Store,
 ) -> Result<Vec<Afinado>> {
     let inicio = std::time::Instant::now();
     let script = crate::assets::ruta("workers/lumi_verify.py");
@@ -233,7 +234,7 @@ async fn afinar_persistente(
         inicio.elapsed().as_secs_f64(),
     );
 
-    Ok(construir_afinados(candidatos, rutas, &por_candidato, verificadores))
+    Ok(construir_afinados(candidatos, rutas, &por_candidato, verificadores, store))
 }
 
 fn construir_afinados(
@@ -241,13 +242,31 @@ fn construir_afinados(
     rutas: &[(i64, String)],
     por_candidato: &std::collections::HashMap<i64, Vec<Veredicto>>,
     verificadores: &[Verificador],
+    store: &crate::store::Store,
 ) -> Vec<Afinado> {
     // Una tabla, no una búsqueda lineal por candidato: `verificadores` es la
     // lista entera del registro (todos los niveles), no solo los de este
     // nivel, así que sin esto se recorrería de más en cada candidato.
+    //
+    // Debug de calibración (spec 2026-09-10 §4a): antes del JSON del
+    // registro se mira un override en `Store` (`umbral_inliers:<id>`,
+    // `routes::calibracion`) -- por-servidor, nunca escrito de vuelta al
+    // fichero ni propagado a otra instalación. Se lee tanto si
+    // `modo_calibracion` está activo como si no: el propio endpoint que
+    // escribe el override ya rechaza el `PATCH` con el modo apagado (ver
+    // `routes::calibracion::patch_umbral`), así que aquí no hace falta
+    // repetir esa comprobación -- si hay un override guardado es porque en
+    // algún momento se permitió guardarlo.
     let umbrales: std::collections::HashMap<&str, u32> = verificadores
         .iter()
-        .map(|v| (v.id.as_str(), v.umbral_inliers.unwrap_or(lumi_index::arbitro::UMBRAL_INLIERS)))
+        .map(|v| {
+            let de_json = v.umbral_inliers.unwrap_or(lumi_index::arbitro::UMBRAL_INLIERS);
+            let umbral = store
+                .get_meta(&format!("umbral_inliers:{}", v.id))
+                .and_then(|s| s.parse::<u32>().ok())
+                .unwrap_or(de_json);
+            (v.id.as_str(), umbral)
+        })
         .collect();
     let umbral_de = |id: &str| umbrales.get(id).copied().unwrap_or(lumi_index::arbitro::UMBRAL_INLIERS);
     candidatos

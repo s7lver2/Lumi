@@ -3,6 +3,6 @@
   "nombre": "Lumi Pro",
   "recuperacion": ["lumi-preview", "lumi-2", "eigenplaces", "dino-mix"],
   "geometricos": ["roma", "dinov2-vitl14", "lightglue-aliked", "aliked-n16"],
-  "agentes": ["idioma", "lado-conduccion", "clima-aparente", "hora-sombras", "toponimos", "estacion", "escena", "senalizacion", "matricula", "dimensiones"],
+  "agentes": ["texto-en-escena", "indicios-viales", "condiciones-ambientales", "hora-sombras", "escena", "dimensiones"],
   "cae_a": "mini"
 }

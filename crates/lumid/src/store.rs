@@ -110,6 +110,20 @@ CREATE TABLE IF NOT EXISTS cases (
     name       TEXT NOT NULL,
     created_at INTEGER NOT NULL
 );
+-- Panel Media (spec 2026-09-10 §3): carpetas VIRTUALES, metadato puro -- no
+-- tocan el pipeline de análisis, export ni el hash de integridad de una
+-- imagen. Una carpeta de caso (`case_id`) solo es visible en ese caso; una
+-- de proyecto (`project_id`) es visible en modo proyecto para cualquiera de
+-- sus casos (interruptor `media_por_proyecto_activo`, apagado por defecto).
+-- El CHECK obliga a que sea justo una de las dos, nunca ninguna ni las dos.
+CREATE TABLE IF NOT EXISTS media_folders (
+    id         INTEGER PRIMARY KEY,
+    case_id    INTEGER REFERENCES cases(id),
+    project_id INTEGER REFERENCES projects(id),
+    nombre     TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    CHECK ((case_id IS NULL) != (project_id IS NULL))
+);
 CREATE TABLE IF NOT EXISTS images (
     id          INTEGER PRIMARY KEY,
     case_id     INTEGER NOT NULL,
@@ -380,6 +394,15 @@ impl Store {
             .ok()
     }
 
+    /// Vuelve una clave meta a "nunca se tocó" -- distinto de `set_meta(k,
+    /// "")`, que dejaría una fila vacía en vez de ninguna. Lo usan los
+    /// overrides de calibración (spec 2026-09-10 §4a/§4b) para volver al
+    /// valor del JSON del registro sin dejar un rastro vacío en `meta`.
+    pub fn delete_meta(&self, k: &str) -> Result<()> {
+        self.conn().execute("DELETE FROM meta WHERE k = ?1", [k])?;
+        Ok(())
+    }
+
     /// Todo `en_curso` que exista al arrancar es un resto de una caída: ningún
     /// trabajador sobrevive al daemon, así que no puede haber nada corriendo de
     /// verdad. Sin esto, un corte de luz deja trabajos que nadie recogerá jamás.
@@ -481,6 +504,27 @@ fn migrate(c: &Connection) {
         ("analyses", "agente", "TEXT"),
         ("analysis_agents", "alternativas", "TEXT"),
         ("analysis_agents", "rasgos", "TEXT"),
+        // Debug de calibración (spec 2026-09-10 §4c): el texto/JSON crudo
+        // que devolvió el motor, solo relleno con `modo_calibracion` activo
+        // en el momento del análisis -- `NULL` en cualquier otra fila.
+        ("analysis_agents", "respuesta_cruda", "TEXT"),
+        // Panel Media (spec 2026-09-10 §3): carpeta virtual de una imagen.
+        // `NULL` = "Sin carpeta", el estado de toda imagen de antes de esto.
+        ("images", "folder_id", "INTEGER REFERENCES media_folders(id) ON DELETE SET NULL"),
+        // Debug de calibración (spec 2026-09-10 §4d). `routes::analyses::create`
+        // solo los persiste con `modo_calibracion` activo -- con el modo
+        // apagado quedan `NULL` sin más, que es justo "ignorados en
+        // silencio": no hay nada que el enrutado automático deba comprobar
+        // aquí, el campo simplemente nunca llegó a guardarse.
+        ("analyses", "forzar_motor", "TEXT"),
+        ("analyses", "forzar_dispositivo", "TEXT"),
+        // Panel Media (spec 2026-09-10 §3): el `sha256` que tenía la imagen
+        // cuando ESTE análisis se lanzó -- lo que compara
+        // `routes::media::analisis_desincronizados` contra el actual de
+        // `images.sha256` para avisar de "esta imagen se editó después de
+        // este análisis". `NULL` en un análisis de antes de esta columna:
+        // ausencia legítima, nunca se reconstruye a posteriori.
+        ("analyses", "imagen_sha256", "TEXT"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }

@@ -170,6 +170,13 @@ pub enum Msg {
         /// sería peor que ninguno.
         #[serde(default)]
         rasgos: Option<Rasgos>,
+        /// Ver `lumi_index::agentes::Veredicto::respuesta_cruda` (spec
+        /// 2026-09-10 §4c). El trabajador solo lo rellena con
+        /// `modo_calibracion` activo (`LUMI_MODO_CALIBRACION=1`,
+        /// `agentar::preguntar`) -- vacío en cualquier otro caso, nunca
+        /// reconstruido a posteriori.
+        #[serde(default)]
+        respuesta_cruda: Option<String>,
     },
     Resultado {
         id: i64,
@@ -185,6 +192,11 @@ pub enum Msg {
     /// El motor contestó «no puedo». Es un RESULTADO, no una avería: no se
     /// reintenta, porque reintentarlo solo quema GPU.
     Fallo { id: i64, motivo: String },
+    /// El upscaler (spec 2026-09-10 §2) terminó de escribir el resultado en
+    /// `ruta` — igual que `Vectores`/`Verificado`, la imagen viaja por RUTA
+    /// (`workers/lumi_upscale.py` la escribe a disco) y no por bytes en la
+    /// tubería.
+    Upscale { id: i64, ruta: String },
     /// Cierra los mensajes de UN trabajo. Solo la usa `crate::persistente`
     /// (verificación/agentes en modo persistente, subsistema de rendimiento
     /// configurable): un proceso persistente no cierra `stdout` entre
@@ -314,6 +326,7 @@ mod tests {
                 detalle: String::new(),
                 alternativas: Vec::new(),
                 rasgos: None,
+                respuesta_cruda: None,
             }
         );
         // Y validar no tiene nada que decir de ella: no lleva coordenadas.
@@ -339,6 +352,7 @@ mod tests {
                 rasgos: Some(Rasgos::Ocr {
                     cajas: vec![CajaOcr { x: 0.1, y: 0.2, w: 0.3, h: 0.1, etiqueta: "latino".into() }]
                 }),
+                respuesta_cruda: None,
             }
         );
     }

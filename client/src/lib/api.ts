@@ -7,6 +7,26 @@ export interface Image {
   exif_lat: number | null; exif_lng: number | null;
   exif: Record<string, string> | null;
   created_at: number;
+  /** Hash del fichero tal y como está AHORA en disco. */
+  sha256: string;
+  /** Carpeta virtual del panel Media (spec 2026-09-10 §3). `null` = "Sin carpeta". */
+  folder_id: number | null;
+}
+
+/** Una carpeta virtual del panel Media. Borrarla no borra sus imágenes. */
+export interface MediaFolder { id: number; nombre: string; created_at: number }
+
+/** Un análisis cuyo sha256 guardado ya no coincide con el actual de la imagen —
+ *  "Sobrescribir" desde el editor cambió los bytes después de que este análisis corriera. */
+export interface AnalisisDesincronizado {
+  analysis_id: number; model: string; agente: string | null; created_at: number;
+}
+
+/** Los tres interruptores del spec 2026-09-10. Los tres nacen apagados. */
+export interface FeatureFlags {
+  upscaler_activo: boolean; upscaler_activo_desc: string;
+  media_por_proyecto_activo: boolean; media_por_proyecto_activo_desc: string;
+  modo_calibracion: boolean; modo_calibracion_desc: string;
 }
 
 export interface Capability { id: string; label: string; state: "on" | "partial" | "off"; reason: string | null }
@@ -359,6 +379,9 @@ export interface DichoDeAgente {
    *  verdad. Vacía si no — nunca rellenada a mano para completar la lista. */
   alternativas: [string, number][];
   rasgos: Rasgos | null;
+  /** El texto/JSON exacto que devolvió el motor, solo con `modo_calibracion`
+   *  activo en el momento del análisis (spec 2026-09-10 §4c). */
+  respuesta_cruda: string | null;
 }
 export interface Analysis {
   id: number; case_id: number; model: string;
@@ -393,6 +416,9 @@ export interface AgenteVista {
   /** El nombre del motor que hace falta descargar. `null` cuando `instalado`
    *  es `true`, o cuando el registro no trae ningún motor de esa clase. */
   requiere: string | null;
+  /** Ids de sus sub-preguntas si es un agente fusionado (spec 2026-09-10
+   *  §1). Vacío en los que no lo son. */
+  sub_preguntas: string[];
 }
 export interface Usage { used_bytes: number; limit_gb: number; overridden: boolean }
 export interface IndiceInstalado {

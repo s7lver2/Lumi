@@ -1,0 +1,32 @@
+{
+  "id": "texto-en-escena",
+  "nombre": "Texto en escena",
+  "motor": "ocr",
+  "pregunta": "",
+  "tipo": "describe",
+  "sub_preguntas": [
+    {
+      "id": "idioma",
+      "etiquetas": ["latino", "cirilico", "griego", "arabe", "hebreo", "devanagari", "tailandes", "cjk", "hangul", "kana", "sin texto"],
+      "restriccion": "pais",
+      "mapa": {
+        "griego": ["GRC", "CYP"],
+        "cirilico": ["RUS", "BLR", "UKR", "BGR", "SRB", "MKD", "MNE", "KAZ", "KGZ", "TJK", "MNG"],
+        "hebreo": ["ISR"],
+        "devanagari": ["IND", "NPL"],
+        "tailandes": ["THA"],
+        "hangul": ["KOR", "PRK"],
+        "kana": ["JPN"],
+        "arabe": ["MAR", "DZA", "TUN", "LBY", "EGY", "SDN", "SAU", "ARE", "QAT", "KWT", "BHR", "OMN", "YEM", "JOR", "SYR", "IRQ", "LBN", "PSE", "IRN", "AFG", "PAK", "MRT"]
+      },
+      "umbral_confianza": 0.6
+    },
+    {
+      "id": "toponimos",
+      "etiquetas": [],
+      "restriccion": "",
+      "mapa": {},
+      "umbral_confianza": 0.5
+    }
+  ]
+}

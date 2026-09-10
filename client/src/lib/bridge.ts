@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { Image } from "./api";
+import type { Analysis, Image } from "./api";
 
 /** Windows y Android sirven los esquemas propios como `http://<esquema>.localhost`;
  *  el resto, como `<esquema>://localhost`. No se usa `convertFileSrc` porque
@@ -44,6 +44,38 @@ export async function uploadPaths(caseId: number, paths: string[]): Promise<Imag
   if (paths.length === 0) return [];
   const raw = await invoke<string>("upload_images", { caseId, paths });
   return JSON.parse(raw) as Image[];
+}
+
+/** Editor pre-subida (spec 2026-09-10 §2): el resultado del `<canvas>`
+ *  (recorte/blur ya aplicados), como un único fichero en memoria -- mismo
+ *  endpoint que `uploadPaths` (`POST /v1/cases/:id/images`), solo que el
+ *  origen es un blob y no una ruta local. */
+export async function uploadCaseImageBytes(caseId: number, dataBase64: string, fileName: string): Promise<Image> {
+  const raw = await invoke<string>("upload_case_image_bytes", { caseId, dataBase64, fileName });
+  const imgs = JSON.parse(raw) as Image[];
+  return imgs[0];
+}
+
+/** Botón "Mejorar calidad": sube la imagen ya editada y la encola como un
+ *  trabajo real de la cola existente. Devuelve el `Analysis` (`pendiente`) —
+ *  el llamador sigue su estado igual que `AgentResultPopup` sigue el de un
+ *  agente, por el mismo evento `queue-change`. */
+export async function upscaleImageBytes(caseId: number, dataBase64: string, fileName: string): Promise<Analysis> {
+  const raw = await invoke<string>("upscale_image_bytes", { caseId, dataBase64, fileName });
+  return JSON.parse(raw) as Analysis;
+}
+
+/** "Sobrescribir" desde el panel Media: reemplaza los bytes de una imagen
+ *  YA EXISTENTE, mismo id. Los análisis previos no se tocan. */
+export async function overwriteImageBytes(imageId: number, dataBase64: string, fileName: string): Promise<Image> {
+  const raw = await invoke<string>("overwrite_image_bytes", { imageId, dataBase64, fileName });
+  return JSON.parse(raw) as Image;
+}
+
+/** "Guardar como copia" desde el panel Media: fila nueva, la original intacta. */
+export async function copyImageBytes(imageId: number, dataBase64: string, fileName: string): Promise<Image> {
+  const raw = await invoke<string>("copy_image_bytes", { imageId, dataBase64, fileName });
+  return JSON.parse(raw) as Image;
 }
 
 /** Lee un archivo local como `data:` URL, para poder mostrarlo dentro del

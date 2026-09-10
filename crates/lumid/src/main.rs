@@ -23,6 +23,7 @@ mod store;
 mod tasks;
 mod telemetry;
 mod tls;
+mod upscale;
 mod verificar;
 mod zero_trust;
 
@@ -296,6 +297,26 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/hardware/:index", axum::routing::patch(routes::hardware::aplicar))
         .route("/v1/admin/hardware/cpu", get(routes::hardware_cpu::leer).patch(routes::hardware_cpu::aplicar))
         .route("/v1/admin/rendimiento", get(routes::rendimiento::get).patch(routes::rendimiento::patch))
+        .route("/v1/admin/features", get(routes::features::get).patch(routes::features::patch))
+        .route("/v1/features", get(routes::features::get_public))
+        .route("/v1/cases/:id/images/upscale", post(routes::images::upscale))
+        .route(
+            "/v1/admin/verificadores/:id/umbrales",
+            get(routes::calibracion::get_umbral).patch(routes::calibracion::patch_umbral),
+        )
+        .route(
+            "/v1/admin/agentes/:id",
+            get(routes::calibracion::get_agente).patch(routes::calibracion::patch_agente),
+        )
+        .route(
+            "/v1/cases/:id/media/folders",
+            get(routes::media::listar_carpetas).post(routes::media::crear_carpeta),
+        )
+        .route("/v1/media/folders/:id", axum::routing::delete(routes::media::borrar_carpeta))
+        .route("/v1/images/:id/mover", axum::routing::patch(routes::media::mover_imagen))
+        .route("/v1/images/:id/analisis-desincronizados", get(routes::media::analisis_desincronizados))
+        .route("/v1/images/:id/sobrescribir", post(routes::media::sobrescribir))
+        .route("/v1/images/:id/copiar", post(routes::media::copiar))
         .route("/v1/admin/actualizacion", get(routes::actualizacion::get))
         .route("/v1/admin/actualizacion/comprobar", post(routes::actualizacion::comprobar_ahora))
         .route("/v1/admin/actualizacion/aplicar", post(routes::actualizacion::aplicar))

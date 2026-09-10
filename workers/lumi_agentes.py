@@ -8,7 +8,15 @@ la pregunta de un agente se corrige editando un JSON y nadie recompila nada.
 
 Casi todos los agentes miran SOLO la imagen de consulta: el idioma de un cartel
 no depende de que candidato se este mirando. Por eso entra una imagen y salen
-doce veredictos, y no doce por candidato.
+varios veredictos, y no varios por candidato.
+
+Seis fichas en el registro (spec 2026-09-10 §1: antes doce, ahora fusionadas
+en seis), tres de ellas con `sub_preguntas` -- una ficha fusionada pide UNA
+sola respuesta compuesta al motor (`Vlm.responder_fusionado`/
+`Ocr.responder_fusionado` en `lumi_motores.py`) y este módulo la reparte en
+un `Veredicto` por sub-pregunta, con `agente = "<fusionada>.<sub>"`. Aguas
+abajo (Rust) es indistinguible de agentes sueltos -- ver
+`lumi_index::agentes::aplanar`.
 """
 import json
 import os
@@ -119,21 +127,46 @@ def _procesar(orden, disp):
         motor = _motor(a.get("motor", ""), disp)
         if motor is None:
             continue
+        # Un agente fusionado (`sub_preguntas` no vacío, spec 2026-09-10 §1)
+        # pide UNA sola respuesta compuesta al motor y la reparte en varios
+        # veredictos -- el resto sigue el camino de siempre, un veredicto por
+        # agente. `resultados` normaliza los dos caminos a la misma forma
+        # (id-a-usar-como-`agente`, etiqueta, confianza, detalle,
+        # alternativas, rasgos) para que el bucle de escritura de abajo sea
+        # uno solo.
+        subs = a.get("sub_preguntas") or []
+        # Debug de calibración (spec 2026-09-10 §4c): puesto por
+        # `agentar::preguntar`/`agentar::correr_persistente` solo cuando
+        # `modo_calibracion` está activo -- ausente o "0" en cualquier otro
+        # caso, así que `crudo_de_este_agente` se queda en `None` y el campo
+        # nunca se rellena en una instalación que no activó calibración.
+        calibracion_activo = os.environ.get("LUMI_MODO_CALIBRACION") == "1"
+        crudo_de_este_agente = None
         try:
-            etiqueta, confianza, detalle, alternativas, rasgos = motor.responder(a, consulta)
+            if subs:
+                crudo_de_este_agente, crudos = motor.responder_fusionado(a, consulta)
+                resultados = [
+                    (f'{a["id"]}.{sub_id}', etiqueta, confianza, detalle, alternativas, rasgos)
+                    for sub_id, etiqueta, confianza, detalle, alternativas, rasgos in crudos
+                ]
+            else:
+                etiqueta, confianza, detalle, alternativas, rasgos = motor.responder(a, consulta)
+                resultados = [(a["id"], etiqueta, confianza, detalle, alternativas, rasgos)] if etiqueta else []
         except Exception as e:
             print("agente %s fallo: %s" % (a["id"], e), file=sys.stderr)
             continue
-        if not etiqueta:
-            continue
-        escribir({
-            "tipo": "agente", "id": id_analisis, "agente": a["id"],
-            "etiqueta": etiqueta, "confianza": float(confianza), "detalle": detalle or "",
-            # Tal cual salen del motor, sin logica propia aqui: vacio/None
-            # cuando el motor no tiene nada real que anadir.
-            "alternativas": [[e, float(p)] for e, p in (alternativas or [])],
-            "rasgos": rasgos,
-        })
+        for agente_id, etiqueta, confianza, detalle, alternativas, rasgos in resultados:
+            if not etiqueta:
+                continue
+            escribir({
+                "tipo": "agente", "id": id_analisis, "agente": agente_id,
+                "etiqueta": etiqueta, "confianza": float(confianza), "detalle": detalle or "",
+                # Tal cual salen del motor, sin logica propia aqui: vacio/None
+                # cuando el motor no tiene nada real que anadir.
+                "alternativas": [[e, float(p)] for e, p in (alternativas or [])],
+                "rasgos": rasgos,
+                "respuesta_cruda": crudo_de_este_agente if calibracion_activo else None,
+            })
 
 
 def main():
