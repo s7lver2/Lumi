@@ -31,8 +31,13 @@ export function ProjectsView({ onAbrir }: { onAbrir: (id: number) => void }) {
   useEffect(() => { void api.catalogoDependenciasRotas().then(setRotas, () => {}); }, []);
   // Nunca al mover el mapa, siempre al abrir esta pantalla: es lo que
   // mantiene el catálogo remoto (RemoteRepos, el buscador) al día sin
-  // pedirlo a mano.
-  useEffect(() => { void api.catalogoRefrescar(); }, []);
+  // pedirlo a mano. Se repite cada 5 minutos mientras la pantalla sigue
+  // abierta -- mismo motivo que TerritoryView.tsx.
+  useEffect(() => {
+    void api.catalogoRefrescar();
+    const id = setInterval(() => void api.catalogoRefrescar(), 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const t = filtro.trim().toLowerCase();
   const filtrados = (proyectos ?? []).filter((p) => p.repo.toLowerCase().includes(t));

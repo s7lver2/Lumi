@@ -90,8 +90,16 @@ export function TerritoryView({
   useEffect(() => { void api.claveLeer("mapillary").then(setTokenMapillary); }, []);
   // Nunca al mover el mapa, siempre al abrir Territorio: sin esto la
   // cobertura remota que decide qué tesela está "reclamada" puede quedarse
-  // vacía si nunca se pasó antes por Índices o Ajustes.
-  useEffect(() => { void api.catalogoRefrescar(); }, []);
+  // vacía si nunca se pasó antes por Índices o Ajustes. Se repite cada 5
+  // minutos mientras la pantalla sigue abierta -- sin esto, una liberación
+  // recién firmada por el operador no se ve hasta cerrar y volver a abrir
+  // Territorio, y una liberación "no es instantánea" ya de por sí (ver
+  // ProfileDialog.tsx) como para encima depender de un cierre de pestaña.
+  useEffect(() => {
+    void api.catalogoRefrescar();
+    const id = setInterval(() => void api.catalogoRefrescar(), 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
 
   async function fijarAnillos(anillos: Punto[][]) {
     setHistorial((h) => [...h, { dibujo, clasificacion }].slice(-20));
