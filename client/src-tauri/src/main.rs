@@ -221,6 +221,12 @@ async fn pedir_informe(case_id: i64, opts_json: String, token: &str, state: &Sha
         .bearer_auth(token)
         .header("content-type", "application/json")
         .body(opts_json)
+        // `client` es el de `client_for` (15s, pensado para llamadas normales
+        // de la API) -- compilar el informe con tectonic, sobre todo la
+        // primera vez que hace falta bajar algún paquete LaTeX a su caché,
+        // puede tardar bastante más que eso. `.timeout()` por petición
+        // sustituye al del cliente solo aquí, sin tocar el resto de llamadas.
+        .timeout(std::time::Duration::from_secs(120))
         .send()
         .await
         .map_err(|e| e.to_string())?;

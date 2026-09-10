@@ -138,6 +138,18 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec
                  else \
                    UV_HTTP_TIMEOUT=60 \"$UV\" pip install --python \"$1/bin/python3\" transformers; \
                  fi; \
+                 # `accelerate` es lo que deja a `from_pretrained(..., low_cpu_mem_usage=True)`
+                 # cargar un checkpoint directo al dispositivo destino (mapeado
+                 # desde el propio fichero safetensors) en vez de materializar
+                 # el modelo entero en RAM del sistema antes de moverlo a la
+                 # GPU con `.to()` -- sin esto, un VLM de 8GB+ (Qwen3-VL) puede
+                 # necesitar el doble de esa RAM solo para cargar, en una caja
+                 # con memoria de sistema mas ajustada que la VRAM disponible.
+                 if \"$1/bin/python3\" -c 'import accelerate' 2>/dev/null; then \
+                   echo 'accelerate ya instalado, nada que hacer'; \
+                 else \
+                   UV_HTTP_TIMEOUT=60 \"$UV\" pip install --python \"$1/bin/python3\" accelerate; \
+                 fi; \
                  # `paddleocr` sin `paddle` no arranca: es su motor de
                  # inferencia real, un paquete aparte que `pip install
                  # paddleocr` NO arrastra solo. Sin este segundo paquete el

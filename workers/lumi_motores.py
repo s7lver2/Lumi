@@ -83,9 +83,19 @@ class Vlm(object):
         d = _directorio(pesos_dir, "qwen3-vl")
         self.dispositivo = dispositivo
         self.proc = AutoProcessor.from_pretrained(d)
+        # `low_cpu_mem_usage=True` + `device_map` (necesitan `accelerate`,
+        # ver tasks.rs) cargan el checkpoint mapeado desde el propio fichero
+        # safetensors directo al dispositivo destino, en vez de materializar
+        # el modelo entero en RAM del sistema (`from_pretrained` + `.to()`
+        # normal) antes de copiarlo a la GPU -- con un checkpoint de 8GB+ y
+        # una caja donde la RAM de sistema es mas ajustada que la VRAM
+        # disponible, esa doble copia era el cuello de botella real detras
+        # de cargas en frio que se pasaban de largo del timeout de
+        # `agentar::LIMITE_STANDALONE` (240s) sin que la GPU tuviera nada
+        # que ver.
         self.red = AutoModelForImageTextToText.from_pretrained(
-            d, torch_dtype=torch.float16 if dispositivo != "cpu" else torch.float32)
-        self.red.to(dispositivo)
+            d, dtype=torch.float16 if dispositivo != "cpu" else torch.float32,
+            low_cpu_mem_usage=True, device_map=dispositivo)
         self.red.eval()
 
     def responder(self, agente, ruta_imagen):
@@ -259,14 +269,12 @@ class Profundidad(object):
         d = _directorio(pesos_dir, "depth-anything-v2-small")
         self.dispositivo = dispositivo
         self.proc = AutoImageProcessor.from_pretrained(d)
-        # Mismo `torch_dtype` que ya usa `Vlm.__init__` para el mismo motivo
-        # -- antes cargaba siempre en fp32 mientras el VLM ya iba en fp16,
-        # una asimetría que parece un olvido y no una decisión: la salida se
-        # consume solo como medias de franjas y un cociente normalizado
-        # (`responder()`, abajo), donde fp16 no puede mover ningún umbral.
+        # Mismo criterio que ya usa `Vlm.__init__` (`dtype`, `low_cpu_mem_usage`
+        # + `device_map`): un modelo bastante más pequeño, pero misma
+        # asimetría a evitar entre cómo cargan los distintos motores.
         self.red = AutoModelForDepthEstimation.from_pretrained(
-            d, torch_dtype=torch.float16 if dispositivo != "cpu" else torch.float32)
-        self.red.to(dispositivo)
+            d, dtype=torch.float16 if dispositivo != "cpu" else torch.float32,
+            low_cpu_mem_usage=True, device_map=dispositivo)
         self.red.eval()
 
     def _mapa_de_calor(self, mapa):
