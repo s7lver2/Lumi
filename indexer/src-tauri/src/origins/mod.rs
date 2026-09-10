@@ -11,6 +11,8 @@ pub mod google;
 pub mod kartaview;
 pub mod mapbox;
 pub mod mapillary;
+pub mod monumentos;
+pub mod panoramax;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -222,6 +224,9 @@ pub fn registro(claves: &Claves, stage: PathBuf) -> Vec<Box<dyn OrigenDeRed>> {
     }
     // Commons tampoco necesita clave.
     v.push(Box::new(commons::Commons::nuevo(stage.clone())));
+    // Ni monumentos (Wikidata → Commons) ni Panoramax: entran siempre.
+    v.push(Box::new(monumentos::Monumentos::nuevo(stage.clone())));
+    v.push(Box::new(panoramax::Panoramax::nuevo(stage.clone())));
     if let Ok(Some(k)) = claves.leer("flickr") {
         v.push(Box::new(flickr::Flickr::nuevo(k, stage)));
     }

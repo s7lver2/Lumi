@@ -34,7 +34,7 @@ fn candidata_de(ancho: u32, alto: u32, categorias: &[String], licencia: Option<&
     }
 }
 
-const API: &str = "https://commons.wikimedia.org/w/api.php";
+pub(crate) const API: &str = "https://commons.wikimedia.org/w/api.php";
 const LIMITE: u32 = 500;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -43,22 +43,25 @@ struct Coordenada {
     lon: f64,
 }
 
+// `pub(crate)`: `monumentos.rs` pagina imageinfo por lotes con la misma forma
+// exacta de respuesta (`iiprop=url|size|extmetadata`) y reutiliza estos dos
+// tipos en vez de duplicarlos — es la misma API, la misma consulta.
 #[derive(Debug, Clone, Deserialize)]
-struct Campo {
-    value: Option<String>,
+pub(crate) struct Campo {
+    pub(crate) value: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct InfoImagen {
+pub(crate) struct InfoImagen {
     #[serde(rename = "thumburl")]
-    thumb: Option<String>,
-    url: Option<String>,
+    pub(crate) thumb: Option<String>,
+    pub(crate) url: Option<String>,
     #[serde(default)]
-    width: u32,
+    pub(crate) width: u32,
     #[serde(default)]
-    height: u32,
+    pub(crate) height: u32,
     #[serde(rename = "extmetadata", default)]
-    meta: std::collections::HashMap<String, Campo>,
+    pub(crate) meta: std::collections::HashMap<String, Campo>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -125,9 +128,9 @@ impl Commons {
         // ninguna otra API de este módulo. Escrito para que nadie lo "corrija".
         let mut u = format!(
             "{API}?action=query&format=json&formatversion=1\
-             &generator=geosearch&ggsbbox={}%7C{}%7C{}%7C{}&ggslimit={LIMITE}&ggsnamespace=6\
+             &generator=geosearch&ggsbbox={}%7C{}%7C{}%7C{}&ggslimit={LIMITE}&ggsnamespace=6&ggsprimary=all\
              &prop=imageinfo%7Ccoordinates%7Ccategories&iiprop=url%7Csize%7Cextmetadata&iiurlwidth=2048\
-             &cllimit=20",
+             &colimit=500&cllimit=500",
             b.norte, b.oeste, b.sur, b.este
         );
         if let Some(c) = continuar {
@@ -142,14 +145,15 @@ impl Commons {
     }
 
     /// `coordinates`, `imageinfo` y `categories` paginan cada uno por su
-    /// cuenta y muy por debajo de `ggslimit`: en una tesela con 500 páginas
-    /// candidatas, `coordinates` solo resuelve 10 por petición e `imageinfo`
-    /// 50 — confirmado contra la API real. Sin seguir la continuación, el
-    /// solape entre "tiene coordenadas" y "tiene imageinfo" de una sola
-    /// respuesta se queda en casi nada (1 de 500 en el centro de Tokio), y
-    /// es justo la zona con más candidatas la que peor sale. Por eso se repite
-    /// la consulta añadiendo los cursores hasta que la API deja de pedirlos,
-    /// fusionando cada página con los campos que le falten.
+    /// cuenta, muy por debajo de `ggslimit`. Con `colimit=500` y
+    /// `cllimit=500` ya se pide el máximo de cada submódulo desde la primera
+    /// petición, así que `coordinates` y `categories` resuelven casi siempre
+    /// las 500 páginas candidatas de un tirón. Lo que sigue paginando de
+    /// verdad es `imageinfo`: 50 por respuesta es un tope del propio módulo,
+    /// no un parámetro que se pueda subir — y, en teselas con más de 500
+    /// páginas candidatas, la propia búsqueda de `geosearch`. Por eso se
+    /// repite la consulta añadiendo los cursores hasta que la API deja de
+    /// pedirlos, fusionando cada página con los campos que le falten.
     async fn paginas(&self, tesela: &str) -> Result<Vec<Pagina>> {
         let mut fusionadas: std::collections::HashMap<i64, Pagina> = std::collections::HashMap::new();
         let mut cont: Option<std::collections::HashMap<String, String>> = None;
