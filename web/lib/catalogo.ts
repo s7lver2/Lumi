@@ -26,8 +26,18 @@ export async function cobertura(): Promise<Resumen | null> {
     const repos = ((await busqueda.json()).items ?? []) as { full_name: string }[];
 
     // Los paquetes retirados por la web no cuentan como cobertura.
+    //
+    // `desreclamos.json` se importa como módulo JSON: TypeScript infiere su
+    // tipo a partir del CONTENIDO real del fichero en cada build, no de una
+    // forma fija. Mientras `lista` estuvo vacía (`[]`) en todos los
+    // despliegues anteriores, cualquier anotación encajaba sin queja; en
+    // cuanto pasó a tener pares reales (`[paquete, motivo]`), TypeScript
+    // infirió `string[][]` -- y una anotación `[string, string][]` (tupla
+    // exacta) dejó de tener suficiente solape para el cast directo. Se anota
+    // como TypeScript realmente lo ve (`string[][]`); desestructurar el
+    // primer elemento sigue siendo válido igual.
     const retirados = new Set(
-      ((desreclamos as { lista?: [string, string][] }).lista ?? []).map(([paquete]) => paquete),
+      ((desreclamos as { lista?: string[][] }).lista ?? []).map(([paquete]) => paquete),
     );
 
     // Mapa por quadkey, no Set: cada tesela reclamada guarda quién la
