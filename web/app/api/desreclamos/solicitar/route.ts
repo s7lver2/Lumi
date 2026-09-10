@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { EntradaPendiente } from "@/lib/liberaciones";
 
 /// Fase 1 de la liberación de teselas (BUG_BOUNTY #38): el Indexer, autenticado
 /// con el mismo testigo de GitHub que ya usa para publicar, pide aquí que se
@@ -31,13 +32,6 @@ interface SolicitudBody {
 interface FichaRemota {
   paquete: string;
   autor: string;
-}
-
-interface EntradaPendiente {
-  paquete: string;
-  quadkeys: string[];
-  cuenta: string;
-  fecha: string;
 }
 
 async function loginDeGithub(testigo: string): Promise<string | null> {
