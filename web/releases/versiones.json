@@ -1234,7 +1234,43 @@
           "sha256": "ee2754de844a532a37c29b55475a6f4d07325435a21fa3d7a009e64e4362e8a0"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.37",
+      "publicado": "2026-09-10T00:01:20Z",
+      "notas": "Desalojo de memoria por presion (ademas del ya existente por inactividad) en los tres trabajadores persistentes, desactivable. Exportar informe pasa a ser una seccion del panel lateral en vez de un boton flotante.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.37/app.exe",
+          "bytes": 16006656,
+          "sha256": "5b51227efd6b1ffb87f5931687224ebd02f4bcf99cda2ef6b9511c65615ea8a1"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.37",
+      "publicado": "2026-09-10T00:01:20Z",
+      "notas": "Desalojo de memoria por presion (ademas del ya existente por inactividad) en los tres trabajadores persistentes, desactivable. Exportar informe pasa a ser una seccion del panel lateral en vez de un boton flotante.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.37/lumid",
+          "bytes": 23251984,
+          "sha256": "fc474732fae28547119039a15d1fd32977c80eaf1f1bcb8a5a6b8d50ad59be17"
+        },
+        {
+          "plataforma": "assets",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.37/lumid-assets.tar.gz",
+          "bytes": 151396,
+          "sha256": "b4b9b16208a545642d007442d92ef6f371245f2458e97d225e423573fbf3bf2a"
+        }
+      ]
     }
   ],
-  "firma": "lnO3MApEGTA6oVsfWWB8VPQypna+uSig/WZBxTQGU6KUPLOIo112IEQCIx/0LED1getnWhgcaIvzlaa4m7HtCQ=="
+  "firma": "k6XNukvjC9Fk8/bGVjvT0nn3JkZmZ+qI0eC+zt5Gnjn9L55p3MX2crsb6TcqW+ZqN5trVkxA/nzONctd9V3/Bg=="
 }
