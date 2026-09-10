@@ -9,19 +9,23 @@
 //!   cargo run -p lumi-index --example firmar_desreclamos -- fusionar-pendientes <borrador.json>
 //!   cargo run -p lumi-index --example firmar_desreclamos -- firmar <borrador.json> <salida.json>
 //!   cargo run -p lumi-index --example firmar_desreclamos -- vigilar [--intervalo-min N]
+//!   cargo run -p lumi-index --example firmar_desreclamos -- pasada-unica
 //!
 //! El borrador es un JSON de la forma `{"lista":[["paquete","motivo"], ...]}`.
 //!
 //! `fusionar-pendientes`/`firmar` son la fase 3 de la liberación de teselas
 //! (BUG_BOUNTY #38), a mano: descargar la cola, revisar el borrador, firmar,
-//! comitear. `vigilar` es la fase 4: automatiza ese mismo trabajo mecánico
-//! sin tocar la invariante de seguridad -- la clave privada nunca sale de
-//! esta máquina, solo que ahora el bucle de "mirar si hay algo aprobado,
-//! firmarlo, publicarlo" lo corre este proceso en vez de las manos del
-//! operador. Deja corriendo `vigilar` en tu propio equipo (o un Pi, o un
-//! servidor tuyo) y las liberaciones aprobadas en `/admin` se firman y
-//! publican solas; `fusionar-pendientes`/`firmar` siguen aquí para quien
-//! prefiera decidir cada firma a mano.
+//! comitear. `vigilar`/`pasada-unica` son la fase 4: automatizan ese mismo
+//! trabajo mecánico sin tocar la invariante de seguridad -- la clave privada
+//! sigue viviendo solo donde el operador decide ponerla, nunca en el
+//! repositorio en claro. `vigilar` es un bucle para dejar corriendo en un
+//! equipo propio (PC, Pi, un servidor); `pasada-unica` hace exactamente lo
+//! mismo pero UNA vez y sale, pensado para un cron externo que ya programa
+//! la repetición -- ver `.github/workflows/vigilar-desreclamos.yml`, que lo
+//! corre en GitHub Actions con la clave como *secret* del repositorio
+//! (`LUMI_DESRECLAMOS_KEY_B64`) en vez de en la máquina de nadie. Sigue sin
+//! ser Vercel: un cron de Actions no atiende peticiones públicas, así que la
+//! clave no comparte proceso con nada que responda a un desconocido.
 
 use std::path::PathBuf;
 
@@ -120,7 +124,22 @@ fn escribir_con_reintentos(ruta: &std::path::Path, contenido: &str) {
     );
 }
 
+/// La clave local de siempre (`~/.lumi-indexer/desreclamos.key`), o -- para
+/// correr esto sin operador delante, p. ej. `pasada-unica` en un runner de
+/// GitHub Actions donde no existe ningún `HOME` con la clave dentro --
+/// `LUMI_DESRECLAMOS_KEY_B64`, la misma clave en base64, guardada como
+/// *secret* cifrado del repositorio. Es la misma clave, el mismo formato
+/// (32 bytes), solo cambia dónde vive: nunca en el repo en claro, nunca en
+/// un log -- GitHub enmascara el valor de un secret en la salida de Actions.
 fn cargar_clave() -> SigningKey {
+    if let Ok(b64) = std::env::var("LUMI_DESRECLAMOS_KEY_B64") {
+        use base64::{engine::general_purpose::STANDARD, Engine};
+        let bytes = STANDARD
+            .decode(b64.trim())
+            .expect("LUMI_DESRECLAMOS_KEY_B64 no es base64 válido");
+        let arr: [u8; 32] = bytes.try_into().expect("la clave debe medir exactamente 32 bytes");
+        return SigningKey::from_bytes(&arr);
+    }
     let ruta = ruta_clave();
     let bytes = std::fs::read(&ruta).unwrap_or_else(|_| {
         panic!("no se pudo leer {} — ejecuta antes 'generar-clave'", ruta.display())
@@ -381,12 +400,25 @@ fn main() {
                 .unwrap_or(15);
             vigilar(intervalo_min);
         }
+        // Una sola pasada y sale -- pensado para un cron externo que ya
+        // programa la repetición (GitHub Actions), no para correr a mano.
+        // Sale con código 1 si algo falla, para que Actions marque el job
+        // en rojo en vez de fingir que salió bien.
+        Some("pasada-unica") => {
+            let token = token_push();
+            let secreta = cargar_clave();
+            if let Err(e) = pasada(&token, &secreta) {
+                eprintln!("[pasada-unica] fallo: {e}");
+                std::process::exit(1);
+            }
+        }
         _ => {
             eprintln!(
                 "uso: firmar_desreclamos generar-clave \
                  | fusionar-pendientes <borrador.json> \
                  | firmar <borrador.json> <salida.json> \
-                 | vigilar [--intervalo-min N]"
+                 | vigilar [--intervalo-min N] \
+                 | pasada-unica"
             );
             std::process::exit(1);
         }

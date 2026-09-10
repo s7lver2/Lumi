@@ -1,0 +1,41 @@
+# Fase 4 de la liberación de teselas (BUG_BOUNTY #38), en la nube en vez de
+# en la máquina del operador: cada 15 minutos, mira si el panel `/admin` ha
+# aprobado alguna solicitud de `web/releases/liberaciones-pendientes.json` y,
+# si es así, la firma y publica sola -- mismo código Rust que `vigilar`
+# (`crates/lumi-index/examples/firmar_desreclamos.rs`), en modo `pasada-unica`
+# porque este cron ya programa la repetición, no hace falta un bucle propio.
+#
+# La clave privada Ed25519 vive como secret cifrado de este repositorio
+# (`LUMI_DESRECLAMOS_KEY_B64`) -- nunca en claro en el árbol, nunca en un log
+# (GitHub enmascara el valor de un secret en la salida de Actions). No es
+# Vercel a propósito: un cron de Actions no atiende peticiones públicas, así
+# que la clave no comparte proceso con nada que responda a un desconocido.
+#
+# `GITHUB_TOKEN` es el testigo automático que Actions ya inyecta en cada
+# ejecución -- con `permissions: contents: write` de aquí abajo, alcanza para
+# comitear en `web/releases/`, sin crear ni guardar un PAT aparte.
+name: Vigilar liberaciones de teselas
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  vigilar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Firmar lo aprobado, si hay algo
+        env:
+          LUMI_GITHUB_PUSH_TOKEN: ${{ github.token }}
+          LUMI_DESRECLAMOS_KEY_B64: ${{ secrets.LUMI_DESRECLAMOS_KEY_B64 }}
+        run: cargo run -p lumi-index --example firmar_desreclamos -- pasada-unica
