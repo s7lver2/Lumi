@@ -13,11 +13,19 @@ use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 
 /// Generada con `cargo run -p lumi-index --example firmar_desreclamos --
-/// generar-clave` y pegada aquí a mano — la privada vive solo en
-/// `~/.lumi-indexer/desreclamos.key` de quien publica, nunca en el repo.
-/// Rotarla exige una versión puente que sepa validar con la vieja y la nueva
-/// a la vez — no resuelto, mismo techo que `lumi_proto::actualizacion::CLAVE_PUBLICA`.
-pub const CLAVE_PUBLICA: [u8; 32] = [1, 159, 152, 114, 9, 2, 82, 149, 188, 9, 8, 75, 199, 148, 6, 131, 191, 13, 103, 160, 116, 191, 75, 115, 223, 193, 88, 141, 84, 130, 12, 82];
+/// generar-clave` y pegada aquí a mano — la privada vive solo en el secreto
+/// de GitHub Actions y, si el operador la conserva, en su
+/// `~/.lumi-indexer/desreclamos.key`, nunca en este repo.
+///
+/// Rotada el 2026-09-10: la clave anterior firmó `desreclamos.json` sin que
+/// su privada sobreviviera en ningún disco conocido del operador (ni Windows
+/// ni WSL, comprobado antes de rotar) -- inservible para firmar nada más,
+/// así que se sustituye entera en vez de mantener una versión puente que
+/// valide las dos. Sin coste real: `lista` seguía vacía, no había ninguna
+/// liberación real que perder. Rotar de verdad (con liberaciones ya
+/// publicadas de por medio) sigue exigiendo esa versión puente — no
+/// resuelto, mismo techo que `lumi_proto::actualizacion::CLAVE_PUBLICA`.
+pub const CLAVE_PUBLICA: [u8; 32] = [138, 141, 110, 108, 34, 254, 243, 82, 16, 208, 153, 36, 206, 230, 219, 79, 170, 17, 56, 66, 208, 182, 235, 205, 65, 239, 156, 42, 47, 119, 147, 105];
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum DesreclamosError {
@@ -86,10 +94,10 @@ mod tests {
         let secreta = SigningKey::generate(&mut rand::rngs::OsRng);
         let mut d = Desreclamos { lista: vec![("paquete-x".into(), "abuso".into())], ..Default::default() };
         d.firmar(&secreta);
-        // CLAVE_PUBLICA en este árbol es el placeholder de ceros (todavía no
-        // hay clave real generada) — firmar con cualquier otra clave, real o
-        // no, nunca debe pasar `comprobar()`. Es lo que demuestra que no
-        // basta con firmar con CUALQUIER clave, tiene que ser la compilada.
+        // Firmar con cualquier otra clave que no sea la compilada en
+        // CLAVE_PUBLICA, real y generada al azar aquí mismo, nunca debe
+        // pasar `comprobar()`. Es lo que demuestra que no basta con firmar
+        // con CUALQUIER clave, tiene que ser la compilada.
         assert!(d.comprobar().is_err());
     }
 
