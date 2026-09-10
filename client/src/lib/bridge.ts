@@ -143,6 +143,9 @@ export interface ExportInformeOpts {
    *  resto del backend para no romper compatibilidad con llamadas viejas. */
   imagenes_incluidas: number[] | null;
   notas: string;
+  /** `"oscuro"` (editorial, por defecto) o `"claro"` (el documento
+   *  imprimible de siempre) -- ver `ExportInformeReq::tema` en el backend. */
+  tema: "oscuro" | "claro";
 }
 
 /** Pide a `lumid` el informe forense del caso en PDF con la config actual,

@@ -1239,6 +1239,18 @@ pub struct ExportInformeReq {
     /// Vacío es "sin sección de notas" -- no se imprime una sección vacía.
     #[serde(default)]
     pub notas: String,
+    /// `"oscuro"` (editorial, números grandes, el mismo lenguaje visual que
+    /// la app) o `"claro"` (el documento imprimible de siempre, sin cambios
+    /// de fondo -- ver `docs/superpowers/specs/2026-09-10-informe-tema-oscuro-design.md`).
+    /// Cualquier otro valor se trata como `"claro"` en la plantilla, no como
+    /// error: un informe sigue siendo generable aunque llegue un valor viejo
+    /// o mal tecleado.
+    #[serde(default = "tema_oscuro")]
+    pub tema: String,
+}
+
+fn tema_oscuro() -> String {
+    "oscuro".to_string()
 }
 
 impl Default for ExportInformeReq {
@@ -1253,6 +1265,7 @@ impl Default for ExportInformeReq {
             rasgos_como_imagen: true,
             imagenes_incluidas: None,
             notas: String::new(),
+            tema: tema_oscuro(),
         }
     }
 }

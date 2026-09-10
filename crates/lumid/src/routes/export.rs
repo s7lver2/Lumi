@@ -183,6 +183,11 @@ struct Contexto {
     /// Notas libres del investigador -- vacío significa que la plantilla no
     /// dibuja la sección entera, no que se dibuje una en blanco.
     notas: String,
+    /// `"oscuro"` (editorial, por defecto) o `"claro"` (el documento
+    /// imprimible de siempre). Cualquier otra cosa que llegue del cliente se
+    /// normaliza aquí a `"claro"` en vez de propagar un valor desconocido a
+    /// la plantilla -- ver `ExportInformeReq::tema`.
+    tema: String,
 }
 
 #[derive(Serialize)]
@@ -202,6 +207,17 @@ struct Estadisticas {
     agentes_total: usize,
     agentes_respondieron: usize,
     agentes_abstuvieron: usize,
+    /// Los cuatro números grandes de la portada del tema oscuro -- se
+    /// calculan por imagen (ver `resumen_oscuro`), no por análisis, porque
+    /// "imágenes con hipótesis" e "imágenes sin resolver" son conteos de
+    /// fotos, no de filas de la tabla `analyses`. El tema claro no los usa,
+    /// pero calcularlos siempre es más simple que duplicar
+    /// `calcular_estadisticas` según el tema (ver comentario en esa función).
+    n_con_hipotesis: usize,
+    n_con_agente: usize,
+    n_sin_resolver: usize,
+    n_errores: usize,
+    n_abstenciones: usize,
 }
 
 #[derive(Serialize, Clone)]
@@ -215,6 +231,10 @@ struct Linea {
 
 #[derive(Serialize)]
 struct ImagenCtx {
+    /// Número de orden dentro del informe (1-based) -- solo lo usa la
+    /// cabecera mono de la página del tema oscuro ("03 — foto.jpg"), el tema
+    /// claro sigue usando `\subsection*` de siempre.
+    orden: usize,
     filename: String,
     /// Nombre de fichero relativo, ya escrito junto al `.tex`, de la
     /// miniatura -- `None` si no hay miniatura en disco o no se pudo
@@ -227,11 +247,47 @@ struct ImagenCtx {
     /// archivo no se pudo leer del disco (nunca un hash inventado).
     sha256: Option<String>,
     exif_lineas: Vec<Linea>,
+    /// Usado tal cual por el tema claro (bloque único "Análisis" tabular).
+    /// El tema oscuro NO usa este campo -- separa hipótesis y agente en sus
+    /// propios bloques con icono, ver `hipotesis_extra`/`agente_lineas`.
     analisis_lineas: Vec<Linea>,
     /// Rasgos reales de agentes (recuadros OCR, mapa de profundidad) para
     /// dibujar como gráfico -- vacío cuando `rasgos_como_imagen` está
     /// apagado o ningún agente de esta imagen trajo rasgos de verdad.
     rasgos_graficos: Vec<RasgoImgCtx>,
+
+    // ---- Campos exclusivos del tema oscuro (ver `resumen_oscuro`) ----
+    /// `true` cuando el análisis de geolocalización o el de agentes de esta
+    /// imagen terminó en error, o el de agentes terminó en abstención total
+    /// (todos sus veredictos con etiqueta "abstiene"). Es un hecho real del
+    /// caso, no depende de qué secciones estén activadas en este informe --
+    /// mismo criterio que `calcular_estadisticas` para el resto de cifras de
+    /// portada.
+    sin_resuelto: bool,
+    /// Motivo real citado en el aviso ámbar que sustituye a los bloques de
+    /// resultado cuando `sin_resuelto` -- nunca un texto inventado: el
+    /// `error` registrado, o el genérico ya usado en el cliente cuando no
+    /// hay uno.
+    motivo_sin_resuelto: Option<String>,
+    /// `sin_resuelto` Y además al menos una de las dos secciones de
+    /// resultado (`hipotesis_geolocalizacion`/`veredictos_agentes`) está
+    /// activada en este informe -- si el investigador apagó las dos, no
+    /// hay ningún bloque de resultado que sustituir, así que tampoco se
+    /// imprime el aviso ámbar (no estaría reemplazando nada).
+    mostrar_aviso_sin_resuelto: bool,
+    /// Confianza de la hipótesis principal, ya redondeada a entero de
+    /// porcentaje -- el número grande junto a la miniatura. `None` cuando no
+    /// hay hipótesis, la sección está apagada, o `sin_resuelto`.
+    confianza_pct: Option<i64>,
+    coord_txt: Option<String>,
+    radio_txt: Option<String>,
+    /// Alternativas y respaldo geométrico de la hipótesis principal -- todo
+    /// lo que no es "el número grande" ni la coordenada/radio de cabecera.
+    hipotesis_extra: Vec<Linea>,
+    /// Nombre, veredicto y detalle del agente -- mismo contenido que
+    /// producía `lineas_agentes` para el tema claro, aparte para poder
+    /// dibujarlo en su propio bloque con icono.
+    agente_lineas: Vec<Linea>,
 }
 
 /// Un recuadro OCR ya convertido a coordenadas TikZ (origen abajo-izquierda,
@@ -415,11 +471,123 @@ fn lineas_agentes(out: &mut Vec<Linea>, dichos: &[DichoDeAgente], agente_pedido:
     }
 }
 
+/// Lo que necesita la página por imagen (y los cuatro números de portada) del
+/// tema oscuro: una sola hipótesis principal, un solo veredicto de agente, y
+/// si ambos -- o alguno -- terminaron en error o abstención total, para poder
+/// sustituir sus bloques por un único aviso ámbar en vez de dejarlos vacíos o
+/// a medias. Deliberadamente NO toca `analisis_lineas`/`lineas_analisis`: esa
+/// ruta la sigue usando el tema claro tal cual estaba, sin tocar su salida.
+struct ResumenOscuro {
+    sin_resuelto: bool,
+    es_error: bool,
+    motivo_sin_resuelto: Option<String>,
+    con_hipotesis: bool,
+    con_agente: bool,
+    confianza_pct: Option<i64>,
+    coord_txt: Option<String>,
+    radio_txt: Option<String>,
+    hipotesis_extra: Vec<Linea>,
+    agente_lineas: Vec<Linea>,
+}
+
+fn resumen_oscuro(analyses: &[Analysis], req: &ExportInformeReq) -> ResumenOscuro {
+    let geo = analyses.iter().find(|a| a.model != "agentes");
+    let ag = analyses.iter().find(|a| a.model == "agentes");
+
+    let con_hipotesis = geo.map(|a| a.result_lat.is_some() && a.result_lng.is_some()).unwrap_or(false);
+    let con_agente = ag.map(|a| a.agentes.iter().any(|d| d.etiqueta != "abstiene")).unwrap_or(false);
+
+    let geo_error = geo.map(|a| a.state == "error").unwrap_or(false);
+    let ag_error = ag.map(|a| a.state == "error").unwrap_or(false);
+    // "Abstención total": el análisis de agentes SÍ contestó, pero ninguno
+    // de sus veredictos llegó a un umbral -- distinto de que no contestara a
+    // tiempo (`ag_error`/dichos vacío), que ya cuenta como error arriba.
+    let ag_abstencion_total =
+        ag.map(|a| !a.agentes.is_empty() && a.agentes.iter().all(|d| d.etiqueta == "abstiene")).unwrap_or(false);
+
+    let (sin_resuelto, es_error, motivo_sin_resuelto) = if geo_error {
+        (true, true, Some(geo.unwrap().error.clone().unwrap_or_else(|| "sin motivo registrado".into())))
+    } else if ag_error {
+        (true, true, Some(ag.unwrap().error.clone().unwrap_or_else(|| "El agente no contest\u{f3} a tiempo.".into())))
+    } else if ag_abstencion_total {
+        (true, false, Some("El agente se abstuvo -- no lleg\u{f3} a su umbral de confianza.".into()))
+    } else {
+        (false, false, None)
+    };
+
+    // Los campos que de verdad se imprimen sí respetan los interruptores del
+    // informe (`hipotesis_geolocalizacion`/`veredictos_agentes`) y quedan en
+    // blanco cuando `sin_resuelto` -- ese caso lo cubre el aviso ámbar, no
+    // estos campos.
+    let mut confianza_pct = None;
+    let mut coord_txt = None;
+    let mut radio_txt = None;
+    let mut hipotesis_extra = Vec::new();
+    if req.hipotesis_geolocalizacion && !sin_resuelto {
+        if let Some(a) = geo {
+            if let (Some(lat), Some(lng)) = (a.result_lat, a.result_lng) {
+                confianza_pct = a.result_confidence.map(|c| (c * 100.0).round() as i64);
+                coord_txt = Some(format!("{lat:.6}, {lng:.6}"));
+                radio_txt =
+                    Some(a.result_radius_m.map(|r| format!("{r:.0} m")).unwrap_or_else(|| "sin radio".into()));
+                if let (Some(inliers), Some(verif)) = (a.result_inliers, a.result_verificador.as_deref()) {
+                    hipotesis_extra.push(cuerpo(format!("Respaldo geom\u{e9}trico: {inliers} correspondencias ({verif})")));
+                }
+                if !a.hypotheses.is_empty() {
+                    hipotesis_extra.push(cabecera("Alternativas:".into()));
+                    for h in &a.hypotheses {
+                        hipotesis_extra.push(cuerpo(format!(
+                            "\u{b7} {:.6}, {:.6} \u{b7} radio {:.0} m \u{b7} peso {:.0}%",
+                            h.lat, h.lng, h.radio_m, h.peso * 100.0,
+                        )));
+                    }
+                }
+            }
+        }
+    }
+
+    let mut agente_lineas = Vec::new();
+    if req.veredictos_agentes && !sin_resuelto {
+        if let Some(a) = ag {
+            if !a.agentes.is_empty() {
+                let dicho =
+                    a.agentes.iter().find(|d| Some(d.agente.as_str()) == a.agente.as_deref()).unwrap_or(&a.agentes[0]);
+                agente_lineas.push(cabecera(dicho.nombre.clone()));
+                agente_lineas.push(cuerpo(format!("Veredicto: {} ({:.0}%)", dicho.etiqueta, dicho.confianza * 100.0)));
+                if !dicho.detalle.is_empty() {
+                    agente_lineas.push(cuerpo(format!("Detalle: {}", dicho.detalle)));
+                }
+            }
+        }
+    }
+
+    ResumenOscuro {
+        sin_resuelto,
+        es_error,
+        motivo_sin_resuelto,
+        con_hipotesis,
+        con_agente,
+        confianza_pct,
+        coord_txt,
+        radio_txt,
+        hipotesis_extra,
+        agente_lineas,
+    }
+}
+
 /// Agregados de TODO el caso -- independientes de qué per-imagen se termine
 /// mostrando: son un resumen del caso real, no de la vista filtrada por los
 /// interruptores del popup. Cada estadística que no tiene datos de verdad se
 /// omite entera (`Option`/vacío), nunca se dibuja un cero inventado.
-fn calcular_estadisticas(case_created_at: i64, analyses: &[Analysis]) -> Estadisticas {
+///
+/// `resueltos`: los cuatro números de portada del tema oscuro
+/// (con_hipotesis/con_agente/sin_resolver/errores/abstenciones), ya
+/// agregados por imagen en `generar_pdf` -- se reciben calculados en vez de
+/// recalcularse aquí porque esta función trabaja sobre la lista plana de
+/// `Analysis` del caso, no agrupada por imagen (ver `ResumenOscuro`).
+fn calcular_estadisticas(
+    case_created_at: i64, analyses: &[Analysis], resueltos: (usize, usize, usize, usize, usize),
+) -> Estadisticas {
     let mut por_modelo: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     let mut confianzas: Vec<f64> = Vec::new();
     let (mut respondieron, mut abstuvieron) = (0usize, 0usize);
@@ -443,6 +611,7 @@ fn calcular_estadisticas(case_created_at: i64, analyses: &[Analysis]) -> Estadis
     }
     let confianza_media_pct =
         if confianzas.is_empty() { None } else { Some((confianzas.iter().sum::<f64>() / confianzas.len() as f64 * 100.0).round() as i64) };
+    let (n_con_hipotesis, n_con_agente, n_sin_resolver, n_errores, n_abstenciones) = resueltos;
     Estadisticas {
         creado_en: fecha_legible(case_created_at),
         por_modelo: por_modelo.into_iter().map(|(modelo, n)| ModeloCount { modelo, n }).collect(),
@@ -450,6 +619,11 @@ fn calcular_estadisticas(case_created_at: i64, analyses: &[Analysis]) -> Estadis
         agentes_total: respondieron + abstuvieron,
         agentes_respondieron: respondieron,
         agentes_abstuvieron: abstuvieron,
+        n_con_hipotesis,
+        n_con_agente,
+        n_sin_resolver,
+        n_errores,
+        n_abstenciones,
     }
 }
 
@@ -612,7 +786,13 @@ fn generar_pdf(
     let _limpieza = TmpDirGuard(job.clone());
 
     let mut imagenes = Vec::with_capacity(filas.len());
-    for (img, thumb, analyses) in filas {
+    // Agregados para los cuatro números de portada del tema oscuro -- se
+    // suman aquí, imagen a imagen, en vez de recorrer `analyses_del_caso`
+    // aparte (esa lista es plana y no agrupada por imagen; `filas` sí lo
+    // está, ver `ResumenOscuro`).
+    let (mut n_con_hipotesis, mut n_con_agente, mut n_sin_resolver, mut n_errores, mut n_abstenciones) =
+        (0usize, 0usize, 0usize, 0usize, 0usize);
+    for (orden, (img, thumb, analyses)) in filas.iter().enumerate() {
         // La miniatura solo se referencia si de verdad es una imagen
         // decodificable -- un `\includegraphics` sobre un fichero corrupto
         // tira la compilación del informe ENTERO, no solo esta página.
@@ -626,17 +806,54 @@ fn generar_pdf(
         });
         let sha256 =
             if req.integridad_sha256 { sha256_de_fichero(&originales_dir.join(img.id.to_string())) } else { None };
+        let r = resumen_oscuro(analyses, req);
+        if r.con_hipotesis {
+            n_con_hipotesis += 1;
+        }
+        if r.con_agente {
+            n_con_agente += 1;
+        }
+        if r.sin_resuelto {
+            n_sin_resolver += 1;
+            if r.es_error {
+                n_errores += 1;
+            } else {
+                n_abstenciones += 1;
+            }
+        }
         imagenes.push(ImagenCtx {
+            orden: orden + 1,
             filename: img.filename.clone(),
             thumb_file,
             sha256,
             exif_lineas: if req.exif_por_imagen { lineas_exif(img) } else { Vec::new() },
             analisis_lineas: lineas_analisis(analyses, req),
             rasgos_graficos: rasgos_graficos_de(analyses, req, &job, img.id),
+            sin_resuelto: r.sin_resuelto,
+            mostrar_aviso_sin_resuelto: r.sin_resuelto && (req.hipotesis_geolocalizacion || req.veredictos_agentes),
+            motivo_sin_resuelto: r.motivo_sin_resuelto,
+            confianza_pct: r.confianza_pct,
+            coord_txt: r.coord_txt,
+            radio_txt: r.radio_txt,
+            hipotesis_extra: r.hipotesis_extra,
+            agente_lineas: r.agente_lineas,
         });
     }
 
-    let estadisticas = if req.portada_estadisticas { Some(calcular_estadisticas(case_created_at, analyses_del_caso)) } else { None };
+    let estadisticas = if req.portada_estadisticas {
+        Some(calcular_estadisticas(
+            case_created_at,
+            analyses_del_caso,
+            (n_con_hipotesis, n_con_agente, n_sin_resolver, n_errores, n_abstenciones),
+        ))
+    } else {
+        None
+    };
+
+    // Cualquier valor que no sea exactamente "claro" se trata como "oscuro"
+    // -- es el tema por defecto y el que corresponde a un cliente viejo que
+    // no manda el campo (`tema_oscuro()` en `ExportInformeReq`).
+    let tema = if req.tema == "claro" { "claro".to_string() } else { "oscuro".to_string() };
 
     let ctx = Contexto {
         caso: caso.to_string(),
@@ -647,6 +864,7 @@ fn generar_pdf(
         estadisticas,
         imagenes,
         notas: req.notas.trim().to_string(),
+        tema,
     };
 
     let t = tera().map_err(FalloInforme::Compilacion)?;
@@ -670,4 +888,3 @@ impl Drop for TmpDirGuard {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
-

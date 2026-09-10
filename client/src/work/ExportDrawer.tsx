@@ -60,6 +60,7 @@ export function ExportDrawer({
     rasgos_como_imagen: true,
     imagenes_incluidas: null,
     notas: "",
+    tema: "oscuro",
   });
   // Aparte de `opts.imagenes_incluidas` (que solo se rellena al mandar la
   // petición, y con `null` cuando están todas): el set de qué está marcado
@@ -155,6 +156,8 @@ export function ExportDrawer({
         <p className="text-[10.5px] text-subtle">Informe forense en PDF -- el original queda intacto.</p>
 
         <div className="flex flex-col divide-y divide-white/10">
+          <Interruptor activo={opts.tema === "oscuro"} onChange={(v) => set("tema", v ? "oscuro" : "claro")}
+            label="Tema oscuro" hint="Apagado usa el documento imprimible de siempre (fondo claro)" />
           <Interruptor activo={opts.portada_estadisticas} onChange={(v) => set("portada_estadisticas", v)}
             label="Portada con estadísticas" hint="Resumen del caso y gráfico por modelo" />
           <Interruptor activo={opts.exif_por_imagen} onChange={(v) => set("exif_por_imagen", v)}

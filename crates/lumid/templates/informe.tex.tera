@@ -1,7 +1,15 @@
 % Plantilla del informe forense de Lumi -- LaTeX rellenado por Tera y
-% compilado con `tectonic` (ver `routes::export`). Documento IMPRIMIBLE: fondo
-% claro, tipografía editorial seria, un único acento discreto de marca -- el
-% dark theme de DESIGN.md es solo para la interfaz en pantalla, no para esto.
+% compilado con `tectonic` (ver `routes::export`). Dos temas posibles
+% (`{{ tema }}`, ver `ExportInformeReq::tema`):
+%   - "claro": el documento IMPRIMIBLE de siempre -- fondo blanco, tipografía
+%     editorial seria, un único acento discreto. Sin cambios de fondo desde
+%     antes de este interruptor.
+%   - "oscuro" (por defecto): el mismo lenguaje visual que la app --
+%     `DESIGN.md`, sin cajas con borde, números grandes como protagonistas.
+% El branching de color vive en UN solo sitio (los `\definecolor` de más
+% abajo) -- el resto de la plantilla (secciones, condicionales de
+% `ExportInformeReq`) es compartido entre los dos temas; ver
+% `docs/superpowers/specs/2026-09-10-informe-tema-oscuro-design.md`.
 %
 % ponytail: sin `babel`/patrones de guionado en español -- el bundle por
 % defecto de tectonic no trae los patrones de partición silábica de
@@ -21,23 +29,67 @@
 \usepackage{fancyhdr}
 \usepackage{array}
 
+% ------------------------------------------------------------- Paleta --
+% Único punto de rama entre los dos temas -- ver cabecera del fichero.
+{% if tema == "claro" %}
 \definecolor{lumiaccent}{HTML}{2F6DA3}
+\definecolor{lumiaccent2}{HTML}{2F6DA3}
 \definecolor{lumigris}{HTML}{6A6C70}
+\definecolor{lumiborde}{HTML}{CCCCCC}
+\definecolor{lumifg}{HTML}{111111}
+\definecolor{lumiaviso}{HTML}{8A5A00}
+{% else %}
+% Tokens reales de DESIGN.md, no inventados.
+\definecolor{lumiaccent}{HTML}{378ADD}
+\definecolor{lumiaccent2}{HTML}{85B7EB}
+\definecolor{lumigris}{HTML}{9A9A95}
+\definecolor{lumitenue}{HTML}{6A6C70}
+\definecolor{lumiborde}{HTML}{26282C}
+\definecolor{lumibg}{HTML}{0E0F11}
+\definecolor{lumifg}{HTML}{E8E8E6}
+\definecolor{lumiaviso}{HTML}{EFB968}
+\pagecolor{lumibg}
+\color{lumifg}
+{% endif %}
 
 \setlength{\parindent}{0pt}
+
+% --------------------------------------------------------------- Cabecera --
+% Tema claro: sin cambios -- solo el pie de siempre, sin cabecera real.
+% Tema oscuro: cabecera con destello en miniatura + caso + página, línea fina
+% debajo (reemplaza la cabecera de solo-texto); pie con el número de página
+% en mono a la derecha (ver "Página por imagen" del spec).
 \pagestyle{fancy}
 \fancyhf{}
+{% if tema == "claro" %}
 \renewcommand{\headrulewidth}{0pt}
 \fancyfoot[C]{\small\color{lumigris}{{ caso | tex }} \textperiodcentered\ p\'agina \thepage}
+{% else %}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{ {\color{lumiborde}\hrule height\headrulewidth width\headwidth} }
+\fancyhead[L]{\raisebox{-.15em}{\begin{tikzpicture}[x=0.85em/24,y=0.85em/24]
+  \fill[lumiaccent] (12,2)
+    .. controls (12.7,6.4) and (14.7,8.4) .. (19,9)
+    .. controls (14.7,9.7) and (12.7,11.7) .. (12,16)
+    .. controls (11.3,11.6) and (9.3,9.6) .. (5,9)
+    .. controls (9.3,8.3) and (11.3,6.3) .. (12,2) -- cycle;
+\end{tikzpicture}}}
+\fancyhead[C]{\small\ttfamily\color{lumigris}{{ caso | tex }}}
+\fancyhead[R]{\small\ttfamily\color{lumigris}p\'agina \thepage}
+\fancyfoot[R]{\small\ttfamily\color{lumitenue}\thepage}
+{% endif %}
 
 % El destello de cuatro puntas ya usado por `MarcoVentanaLumi`
 % (`web/components/AgentesVisual.tsx`), redibujado en TikZ a partir de las
 % mismas cuatro curvas de B\'ezier del `path` SVG original -- no se inventa
-% iconograf\'ia nueva, ver la orden de la tarea. Se usa una sola vez, en la
-% portada, así que va inline en vez de como macro con parámetro: un
-% `\newcommand` de un argumento numérico (`#1`) dentro de una plantilla Tera
-% obliga a escapar el `#` para que el lexer de Tera no lo confunda con nada
-% -- más ruido que la única vez que hacía falta.
+% iconograf\'ia nueva, ver la orden de la tarea. Los iconos de dato (EXIF,
+% integridad, hip\'otesis, agente) del tema oscuro siguen el mismo criterio:
+% son los mismos trazos que ya usa `client/src/ui/Icon.tsx` (`clock`, `lock`,
+% `via`, `bocadillo`), pasados a TikZ a mano en vez de con una fuente de
+% iconos -- ponytail: no son una reproducci\'on B\'ezier exacta del `path`
+% SVG (arcos/curvas se aproximan con l\'ineas y `controls` sencillos), el
+% original es una miniatura de ~11pt en una p\'agina, no un icono a pantalla
+% completa donde se note la diferencia.
 \begin{document}
 
 % ---------------------------------------------------------------- Portada --
@@ -71,6 +123,7 @@ pericial -- se entregan con su nivel de confianza declarado.
 \end{minipage}
 
 {% if incluir_estadisticas and estadisticas %}
+{% if tema == "claro" %}
 \vspace{1.8cm}
 \begin{minipage}{0.85\textwidth}
 \centering
@@ -102,14 +155,73 @@ Agentes: & {{ estadisticas.agentes_respondieron }} respondieron \textperiodcente
 \end{tikzpicture}
 {% endif %}
 \end{minipage}
+{% else %}
+% --------------------------------------- Portada editorial (tema oscuro) --
+% Cuatro n\'umeros grandes en fila, mono -- "sin resolver" nunca se funde en
+% los otros totales (requisito expl\'icito del owner: un informe de
+% evidencia no puede esconder qu\'e no se resolvi\'o dentro de una cifra de
+% \'exito). Ver `resumen_oscuro`/`ResumenOscuro` en `export.rs`.
+\vspace{1.6cm}
+\noindent
+\begin{minipage}[t]{0.23\textwidth}\centering
+{\fontsize{30}{30}\selectfont\ttfamily\bfseries\color{lumifg}{{ n_imagenes }}}\\[4pt]
+{\footnotesize\color{lumigris}im\'agenes}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.23\textwidth}\centering
+{\fontsize{30}{30}\selectfont\ttfamily\bfseries\color{lumifg}{{ estadisticas.n_con_hipotesis }}}\\[4pt]
+{\footnotesize\color{lumigris}con hip\'otesis}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.23\textwidth}\centering
+{\fontsize{30}{30}\selectfont\ttfamily\bfseries\color{lumifg}{{ estadisticas.n_con_agente }}}\\[4pt]
+{\footnotesize\color{lumigris}con agente}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.23\textwidth}\centering
+{\fontsize{30}{30}\selectfont\ttfamily\bfseries\color{lumiaviso}{{ estadisticas.n_sin_resolver }}}\\[4pt]
+{\footnotesize\color{lumiaviso}sin resolver}
+\end{minipage}
+
+{% if estadisticas.por_modelo %}
+\vspace{16pt}
+\begin{tikzpicture}
+\begin{axis}[
+  ybar, bar width=16pt, width=9.5cm, height=5.5cm,
+  symbolic x coords={ {% for m in estadisticas.por_modelo %}{{ m.modelo }}{% if not loop.last %},{% endif %}{% endfor %} },
+  xtick=data, ymin=0, ylabel={an\'alisis}, nodes near coords,
+  enlarge x limits=0.22, axis lines*=left,
+  tick style={draw=lumiborde}, axis line style={draw=lumiborde},
+  every tick label/.append style={color=lumigris,font=\ttfamily\footnotesize},
+  every axis label/.append style={color=lumigris},
+  nodes near coords style={color=lumifg,font=\ttfamily\footnotesize},
+  bar shift=0pt, every axis plot/.append style={fill=lumiaccent,draw=none},
+]
+\addplot coordinates { {% for m in estadisticas.por_modelo %}({{ m.modelo }},{{ m.n }}) {% endfor %} };
+\end{axis}
+\end{tikzpicture}
 {% endif %}
+
+{% if estadisticas.n_sin_resolver > 0 %}
+\vspace{12pt}
+\begin{minipage}{0.75\textwidth}
+\centering\small\color{lumiaviso}
+{{ estadisticas.n_errores }} error{% if estadisticas.n_errores != 1 %}es{% endif %} \textperiodcentered\ {{ estadisticas.n_abstenciones }} abstenci\'on{% if estadisticas.n_abstenciones != 1 %}es{% endif %} sin resolver en este informe.
+\end{minipage}
+{% endif %}
+{% endif %}
+{% endif %}
+
+\vfill
+{\small\ttfamily\color{lumigris}{{ generado | tex }} \textperiodcentered\ Lumi}
 \end{center}
 \end{titlepage}
 
 % ------------------------------------------------------------ Por imagen --
 {% for img in imagenes %}
 \clearpage
+{% if tema == "claro" %}
 \subsection*{Imagen: {{ img.filename | tex }}}
+{% else %}
+{\small\ttfamily\color{lumigris}{{ img.orden }} \textemdash\ {{ img.filename | tex }}}\\[10pt]
+{% endif %}
 
 {% if img.thumb_file %}
 \begin{center}
@@ -119,6 +231,7 @@ Agentes: & {{ estadisticas.agentes_respondieron }} respondieron \textperiodcente
 \textit{(sin miniatura disponible para esta imagen)}\\[4pt]
 {% endif %}
 
+{% if tema == "claro" %}
 {% if img.sha256 %}
 {\small\ttfamily\color{lumigris}sha256 (original): {{ img.sha256 }}}\\[4pt]
 {% endif %}
@@ -161,6 +274,111 @@ Agentes: & {{ estadisticas.agentes_respondieron }} respondieron \textperiodcente
 \end{center}
 {% endif %}
 {% endfor %}
+{% else %}
+% ------------------------------------------------ Página editorial (oscura) --
+{% if img.confianza_pct is defined and img.confianza_pct %}
+\vspace{6pt}
+\begin{center}
+{\fontsize{34}{34}\selectfont\bfseries\ttfamily\color{lumiaccent}{{ img.confianza_pct }}\%}%
+\quad{\ttfamily\footnotesize\color{lumigris}{{ img.coord_txt | tex }}\\[1pt]radio {{ img.radio_txt | tex }}}
+\end{center}
+\vspace{8pt}
+{% endif %}
+
+{% if img.mostrar_aviso_sin_resuelto %}
+\begin{center}
+\begin{minipage}{0.82\textwidth}
+\small\color{lumiaviso}
+An\'alisis sin resolver: {{ img.motivo_sin_resuelto | tex }}
+\end{minipage}
+\end{center}
+\vspace{6pt}
+{% endif %}
+
+% Un bloque por dato, cada uno con su propio icono TikZ -- sin dato real
+% que mostrar, el bloque entero se omite (nunca un placeholder en blanco).
+{% if img.exif_lineas %}
+\vspace{8pt}\noindent
+\raisebox{-.15em}{\begin{tikzpicture}[x=0.8em/24,y=0.8em/24]
+  \color{lumigris}
+  \draw[line width=1.6pt,line cap=round,line join=round] (12,12) circle (9);
+  \draw[line width=1.6pt,line cap=round,line join=round] (12,7) -- (12,12) -- (15,14);
+\end{tikzpicture}}\hspace{4pt}{\small\bfseries\color{lumigris}EXIF}\\[3pt]
+{\small
+{% for l in img.exif_lineas %}
+{{ l.texto | tex }}\\
+{% endfor %}
+}
+{% endif %}
+
+{% if img.sha256 %}
+\vspace{8pt}\noindent
+\raisebox{-.15em}{\begin{tikzpicture}[x=0.8em/24,y=0.8em/24]
+  \color{lumigris}
+  \draw[line width=1.6pt,rounded corners=1pt] (5,11) rectangle (19,20);
+  \draw[line width=1.6pt] (8,11) .. controls (8,4) and (16,4) .. (16,11);
+\end{tikzpicture}}\hspace{4pt}{\small\bfseries\color{lumigris}Integridad}\\[3pt]
+{\small\ttfamily sha256 (original): {{ img.sha256 }}}
+{% endif %}
+
+{% if img.hipotesis_extra %}
+\vspace{8pt}\noindent
+\raisebox{-.15em}{\begin{tikzpicture}[x=0.8em/24,y=0.8em/24]
+  \color{lumigris}
+  \draw[line width=1.4pt,dash pattern=on 1.6pt off 1.6pt] (12,3) -- (12,21);
+  \draw[line width=1.6pt,rounded corners=1pt] (14.5,7) rectangle (19.5,15);
+  \fill (17,8.4) circle (0.6);
+\end{tikzpicture}}\hspace{4pt}{\small\bfseries\color{lumigris}Hip\'otesis de geolocalizaci\'on}\\[3pt]
+{\small
+{% for l in img.hipotesis_extra %}
+{% if l.variante == "cabecera" %}\textbf{ {{- l.texto | tex -}} }\\[2pt]
+{% else %}{{ l.texto | tex }}\\
+{% endif %}
+{% endfor %}
+}
+{% endif %}
+
+{% if img.agente_lineas %}
+\vspace{8pt}\noindent
+\raisebox{-.15em}{\begin{tikzpicture}[x=0.8em/24,y=0.8em/24]
+  \color{lumigris}
+  \draw[line width=1.6pt,rounded corners=1pt] (4,5) -- (20,5) -- (20,15) -- (9,15) -- (5,19) -- (5,15) -- (4,15) -- cycle;
+  \draw[line width=1.4pt] (8,9) -- (16,9);
+  \draw[line width=1.4pt] (8,12) -- (13,12);
+\end{tikzpicture}}\hspace{4pt}{\small\bfseries\color{lumigris}Agente}\\[3pt]
+{\small
+{% for l in img.agente_lineas %}
+{% if l.variante == "cabecera" %}\textbf{ {{- l.texto | tex -}} }\\[2pt]
+{% else %}{{ l.texto | tex }}\\
+{% endif %}
+{% endfor %}
+{% for r in img.rasgos_graficos %}
+% "Rasgos como imagen" se embebe DENTRO de este mismo bloque "Agente",
+% debajo del texto del veredicto -- decisión del spec, no una sección
+% aparte (ver el comentario de implementación en el `.md` del diseño).
+\vspace{6pt}
+{% if r.tipo == "ocr" %}
+{% if img.thumb_file %}
+\begin{center}
+\begin{tikzpicture}
+\node[anchor=south west,inner sep=0] (rasgo-img) {\includegraphics[width=6.5cm,height=6.5cm,keepaspectratio]{ {{- img.thumb_file -}} }};
+\begin{scope}[x={(rasgo-img.south east)},y={(rasgo-img.north west)}]
+{% for c in r.cajas %}
+\draw[lumiaccent,thick] ({{ c.x1 }},{{ c.y1 }}) rectangle ({{ c.x2 }},{{ c.y2 }});
+{% endfor %}
+\end{scope}
+\end{tikzpicture}
+\end{center}
+{% endif %}
+{% elif r.tipo == "profundidad" %}
+\begin{center}
+\includegraphics[width=6.5cm,height=6.5cm,keepaspectratio]{ {{- r.archivo -}} }
+\end{center}
+{% endif %}
+{% endfor %}
+}
+{% endif %}
+{% endif %}
 {% endfor %}
 
 % -------------------------------------------------------- Notas libres --
