@@ -8,20 +8,20 @@
 //!   cargo run -p lumi-index --example firmar_desreclamos -- generar-clave
 //!   cargo run -p lumi-index --example firmar_desreclamos -- fusionar-pendientes <borrador.json>
 //!   cargo run -p lumi-index --example firmar_desreclamos -- firmar <borrador.json> <salida.json>
+//!   cargo run -p lumi-index --example firmar_desreclamos -- vigilar [--intervalo-min N]
 //!
 //! El borrador es un JSON de la forma `{"lista":[["paquete","motivo"], ...]}`.
 //!
-//! `fusionar-pendientes` es la fase 3 de la liberación de teselas
-//! (BUG_BOUNTY #38): descarga `web/releases/liberaciones-pendientes.json`
-//! (sin autenticación — es un fichero público del propio repo, lo escribió
-//! `POST /api/desreclamos/solicitar` ya verificado contra la ficha real, y lo
-//! decide después el panel `/admin`, subsistema 3) y añade al borrador las
-//! que el panel ya marcó `estado: "aprobada"` — ausente, "pendiente" o
-//! "rechazada" se saltan. No firma nada por sí sola: sigue haciendo
-//! falta `firmar` a mano, con la clave que nunca sale de esta máquina. Y
-//! tras firmar con éxito, vaciar `liberaciones-pendientes.json` y comitearlo
-//! junto con `desreclamos.json` sigue siendo trabajo manual del operador —
-//! no se automatiza el commit/push.
+//! `fusionar-pendientes`/`firmar` son la fase 3 de la liberación de teselas
+//! (BUG_BOUNTY #38), a mano: descargar la cola, revisar el borrador, firmar,
+//! comitear. `vigilar` es la fase 4: automatiza ese mismo trabajo mecánico
+//! sin tocar la invariante de seguridad -- la clave privada nunca sale de
+//! esta máquina, solo que ahora el bucle de "mirar si hay algo aprobado,
+//! firmarlo, publicarlo" lo corre este proceso en vez de las manos del
+//! operador. Deja corriendo `vigilar` en tu propio equipo (o un Pi, o un
+//! servidor tuyo) y las liberaciones aprobadas en `/admin` se firman y
+//! publican solas; `fusionar-pendientes`/`firmar` siguen aquí para quien
+//! prefiera decidir cada firma a mano.
 
 use std::path::PathBuf;
 
@@ -33,7 +33,7 @@ use lumi_index::desreclamos::Desreclamos;
 /// shape que `EntradaPendiente` en `web/lib/liberaciones.ts`. `estado`
 /// ausente significa "pendiente" en ambos lados — la solicitud original
 /// nunca lo escribe, y solo el panel admin lo pone a "aprobada"/"rechazada".
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize, Clone)]
 struct EntradaPendiente {
     paquete: String,
     quadkeys: Vec<String>,
@@ -129,6 +129,169 @@ fn cargar_clave() -> SigningKey {
     SigningKey::from_bytes(&arr)
 }
 
+// ---------------------------------------------------------- vigilar --
+//
+// A diferencia de `fusionar-pendientes`/`firmar` (offline, sobre ficheros
+// locales, sin credenciales de escritura), `vigilar` necesita comitear al
+// repo por sí sola -- por eso hace falta un token de GitHub aparte, con
+// permiso de escritura sobre ESTE repo. Es un secreto local más, igual que
+// `desreclamos.key`: nunca en el repo, nunca en Vercel. Se lee de la
+// variable de entorno si está (cómoda para probar), y si no de un fichero
+// junto a la clave -- para dejar `vigilar` corriendo de fondo sin depender
+// de que la variable siga puesta en esa sesión de terminal.
+
+const REPO: &str = "s7lver2/Lumi";
+const RUTA_PENDIENTES: &str = "web/releases/liberaciones-pendientes.json";
+const RUTA_DESRECLAMOS: &str = "web/releases/desreclamos.json";
+
+fn ruta_token_push() -> PathBuf {
+    home_dir().join(".lumi-indexer").join("github-push.token")
+}
+
+fn token_push() -> String {
+    if let Ok(t) = std::env::var("LUMI_GITHUB_PUSH_TOKEN") {
+        if !t.trim().is_empty() {
+            return t.trim().to_string();
+        }
+    }
+    let ruta = ruta_token_push();
+    std::fs::read_to_string(&ruta)
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| {
+            panic!(
+                "falta un token de GitHub con permiso de escritura sobre {REPO} -- \
+                 crea uno (classic, scope 'repo' o 'public_repo') en \
+                 https://github.com/settings/tokens y ponlo en la variable de entorno \
+                 LUMI_GITHUB_PUSH_TOKEN, o guárdalo en {} (una sola línea, sin comillas)",
+                ruta.display()
+            )
+        })
+}
+
+/// Contenido y `sha` actuales de un fichero del repo, vía la API de
+/// contenidos de GitHub -- el mismo `sha` hay que devolverlo en el `PUT`
+/// para que GitHub sepa que no se está pisando un cambio que no se ha visto.
+struct ContenidoRepo {
+    texto: String,
+    sha: String,
+}
+
+fn leer_contenido(token: &str, ruta: &str) -> Result<ContenidoRepo, String> {
+    #[derive(serde::Deserialize)]
+    struct Resp {
+        content: String,
+        sha: String,
+    }
+    let url = format!("https://api.github.com/repos/{REPO}/contents/{ruta}");
+    let r = ureq::get(&url)
+        .set("authorization", &format!("Bearer {token}"))
+        .set("user-agent", "lumi-vigilar")
+        .set("accept", "application/vnd.github+json")
+        .call()
+        .map_err(|e| format!("no se pudo leer {ruta}: {e}"))?;
+    let resp: Resp = r.into_json().map_err(|e| format!("{ruta}: respuesta inesperada: {e}"))?;
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    let bytes = STANDARD
+        .decode(resp.content.replace('\n', ""))
+        .map_err(|e| format!("{ruta}: contenido no es base64 válido: {e}"))?;
+    let texto = String::from_utf8(bytes).map_err(|e| format!("{ruta}: no es UTF-8: {e}"))?;
+    Ok(ContenidoRepo { texto, sha: resp.sha })
+}
+
+fn escribir_contenido(token: &str, ruta: &str, sha: &str, contenido: &str, mensaje: &str) -> Result<(), String> {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    let url = format!("https://api.github.com/repos/{REPO}/contents/{ruta}");
+    let cuerpo = serde_json::json!({
+        "message": mensaje,
+        "content": STANDARD.encode(contenido),
+        "sha": sha,
+    });
+    ureq::put(&url)
+        .set("authorization", &format!("Bearer {token}"))
+        .set("user-agent", "lumi-vigilar")
+        .set("accept", "application/vnd.github+json")
+        .send_json(cuerpo)
+        .map_err(|e| format!("no se pudo escribir {ruta}: {e}"))?;
+    Ok(())
+}
+
+/// Una pasada: mira si hay algo aprobado que aún no esté en
+/// `desreclamos.json`, lo firma, lo publica, y limpia esas entradas de la
+/// cola. Nunca toca lo pendiente ni lo rechazado -- solo lo que el panel
+/// admin ya decidió. Cualquier fallo de red o de la API se propaga como
+/// `Err` para que `vigilar` lo registre y reintente en la siguiente pasada,
+/// nunca para que el proceso entero muera por un fallo transitorio.
+fn pasada(token: &str, secreta: &SigningKey) -> Result<(), String> {
+    let pendientes_raw = leer_contenido(token, RUTA_PENDIENTES)?;
+    let pendientes: Vec<EntradaPendiente> = serde_json::from_str(&pendientes_raw.texto)
+        .map_err(|e| format!("{RUTA_PENDIENTES} no es una cola válida: {e}"))?;
+
+    let desreclamos_raw = leer_contenido(token, RUTA_DESRECLAMOS)?;
+    let mut actual: Desreclamos = serde_json::from_str(&desreclamos_raw.texto)
+        .map_err(|e| format!("{RUTA_DESRECLAMOS} no es un documento válido: {e}"))?;
+    let ya: std::collections::HashSet<String> = actual.lista.iter().map(|(p, _)| p.clone()).collect();
+
+    let nuevas: Vec<&EntradaPendiente> =
+        pendientes.iter().filter(|p| p.aprobada() && !ya.contains(&p.paquete)).collect();
+    if nuevas.is_empty() {
+        println!("[vigilar] nada nuevo que firmar");
+        return Ok(());
+    }
+
+    for p in &nuevas {
+        let motivo = format!(
+            "liberación aprobada en /admin -- pedida por {} el {} ({} teselas)",
+            p.cuenta,
+            p.fecha,
+            p.quadkeys.len()
+        );
+        actual.lista.push((p.paquete.clone(), motivo));
+    }
+    actual.firmar(secreta);
+    let paquetes: Vec<String> = nuevas.iter().map(|p| p.paquete.clone()).collect();
+    escribir_contenido(
+        token,
+        RUTA_DESRECLAMOS,
+        &desreclamos_raw.sha,
+        &serde_json::to_string_pretty(&actual).unwrap(),
+        &format!("firma automática: {}", paquetes.join(", ")),
+    )?;
+
+    // Se relee la cola justo antes de escribirla, con su `sha` fresco --
+    // pudo cambiar entre la lectura de arriba y este punto (alguien decidió
+    // otra solicitud en `/admin` mientras tanto). Solo se quitan las que
+    // esta pasada acaba de firmar; cualquier otra decisión reciente se
+    // conserva tal cual.
+    let pendientes_raw2 = leer_contenido(token, RUTA_PENDIENTES)?;
+    let mut pendientes2: Vec<EntradaPendiente> = serde_json::from_str(&pendientes_raw2.texto)
+        .map_err(|e| format!("{RUTA_PENDIENTES} no es una cola válida: {e}"))?;
+    pendientes2.retain(|p| !paquetes.contains(&p.paquete));
+    escribir_contenido(
+        token,
+        RUTA_PENDIENTES,
+        &pendientes_raw2.sha,
+        &serde_json::to_string_pretty(&pendientes2).unwrap(),
+        &format!("liberaciones firmadas: {}", paquetes.join(", ")),
+    )?;
+
+    println!("[vigilar] firmadas {} liberación(es): {}", paquetes.len(), paquetes.join(", "));
+    Ok(())
+}
+
+fn vigilar(intervalo_min: u64) {
+    let token = token_push();
+    let secreta = cargar_clave();
+    println!("[vigilar] arrancando, comprobando cada {intervalo_min} min -- Ctrl+C para parar");
+    loop {
+        if let Err(e) = pasada(&token, &secreta) {
+            eprintln!("[vigilar] fallo en esta pasada, se reintenta en la siguiente: {e}");
+        }
+        std::thread::sleep(std::time::Duration::from_secs(intervalo_min * 60));
+    }
+}
+
 /// Trae la cola pendiente y añade al borrador las que el panel admin ya
 /// aprobó (`estado == "aprobada"`; ausente o "pendiente"/"rechazada" NO se
 /// trae — antes de que existiera el panel esta función traía todo lo que no
@@ -209,11 +372,21 @@ fn main() {
             let salida = args.get(3).expect("falta <salida.json>");
             firmar(std::path::Path::new(borrador), std::path::Path::new(salida));
         }
+        Some("vigilar") => {
+            let intervalo_min = args
+                .iter()
+                .position(|a| a == "--intervalo-min")
+                .and_then(|i| args.get(i + 1))
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(15);
+            vigilar(intervalo_min);
+        }
         _ => {
             eprintln!(
                 "uso: firmar_desreclamos generar-clave \
                  | fusionar-pendientes <borrador.json> \
-                 | firmar <borrador.json> <salida.json>"
+                 | firmar <borrador.json> <salida.json> \
+                 | vigilar [--intervalo-min N]"
             );
             std::process::exit(1);
         }
