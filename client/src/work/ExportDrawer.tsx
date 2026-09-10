@@ -6,19 +6,22 @@ import { Drawer } from "./Drawer";
 import { PdfPreviewPopup } from "./PdfPreviewPopup";
 
 /** Interruptor de sección del informe -- mismo `role="switch"` y misma
- *  animación que ya usa `AjustesView`. */
-function Interruptor({ activo, onChange, label, hint }: {
-  activo: boolean; onChange: (v: boolean) => void; label: string; hint: string;
+ *  animación que ya usa `AjustesView`. `deshabilitado` sigue la matriz de
+ *  capacidades del proyecto: el motivo real va en `hint`, nunca se esconde
+ *  el interruptor (ver `ARCHITECTURE.md`, "Capability matrix"). */
+function Interruptor({ activo, onChange, label, hint, deshabilitado }: {
+  activo: boolean; onChange: (v: boolean) => void; label: string; hint: string; deshabilitado?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-2">
+    <div className={`flex items-center justify-between gap-3 py-2 ${deshabilitado ? "opacity-40" : ""}`}>
       <span className="text-[12px] text-fg">
         {label}
         <small className="mt-0.5 block text-[10.5px] text-subtle">{hint}</small>
       </span>
-      <button role="switch" aria-checked={activo} onClick={() => onChange(!activo)}
+      <button role="switch" aria-checked={activo} disabled={deshabilitado} onClick={() => onChange(!activo)}
         className={`relative h-5 w-10 shrink-0 rounded-full border transition-colors duration-300 ease-expo
-          ${activo ? "border-accent bg-accent" : "border-white/15 bg-white/10"}`}>
+          ${activo ? "border-accent bg-accent" : "border-white/15 bg-white/10"}
+          ${deshabilitado ? "cursor-not-allowed" : ""}`}>
         <span className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-fg ring-1 ring-black/20
           transition-transform duration-300 ease-expo ${activo ? "translate-x-[18px]" : "translate-x-0.5"}`} />
       </button>
@@ -61,6 +64,7 @@ export function ExportDrawer({
     imagenes_incluidas: null,
     notas: "",
     tema: "oscuro",
+    disposicion: "compacta",
   });
   // Aparte de `opts.imagenes_incluidas` (que solo se rellena al mandar la
   // petición, y con `null` cuando están todas): el set de qué está marcado
@@ -158,6 +162,13 @@ export function ExportDrawer({
         <div className="flex flex-col divide-y divide-white/10">
           <Interruptor activo={opts.tema === "oscuro"} onChange={(v) => set("tema", v ? "oscuro" : "claro")}
             label="Tema oscuro" hint="Apagado usa el documento imprimible de siempre (fondo claro)" />
+          <Interruptor activo={opts.disposicion === "banda"}
+            onChange={(v) => set("disposicion", v ? "banda" : "compacta")}
+            deshabilitado={opts.tema !== "oscuro"}
+            label="Foto a ancho completo"
+            hint={opts.tema !== "oscuro"
+              ? "Solo disponible en el tema oscuro"
+              : "Miniatura grande en vez de al lado de los datos"} />
           <Interruptor activo={opts.portada_estadisticas} onChange={(v) => set("portada_estadisticas", v)}
             label="Portada con estadísticas" hint="Resumen del caso y gráfico por modelo" />
           <Interruptor activo={opts.exif_por_imagen} onChange={(v) => set("exif_por_imagen", v)}

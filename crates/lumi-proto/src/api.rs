@@ -1323,10 +1323,20 @@ pub struct ExportInformeReq {
     /// o mal tecleado.
     #[serde(default = "tema_oscuro")]
     pub tema: String,
+    /// `"compacta"` (miniatura al lado, por defecto) o `"banda"` (foto a
+    /// ancho completo). Solo la usa el tema oscuro: el claro es siempre
+    /// compacto (ver `routes::export`). Cualquier otro valor se trata como
+    /// `"compacta"` -- mismo patrón tolerante que `tema`.
+    #[serde(default = "disposicion_compacta")]
+    pub disposicion: String,
 }
 
 fn tema_oscuro() -> String {
     "oscuro".to_string()
+}
+
+fn disposicion_compacta() -> String {
+    "compacta".to_string()
 }
 
 impl Default for ExportInformeReq {
@@ -1342,6 +1352,7 @@ impl Default for ExportInformeReq {
             imagenes_incluidas: None,
             notas: String::new(),
             tema: tema_oscuro(),
+            disposicion: disposicion_compacta(),
         }
     }
 }
