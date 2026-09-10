@@ -1270,7 +1270,43 @@
           "sha256": "b4b9b16208a545642d007442d92ef6f371245f2458e97d225e423573fbf3bf2a"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.38",
+      "publicado": "2026-09-10T09:25:59Z",
+      "notas": "Causa real del timeout de agentes arreglada (carga del VLM directa al dispositivo). Timeout de exportar informe subido a 120s. Informe: integridad sha256, rasgos como imagen, selector de fotos y notas del investigador.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.38/app.exe",
+          "bytes": 16011776,
+          "sha256": "a82dfbd3b4b16595d6963b71594fc1cbe5c49d40237cdd958ea50d3f5b02dc17"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.38",
+      "publicado": "2026-09-10T09:25:59Z",
+      "notas": "Causa real del timeout de agentes arreglada (carga del VLM directa al dispositivo). Timeout de exportar informe subido a 120s. Informe: integridad sha256, rasgos como imagen, selector de fotos y notas del investigador.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.38/lumid",
+          "bytes": 23285232,
+          "sha256": "115cec92df44e1475b98fbe6ce2dc78c43dae30ac2a401d9c06a2c97c85a30ed"
+        },
+        {
+          "plataforma": "assets",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.38/lumid-assets.tar.gz",
+          "bytes": 151937,
+          "sha256": "bce31a7f9b0093a4e0c9f0a9103cf5c67827e84482ed3b68568fc3525edc7cbf"
+        }
+      ]
     }
   ],
-  "firma": "k6XNukvjC9Fk8/bGVjvT0nn3JkZmZ+qI0eC+zt5Gnjn9L55p3MX2crsb6TcqW+ZqN5trVkxA/nzONctd9V3/Bg=="
+  "firma": "Fke/56fyk52BDid/1Tu1lIN9iyS3h44Ymy1UVdzRbDm8CTH+basl8gUGdzS2NtAQ615GUQrZYXAjbtcM91lFBQ=="
 }
