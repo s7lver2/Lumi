@@ -1357,7 +1357,22 @@
           "sha256": "8d57c7facafab24f1c232e7334d04944d6f576c8e048165846b833944c3c9b14"
         }
       ]
+    },
+    {
+      "producto": "indexer",
+      "version": "2.0.40",
+      "publicado": "2026-09-10T21:35:07Z",
+      "notas": "Refresca el catalogo remoto (incluidas las liberaciones de teselas) cada 5 minutos sin reabrir la pestana.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.40/indexer-app.exe",
+          "bytes": 22676992,
+          "sha256": "58bc6119e3232bd4ff62e0394ad71d4240c59d744967bde020609031cfe39099"
+        }
+      ]
     }
   ],
-  "firma": "CaHDVeaqLqO772mFr3R01DcLyxbDOQt6GmEWY0hg+U/gZtdt22XdPz7W07Ai9CYjV57IcHVINvTJcMxB70G2BQ=="
+  "firma": "M0jajQ1aAAG6Fi60VWxdWrW8DtNZqsr/2LHi4G/DiK6kJcFDStbNc/6t1/K5w3N0N34urI5EY3tqo4xdGVoeCQ=="
 }
