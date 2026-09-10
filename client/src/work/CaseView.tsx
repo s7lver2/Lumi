@@ -402,18 +402,6 @@ export function CaseView({
       }} />
       {rail}
 
-      {/* Exportar es una sección más del mismo carril que Resultados
-          (`DrawerId`), no un botón flotante sobre el mapa -- se apila justo
-          debajo de la pestaña de resultados y se desplaza con ella. */}
-      <button onClick={() => setDrawer(drawerId === "export" ? null : "export")}
-        title="Exportar el caso a un informe forense en PDF" aria-label="Exportar informe"
-        style={{ right: drawerId !== null ? DRAWER_W : 0, top: "calc(50% + 32px)" }}
-        className={`jg-press absolute z-[23] grid h-[40px] w-[15px] -translate-y-1/2 place-items-center
-          rounded-l-lg border border-r-0 transition-[right,color,background-color] duration-[420ms] ease-expo
-          ${drawerId === "export" ? "border-fg bg-[rgba(16,18,21,.98)] text-fg" : "border-border bg-[rgba(16,18,21,.92)] text-subtle hover:bg-white/[.05] hover:text-fg"}`}>
-        <Icon name="doc-descarga" size={11} />
-      </button>
-
       {dragging && <DropFrame />}
 
       {vacio ? (

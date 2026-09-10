@@ -19,8 +19,15 @@ export function PdfPreviewPopup({ url, onClose }: { url: string; onClose: () => 
                 <Icon name="x" size={13} />
               </button>
             </div>
-            <div className="mt-3 min-h-[540px] flex-1 overflow-hidden rounded-[9px] border border-white/10 bg-white/[.03]">
-              <embed src={url} type="application/pdf" className="h-full min-h-[540px] w-full" />
+            {/* El visor de PDF nativo de WebView2 (el `<embed>` de abajo) rasteriza
+                a una resolución interna baja y fija, así que a tamaño real se ve
+                pixelado -- el PDF en sí no tiene nada, por eso al descargarlo se ve
+                bien. El truco es forzarlo a rasterizar al doble de tamaño (donde sí
+                tiene detalle de sobra) y encogerlo de vuelta con `transform: scale`,
+                que es una operación de compositor, no un reescalado con pérdida. */}
+            <div className="relative mt-3 min-h-[540px] flex-1 overflow-hidden rounded-[9px] border border-white/10 bg-white/[.03]">
+              <embed src={url} type="application/pdf"
+                className="absolute left-0 top-0 h-[200%] w-[200%] origin-top-left [transform:scale(0.5)]" />
             </div>
           </FloatingCard>
         </Pop>

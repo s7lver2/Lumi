@@ -1,6 +1,6 @@
 import { Icon } from "../ui/Icon";
 
-export type RailItem = "cases" | "members" | "admin";
+export type RailItem = "cases" | "members" | "admin" | "export";
 
 /** 44 px, iconos sin etiqueta, translúcido sobre el mapa. Es el carril de la
  *  v1: la navegación no ocupa sitio porque el mapa es el trabajo.
@@ -8,7 +8,7 @@ export type RailItem = "cases" | "members" | "admin";
  *  Ya no lleva el logotipo: eso vive ahora en la barra de título, que cruza
  *  toda la ventana por encima de este carril. */
 export function Rail({
-  active, canManage, isAdmin, onCases, onMembers, onAdmin, onLeave,
+  active, canManage, isAdmin, onCases, onMembers, onAdmin, onLeave, onExport,
 }: {
   active: RailItem;
   canManage: boolean;
@@ -17,6 +17,9 @@ export function Rail({
   onMembers: () => void;
   onAdmin: () => void;
   onLeave: () => void;
+  /** Solo hay algo que exportar dentro de un caso -- `undefined` en
+   *  `ProjectView` (la lista de casos), donde este botón no pinta nada. */
+  onExport?: () => void;
 }) {
   return (
     <nav className="absolute inset-y-0 left-0 z-30 flex w-11 flex-col items-center gap-[3px]
@@ -24,6 +27,9 @@ export function Rail({
       <RailBtn icon="layers" title="Casos del proyecto" on={active === "cases"} onClick={onCases} />
       {canManage && (
         <RailBtn icon="users" title="Quién entra en el proyecto" on={active === "members"} onClick={onMembers} />
+      )}
+      {onExport && (
+        <RailBtn icon="doc-descarga" title="Exportar informe" on={active === "export"} onClick={onExport} />
       )}
       {/* Un administrador es además un investigador. */}
       {isAdmin && (
@@ -36,7 +42,7 @@ export function Rail({
 }
 
 function RailBtn({ icon, title, on, onClick }: {
-  icon: "layers" | "users" | "shield" | "logout";
+  icon: "layers" | "users" | "shield" | "logout" | "doc-descarga";
   title: string; on: boolean; onClick: () => void;
 }) {
   return (
