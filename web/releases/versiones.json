@@ -1306,7 +1306,58 @@
           "sha256": "bce31a7f9b0093a4e0c9f0a9103cf5c67827e84482ed3b68568fc3525edc7cbf"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.39",
+      "publicado": "2026-09-10T15:15:13Z",
+      "notas": "New Providers for indexer, fixed wikimedia commons provider, improved pdf printing, new settings in admin dash",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.39/app.exe",
+          "bytes": 16107520,
+          "sha256": "d3221ec53e2305710a253aa2f74b96b888e53b5d8f768dc6188ebe9988bccd29"
+        }
+      ]
+    },
+    {
+      "producto": "indexer",
+      "version": "2.0.39",
+      "publicado": "2026-09-10T15:15:13Z",
+      "notas": "New Providers for indexer, fixed wikimedia commons provider, improved pdf printing, new settings in admin dash",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.39/indexer-app.exe",
+          "bytes": 22677504,
+          "sha256": "156f1e56faa3eaefcbccab7afc23ced6566fe09c25392407c563f00596c4ba68"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.39",
+      "publicado": "2026-09-10T15:15:13Z",
+      "notas": "New Providers for indexer, fixed wikimedia commons provider, improved pdf printing, new settings in admin dash",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.39/lumid",
+          "bytes": 23918352,
+          "sha256": "2b8e1c3ec6c93531b909dbef6cbd97519293532eb02521fca66ad147496f4cf2"
+        },
+        {
+          "plataforma": "assets",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.39/lumid-assets.tar.gz",
+          "bytes": 158338,
+          "sha256": "8d57c7facafab24f1c232e7334d04944d6f576c8e048165846b833944c3c9b14"
+        }
+      ]
     }
   ],
-  "firma": "Fke/56fyk52BDid/1Tu1lIN9iyS3h44Ymy1UVdzRbDm8CTH+basl8gUGdzS2NtAQ615GUQrZYXAjbtcM91lFBQ=="
+  "firma": "CaHDVeaqLqO772mFr3R01DcLyxbDOQt6GmEWY0hg+U/gZtdt22XdPz7W07Ai9CYjV57IcHVINvTJcMxB70G2BQ=="
 }
