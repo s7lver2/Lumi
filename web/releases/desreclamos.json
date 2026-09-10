@@ -1,5 +1,22 @@
 {
-  "lista": [],
+  "lista": [
+    [
+      "Lumi Datasets",
+      "liberación aprobada en /admin -- pedida por s7lver2 el 2026-09-02T14:40:31.941Z (13 teselas)"
+    ],
+    [
+      "test",
+      "liberación aprobada en /admin -- pedida por s7lver2 el 2026-09-02T14:40:33.491Z (6 teselas)"
+    ],
+    [
+      "REMOVEME",
+      "liberación aprobada en /admin -- pedida por s7lver2 el 2026-09-10T15:43:40.232Z (1 teselas)"
+    ],
+    [
+      "TESELAS",
+      "liberación aprobada en /admin -- pedida por s7lver2 el 2026-09-10T15:43:44.661Z (8 teselas)"
+    ]
+  ],
   "clave_publica": "io1ubCL+81IQ0JkkzubbT6oROELQtuvNQe+cKi93k2k=",
-  "firma": "k6+d23ZSCYHpU9cfjdRQ3ROlI5kSGloZy2x+qzbLMDVuz8YCelnbCxWw3fDxoxWtfcc5TEWdtl/LEHUfQ6hmCw=="
+  "firma": "altPFxmhRByr3TCOeTqtjuaBL5OQQV8k4y2sed8lcu99dc9b2qm5o7kMtws1RAIiyhHY+xZy8W7Ys55B+8y6Aw=="
 }
