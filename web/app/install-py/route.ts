@@ -550,9 +550,9 @@ def _instalar_qdrant():
 
 
 def _instalar_tectonic():
-    """Idempotente, igual que `_instalar_qdrant`: si el binario ya está en su
+    """Idempotente, igual que \`_instalar_qdrant\`: si el binario ya está en su
     sitio no vuelve a bajar los ~60 MB en cada reinstalación. Un fallo aquí no
-    aborta la instalación de Station entera -- `export.rs` ya sabe devolver un
+    aborta la instalación de Station entera -- \`export.rs\` ya sabe devolver un
     error accionable si el binario no aparece cuando alguien pide un informe,
     igual que cualquier otra capacidad recortada."""
     os.makedirs(TECTONIC_DIR, exist_ok=True)
