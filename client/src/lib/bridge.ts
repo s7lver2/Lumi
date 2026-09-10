@@ -137,6 +137,12 @@ export interface ExportInformeOpts {
   hipotesis_geolocalizacion: boolean;
   veredictos_agentes: boolean;
   firmado_por: string;
+  integridad_sha256: boolean;
+  rasgos_como_imagen: boolean;
+  /** `null`/ausente = todas las imágenes del caso -- mismo criterio que el
+   *  resto del backend para no romper compatibilidad con llamadas viejas. */
+  imagenes_incluidas: number[] | null;
+  notas: string;
 }
 
 /** Pide a `lumid` el informe forense del caso en PDF con la config actual,

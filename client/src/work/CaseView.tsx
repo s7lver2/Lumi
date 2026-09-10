@@ -446,7 +446,7 @@ export function CaseView({
             busy={busy}
             onAnalyze={() => (sel !== null ? setStaged([sel]) : void pick())}
             onCenter={(lat, lng) => setFly({ lat, lng, zoom: 14 })} />
-          <ExportDrawer token={token} caseId={case_.id} caseName={case_.name}
+          <ExportDrawer token={token} caseId={case_.id} caseName={case_.name} images={list}
             firmadoPorDefecto={username} open={drawerId === "export"}
             onClose={() => setDrawer(null)} onGuardar={guardarInforme} />
         </>

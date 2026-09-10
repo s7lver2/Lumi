@@ -119,6 +119,10 @@ Agentes: & {{ estadisticas.agentes_respondieron }} respondieron \textperiodcente
 \textit{(sin miniatura disponible para esta imagen)}\\[4pt]
 {% endif %}
 
+{% if img.sha256 %}
+{\small\ttfamily\color{lumigris}sha256 (original): {{ img.sha256 }}}\\[4pt]
+{% endif %}
+
 {% for l in img.exif_lineas %}
 {% if l.variante == "cabecera" %}\textbf{ {{- l.texto | tex -}} }\\[2pt]
 {% else %}{{ l.texto | tex }}\\
@@ -131,7 +135,40 @@ Agentes: & {{ estadisticas.agentes_respondieron }} respondieron \textperiodcente
 {% else %}{{ l.texto | tex }}\\
 {% endif %}
 {% endfor %}
+
+{% for r in img.rasgos_graficos %}
+\vspace{6pt}
+{% if r.tipo == "ocr" %}
+\textbf{Rasgos detectados ({{ r.agente | tex }}):}\\[3pt]
+{% if img.thumb_file %}
+\begin{center}
+\begin{tikzpicture}
+\node[anchor=south west,inner sep=0] (rasgo-img) {\includegraphics[width=6.5cm,height=6.5cm,keepaspectratio]{ {{- img.thumb_file -}} }};
+\begin{scope}[x={(rasgo-img.south east)},y={(rasgo-img.north west)}]
+{% for c in r.cajas %}
+\draw[lumiaccent,thick] ({{ c.x1 }},{{ c.y1 }}) rectangle ({{ c.x2 }},{{ c.y2 }});
 {% endfor %}
+\end{scope}
+\end{tikzpicture}
+\end{center}
+{% else %}
+\textit{(sin miniatura sobre la que dibujar los recuadros)}\\[4pt]
+{% endif %}
+{% elif r.tipo == "profundidad" %}
+\textbf{Mapa de profundidad ({{ r.agente | tex }}):}\\[3pt]
+\begin{center}
+\includegraphics[width=6.5cm,height=6.5cm,keepaspectratio]{ {{- r.archivo -}} }
+\end{center}
+{% endif %}
+{% endfor %}
+{% endfor %}
+
+% -------------------------------------------------------- Notas libres --
+{% if notas %}
+\clearpage
+\subsection*{Notas del investigador}
+{{ notas | tex }}\\
+{% endif %}
 
 % ------------------------------------------------------------------ Firma --
 {% if firmado_por %}

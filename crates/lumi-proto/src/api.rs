@@ -1218,6 +1218,27 @@ pub struct ExportInformeReq {
     pub veredictos_agentes: bool,
     #[serde(default)]
     pub firmado_por: String,
+    /// Hash sha256 del archivo ORIGINAL (nunca de la miniatura) por imagen,
+    /// para cadena de custodia. `true` por defecto: es una prueba, no una
+    /// decoración, y quien la quite lo hace a sabiendas.
+    #[serde(default = "si")]
+    pub integridad_sha256: bool,
+    /// Cuando un veredicto de agente trae `DichoDeAgente.rasgos` de verdad
+    /// (recuadros OCR o mapa de profundidad), incluirlo como gráfico
+    /// embebido en vez de solo la línea de texto. Sin rasgos reales que
+    /// mostrar, no cambia nada -- nunca se inventa un gráfico placeholder.
+    #[serde(default = "si")]
+    pub rasgos_como_imagen: bool,
+    /// `None` = todas las imágenes del caso, el comportamiento de siempre --
+    /// así una llamada vieja que no manda este campo no cambia de
+    /// comportamiento. `Some([])` es un informe sin ninguna imagen, una
+    /// elección válida aunque rara, no un error.
+    #[serde(default)]
+    pub imagenes_incluidas: Option<Vec<i64>>,
+    /// Texto libre del investigador (observaciones, contexto del caso).
+    /// Vacío es "sin sección de notas" -- no se imprime una sección vacía.
+    #[serde(default)]
+    pub notas: String,
 }
 
 impl Default for ExportInformeReq {
@@ -1228,6 +1249,10 @@ impl Default for ExportInformeReq {
             hipotesis_geolocalizacion: true,
             veredictos_agentes: true,
             firmado_por: String::new(),
+            integridad_sha256: true,
+            rasgos_como_imagen: true,
+            imagenes_incluidas: None,
+            notas: String::new(),
         }
     }
 }

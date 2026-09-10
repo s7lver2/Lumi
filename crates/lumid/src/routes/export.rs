@@ -20,7 +20,10 @@ use crate::App;
 use axum::extract::{Path, State};
 use axum::{http::HeaderMap, http::StatusCode, Json};
 use lumi_proto::api::{Analysis, DichoDeAgente, ExportInformeReq, Image};
+use lumi_proto::worker::Rasgos;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
+use std::io::Read;
 use std::path::{Path as FsPath, PathBuf};
 use std::process::Command;
 
@@ -42,7 +45,7 @@ pub async fn export_pdf(
         })
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe ese caso"))?;
 
-    let images: Vec<Image> = {
+    let mut images: Vec<Image> = {
         let c = app.store.conn();
         let cols = crate::routes::images::COLS;
         let mut q = c
@@ -55,6 +58,14 @@ pub async fn export_pdf(
             .collect();
         filas
     };
+
+    // `None` (el valor de siempre) deja pasar todas -- una llamada vieja que
+    // no manda este campo no cambia de comportamiento. Con una lista, solo
+    // esas imágenes entran en el resto del pipeline.
+    if let Some(ids) = &req.imagenes_incluidas {
+        let incluidos: std::collections::HashSet<i64> = ids.iter().copied().collect();
+        images.retain(|img| incluidos.contains(&img.id));
+    }
 
     // Los análisis del caso entero, con sus imágenes/hipótesis/agentes ya
     // resueltos -- mismo patrón de `analyses::list` (3 consultas para el
@@ -101,12 +112,29 @@ pub async fn export_pdf(
         })
         .collect();
 
+    // Las estadísticas de portada son, por defecto, del caso ENTERO -- un
+    // resumen real, no de lo que quedó visible tras los interruptores de
+    // texto (ver el comentario de `calcular_estadisticas`). Pero
+    // `imagenes_incluidas` no es un interruptor de qué se ve, es una
+    // selección real de qué DATOS entran en el informe: si el investigador
+    // elige a mano que solo tres fotos formen parte del documento, las
+    // estadísticas de esas tres es lo que espera leer, no las de fotos que ni
+    // siquiera aparecen. Se filtra aquí, no dentro de `calcular_estadisticas`,
+    // para que esa función siga recibiendo "los análisis que debe agregar" sin
+    // tener que conocer el criterio de selección.
+    let analyses_para_pdf: Vec<Analysis> = if req.imagenes_incluidas.is_some() {
+        let ids_incluidos: std::collections::HashSet<i64> = filas.iter().map(|(img, _, _)| img.id).collect();
+        analyses.into_iter().filter(|a| a.image_ids.iter().any(|id| ids_incluidos.contains(id))).collect()
+    } else {
+        analyses
+    };
+
     // Montar el `.tex`, escribir los ficheros del trabajo y compilar es CPU +
     // un subproceso, no red -- al pool de `spawn_blocking`, igual que
     // `procesar_imagen` en la subida.
     let case_id_para_log = case_id;
     let resultado = tokio::task::spawn_blocking(move || {
-        generar_pdf(&case_name, case_created_at, &filas, &req, &analyses)
+        generar_pdf(&case_name, case_created_at, &dir, &filas, &req, &analyses_para_pdf)
     })
     .await
     .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
@@ -152,6 +180,9 @@ struct Contexto {
     incluir_estadisticas: bool,
     estadisticas: Option<Estadisticas>,
     imagenes: Vec<ImagenCtx>,
+    /// Notas libres del investigador -- vacío significa que la plantilla no
+    /// dibuja la sección entera, no que se dibuje una en blanco.
+    notas: String,
 }
 
 #[derive(Serialize)]
@@ -191,8 +222,46 @@ struct ImagenCtx {
     /// se sabe abrir: un `\includegraphics` roto tira la compilación del
     /// informe ENTERO, no solo esa página).
     thumb_file: Option<String>,
+    /// Sha256 del archivo ORIGINAL (no la miniatura), para cadena de
+    /// custodia -- `None` cuando `integridad_sha256` está apagado o el
+    /// archivo no se pudo leer del disco (nunca un hash inventado).
+    sha256: Option<String>,
     exif_lineas: Vec<Linea>,
     analisis_lineas: Vec<Linea>,
+    /// Rasgos reales de agentes (recuadros OCR, mapa de profundidad) para
+    /// dibujar como gráfico -- vacío cuando `rasgos_como_imagen` está
+    /// apagado o ningún agente de esta imagen trajo rasgos de verdad.
+    rasgos_graficos: Vec<RasgoImgCtx>,
+}
+
+/// Un recuadro OCR ya convertido a coordenadas TikZ (origen abajo-izquierda,
+/// `y` creciendo hacia arriba) -- `CajaOcr` viene en convención de imagen
+/// (origen arriba-izquierda, `y` creciendo hacia abajo), la misma que usa
+/// PaddleOCR/PIL. La conversión se hace aquí, no en la plantilla, para que
+/// Tera no tenga que saber de convenciones de coordenadas.
+#[derive(Serialize)]
+struct CajaCtx {
+    x1: f64,
+    y1: f64,
+    x2: f64,
+    y2: f64,
+    etiqueta: String,
+}
+
+/// Lo que la plantilla dibuja por cada rasgo real de un agente sobre una
+/// imagen. `tipo` decide qué rama de la plantilla se usa.
+#[derive(Serialize)]
+#[serde(tag = "tipo", rename_all = "lowercase")]
+enum RasgoImgCtx {
+    Ocr {
+        agente: String,
+        cajas: Vec<CajaCtx>,
+    },
+    Profundidad {
+        agente: String,
+        /// Nombre de fichero relativo, ya escrito junto al `.tex`.
+        archivo: String,
+    },
 }
 
 fn cabecera(texto: String) -> Linea {
@@ -463,9 +532,78 @@ fn compilar_con_tectonic(dir: &FsPath) -> Result<Vec<u8>, FalloInforme> {
         .map_err(|e| FalloInforme::Compilacion(format!("tectonic terminó sin error pero no dejó informe.pdf: {e}")))
 }
 
+/// Hash del ORIGINAL leyéndolo por bloques, no de una sola vez -- una imagen
+/// forense puede pesar decenas de MB, y `procesar_imagen` (subida) ya lo
+/// carga entero para decodificarlo, pero exportar no necesita repetir eso
+/// solo para hashear. `None` si el archivo no está o no se puede leer -- una
+/// fila sin fichero en disco es una inconsistencia real (ver `serve`), nunca
+/// se inventa un hash para taparla.
+fn sha256_de_fichero(path: &FsPath) -> Option<String> {
+    let mut f = std::fs::File::open(path).ok()?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = f.read(&mut buf).ok()?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Some(format!("{:x}", hasher.finalize()))
+}
+
+/// Los rasgos reales (recuadros OCR, mapa de profundidad) de los agentes que
+/// corrieron sobre esta imagen y que la configuración deja pasar -- mismo
+/// filtro que `lineas_analisis` (`veredictos_agentes`), porque un rasgo es
+/// parte del veredicto del agente, no una sección aparte. Escribe los PNG de
+/// profundidad que haga falta junto al `.tex`, en `job`.
+fn rasgos_graficos_de(analyses: &[Analysis], req: &ExportInformeReq, job: &FsPath, img_id: i64) -> Vec<RasgoImgCtx> {
+    if !req.rasgos_como_imagen || !req.veredictos_agentes {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for a in analyses {
+        if a.model != "agentes" {
+            continue;
+        }
+        for (i, dicho) in a.agentes.iter().enumerate() {
+            match &dicho.rasgos {
+                Some(Rasgos::Ocr { cajas }) if !cajas.is_empty() => {
+                    // `CajaOcr` viene en convención de imagen (origen
+                    // arriba-izquierda, `y` hacia abajo) -- TikZ dibuja con
+                    // origen abajo-izquierda, así que `y` se invierte aquí,
+                    // una vez, en vez de complicar la plantilla.
+                    let cajas_ctx = cajas
+                        .iter()
+                        .map(|c| CajaCtx {
+                            x1: c.x.clamp(0.0, 1.0),
+                            y1: (1.0 - c.y - c.h).clamp(0.0, 1.0),
+                            x2: (c.x + c.w).clamp(0.0, 1.0),
+                            y2: (1.0 - c.y).clamp(0.0, 1.0),
+                            etiqueta: c.etiqueta.clone(),
+                        })
+                        .collect();
+                    out.push(RasgoImgCtx::Ocr { agente: dicho.nombre.clone(), cajas: cajas_ctx });
+                }
+                Some(Rasgos::Profundidad { png_base64 }) if !png_base64.is_empty() => {
+                    use base64::{engine::general_purpose::STANDARD, Engine};
+                    if let Ok(bytes) = STANDARD.decode(png_base64) {
+                        let nombre = format!("profundidad_{img_id}_{}_{i}.png", a.id);
+                        if std::fs::write(job.join(&nombre), &bytes).is_ok() {
+                            out.push(RasgoImgCtx::Profundidad { agente: dicho.nombre.clone(), archivo: nombre });
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    out
+}
+
 fn generar_pdf(
-    caso: &str, case_created_at: i64, filas: &[(Image, Option<Vec<u8>>, Vec<Analysis>)], req: &ExportInformeReq,
-    analyses_del_caso: &[Analysis],
+    caso: &str, case_created_at: i64, originales_dir: &FsPath, filas: &[(Image, Option<Vec<u8>>, Vec<Analysis>)],
+    req: &ExportInformeReq, analyses_del_caso: &[Analysis],
 ) -> Result<Vec<u8>, FalloInforme> {
     let job = std::env::temp_dir().join(format!("lumi-informe-{}-{}", now(), rand::random::<u32>()));
     std::fs::create_dir_all(&job).map_err(|e| FalloInforme::Compilacion(format!("no se pudo crear el directorio de trabajo: {e}")))?;
@@ -486,11 +624,15 @@ fn generar_pdf(
             std::fs::write(job.join(&nombre), bytes).ok()?;
             Some(nombre)
         });
+        let sha256 =
+            if req.integridad_sha256 { sha256_de_fichero(&originales_dir.join(img.id.to_string())) } else { None };
         imagenes.push(ImagenCtx {
             filename: img.filename.clone(),
             thumb_file,
+            sha256,
             exif_lineas: if req.exif_por_imagen { lineas_exif(img) } else { Vec::new() },
             analisis_lineas: lineas_analisis(analyses, req),
+            rasgos_graficos: rasgos_graficos_de(analyses, req, &job, img.id),
         });
     }
 
@@ -504,6 +646,7 @@ fn generar_pdf(
         incluir_estadisticas: req.portada_estadisticas,
         estadisticas,
         imagenes,
+        notas: req.notas.trim().to_string(),
     };
 
     let t = tera().map_err(FalloInforme::Compilacion)?;
@@ -527,3 +670,4 @@ impl Drop for TmpDirGuard {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
+
