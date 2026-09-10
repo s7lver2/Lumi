@@ -14,8 +14,10 @@
 //! `fusionar-pendientes` es la fase 3 de la liberación de teselas
 //! (BUG_BOUNTY #38): descarga `web/releases/liberaciones-pendientes.json`
 //! (sin autenticación — es un fichero público del propio repo, lo escribió
-//! `POST /api/desreclamos/solicitar` ya verificado contra la ficha real) y
-//! añade lo que falte al borrador. No firma nada por sí sola: sigue haciendo
+//! `POST /api/desreclamos/solicitar` ya verificado contra la ficha real, y lo
+//! decide después el panel `/admin`, subsistema 3) y añade al borrador las
+//! que el panel ya marcó `estado: "aprobada"` — ausente, "pendiente" o
+//! "rechazada" se saltan. No firma nada por sí sola: sigue haciendo
 //! falta `firmar` a mano, con la clave que nunca sale de esta máquina. Y
 //! tras firmar con éxito, vaciar `liberaciones-pendientes.json` y comitearlo
 //! junto con `desreclamos.json` sigue siendo trabajo manual del operador —
@@ -26,14 +28,25 @@ use std::path::PathBuf;
 use ed25519_dalek::SigningKey;
 use lumi_index::desreclamos::Desreclamos;
 
-/// La cola pendiente que escribe `web/app/api/desreclamos/solicitar/route.ts`.
-/// Mismo shape que `EntradaPendiente` en ese fichero TypeScript.
+/// La cola pendiente que escribe `web/app/api/desreclamos/solicitar/route.ts`
+/// y que decide `web/app/api/admin/liberaciones/[paquete]/route.ts`. Mismo
+/// shape que `EntradaPendiente` en `web/lib/liberaciones.ts`. `estado`
+/// ausente significa "pendiente" en ambos lados — la solicitud original
+/// nunca lo escribe, y solo el panel admin lo pone a "aprobada"/"rechazada".
 #[derive(serde::Deserialize)]
 struct EntradaPendiente {
     paquete: String,
     quadkeys: Vec<String>,
     cuenta: String,
     fecha: String,
+    #[serde(default)]
+    estado: Option<String>,
+}
+
+impl EntradaPendiente {
+    fn aprobada(&self) -> bool {
+        self.estado.as_deref() == Some("aprobada")
+    }
 }
 
 const URL_PENDIENTES: &str =
@@ -116,11 +129,15 @@ fn cargar_clave() -> SigningKey {
     SigningKey::from_bytes(&arr)
 }
 
-/// Trae la cola pendiente y añade al borrador lo que le falte, sin duplicar
-/// un `paquete` que el borrador ya trae (ya fusionado en una pasada anterior,
-/// o añadido a mano por el operador). El motivo se compone solo, con la
-/// cuenta y la fecha de la solicitud, para que quede rastro de quién la
-/// pidió sin tener que ir a buscarlo.
+/// Trae la cola pendiente y añade al borrador las que el panel admin ya
+/// aprobó (`estado == "aprobada"`; ausente o "pendiente"/"rechazada" NO se
+/// trae — antes de que existiera el panel esta función traía todo lo que no
+/// estuviera ya en el borrador, así que ahora la aprobación humana en
+/// `/admin` es la puerta real, no una revisión posterior a mano), sin
+/// duplicar un `paquete` que el borrador ya trae (ya fusionado en una pasada
+/// anterior, o añadido a mano por el operador). El motivo se compone solo,
+/// con la cuenta y la fecha de la solicitud, para que quede rastro de quién
+/// la pidió sin tener que ir a buscarlo.
 fn fusionar_pendientes(borrador: &std::path::Path) {
     let texto = std::fs::read_to_string(borrador)
         .unwrap_or_else(|e| panic!("no se pudo leer {}: {e}", borrador.display()));
@@ -139,7 +156,7 @@ fn fusionar_pendientes(borrador: &std::path::Path) {
     let mut añadidos = 0;
     let mut saltados = 0;
     for p in &pendientes {
-        if ya_en_borrador.contains(&p.paquete) {
+        if !p.aprobada() || ya_en_borrador.contains(&p.paquete) {
             saltados += 1;
             continue;
         }
