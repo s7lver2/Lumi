@@ -17,7 +17,8 @@
       "13300211230310"
     ],
     "cuenta": "s7lver2",
-    "fecha": "2026-09-02T14:40:31.941Z"
+    "fecha": "2026-09-02T14:40:31.941Z",
+    "estado": "aprobada"
   },
   {
     "paquete": "test",
@@ -30,7 +31,8 @@
       "13300211230310"
     ],
     "cuenta": "s7lver2",
-    "fecha": "2026-09-02T14:40:33.491Z"
+    "fecha": "2026-09-02T14:40:33.491Z",
+    "estado": "aprobada"
   },
   {
     "paquete": "REMOVEME",
@@ -38,7 +40,8 @@
       "03133320022212"
     ],
     "cuenta": "s7lver2",
-    "fecha": "2026-09-10T15:43:40.232Z"
+    "fecha": "2026-09-10T15:43:40.232Z",
+    "estado": "aprobada"
   },
   {
     "paquete": "TESELAS",
@@ -53,6 +56,7 @@
       "03133320022231"
     ],
     "cuenta": "s7lver2",
-    "fecha": "2026-09-10T15:43:44.661Z"
+    "fecha": "2026-09-10T15:43:44.661Z",
+    "estado": "aprobada"
   }
 ]
