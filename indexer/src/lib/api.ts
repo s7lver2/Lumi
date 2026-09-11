@@ -148,7 +148,12 @@ export interface Estimacion {
   exceso_eur: number;
 }
 export interface LineaOrigen {
-  fuente: string; hechas: number; total: number; imagenes: number; coste_eur: number;
+  fuente: string; hechas: number; total: number; imagenes: number;
+  /** Bajadas pero fuera de la tesela pedida, así que no entraron al índice. */
+  fuera_de_tesela: number;
+  /** Teselas que fallaron y ya no se reintentan. */
+  fallidas: number;
+  coste_eur: number;
 }
 export interface PlanDescarga {
   indice_id: number;
@@ -166,6 +171,8 @@ export interface ProgresoDescarga {
   imagenes: number;
   gastado_eur: number;
   sin_saldo: boolean;
+  fuera_de_tesela: number;
+  fallidas: number;
   por_origen: LineaOrigen[];
   teselas: TeselaProgreso[];
   en_curso: TeselaEnCurso | null;

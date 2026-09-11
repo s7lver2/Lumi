@@ -7,13 +7,18 @@
 //! Fuera de las islas, cero peticiones: el bbox de cobertura decide antes de
 //! salir a la red, igual que `wms_orto::servicio_para`.
 //!
-//! `thumb` es una miniatura pequeña; resolver la imagen grande obligaría a
-//! parsear el HTML de `link` por foto. `// ponytail:` el techo es exactamente
-//! ese — no se hace aquí porque 7 M de fotos a resolución de miniatura valen
-//! más que cero fotos a resolución completa, y una miniatura de Geograph
-//! (~640px de lado largo) pasa justo el `lado_minimo` de `Reglas`. Si algún
-//! día hace falta la imagen grande, la salida es scrapear `link`, no cambiar
-//! esta API.
+//! El `thumb` de la API NO sirve, y la suposición contraria costó que este
+//! origen no bajara nada: medido el 2026-09-11, `..._120x120.jpg` devuelve
+//! imágenes de 120×68 y 95×120, no «~640 de lado largo» — muy por debajo del
+//! `lado_minimo` de 640 de `Reglas`, así que todas se descartaban.
+//!
+//! La imagen de verdad se obtiene del MISMO nombre de fichero sustituyendo el
+//! sufijo de tamaño (ver `url_original`), sin scrapear el HTML de `link`:
+//! `_120x120.jpg` → `_original.jpg` da entre 1600 y 5600 px de lado. Como la
+//! API no publica las dimensiones, el filtro de tamaño se aplica DESPUÉS de
+//! bajar el fichero, leyéndolas del propio JPEG — es aceptable porque este
+//! origen es gratis y no hay cuota que proteger; en uno de pago habría que
+//! pagar por saberlo, y entonces sí valdría la pena otra estrategia.
 //!
 //! 2 req/s, concurrencia 1: proyecto voluntario, servidor pequeño.
 
@@ -53,6 +58,30 @@ struct Item {
 struct Respuesta {
     #[serde(default)]
     items: Vec<Item>,
+}
+
+/// `https://s1.geograph.org.uk/geophotos/08/39/45/8394501_2dbaeb9d_120x120.jpg`
+/// → `..._original.jpg`. Se sustituye el sufijo de tamaño, que es lo único
+/// que separa la miniatura del original en la ruta del CDN. Si el nombre no
+/// trae sufijo reconocible se devuelve tal cual: mejor bajar lo que haya que
+/// inventarse una URL que dé 404.
+fn url_original(thumb: &str) -> String {
+    match thumb.rfind('_') {
+        // El sufijo es la última pieza antes de la extensión, y siempre tiene
+        // forma `<ancho>x<alto>`: comprobarlo evita destrozar un nombre que
+        // simplemente lleve guiones bajos.
+        Some(i) if thumb[i + 1..].split('.').next().is_some_and(|s| {
+            s.split_once('x').is_some_and(|(a, b)| {
+                !a.is_empty() && !b.is_empty() && a.chars().all(|c| c.is_ascii_digit())
+                    && b.chars().all(|c| c.is_ascii_digit())
+            })
+        }) =>
+        {
+            let ext = thumb.rsplit_once('.').map(|(_, e)| e).unwrap_or("jpg");
+            format!("{}_original.{ext}", &thumb[..i])
+        }
+        _ => thumb.to_string(),
+    }
 }
 
 fn dentro_de_islas(lat: f64, lng: f64) -> bool {
@@ -121,15 +150,19 @@ impl OrigenDeRed for Geograph {
         let mut fuera = Vec::new();
         for it in self.items(tesela).await? {
             let Some(thumb) = &it.thumb else { continue };
-            let cand = Candidata {
-                ancho: 640,
-                alto: 480,
+            // Lo barato primero: la licencia se conoce SIN bajar nada, así que
+            // una -ND/-NC se descarta antes de gastar una petición. El tamaño
+            // no se puede juzgar aquí (la API no lo publica) y se comprueba
+            // más abajo, con el fichero ya en disco.
+            let cand_licencia = Candidata {
+                ancho: u32::MAX,
+                alto: u32::MAX,
                 precision_metros: None,
                 categorias: vec![],
                 licencia: it.licence.clone(),
                 tipo: Tipo::Suelta,
             };
-            if let Veredicto::Fuera(motivo) = Reglas::por_defecto().evaluar(&cand) {
+            if let Veredicto::Fuera(motivo) = Reglas::por_defecto().evaluar(&cand_licencia) {
                 log::debug!("geograph {}: descartada, {motivo}", it.title);
                 continue;
             }
@@ -138,15 +171,34 @@ impl OrigenDeRed for Geograph {
             }
             let nombre = format!(
                 "geo-{}.jpg",
-                it.link.as_deref().and_then(|l| l.rsplit('=').next()).unwrap_or(&it.title)
+                it.link.as_deref().and_then(|l| l.rsplit('/').next()).unwrap_or(&it.title)
             );
-            let ruta = match self.ctx.bajar_imagen(thumb, &nombre).await {
+            let ruta = match self.ctx.bajar_imagen(&url_original(thumb), &nombre).await {
                 Ok(r) => r,
                 Err(e) => {
                     log::warn!("geograph {}: {e}", it.title);
                     continue;
                 }
             };
+            // Ahora sí se puede juzgar el tamaño: las dimensiones se leen del
+            // fichero, que `bajar_imagen` ya ha verificado que decodifica.
+            // Una foto que no llega al mínimo se borra en vez de dejarla
+            // ocupando el directorio de paso sin que nada vaya a usarla.
+            match image::image_dimensions(&ruta) {
+                Ok((ancho, alto)) => {
+                    let cand = Candidata { ancho, alto, ..cand_licencia };
+                    if let Veredicto::Fuera(motivo) = Reglas::por_defecto().evaluar(&cand) {
+                        log::debug!("geograph {}: descartada tras bajarla, {motivo}", it.title);
+                        let _ = std::fs::remove_file(&ruta);
+                        continue;
+                    }
+                }
+                Err(e) => {
+                    log::warn!("geograph {}: no se pudieron leer sus dimensiones: {e}", it.title);
+                    let _ = std::fs::remove_file(&ruta);
+                    continue;
+                }
+            }
             fuera.push(Captura {
                 fuente: "geograph",
                 id_origen: it.link.clone().unwrap_or_else(|| it.title.clone()),
@@ -170,6 +222,24 @@ impl OrigenDeRed for Geograph {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// El `thumb` de la API mide 120 px de lado: bajarlo era garantizar que
+    /// `lado_minimo` (640) descartara todas las fotos de este origen. El
+    /// original se pide sustituyendo el sufijo de tamaño.
+    #[test]
+    fn el_sufijo_de_tamano_se_sustituye_por_original() {
+        assert_eq!(
+            url_original("https://s1.geograph.org.uk/geophotos/08/39/45/8394501_2dbaeb9d_120x120.jpg"),
+            "https://s1.geograph.org.uk/geophotos/08/39/45/8394501_2dbaeb9d_original.jpg"
+        );
+    }
+
+    /// Un nombre sin sufijo de tamaño no se toca: inventarle uno daría un 404.
+    #[test]
+    fn un_nombre_sin_sufijo_de_tamano_se_deja_como_esta() {
+        let u = "https://s1.geograph.org.uk/geophotos/08/39/45/8394501_2dbaeb9d.jpg";
+        assert_eq!(url_original(u), u);
+    }
 
     #[test]
     fn londres_esta_dentro_de_la_cobertura() {

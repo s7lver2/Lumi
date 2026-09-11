@@ -34,12 +34,27 @@ const API: &str = "https://api.inaturalist.org/v1/observations";
 const LICENCIAS: &str = "cc-by,cc-by-sa,cc0";
 const POR_PAGINA: u32 = 200;
 
+/// Las dimensiones REALES de la foto, que iNaturalist sí publica. No son
+/// opcionales de adorno: `Reglas::por_defecto()` descarta por debajo de 640 px
+/// de lado, así que pasar `0` (como se hacía antes) significaba que TODAS las
+/// fotos de este origen se descartaban por «demasiado pequeña» — 352
+/// estimadas, 0 descargadas, sin ningún síntoma más que ese cero.
+#[derive(Debug, Clone, Deserialize)]
+struct Dimensiones {
+    #[serde(default)]
+    width: u32,
+    #[serde(default)]
+    height: u32,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct Foto {
     id: i64,
     url: Option<String>,
     license_code: Option<String>,
     attribution: Option<String>,
+    #[serde(default)]
+    original_dimensions: Option<Dimensiones>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -161,9 +176,18 @@ impl OrigenDeRed for INaturalist {
             let Some((lat, lng)) = o.location.as_deref().and_then(parsear_location) else { continue };
             for f in &o.photos {
                 let Some(url) = f.url.as_deref() else { continue };
+                // Sin dimensiones declaradas se pasa `None` implícito como
+                // «no lo dijo»: se usan las del propio filtro para no
+                // descartar por algo que el proveedor no afirmó. Con `0` se
+                // descartaba todo (ver `Dimensiones`).
+                let (ancho, alto) = f
+                    .original_dimensions
+                    .as_ref()
+                    .map(|d| (d.width, d.height))
+                    .unwrap_or((u32::MAX, u32::MAX));
                 let cand = Candidata {
-                    ancho: 0,
-                    alto: 0,
+                    ancho,
+                    alto,
                     precision_metros: o.positional_accuracy,
                     categorias: vec![],
                     licencia: f.license_code.clone(),
@@ -221,7 +245,13 @@ mod tests {
             positional_accuracy: Some(10.0),
             observed_on: None,
             uri: None,
-            photos: vec![Foto { id: 9, url: Some("https://x/square.jpg".into()), license_code: Some("cc0".into()), attribution: None }],
+            photos: vec![Foto {
+                id: 9,
+                url: Some("https://x/square.jpg".into()),
+                license_code: Some("cc0".into()),
+                attribution: None,
+                original_dimensions: Some(Dimensiones { width: 1536, height: 2048 }),
+            }],
         }
     }
 
@@ -251,6 +281,31 @@ mod tests {
     #[test]
     fn la_url_de_la_foto_pasa_de_square_a_original() {
         assert_eq!(url_original("https://x/photos/9/square.jpg"), "https://x/photos/9/original.jpg");
+    }
+
+    /// La regresión que dejaba este origen en 0 descargas: `Candidata` se
+    /// construía con `ancho: 0, alto: 0` porque se creyó que la API no daba
+    /// dimensiones. Sí las da (`original_dimensions`), y con ceros el filtro
+    /// descartaba TODAS las fotos por «demasiado pequeña».
+    #[test]
+    fn una_foto_con_sus_dimensiones_reales_pasa_el_filtro() {
+        let j = r#"{"id":9,"url":"https://x/square.jpg","license_code":"cc0",
+                    "original_dimensions":{"width":1536,"height":2048}}"#;
+        let f: Foto = serde_json::from_str(j).unwrap();
+        let d = f.original_dimensions.as_ref().expect("la API sí manda dimensiones");
+        let cand = Candidata {
+            ancho: d.width,
+            alto: d.height,
+            precision_metros: Some(10.0),
+            categorias: vec![],
+            licencia: f.license_code.clone(),
+            tipo: Tipo::Suelta,
+        };
+        assert_eq!(Reglas::por_defecto().evaluar(&cand), Veredicto::Pasa);
+
+        // Y la prueba de que el bug era real: con ceros, no pasa.
+        let con_ceros = Candidata { ancho: 0, alto: 0, ..cand };
+        assert!(matches!(Reglas::por_defecto().evaluar(&con_ceros), Veredicto::Fuera(_)));
     }
 
     #[test]

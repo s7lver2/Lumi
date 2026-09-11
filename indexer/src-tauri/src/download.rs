@@ -63,12 +63,27 @@ pub struct LineaOrigen {
     /// Cuántas imágenes sirvió de verdad. Es lo que se enseña en los gratuitos,
     /// donde el euro no dice nada.
     pub imagenes: u32,
+    /// Cuántas se bajaron pero NO entraron al índice por caer fuera de la
+    /// tesela que se pidió (ver el recorte por quadkey de `un_origen`).
+    ///
+    /// Existe porque sin él la diferencia entre lo prometido y lo entregado no
+    /// se podía explicar desde ningún sitio: el operador veía «40.000» en la
+    /// estimación y 26.325 en el índice, y la única pista era restar a mano
+    /// dos columnas de la base de datos. Los orígenes que preguntan por radio
+    /// en vez de por bbox (`monumentos`) descartan la mitad de lo que sirven:
+    /// medido, 4.024 servidas → 1.882 guardadas.
+    pub fuera_de_tesela: u32,
+    /// Teselas que fallaron y no se reintentarán. Mismo motivo: 12 teselas en
+    /// error repartidas entre tres orígenes no pueden ser invisibles en el
+    /// recuento final.
+    pub fallidas: u32,
     pub coste_eur: f64,
 }
 
-fn sumar_a_origen(p: &mut Progreso, fuente: &str, imagenes: u32, coste_eur: f64) {
+fn sumar_a_origen(p: &mut Progreso, fuente: &str, imagenes: u32, fuera_de_tesela: u32, coste_eur: f64) {
     if let Some(l) = p.por_origen.iter_mut().find(|l| l.fuente == fuente) {
         l.imagenes += imagenes;
+        l.fuera_de_tesela += fuera_de_tesela;
         l.coste_eur += coste_eur;
     }
 }
@@ -106,6 +121,11 @@ pub struct Progreso {
     pub imagenes: u32,
     pub gastado_eur: f64,
     pub sin_saldo: bool,
+    /// Total de imágenes bajadas que no entraron al índice por caer fuera de
+    /// su tesela. Ver `LineaOrigen::fuera_de_tesela`.
+    pub fuera_de_tesela: u32,
+    /// Total de teselas × origen que fallaron definitivamente.
+    pub fallidas: u32,
     pub por_origen: Vec<LineaOrigen>,
     pub teselas: Vec<TeselaProgreso>,
     pub en_curso: Option<TeselaEnCurso>,
@@ -216,6 +236,14 @@ impl Descarga {
                 hechas: hechas_ya,
                 total: pendientes.len() as u32 + hechas_ya,
                 imagenes: imagenes_ya,
+                // No se siembran desde `descargas`: la tabla guarda `imagenes`
+                // (lo que entró) y `unidades` (lo que se sirvió), pero de una
+                // ejecución anterior no se puede saber cuánto de la diferencia
+                // fue recorte por tesela y cuánto otra cosa. Empiezan a cero y
+                // cuentan lo de ESTA ejecución, que es lo que el operador está
+                // mirando mientras corre.
+                fuera_de_tesela: 0,
+                fallidas: 0,
                 coste_eur: coste_ya,
             });
             for qk in teselas {
@@ -270,9 +298,11 @@ impl Descarga {
                     // aquí: solo entra al índice lo que de verdad cae en la
                     // tesela que se pidió, ni una más.
                     let mut n = 0u32;
+                    let mut descartadas = 0u32;
                     for c in &caps {
                         let qk_real = quadkey(c.lat, c.lng);
                         if qk_real != qk {
+                            descartadas += 1;
                             continue;
                         }
                         let _ = self.almacen.insertar_imagen_de_red(
@@ -312,8 +342,9 @@ impl Descarga {
 
                     let mut p = self.progreso.lock().unwrap();
                     p.imagenes += n;
+                    p.fuera_de_tesela += descartadas;
                     p.gastado_eur = self.tope.gastado_eur();
-                    sumar_a_origen(&mut p, o.id(), n, gastado);
+                    sumar_a_origen(&mut p, o.id(), n, descartadas, gastado);
                     if sin_saldo {
                         p.sin_saldo = true;
                     } else {
@@ -325,7 +356,17 @@ impl Descarga {
                             t.hecha = true;
                         }
                     }
-                    apuntar_en(&mut p, format!("{} {qk} · {n} imágenes", o.id()));
+                    // Lo descartado se dice EN LA MISMA línea que lo guardado:
+                    // «1.882 imágenes» a secas, cuando el origen sirvió 4.024,
+                    // es un número correcto que cuenta media verdad.
+                    apuntar_en(
+                        &mut p,
+                        if descartadas > 0 {
+                            format!("{} {qk} · {n} imágenes ({descartadas} fuera de la tesela)", o.id())
+                        } else {
+                            format!("{} {qk} · {n} imágenes", o.id())
+                        },
+                    );
                 }
                 Err(e) => {
                     // AVERÍA: vuelve una vez, y el contador impide el bucle.
@@ -342,6 +383,17 @@ impl Descarga {
                     let _ = self.almacen.descarga_marcar(
                         self.indice_id, o.id(), &qk, "error", 0, 0, Some(&motivo),
                     );
+                    // Solo se cuenta como fallida cuando ya no se va a
+                    // reintentar: una avería que vuelve todavía puede acabar
+                    // bien, y contarla aquí inflaría el número en la pantalla
+                    // para luego tener que bajarlo.
+                    if definitivo {
+                        let mut p = self.progreso.lock().unwrap();
+                        p.fallidas += 1;
+                        if let Some(l) = p.por_origen.iter_mut().find(|l| l.fuente == o.id()) {
+                            l.fallidas += 1;
+                        }
+                    }
                     self.anotar(format!("{} {qk} · {motivo}", o.id()));
                 }
             }

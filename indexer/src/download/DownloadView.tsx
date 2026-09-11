@@ -85,6 +85,29 @@ export function DownloadView({ indiceId, imagenesEstimadas, onTerminado }: {
           <i className="block h-full bg-fg transition-[width] duration-500" style={{ width: `${pct}%` }} />
         </div>
 
+        {/* Por qué entran menos imágenes de las estimadas. Sin esto, la única
+            diferencia visible entre "40.000 previstas" y "26.325 en el índice"
+            era el número final, sin nada que explicara el hueco — y las dos
+            causas reales (lo que cae fuera de la tesela pedida y lo que falló
+            sin reintento) estaban solo en la base de datos. */}
+        {(p.fuera_de_tesela > 0 || p.fallidas > 0) && (
+          <p className="mt-2 text-[10.5px] text-subtle">
+            {p.fuera_de_tesela > 0 && (
+              <span title="Algunos orígenes preguntan por radio, no por tesela, y devuelven material del vecindario. Solo entra al índice lo que cae dentro de la tesela pedida.">
+                <b className="font-normal text-warning-fg">{p.fuera_de_tesela}</b> bajadas fuera de
+                la tesela pedida, no entran al índice
+              </span>
+            )}
+            {p.fuera_de_tesela > 0 && p.fallidas > 0 && " · "}
+            {p.fallidas > 0 && (
+              <span title="Teselas que agotaron sus reintentos. Vuelve a lanzar la descarga para intentarlas de nuevo: lo ya hecho no se repite.">
+                <b className="font-normal text-warning-fg">{p.fallidas}</b>{" "}
+                {p.fallidas === 1 ? "tesela fallida" : "teselas fallidas"}
+              </span>
+            )}
+          </p>
+        )}
+
         {/* La barra de arriba solo avanza tesela a tesela, y una sola puede
             tardar minutos en zonas densas. Sin esto, esos minutos se leen
             como que no pasa nada — aunque el registro de abajo sí se mueva,
@@ -131,11 +154,24 @@ export function DownloadView({ indiceId, imagenesEstimadas, onTerminado }: {
                       style={{ width: `${l.total ? (l.hechas / l.total) * 100 : 0}%`, background: color(l.fuente) }} />
                   </span>
                 </td>
-                <td className="py-2 text-right font-mono text-muted">{l.hechas}/{l.total}</td>
+                <td className="py-2 text-right font-mono text-muted">
+                  {l.hechas}/{l.total}
+                  {l.fallidas > 0 && (
+                    <span className="text-warning-fg" title={`${l.fallidas} agotaron sus reintentos`}>
+                      {" "}−{l.fallidas}
+                    </span>
+                  )}
+                </td>
                 {/* En los de pago manda el euro; en los gratuitos el euro es
                     siempre 0,00 y lo que informa es cuánto material trajeron. */}
-                <td className={`py-2 text-right font-mono ${l.coste_eur > 0 ? "text-warning-fg" : "text-subtle"}`}>
+                <td className={`py-2 text-right font-mono ${l.coste_eur > 0 ? "text-warning-fg" : "text-subtle"}`}
+                  title={l.fuera_de_tesela > 0
+                    ? `${l.imagenes + l.fuera_de_tesela} bajadas, ${l.fuera_de_tesela} fuera de la tesela pedida`
+                    : undefined}>
                   {l.coste_eur > 0 ? eur(l.coste_eur) : `${l.imagenes} fotos`}
+                  {l.fuera_de_tesela > 0 && (
+                    <span className="text-warning-fg"> −{l.fuera_de_tesela}</span>
+                  )}
                 </td>
               </tr>
             ))}
