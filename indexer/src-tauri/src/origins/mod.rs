@@ -7,7 +7,9 @@
 pub mod calles;
 pub mod commons;
 pub mod flickr;
+pub mod geograph;
 pub mod google;
+pub mod inaturalist;
 pub mod kartaview;
 pub mod mapbox;
 pub mod mapillary;
@@ -249,6 +251,8 @@ pub fn registro(claves: &Claves, stage: PathBuf) -> Vec<Box<dyn OrigenDeRed>> {
     // Ni monumentos (Wikidata → Commons) ni Panoramax: entran siempre.
     v.push(Box::new(monumentos::Monumentos::nuevo(stage.clone())));
     v.push(Box::new(panoramax::Panoramax::nuevo(stage.clone())));
+    v.push(Box::new(inaturalist::INaturalist::nuevo(stage.clone())));
+    v.push(Box::new(geograph::Geograph::nuevo(stage.clone())));
     if let Ok(Some(k)) = claves.leer("flickr") {
         v.push(Box::new(flickr::Flickr::nuevo(k, stage.clone())));
     }
