@@ -167,7 +167,7 @@ impl Monumentos {
     async fn monumentos_en_tesela(&self, tesela: &str) -> Result<Vec<Monumento>> {
         let (lat, lng, radio_km) = centro_y_radio_km(bbox_de_tesela(tesela));
         let url = url_sparql(lat, lng, radio_km);
-        let _g = self.ctx.limitador.permiso().await;
+        let _g = super::limitador_wikimedia().permiso().await;
         let r = self
             .ctx
             .cliente
@@ -201,7 +201,7 @@ impl Monumentos {
                 url.push_str("cmcontinue=");
                 url.push_str(&urlencoding::encode(c));
             }
-            let _g = self.ctx.limitador.permiso().await;
+            let _g = super::limitador_wikimedia().permiso().await;
             let r = self.ctx.cliente.get(&url).send().await?;
             if !r.status().is_success() {
                 anyhow::bail!("Commons respondió {} a {}", r.status(), crate::keys::redactar(&url));

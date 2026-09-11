@@ -33,6 +33,30 @@ use serde::Deserialize;
 use super::{Ctx, OrigenDeRed};
 
 const RUTA_TABLA: &str = "registros/geo/orto-wms.json";
+
+/// Dónde buscar la tabla, en orden. Una ruta RELATIVA a secas no vale: el
+/// directorio de trabajo de la aplicación Tauri no es la raíz del repositorio,
+/// así que `read_to_string("registros/...")` fallaba siempre y el origen
+/// degradaba a «no hay» en todas partes — silenciosamente, porque `sondear`
+/// devuelve `Siempre { unidades: 0 }` y no un error, así que ni siquiera salía
+/// en ámbar. Justo el modo de fallo contra el que avisa el §5 del spec.
+///
+/// El primer candidato es el mismo truco que usa `lib.rs::run()` para
+/// `registros/niveles`: relativo a `CARGO_MANIFEST_DIR`, que en desarrollo
+/// apunta al repo. El segundo cubre una build empaquetada que traiga
+/// `registros/` junto al ejecutable.
+fn rutas_candidatas() -> Vec<std::path::PathBuf> {
+    let mut v = vec![std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(RUTA_TABLA)];
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            v.push(dir.join(RUTA_TABLA));
+        }
+    }
+    v.push(std::path::PathBuf::from(RUTA_TABLA));
+    v
+}
 /// 4096² ≈ 0,44 m/px sobre una tesela z14 (~1,8 km de lado). El mismo orden
 /// de magnitud que el 0,6 m/px de `mapbox-satelite` a @2x/z17.
 const LADO_PX: u32 = 4096;
@@ -74,11 +98,21 @@ struct Tabla {
 }
 
 fn cargar_tabla() -> Vec<Servicio> {
-    std::fs::read_to_string(RUTA_TABLA)
-        .ok()
-        .and_then(|s| serde_json::from_str::<Tabla>(&s).ok())
-        .map(|t| t.servicios)
-        .unwrap_or_default()
+    for ruta in rutas_candidatas() {
+        let Ok(s) = std::fs::read_to_string(&ruta) else { continue };
+        match serde_json::from_str::<Tabla>(&s) {
+            Ok(t) => {
+                log::info!("wms-orto: {} servicios desde {}", t.servicios.len(), ruta.display());
+                return t.servicios;
+            }
+            // Un fichero PRESENTE pero ilegible no es lo mismo que uno
+            // ausente: lo primero es un error del operador que hay que poder
+            // ver en el log, lo segundo es el caso normal documentado.
+            Err(e) => log::warn!("wms-orto: {} no se pudo leer: {e}", ruta.display()),
+        }
+    }
+    log::info!("wms-orto: sin tabla de servicios, el origen queda en «no hay»");
+    Vec::new()
 }
 
 /// El servicio que cubre el centro de la tesela, si hay alguno en la tabla.
@@ -173,6 +207,28 @@ mod tests {
             atribucion: "IGN".into(),
             cobertura: [[-9.5, 35.9], [4.4, 43.9]],
         }
+    }
+
+    /// La tabla TIENE que encontrarse desde el binario, no desde el
+    /// directorio de trabajo: con una ruta relativa a secas el origen
+    /// reportaba 0 en todas partes sin decir por qué.
+    #[test]
+    fn la_tabla_de_servicios_se_encuentra_y_trae_pnoa() {
+        let servicios = cargar_tabla();
+        assert!(!servicios.is_empty(), "no se encontró {RUTA_TABLA} en ninguna ruta candidata");
+        assert!(
+            servicios.iter().any(|s| s.id == "pnoa-es"),
+            "la tabla no trae pnoa-es: {:?}",
+            servicios.iter().map(|s| &s.id).collect::<Vec<_>>()
+        );
+    }
+
+    /// Y una tesela de León tiene que resolver a ese servicio — es lo que
+    /// fallaba en la estimación real del operador (25 teselas, 0 unidades).
+    #[test]
+    fn una_tesela_de_leon_resuelve_a_un_servicio_real_de_la_tabla() {
+        let s = servicio_para(&cargar_tabla(), "03133320022212");
+        assert_eq!(s.map(|s| s.id), Some("pnoa-es".to_string()));
     }
 
     #[test]

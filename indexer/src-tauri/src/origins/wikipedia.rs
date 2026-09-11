@@ -110,7 +110,7 @@ impl Wikipedia {
              &prop=coordinates%7Cpageimages%7Cimages&piprop=original&imlimit=500",
             Self::host(idioma), b.norte, b.oeste, b.sur, b.este
         );
-        let _g = self.ctx.limitador.permiso().await;
+        let _g = super::limitador_wikimedia().permiso().await;
         let r = self.ctx.cliente.get(&url).send().await?;
         if !r.status().is_success() {
             anyhow::bail!("{idioma}.wikipedia respondió {}", r.status());

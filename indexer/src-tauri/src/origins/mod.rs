@@ -35,6 +35,41 @@ use crate::keys::Claves;
 /// Cuánto espera un adaptador antes de darse por vencido con una petición.
 pub const TIMEOUT: Duration = Duration::from_secs(30);
 
+/// El `User-Agent` de TODOS los adaptadores. **La URL de contacto no es
+/// decoración**: la política de Wikimedia exige que el agente identifique al
+/// responsable y dé una forma de contactarlo, y desde 2025 la hacen cumplir
+/// devolviendo `429 Too Many Requests` de forma casi inmediata a cualquier
+/// cliente que no la traiga.
+///
+/// Medido el 2026-09-11 desde la misma IP y en el mismo segundo:
+/// `LumiIndexer/0.1.0` → 429 en `es.wikipedia.org` y en
+/// `commons.wikimedia.org`; con esta cadena → 200 en los dos. Ese 429 era todo
+/// lo que hacía falta para que Wikipedia reportara 0 y para que Commons y
+/// Wikidata→Commons se pintaran en ámbar.
+///
+/// Se usa la URL del proyecto, NO el correo del operador: esto viaja en una
+/// cabecera a servidores de terceros en cada petición, y la política de
+/// Wikimedia acepta una URL como contacto igual que un correo.
+pub const AGENTE: &str = concat!(
+    "LumiIndexer/",
+    env!("CARGO_PKG_VERSION"),
+    " (https://lumi.s7lver.xyz)"
+);
+
+/// Un limitador COMPARTIDO por todo lo que habla con Wikimedia, no el de cada
+/// adaptador. `commons`, `wikipedia` y `monumentos` (que además pega a
+/// `query.wikidata.org`) llevaban un `Ctx::limitador` propio de 2 req/s cada
+/// uno: combinados, hasta 6 req/s contra la misma infraestructura donada, que
+/// solo tolera pedir despacio.
+///
+/// Es exactamente el mismo problema que `calles::limitador_overpass` ya
+/// resolvió para Google y KartaView, y con el mismo síntoma: un sondeo entero
+/// saliendo en ámbar porque el proveedor rechaza la mayoría de las peticiones.
+pub fn limitador_wikimedia() -> &'static Limitador {
+    static L: std::sync::OnceLock<Limitador> = std::sync::OnceLock::new();
+    L.get_or_init(|| Limitador::nuevo(1, 1))
+}
+
 #[async_trait]
 pub trait OrigenDeRed: Send + Sync {
     fn id(&self) -> &'static str;
@@ -176,7 +211,7 @@ impl Ctx {
         Self {
             cliente: reqwest::Client::builder()
                 .timeout(TIMEOUT)
-                .user_agent(concat!("LumiIndexer/", env!("CARGO_PKG_VERSION")))
+                .user_agent(AGENTE)
                 .build()
                 .expect("el cliente HTTP se construye con la configuración por defecto"),
             clave,

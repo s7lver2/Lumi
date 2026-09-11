@@ -1,8 +1,15 @@
 //! Wikimedia Commons. Todo lo de aquí es de licencia libre por definición, así
 //! que sus imágenes viajan dentro del paquete con su autor y su licencia.
 //!
-//! Es infraestructura donada: 2 peticiones por segundo y una a la vez, con el
-//! `User-Agent` identificable que `Ctx` ya pone, que es lo que su política pide.
+//! Es infraestructura donada, y se pide despacio: el ritmo NO lo pone el
+//! `Ctx` de este adaptador sino `origins::limitador_wikimedia()`, compartido
+//! con `wikipedia.rs` y `monumentos.rs` — los tres hablan con los mismos
+//! servidores y sumar tres limitadores propios era pedir el triple de lo que
+//! cada uno creía estar pidiendo.
+//!
+//! El `User-Agent` con contacto (`origins::AGENTE`) tampoco es cortesía: sin
+//! él, Wikimedia responde `429` casi de inmediato. Ver el comentario de
+//! `AGENTE` para la medición.
 
 use std::path::PathBuf;
 
@@ -121,7 +128,7 @@ pub(crate) async fn imageinfo_por_lotes(ctx: &Ctx, titulos: &[String]) -> anyhow
              &prop=imageinfo&iiprop=url%7Csize%7Cextmetadata&iiurlwidth=2048&titles={}",
             urlencoding::encode(&titles)
         );
-        let _g = ctx.limitador.permiso().await;
+        let _g = super::limitador_wikimedia().permiso().await;
         let r = ctx.cliente.get(&url).send().await?;
         if !r.status().is_success() {
             anyhow::bail!("Commons respondió {} a imageinfo", r.status());
@@ -238,7 +245,7 @@ impl Commons {
              &generator=geosearch&ggsbbox={}%7C{}%7C{}%7C{}&ggslimit={LIMITE}&ggsnamespace=6&ggsprimary=all",
             b.norte, b.oeste, b.sur, b.este
         );
-        let _g = self.ctx.limitador.permiso().await;
+        let _g = super::limitador_wikimedia().permiso().await;
         let r = self.ctx.cliente.get(&url).send().await?;
         if !r.status().is_success() {
             anyhow::bail!("Commons respondió {}", r.status());
@@ -252,7 +259,7 @@ impl Commons {
         let mut cont: Option<std::collections::HashMap<String, String>> = None;
         for _ in 0..60 {
             let url = self.url(tesela, cont.as_ref());
-            let _g = self.ctx.limitador.permiso().await;
+            let _g = super::limitador_wikimedia().permiso().await;
             let r = self.ctx.cliente.get(&url).send().await?;
             if !r.status().is_success() {
                 anyhow::bail!("Commons respondió {}", r.status());
