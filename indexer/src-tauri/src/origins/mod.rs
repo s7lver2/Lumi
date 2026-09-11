@@ -14,6 +14,7 @@ pub mod kartaview;
 pub mod mapbox;
 pub mod mapillary;
 pub mod monumentos;
+pub mod openaerialmap;
 pub mod panoramax;
 pub mod wikipedia;
 pub mod wms_orto;
@@ -253,6 +254,7 @@ pub fn registro(claves: &Claves, stage: PathBuf) -> Vec<Box<dyn OrigenDeRed>> {
     v.push(Box::new(panoramax::Panoramax::nuevo(stage.clone())));
     v.push(Box::new(inaturalist::INaturalist::nuevo(stage.clone())));
     v.push(Box::new(geograph::Geograph::nuevo(stage.clone())));
+    v.push(Box::new(openaerialmap::OpenAerialMap::nuevo(stage.clone())));
     if let Ok(Some(k)) = claves.leer("flickr") {
         v.push(Box::new(flickr::Flickr::nuevo(k, stage.clone())));
     }
