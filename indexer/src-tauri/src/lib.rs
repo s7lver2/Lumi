@@ -1015,6 +1015,23 @@ async fn descarga_parar(estado: tauri::State<'_, Estado>) -> Result<(), String> 
     Ok(())
 }
 
+/// Vuelve a poner en juego lo que se dio por perdido. `abandonada` es un
+/// estado terminal a propósito (`descargas_pendientes` deja de ofrecerlo en
+/// cualquier relanzamiento normal), así que esta es la única puerta de
+/// vuelta — manual, y solo cuando el operador la pide.
+#[tauri::command]
+fn descarga_reintentar_abandonadas(
+    estado: tauri::State<'_, Estado>,
+    indice_id: i64,
+    fuente: Option<String>,
+) -> Result<usize, String> {
+    exige_abierto(&estado, indice_id)?;
+    estado
+        .almacen
+        .descargas_reintentar_abandonadas(indice_id, fuente.as_deref())
+        .map_err(|e| e.to_string())
+}
+
 #[derive(serde::Serialize)]
 struct PlanPendiente {
     plan: download::PlanDescarga,
@@ -2092,6 +2109,7 @@ pub fn run() {
             descarga_arrancar,
             descarga_progreso,
             descarga_parar,
+            descarga_reintentar_abandonadas,
             descarga_pendiente,
             descarga_pendiente_descartar,
             revision_pendientes,

@@ -96,7 +96,11 @@ fn sumar_a_origen(p: &mut Progreso, fuente: &str, imagenes: u32, fuera_de_tesela
 pub struct TeselaProgreso {
     pub quadkey: String,
     pub fuente: String,
-    pub hecha: bool,
+    /// "hecha" | "pendiente" | "abandonada". Antes era un `bool` (`hecha`),
+    /// y una tesela abandonada (reintentos agotados) no tenía dónde
+    /// pintarse: `!pendientes.contains(qk)` la hacía indistinguible de una
+    /// que sí había terminado bien.
+    pub estado: String,
 }
 
 /// La tesela × origen que se está bajando AHORA MISMO, con lo único que se
@@ -218,10 +222,21 @@ impl Descarga {
             .descargas_hechas_resumen(self.indice_id, o.id(), teselas)
             .unwrap_or((0, 0, 0));
         let coste_ya = o.tarifa().coste_eur(unidades_ya);
+        // Estado persistido de cada tesela pedida: es lo único que distingue
+        // "hecha", "abandonada" y "todavía pendiente" al reanudar — sin esto,
+        // `!pendientes.contains(qk)` (que ahora excluye las dos primeras) no
+        // podía decir cuál de las dos era, y una tesela dada por perdida se
+        // pintaba en el mapa como si hubiera terminado bien.
+        let estados_previos = self
+            .almacen
+            .descargas_estados(self.indice_id, o.id(), teselas)
+            .unwrap_or_default();
+        let abandonadas_ya = estados_previos.values().filter(|e| e.as_str() == "abandonada").count() as u32;
         {
             let mut p = self.progreso.lock().unwrap();
-            p.teselas_total += pendientes.len() as u32 + hechas_ya;
+            p.teselas_total += pendientes.len() as u32 + hechas_ya + abandonadas_ya;
             p.teselas_hechas += hechas_ya;
+            p.fallidas += abandonadas_ya;
             p.imagenes += imagenes_ya;
             // `p.gastado_eur` NO se siembra igual: más abajo se sobrescribe
             // con `self.tope.gastado_eur()` en cuanto termina cualquier
@@ -234,25 +249,32 @@ impl Descarga {
             p.por_origen.push(LineaOrigen {
                 fuente: o.id().to_string(),
                 hechas: hechas_ya,
-                total: pendientes.len() as u32 + hechas_ya,
+                total: pendientes.len() as u32 + hechas_ya + abandonadas_ya,
                 imagenes: imagenes_ya,
-                // No se siembran desde `descargas`: la tabla guarda `imagenes`
-                // (lo que entró) y `unidades` (lo que se sirvió), pero de una
-                // ejecución anterior no se puede saber cuánto de la diferencia
-                // fue recorte por tesela y cuánto otra cosa. Empiezan a cero y
-                // cuentan lo de ESTA ejecución, que es lo que el operador está
-                // mirando mientras corre.
+                // `fuera_de_tesela` NO se siembra desde `descargas`: la tabla
+                // guarda `imagenes` (lo que entró) y `unidades` (lo que se
+                // sirvió), pero de una ejecución anterior no se puede saber
+                // cuánto de la diferencia fue recorte por tesela y cuánto
+                // otra cosa. Empieza a cero y cuenta lo de ESTA ejecución.
                 fuera_de_tesela: 0,
-                fallidas: 0,
+                fallidas: abandonadas_ya,
                 coste_eur: coste_ya,
             });
             for qk in teselas {
-                if !pendientes.contains(qk) {
-                    p.teselas.push(TeselaProgreso { quadkey: qk.clone(), fuente: o.id().to_string(), hecha: true });
+                let estado = match estados_previos.get(qk).map(String::as_str) {
+                    Some("hecho") => "hecha",
+                    Some("abandonada") => "abandonada",
+                    // 'en_curso' y 'error' siguen ofreciéndose vía
+                    // `pendientes` — se pintan como pendientes, no como algo
+                    // ya resuelto.
+                    _ => "pendiente",
+                };
+                if estado != "pendiente" {
+                    p.teselas.push(TeselaProgreso { quadkey: qk.clone(), fuente: o.id().to_string(), estado: estado.into() });
                 }
             }
             for qk in &pendientes {
-                p.teselas.push(TeselaProgreso { quadkey: qk.clone(), fuente: o.id().to_string(), hecha: false });
+                p.teselas.push(TeselaProgreso { quadkey: qk.clone(), fuente: o.id().to_string(), estado: "pendiente".into() });
             }
         }
 
@@ -353,7 +375,7 @@ impl Descarga {
                             l.hechas += 1;
                         }
                         if let Some(t) = p.teselas.iter_mut().find(|t| t.quadkey == qk && t.fuente == o.id()) {
-                            t.hecha = true;
+                            t.estado = "hecha".into();
                         }
                     }
                     // Lo descartado se dice EN LA MISMA línea que lo guardado:
@@ -380,8 +402,13 @@ impl Descarga {
                     } else {
                         format!("avería, vuelve una vez: {e}")
                     };
+                    // 'abandonada' es TERMINAL: `descargas_pendientes` deja de
+                    // ofrecerla en cualquier relanzamiento futuro. 'error'
+                    // sigue siendo la avería normal, que esta misma ejecución
+                    // ya no reintenta pero la siguiente sí.
                     let _ = self.almacen.descarga_marcar(
-                        self.indice_id, o.id(), &qk, "error", 0, 0, Some(&motivo),
+                        self.indice_id, o.id(), &qk, if definitivo { "abandonada" } else { "error" },
+                        0, 0, Some(&motivo),
                     );
                     // Solo se cuenta como fallida cuando ya no se va a
                     // reintentar: una avería que vuelve todavía puede acabar
@@ -392,6 +419,9 @@ impl Descarga {
                         p.fallidas += 1;
                         if let Some(l) = p.por_origen.iter_mut().find(|l| l.fuente == o.id()) {
                             l.fallidas += 1;
+                        }
+                        if let Some(t) = p.teselas.iter_mut().find(|t| t.quadkey == qk && t.fuente == o.id()) {
+                            t.estado = "abandonada".into();
                         }
                     }
                     self.anotar(format!("{} {qk} · {motivo}", o.id()));
@@ -478,18 +508,47 @@ mod tests {
         (d, a)
     }
 
+    /// Un origen que SIEMPRE falla al descargar — `Falso` no tiene forma de
+    /// fallar (su guion solo dice cuántas sirve), así que esto es lo que hace
+    /// falta para probar la avería que agota reintentos y termina en
+    /// `abandonada`.
+    struct SiempreFalla;
+
+    #[async_trait::async_trait]
+    impl crate::origins::OrigenDeRed for SiempreFalla {
+        fn id(&self) -> &'static str { "siemprefalla" }
+        fn tipo(&self) -> Tipo { Tipo::Suelta }
+        fn tarifa(&self) -> Tarifa { Tarifa::Gratis }
+        fn redistribucion(&self) -> lumi_index::network::Redistribucion {
+            lumi_index::network::Redistribucion::Libre { licencia: "x".into() }
+        }
+        async fn sondear(&self, _tesela: &str) -> anyhow::Result<lumi_index::network::Disponibilidad> {
+            anyhow::bail!("no importa, este test no sondea")
+        }
+        async fn descargar(&self, _tesela: &str, _tope: &Presupuesto) -> anyhow::Result<Vec<lumi_index::network::Captura>> {
+            anyhow::bail!("avería, a propósito, para el test")
+        }
+    }
+
     #[tokio::test]
     async fn una_tesela_ya_hecha_no_se_vuelve_a_bajar_ni_a_pagar() {
         let (_d, a) = temporal();
         let i = a.crear_indice("x", "x", "x/x").unwrap();
+        // Quadkeys REALES, no "AAA"/"BBB": `Falso::descargar` sitúa cada
+        // captura en el centro de la tesela pedida, y `un_origen` descarta
+        // lo que no cae dentro de ella al recalcular el quadkey desde esa
+        // coordenada — con un identificador que no es un quadkey de verdad,
+        // ese recorte lo tira todo, sin que el guion tenga culpa.
+        let aaa = lumi_index::tiles::quadkey(43.36, -8.41);
+        let bbb = lumi_index::tiles::quadkey(43.10, -8.10);
         let o: Origen = std::sync::Arc::new(
             Falso::nuevo("caro", Tipo::Suelta, Tarifa::PorUnidad { usd_por_mil: 7.00 })
-                .con("AAA", 10)
-                .con("BBB", 10),
+                .con(&aaa, 10)
+                .con(&bbb, 10),
         );
 
         let d = Descarga::nueva(a.clone(), i, 100.0, &[]);
-        d.un_origen(&o, &["AAA".into(), "BBB".into()]).await;
+        d.un_origen(&o, &[aaa.clone(), bbb.clone()]).await;
         let primera = d.progreso().gastado_eur;
         assert!(primera > 0.0);
         assert_eq!(d.progreso().teselas_hechas, 2);
@@ -501,7 +560,7 @@ mod tests {
         // reanudar una descarga a medias enseñaba "0 hechas" aunque el disco
         // ya tuviera el trabajo real.
         let d2 = Descarga::nueva(a.clone(), i, 100.0, &[]);
-        d2.un_origen(&o, &["AAA".into(), "BBB".into()]).await;
+        d2.un_origen(&o, &[aaa.clone(), bbb.clone()]).await;
         assert_eq!(d2.progreso().gastado_eur, 0.0, "no se paga dos veces");
         assert_eq!(d2.progreso().teselas_hechas, 2, "lo ya hecho se recuerda, no se olvida al reanudar");
 
@@ -549,21 +608,88 @@ mod tests {
     async fn el_presupuesto_agotado_para_la_descarga_y_lo_bajado_se_conserva() {
         let (_d, a) = temporal();
         let i = a.crear_indice("x", "x", "x/x").unwrap();
+        // Quadkeys reales — mismo motivo que en el test de arriba.
+        let aaa = lumi_index::tiles::quadkey(43.36, -8.41);
+        let bbb = lumi_index::tiles::quadkey(43.10, -8.10);
         let o: Origen = std::sync::Arc::new(
             Falso::nuevo("caro", Tipo::Suelta, Tarifa::PorUnidad { usd_por_mil: 7.00 })
-                .con("AAA", 100)
-                .con("BBB", 100),
+                .con(&aaa, 100)
+                .con(&bbb, 100),
         );
         // 0,10 € da para ~15 imágenes: no llega ni a terminar AAA.
         let d = Descarga::nueva(a.clone(), i, 0.10, &[]);
-        d.un_origen(&o, &["AAA".into(), "BBB".into()]).await;
+        d.un_origen(&o, &[aaa.clone(), bbb.clone()]).await;
 
         let p = d.progreso();
         assert!(p.imagenes > 0 && p.imagenes < 200, "bajó {}", p.imagenes);
         assert!(p.sin_saldo, "tiene que quedar dicho que se quedó sin saldo");
         // Y una tesela que se quedó a medias NO queda como hecha: si no, al
         // retomar con más presupuesto se la saltaría para siempre.
-        assert_ne!(a.descarga_estado(i, "caro", "AAA").unwrap().as_deref(), Some("hecho"));
+        assert_ne!(a.descarga_estado(i, "caro", &aaa).unwrap().as_deref(), Some("hecho"));
+    }
+
+    /// El bug real que motivó `abandonada`: sin un estado terminal, una
+    /// tesela que agota sus reintentos se marcaba `error` — indistinguible
+    /// de una avería que todavía puede reintentarse — así que un
+    /// relanzamiento futuro la volvía a pedir, fallaba otra vez, y así para
+    /// siempre. Aquí se fuerzan DOS relanzamientos: el primero deja la
+    /// tesela en `error` (avería, vuelve una vez); el segundo la agota y la
+    /// marca `abandonada`; un TERCERO no debe ni pedirla.
+    #[tokio::test]
+    async fn una_tesela_que_agota_reintentos_queda_abandonada_y_no_se_vuelve_a_pedir() {
+        let (_d, a) = temporal();
+        let i = a.crear_indice("x", "x", "x/x").unwrap();
+        let o: Origen = std::sync::Arc::new(SiempreFalla);
+        let qk = lumi_index::tiles::quadkey(43.36, -8.41);
+
+        let d1 = Descarga::nueva(a.clone(), i, 100.0, &[]);
+        d1.un_origen(&o, &[qk.clone()]).await;
+        assert_eq!(a.descarga_estado(i, "siemprefalla", &qk).unwrap().as_deref(), Some("error"));
+        assert_eq!(d1.progreso().fallidas, 0, "la primera avería todavía puede reintentarse");
+
+        let d2 = Descarga::nueva(a.clone(), i, 100.0, &[]);
+        d2.un_origen(&o, &[qk.clone()]).await;
+        assert_eq!(
+            a.descarga_estado(i, "siemprefalla", &qk).unwrap().as_deref(),
+            Some("abandonada"),
+            "agotados los reintentos, el estado es terminal"
+        );
+        assert_eq!(d2.progreso().fallidas, 1);
+
+        // Tercer relanzamiento: `descargas_pendientes` ya no la ofrece, así
+        // que `un_origen` no llega ni a intentarla — se comprueba con el
+        // recuento SEMBRADO desde SQLite, que es lo único que puede subir si
+        // no se pide nada nuevo.
+        let d3 = Descarga::nueva(a.clone(), i, 100.0, &[]);
+        d3.un_origen(&o, &[qk.clone()]).await;
+        assert_eq!(d3.progreso().fallidas, 1, "sembrado desde SQLite, no se reintentó");
+        assert_eq!(
+            a.descarga_estado(i, "siemprefalla", &qk).unwrap().as_deref(),
+            Some("abandonada"),
+            "sigue abandonada: no se tocó"
+        );
+    }
+
+    /// La única puerta de vuelta desde `abandonada` es manual.
+    #[tokio::test]
+    async fn reintentar_abandonadas_las_vuelve_a_poner_en_juego() {
+        let (_d, a) = temporal();
+        let i = a.crear_indice("x", "x", "x/x").unwrap();
+        let o: Origen = std::sync::Arc::new(SiempreFalla);
+        let qk = lumi_index::tiles::quadkey(43.36, -8.41);
+
+        // Dos pasadas para agotar los reintentos, igual que arriba.
+        Descarga::nueva(a.clone(), i, 100.0, &[]).un_origen(&o, &[qk.clone()]).await;
+        Descarga::nueva(a.clone(), i, 100.0, &[]).un_origen(&o, &[qk.clone()]).await;
+        assert_eq!(a.descarga_estado(i, "siemprefalla", &qk).unwrap().as_deref(), Some("abandonada"));
+
+        let borradas = a.descargas_reintentar_abandonadas(i, None).unwrap();
+        assert_eq!(borradas, 1);
+        assert_eq!(a.descarga_estado(i, "siemprefalla", &qk).unwrap(), None, "vuelve a no existir, como si nunca se hubiera intentado");
+
+        // Y `descargas_pendientes` la ofrece de nuevo.
+        let pendientes = a.descargas_pendientes(i, "siemprefalla", &[qk.clone()]).unwrap();
+        assert_eq!(pendientes, vec![qk]);
     }
 
     #[tokio::test]

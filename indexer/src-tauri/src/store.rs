@@ -113,11 +113,19 @@ CREATE TABLE IF NOT EXISTS gasto (
 
 -- La unidad de trabajo de una descarga. Que esto sea una tabla es lo que
 -- hace que cortar una descarga a la mitad no cueste dinero al retomarla.
+--
+-- 'abandonada' es un estado TERMINAL, distinto de 'error': 'error' es una
+-- avería que `descargas_pendientes` SIGUE ofreciendo (vuelve una vez, por
+-- diseño); sin un estado que de verdad pare, una tesela que agota sus
+-- reintentos se marcaba también como 'error' -- indistinguible de la que
+-- todavía puede reintentarse -- así que un relanzamiento la volvía a pedir,
+-- fallaba otra vez, y así en cada relanzamiento futuro, sin fin. 'abandonada'
+-- es lo único que `descargas_pendientes` excluye además de 'hecho'.
 CREATE TABLE IF NOT EXISTS descargas (
     indice_id  INTEGER NOT NULL,
     fuente     TEXT NOT NULL,
     quadkey    TEXT NOT NULL,
-    estado     TEXT NOT NULL CHECK (estado IN ('en_curso','hecho','error')),
+    estado     TEXT NOT NULL CHECK (estado IN ('en_curso','hecho','error','abandonada')),
     imagenes   INTEGER NOT NULL DEFAULT 0,
     unidades   INTEGER NOT NULL DEFAULT 0,
     reintentos INTEGER NOT NULL DEFAULT 0,
@@ -333,6 +341,26 @@ impl Almacen {
             c.execute_batch(ESQUEMA)?; // recrea `lotes` con el CHECK nuevo
             c.execute_batch(
                 "INSERT INTO lotes SELECT * FROM lotes_viejos; DROP TABLE lotes_viejos;",
+            )?;
+        }
+
+        // `estado` de `descargas` gana 'abandonada' — mismo motivo y mismo
+        // truco que `lotes` arriba: un CHECK no se altera en SQLite. Barato
+        // por la misma razón: una fila por tesela×origen, no por imagen.
+        let sql_descargas: Option<String> = c
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='descargas'",
+                [],
+                |r| r.get::<_, String>(0),
+            )
+            .ok();
+        let necesita_recrear_descargas =
+            matches!(&sql_descargas, Some(sql) if !sql.contains("'abandonada'"));
+        if necesita_recrear_descargas {
+            c.execute_batch("ALTER TABLE descargas RENAME TO descargas_viejas")?;
+            c.execute_batch(ESQUEMA)?; // recrea `descargas` con el CHECK nuevo
+            c.execute_batch(
+                "INSERT INTO descargas SELECT * FROM descargas_viejas; DROP TABLE descargas_viejas;",
             )?;
         }
         Ok(c)
@@ -1274,14 +1302,66 @@ impl Almacen {
         pedidas: &[String],
     ) -> Result<Vec<String>> {
         let c = self.0.lock().unwrap();
+        // 'hecho' no se vuelve a pedir porque ya está; 'abandonada' no se
+        // vuelve a pedir porque YA SE INTENTÓ LO SUFICIENTE — sin excluirla
+        // aquí, una tesela que agotó sus reintentos se pedía de nuevo en
+        // cada relanzamiento futuro, fallaba otra vez, y así para siempre.
         let mut q = c.prepare(
             "SELECT quadkey FROM descargas
-              WHERE indice_id = ?1 AND fuente = ?2 AND estado = 'hecho'",
+              WHERE indice_id = ?1 AND fuente = ?2 AND estado IN ('hecho','abandonada')",
         )?;
-        let hechas: std::collections::HashSet<String> = q
+        let resueltas: std::collections::HashSet<String> = q
             .query_map(params![indice_id, fuente], |r| r.get(0))?
             .collect::<Result<_, _>>()?;
-        Ok(pedidas.iter().filter(|q| !hechas.contains(*q)).cloned().collect())
+        Ok(pedidas.iter().filter(|q| !resueltas.contains(*q)).cloned().collect())
+    }
+
+    /// El estado persistido de cada tesela pedida, para que la interfaz sepa
+    /// distinguir "hecha" de "abandonada" de "todavía pendiente" al reanudar
+    /// una descarga — sin esto, ambas se veían igual (`!pendientes.contains`)
+    /// y una tesela dada por perdida se pintaba como si hubiera terminado
+    /// bien.
+    pub fn descargas_estados(
+        &self,
+        indice_id: i64,
+        fuente: &str,
+        pedidas: &[String],
+    ) -> Result<std::collections::HashMap<String, String>> {
+        if pedidas.is_empty() {
+            return Ok(Default::default());
+        }
+        let c = self.0.lock().unwrap();
+        let marcadores = vec!["?"; pedidas.len()].join(",");
+        let sql = format!(
+            "SELECT quadkey, estado FROM descargas
+              WHERE indice_id = ? AND fuente = ? AND quadkey IN ({marcadores})"
+        );
+        let mut q = c.prepare(&sql)?;
+        let mut params: Vec<&dyn rusqlite::ToSql> = vec![&indice_id, &fuente];
+        params.extend(pedidas.iter().map(|p| p as &dyn rusqlite::ToSql));
+        let filas: std::collections::HashMap<String, String> =
+            q.query_map(params.as_slice(), |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<_, _>>()?;
+        Ok(filas)
+    }
+
+    /// Vuelve a poner en juego lo abandonado: borra las filas 'abandonada' de
+    /// este índice (de un origen, o de todos si `fuente` es `None`) para que
+    /// `descargas_pendientes` las ofrezca de nuevo con los reintentos a cero
+    /// — es la única puerta de vuelta desde un estado terminal, y es manual
+    /// a propósito: un relanzamiento normal de la descarga no debe resucitar
+    /// solo lo que ya se dio por perdido.
+    pub fn descargas_reintentar_abandonadas(&self, indice_id: i64, fuente: Option<&str>) -> Result<usize> {
+        let c = self.0.lock().unwrap();
+        Ok(match fuente {
+            Some(f) => c.execute(
+                "DELETE FROM descargas WHERE indice_id = ?1 AND fuente = ?2 AND estado = 'abandonada'",
+                params![indice_id, f],
+            )?,
+            None => c.execute(
+                "DELETE FROM descargas WHERE indice_id = ?1 AND estado = 'abandonada'",
+                params![indice_id],
+            )?,
+        })
     }
 
     /// Cuánto de lo pedido ya está `hecho` — teselas, imágenes y unidades —

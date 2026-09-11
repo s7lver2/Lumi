@@ -23,6 +23,12 @@ export function DownloadView({ indiceId, imagenesEstimadas, onTerminado }: {
   const [eta, setEta] = useState<string | null>(null);
   const [totalImagenes, setTotalImagenes] = useState<number | null>(null);
   const [deteniendo, setDeteniendo] = useState(false);
+  // Solo cambia la etiqueta del botón para confirmar el clic — el efecto
+  // real (que se vuelvan a pedir) espera al PRÓXIMO lanzamiento de esta
+  // descarga, no a este mismo: `un_origen` ya calculó sus pendientes al
+  // arrancar, así que reintentar a mitad de una descarga en curso no altera
+  // lo que ella misma está haciendo ahora mismo.
+  const [reintentadas, setReintentadas] = useState(false);
   const desde = useRef<number | null>(null);
 
   // El sondeo TERMINA cuando la descarga termina. Es la misma lección del paso
@@ -91,19 +97,31 @@ export function DownloadView({ indiceId, imagenesEstimadas, onTerminado }: {
             causas reales (lo que cae fuera de la tesela pedida y lo que falló
             sin reintento) estaban solo en la base de datos. */}
         {(p.fuera_de_tesela > 0 || p.fallidas > 0) && (
-          <p className="mt-2 text-[10.5px] text-subtle">
-            {p.fuera_de_tesela > 0 && (
-              <span title="Algunos orígenes preguntan por radio, no por tesela, y devuelven material del vecindario. Solo entra al índice lo que cae dentro de la tesela pedida.">
-                <b className="font-normal text-warning-fg">{p.fuera_de_tesela}</b> bajadas fuera de
-                la tesela pedida, no entran al índice
-              </span>
-            )}
-            {p.fuera_de_tesela > 0 && p.fallidas > 0 && " · "}
+          <p className="mt-2 flex items-center gap-2 text-[10.5px] text-subtle">
+            <span className="flex-1">
+              {p.fuera_de_tesela > 0 && (
+                <span title="Algunos orígenes preguntan por radio, no por tesela, y devuelven material del vecindario. Solo entra al índice lo que cae dentro de la tesela pedida.">
+                  <b className="font-normal text-warning-fg">{p.fuera_de_tesela}</b> bajadas fuera de
+                  la tesela pedida, no entran al índice
+                </span>
+              )}
+              {p.fuera_de_tesela > 0 && p.fallidas > 0 && " · "}
+              {p.fallidas > 0 && (
+                <span title="Agotaron sus reintentos: es un estado TERMINAL, un relanzamiento normal ya no las vuelve a pedir por sí solo.">
+                  <b className="font-normal text-warning-fg">{p.fallidas}</b>{" "}
+                  {p.fallidas === 1 ? "tesela abandonada" : "teselas abandonadas"}
+                </span>
+              )}
+            </span>
             {p.fallidas > 0 && (
-              <span title="Teselas que agotaron sus reintentos. Vuelve a lanzar la descarga para intentarlas de nuevo: lo ya hecho no se repite.">
-                <b className="font-normal text-warning-fg">{p.fallidas}</b>{" "}
-                {p.fallidas === 1 ? "tesela fallida" : "teselas fallidas"}
-              </span>
+              <button
+                onClick={() => void api.descargaReintentarAbandonadas(indiceId).then(() => setReintentadas(true))}
+                disabled={reintentadas}
+                className="jg-press shrink-0 rounded-md border border-border px-2 py-1 text-[10px] text-fg
+                  disabled:opacity-40"
+                title="Las vuelve a poner en juego: la próxima vez que lances esta descarga se pedirán de nuevo, con los reintentos a cero.">
+                {reintentadas ? "se reintentarán al relanzar" : "reintentar abandonadas"}
+              </button>
             )}
           </p>
         )}
@@ -157,7 +175,7 @@ export function DownloadView({ indiceId, imagenesEstimadas, onTerminado }: {
                 <td className="py-2 text-right font-mono text-muted">
                   {l.hechas}/{l.total}
                   {l.fallidas > 0 && (
-                    <span className="text-warning-fg" title={`${l.fallidas} agotaron sus reintentos`}>
+                    <span className="text-warning-fg" title={`${l.fallidas} abandonadas — agotaron sus reintentos, estado terminal`}>
                       {" "}−{l.fallidas}
                     </span>
                   )}

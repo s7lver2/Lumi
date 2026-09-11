@@ -162,7 +162,12 @@ export interface PlanDescarga {
   imagenes_estimadas: number;
 }
 export interface PlanPendiente { plan: PlanDescarga; nombre_indice: string }
-export interface TeselaProgreso { quadkey: string; fuente: string; hecha: boolean }
+export interface TeselaProgreso {
+  quadkey: string; fuente: string;
+  /** "abandonada" es terminal: agotó sus reintentos y ya no se vuelve a
+   *  pedir sola — hace falta `descargaReintentarAbandonadas` para revivirla. */
+  estado: "hecha" | "pendiente" | "abandonada";
+}
 export interface TeselaEnCurso { quadkey: string; fuente: string; imagenes: number; objetivo: number }
 export interface ProgresoDescarga {
   trabajando: boolean;
@@ -357,6 +362,11 @@ export const api = {
   descargaPendiente: () => invoke<PlanPendiente | null>("descarga_pendiente"),
   descargaPendienteDescartar: () => invoke<void>("descarga_pendiente_descartar"),
   descargaParar: () => invoke<void>("descarga_parar"),
+  /** `fuente` opcional: sin ella, reintenta lo abandonado de TODOS los
+   *  orígenes de este índice. Devuelve cuántas teselas volvieron a quedar
+   *  pendientes. */
+  descargaReintentarAbandonadas: (indiceId: number, fuente?: string) =>
+    invoke<number>("descarga_reintentar_abandonadas", { indiceId, fuente: fuente ?? null }),
   revisionPendientes: (indiceId: number) => invoke<FichaRevision[]>("revision_pendientes", { indiceId }),
   revisionRechazar: (indiceId: number, ids: number[]) =>
     invoke<Cuentas>("revision_rechazar", { indiceId, ids }),

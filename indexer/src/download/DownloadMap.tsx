@@ -30,13 +30,17 @@ export function DownloadMap({ teselas }: { teselas: TeselaProgreso[] }) {
       });
       m.on("load", () => {
         m.addSource("teselas", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        // 'abandonada' se pinta con un color FIJO (ámbar de aviso, no el del
+        // origen): es un estado de "esto se dio por perdido", no una
+        // variación de "cuánto avanzó" — mezclarlo con la rampa por origen
+        // lo haría indistinguible de una tesela normal a medias.
         m.addLayer({
           id: "teselas-relleno",
           type: "fill",
           source: "teselas",
           paint: {
-            "fill-color": ["get", "color"],
-            "fill-opacity": ["match", ["get", "estado"], "hecha", 0.55, 0.06],
+            "fill-color": ["match", ["get", "estado"], "abandonada", "#ef9f27", ["get", "color"]],
+            "fill-opacity": ["match", ["get", "estado"], "hecha", 0.55, "abandonada", 0.35, 0.06],
           },
         });
         m.addLayer({
@@ -44,9 +48,9 @@ export function DownloadMap({ teselas }: { teselas: TeselaProgreso[] }) {
           type: "line",
           source: "teselas",
           paint: {
-            "line-color": ["get", "color"],
+            "line-color": ["match", ["get", "estado"], "abandonada", "#ef9f27", ["get", "color"]],
             "line-width": 1,
-            "line-opacity": ["match", ["get", "estado"], "hecha", 0.9, 0.25],
+            "line-opacity": ["match", ["get", "estado"], "hecha", 0.9, "abandonada", 0.9, 0.25],
           },
         });
       });
@@ -81,7 +85,7 @@ export function DownloadMap({ teselas }: { teselas: TeselaProgreso[] }) {
       type: "FeatureCollection",
       features: teselas.map((t) => {
         const f = teselaAPoligono(t.quadkey);
-        f.properties = { estado: t.hecha ? "hecha" : "pendiente", color: color(t.fuente) };
+        f.properties = { estado: t.estado, color: color(t.fuente) };
         return f;
       }),
     });

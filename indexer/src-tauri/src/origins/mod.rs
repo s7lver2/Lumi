@@ -348,6 +348,15 @@ impl OrigenDeRed for Falso {
 
     async fn descargar(&self, tesela: &str, tope: &Presupuesto) -> Result<Vec<Captura>> {
         let n = self.guion.get(tesela).copied().unwrap_or(0);
+        // El centro de LA TESELA PEDIDA, no una constante fija: `un_origen`
+        // recorta cualquier captura cuya coordenada real caiga fuera de la
+        // tesela que se pidió (ver `download.rs`), así que un origen falso
+        // que siempre devolviera el mismo punto solo podría servir de verdad
+        // a UNA tesela — cualquier prueba con una segunda tesela vería sus
+        // capturas descartadas en silencio por ese mismo recorte, sin que el
+        // guion (`con(...)`) tuviera ninguna culpa.
+        let b = lumi_index::tiles::bbox_de_tesela(tesela);
+        let (lat, lng) = ((b.norte + b.sur) / 2.0, (b.oeste + b.este) / 2.0);
         let mut fuera = Vec::new();
         for i in 0..n {
             // Se apunta ANTES de "servir": si no cabe, se para y se devuelve lo
@@ -359,8 +368,8 @@ impl OrigenDeRed for Falso {
                 fuente: self.id,
                 id_origen: format!("{tesela}-{i}"),
                 ruta: PathBuf::from(format!("/dev/null/{tesela}-{i}.jpg")),
-                lat: 43.36,
-                lng: -8.41,
+                lat,
+                lng,
                 rumbo: Some(0.0),
                 capturada_en: None,
                 atribucion: lumi_index::coverage::Atribucion {
