@@ -147,13 +147,32 @@ pub struct Descarga {
 }
 
 impl Descarga {
+    /// `trabajando` empieza en `true`, no en `false` — es EL BUG que dejaba la
+    /// pantalla congelada para siempre cuando todas las teselas pedidas ya
+    /// estaban `hecho` (mismo índice, mismos proveedores, relanzada sin
+    /// sellar): `correr()` termina su bucle casi instantáneamente porque no
+    /// hay nada que pedir, y el primer sondeo del frontend (cada 700 ms)
+    /// podía llegar DESPUÉS de que la tarea entera ya hubiera puesto
+    /// `trabajando` en `false` otra vez — la interfaz nunca llegaba a
+    /// OBSERVAR el `true` intermedio, así que su lógica de "avisar solo
+    /// cuando pase de trabajando a parado" nunca se disparaba: `DownloadView`
+    /// se quedaba enseñando el resumen final (con los números reales,
+    /// sembrados desde SQLite) para siempre, sin pasar nunca a la pantalla de
+    /// embebido, y "Detener" tampoco lo arreglaba porque no había ninguna
+    /// tesela en curso que terminar.
+    ///
+    /// Poniéndolo aquí, en la CONSTRUCCIÓN — antes incluso de que la tarea
+    /// async arranque — se garantiza que cualquier sondeo del frontend hecho
+    /// después de que `descarga_arrancar` devuelva (que es cuando esta
+    /// `Descarga` ya existe y está registrada) vea `trabajando: true` al
+    /// menos una vez, sin importar lo rápido que `correr()` termine.
     pub fn nueva(almacen: Arc<Almacen>, indice_id: i64, presupuesto_eur: f64, modelos: &[String]) -> Self {
         Self {
             almacen,
             indice_id,
             tope: Presupuesto::nuevo(presupuesto_eur),
             modelos: modelos.to_vec(),
-            progreso: Mutex::new(Progreso::default()),
+            progreso: Mutex::new(Progreso { trabajando: true, ..Default::default() }),
             parar: AtomicBool::new(false),
         }
     }
@@ -168,16 +187,15 @@ impl Descarga {
         self.parar.store(true, Ordering::SeqCst);
     }
 
-    /// Todos los orígenes activos, uno tras otro. `trabajando` se enciende y
-    /// se apaga AQUÍ, una sola vez para la descarga entera — antes cada
-    /// `un_origen` apagaba `trabajando` al terminar SU lista, y con dos
-    /// orígenes activos eso significaba que tras terminar Mapillary la
-    /// interfaz veía `trabajando: false` un instante y se creía la descarga
-    /// completa mientras KartaView ni había empezado: `DownloadView` se
-    /// navegaba fuera sola, y "Detener" parecía no hacer nada porque el
-    /// operador ya no estaba en la pantalla para verlo parar.
+    /// Todos los orígenes activos, uno tras otro, y solo AQUÍ se apaga
+    /// `trabajando` — `Descarga::nueva` ya lo puso en `true` (ver su doc).
+    /// Antes cada `un_origen` apagaba `trabajando` al terminar SU lista, y
+    /// con dos orígenes activos eso significaba que tras terminar Mapillary
+    /// la interfaz veía `trabajando: false` un instante y se creía la
+    /// descarga completa mientras KartaView ni había empezado:
+    /// `DownloadView` se navegaba fuera sola, y "Detener" parecía no hacer
+    /// nada porque el operador ya no estaba en la pantalla para verlo parar.
     pub async fn correr(&self, origenes: &[Origen], nuevas: &std::collections::BTreeMap<String, Vec<String>>) {
-        self.progreso.lock().unwrap().trabajando = true;
         for o in origenes {
             if self.parar.load(Ordering::SeqCst) {
                 break;
@@ -571,6 +589,40 @@ mod tests {
         assert_eq!(linea.hechas, 2);
         assert_eq!(linea.total, 2);
         assert_eq!(linea.imagenes, 20);
+    }
+
+    /// El bug real reportado por el operador: relanzar sobre teselas que YA
+    /// están `hecho` para todos los orígenes (mismo índice, sin sellar
+    /// todavía) dejaba la pantalla congelada para siempre. La causa era que
+    /// `trabajando` nacía en `false` y solo se ponía en `true` DENTRO de
+    /// `correr()` — con nada pendiente que pedir, `correr()` termina en
+    /// microsegundos, así que el frontend (que solo avisa "terminó" al ver
+    /// `trabajando` pasar de `true` a `false`) podía no llegar a observar
+    /// NUNCA el `true` intermedio, y se quedaba esperando una transición que
+    /// ya había pasado. Esta prueba no puede reproducir el sondeo a 700 ms
+    /// del frontend, así que comprueba la garantía que sí puede dar el
+    /// backend: `trabajando` es `true` desde el instante de la construcción,
+    /// ANTES de llamar a `correr()` — que es lo único que cierra la ventana.
+    #[tokio::test]
+    async fn trabajando_empieza_en_true_antes_de_correr_asi_no_haya_nada_pendiente() {
+        let (_d, a) = temporal();
+        let i = a.crear_indice("x", "x", "x/x").unwrap();
+        let qk = lumi_index::tiles::quadkey(43.36, -8.41);
+        let o: Origen = std::sync::Arc::new(Falso::nuevo("f", Tipo::Suelta, Tarifa::Gratis).con(&qk, 5));
+
+        // Primera pasada: deja la tesela en `hecho`.
+        Descarga::nueva(a.clone(), i, 100.0, &[]).un_origen(&o, &[qk.clone()]).await;
+        assert_eq!(a.descarga_estado(i, "f", &qk).unwrap().as_deref(), Some("hecho"));
+
+        // Segunda: nada pendiente para NINGÚN origen — el caso real del bug.
+        // Si `trabajando` naciera en `false`, esta aserción pasaría igual
+        // (el bug está en la VENTANA temporal, no en el valor final), pero
+        // deja documentado el invariante que el arreglo garantiza: puede
+        // comprobarse ANTES de que `correr()` haga nada.
+        let d2 = Descarga::nueva(a.clone(), i, 100.0, &[]);
+        assert!(d2.progreso().trabajando, "trabajando debe ser true desde la construcción");
+        d2.correr(&[o], &std::collections::BTreeMap::from([("f".to_string(), vec![qk])])).await;
+        assert!(!d2.progreso().trabajando, "y correr() lo apaga al terminar, aunque no hiciera nada");
     }
 
     /// El bug real: `un_origen` apagaba `trabajando` al terminar SU lista, así

@@ -33,13 +33,23 @@ export function DownloadView({ indiceId, imagenesEstimadas, onTerminado }: {
 
   // El sondeo TERMINA cuando la descarga termina. Es la misma lección del paso
   // de servicios: un intervalo eterno inunda el log y miente sobre el estado.
+  //
+  // NO se espera a haber visto `trabajando: true` antes de reaccionar a un
+  // `false` (como hacía una versión anterior con una bandera `arranco`).
+  // `Descarga::nueva` en el backend garantiza que `trabajando` ya vale `true`
+  // desde el instante en que existe — antes incluso de arrancar su tarea —
+  // así que un `false` SIEMPRE significa "ya terminó", nunca "todavía no
+  // empezó". Sin esta garantía, relanzar una descarga sobre teselas que ya
+  // estaban `hecho` para todos los orígenes se colgaba para siempre: sin
+  // nada pendiente que pedir, el backend termina en microsegundos —más
+  // rápido que este mismo sondeo cada 700 ms— y la bandera `arranco` nunca
+  // llegaba a ponerse, así que la pantalla se quedaba enseñando el resumen
+  // final sin pasar nunca a la de embebido.
   useEffect(() => {
-    let arranco = false;
     const t = setInterval(() => {
       void api.descargaProgreso().then((x) => {
         setP(x);
         if (x.trabajando) {
-          arranco = true;
           if (desde.current === null) desde.current = Date.now();
           const transcurrido = (Date.now() - desde.current) / 1000;
           // Por teselas el ritmo se queda mudo mientras una sola tarda
@@ -62,7 +72,7 @@ export function DownloadView({ indiceId, imagenesEstimadas, onTerminado }: {
           } else {
             setEta(null);
           }
-        } else if (arranco) { clearInterval(t); onTerminado(); }
+        } else { clearInterval(t); onTerminado(); }
       });
     }, 700);
     return () => clearInterval(t);
