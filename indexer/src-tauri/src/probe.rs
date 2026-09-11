@@ -30,6 +30,13 @@ pub struct SondeoTesela {
     /// Para que la interfaz pueda decir «sondeado hace 2 d» en vez de fingir
     /// que acaba de preguntar.
     pub del_cache: bool,
+    /// El motivo por el que este sondeo NO pudo preguntar. `None` es
+    /// «preguntó y esto es lo que hay»; `Some` es «no lo sabemos», que NO es
+    /// lo mismo que cero. Sin esto, un origen que falla es indistinguible en
+    /// la interfaz de un origen que sondeó y no encontró nada — así vivió
+    /// meses el bug de Commons (`dd5da1e`): un error de deserialización se
+    /// pintaba, literalmente, como "aquí no hay fotos".
+    pub error: Option<String>,
 }
 
 /// Lo que ve el operador mientras se sondea un área grande: cada origen sondea
@@ -117,6 +124,7 @@ pub async fn sondear_area(
                         nivel,
                         estimadas,
                         del_cache: true,
+                        error: None,
                     });
                     return;
                 }
@@ -124,16 +132,20 @@ pub async fn sondear_area(
                 // como «nada» sin guardarlo en caché, para que el siguiente
                 // intento vuelva a preguntar en vez de heredar el fallo
                 // durante 30 días.
-                let Ok(d) = o.sondear(&qk).await else {
-                    log::warn!("{} no pudo sondear {qk}", o.id());
-                    sondeo.empujar(SondeoTesela {
-                        quadkey: qk,
-                        fuente: o.id().to_string(),
-                        nivel: "nada".into(),
-                        estimadas: 0,
-                        del_cache: false,
-                    });
-                    return;
+                let d = match o.sondear(&qk).await {
+                    Ok(d) => d,
+                    Err(e) => {
+                        log::warn!("{} no pudo sondear {qk}: {e}", o.id());
+                        sondeo.empujar(SondeoTesela {
+                            quadkey: qk,
+                            fuente: o.id().to_string(),
+                            nivel: "nada".into(),
+                            estimadas: 0,
+                            del_cache: false,
+                            error: Some(e.to_string()),
+                        });
+                        return;
+                    }
                 };
                 let nivel = format!("{:?}", d.nivel()).to_lowercase();
                 let _ = almacen.sondeo_guardar(o.id(), &qk, &nivel, d.unidades());
@@ -143,6 +155,7 @@ pub async fn sondear_area(
                     nivel,
                     estimadas: d.unidades(),
                     del_cache: false,
+                    error: None,
                 });
             });
         }
@@ -236,8 +249,9 @@ pub fn fichas(origenes: &[Origen]) -> Vec<FichaOrigen> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lumi_index::budget::Presupuesto;
     use lumi_index::manifest::Tipo;
-    use lumi_index::network::Tarifa;
+    use lumi_index::network::{Disponibilidad, Tarifa};
     use crate::origins::Falso;
 
     fn temporal() -> (tempfile::TempDir, Almacen) {
@@ -310,5 +324,41 @@ mod tests {
         let e = estimar(&a, &o, &nuevas, 400.0).await;
         assert!((e.gastado_eur - 396.0).abs() < 1e-9);
         assert!(!e.cabe, "396 + 6,51 pasa de 400");
+    }
+
+    /// Un origen que no puede sondear (`Falso` no tiene forma de fallar hoy,
+    /// así que este test usa un origen guionizado que SIEMPRE devuelve error,
+    /// definido aquí mismo para no tocar `Falso`, que otros tests dependen de
+    /// que nunca falle).
+    struct SiempreFalla;
+
+    #[async_trait::async_trait]
+    impl crate::origins::OrigenDeRed for SiempreFalla {
+        fn id(&self) -> &'static str { "siemprefalla" }
+        fn tipo(&self) -> lumi_index::manifest::Tipo { lumi_index::manifest::Tipo::Suelta }
+        fn tarifa(&self) -> Tarifa { Tarifa::Gratis }
+        fn redistribucion(&self) -> lumi_index::network::Redistribucion {
+            lumi_index::network::Redistribucion::Libre { licencia: "x".into() }
+        }
+        async fn sondear(&self, _tesela: &str) -> anyhow::Result<Disponibilidad> {
+            anyhow::bail!("la red está caída, a propósito, para el test")
+        }
+        async fn descargar(&self, _tesela: &str, _tope: &Presupuesto) -> anyhow::Result<Vec<lumi_index::network::Captura>> {
+            Ok(vec![])
+        }
+    }
+
+    #[tokio::test]
+    async fn un_origen_que_falla_se_marca_con_error_no_con_cero_silencioso() {
+        let (_d, a) = temporal();
+        let a = Arc::new(a);
+        let o: Vec<Origen> = vec![std::sync::Arc::new(SiempreFalla)];
+        let teselas = vec!["AAA".to_string()];
+        let s = Arc::new(Sondeo::nuevo(1));
+        sondear_area(a, o, teselas, s.clone()).await;
+        let p = s.progreso();
+        assert_eq!(p.resultados.len(), 1);
+        assert!(p.resultados[0].error.is_some(), "un fallo no puede quedar en error=None");
+        assert_eq!(p.resultados[0].estimadas, 0);
     }
 }

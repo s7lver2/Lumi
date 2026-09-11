@@ -7,12 +7,17 @@
 pub mod calles;
 pub mod commons;
 pub mod flickr;
+pub mod geograph;
 pub mod google;
+pub mod inaturalist;
 pub mod kartaview;
 pub mod mapbox;
 pub mod mapillary;
 pub mod monumentos;
+pub mod openaerialmap;
 pub mod panoramax;
+pub mod wikipedia;
+pub mod wms_orto;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -132,6 +137,25 @@ pub fn sanear(nombre: &str) -> String {
     }
 }
 
+/// Centro y radio (en km) que cubren una tesela CON margen. La usan los
+/// orígenes que consultan por punto+radio en vez de por bbox — Wikidata
+/// (`monumentos.rs`) y Geograph (`geograph.rs`) — para no duplicar la misma
+/// cuenta dos veces.
+///
+/// Aproximación plana, igual que `lumi_index::tiles::area_km2`: a la escala
+/// de una tesela z14 el error frente a una fórmula geodésica exacta es
+/// insignificante.
+pub fn centro_y_radio_km(b: lumi_index::tiles::Bbox) -> (f64, f64, f64) {
+    let lat = (b.norte + b.sur) / 2.0;
+    let lng = (b.oeste + b.este) / 2.0;
+    let ancho_km = (b.este - b.oeste) * 111.320 * lat.to_radians().cos();
+    let alto_km = (b.norte - b.sur) * 110.574;
+    let radio = (ancho_km.powi(2) + alto_km.powi(2)).sqrt() / 2.0;
+    // 20% de margen: un punto justo en el borde de la tesela no debe
+    // perderse por un radio calculado al milímetro.
+    (lat, lng, (radio * 1.2).max(0.05))
+}
+
 /// Lo que todo adaptador necesita: un cliente HTTP, su clave si la tiene, y el
 /// directorio de paso donde deja lo que baje.
 pub struct Ctx {
@@ -224,12 +248,19 @@ pub fn registro(claves: &Claves, stage: PathBuf) -> Vec<Box<dyn OrigenDeRed>> {
     }
     // Commons tampoco necesita clave.
     v.push(Box::new(commons::Commons::nuevo(stage.clone())));
+    v.push(Box::new(wikipedia::Wikipedia::nuevo(stage.clone())));
     // Ni monumentos (Wikidata → Commons) ni Panoramax: entran siempre.
     v.push(Box::new(monumentos::Monumentos::nuevo(stage.clone())));
     v.push(Box::new(panoramax::Panoramax::nuevo(stage.clone())));
+    v.push(Box::new(inaturalist::INaturalist::nuevo(stage.clone())));
+    v.push(Box::new(geograph::Geograph::nuevo(stage.clone())));
+    v.push(Box::new(openaerialmap::OpenAerialMap::nuevo(stage.clone())));
     if let Ok(Some(k)) = claves.leer("flickr") {
-        v.push(Box::new(flickr::Flickr::nuevo(k, stage)));
+        v.push(Box::new(flickr::Flickr::nuevo(k, stage.clone())));
     }
+    // Sin clave: la tabla de servicios decide la cobertura real, no una
+    // credencial. Ausente = degradado a "no hay" en cualquier tesela.
+    v.push(Box::new(wms_orto::WmsOrto::nuevo(stage)));
     v
 }
 

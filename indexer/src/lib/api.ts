@@ -122,6 +122,10 @@ export interface SondeoTesela {
   nivel: "mucho" | "poco" | "nada";
   estimadas: number;
   del_cache: boolean;
+  /** El motivo por el que este sondeo no pudo preguntar. `undefined`/`null`
+   *  es "preguntó y esto es lo que hay"; presente es "no lo sabemos", que no
+   *  es lo mismo que cero. */
+  error?: string | null;
 }
 export interface ProgresoSondeo {
   resultados: SondeoTesela[];

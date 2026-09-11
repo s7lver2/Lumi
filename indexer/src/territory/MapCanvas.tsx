@@ -586,7 +586,10 @@ export function MapCanvas({
     src.setData({
       type: "FeatureCollection",
       features: (sondeos ?? [])
-        .filter((s) => activos?.has(s.fuente) && s.fuente !== "mapillary" && s.fuente !== "mapbox-satelite")
+        // Una tesela con `error` no sondeó de verdad: se trata igual que "sin
+        // sondear" en vez de heredar el sombreado de "nada" que le tocaría
+        // por defecto — un fallo de red no es lo mismo que "aquí no hay".
+        .filter((s) => activos?.has(s.fuente) && s.fuente !== "mapillary" && s.fuente !== "mapbox-satelite" && !s.error)
         .map((s) => {
           const f = teselaAPoligono(s.quadkey);
           f.properties = { nivel: s.nivel, color: color(s.fuente) };

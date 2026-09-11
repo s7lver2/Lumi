@@ -89,6 +89,51 @@ pub(crate) struct InfoImagen {
     pub(crate) meta: std::collections::HashMap<String, Campo>,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct PaginaImg {
+    pub(crate) pageid: i64,
+    pub(crate) title: String,
+    #[serde(default)]
+    pub(crate) imageinfo: Vec<InfoImagen>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ConsultaImg {
+    #[serde(default)]
+    pages: std::collections::HashMap<String, PaginaImg>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RespuestaImg {
+    query: Option<ConsultaImg>,
+}
+
+/// `imageinfo` por lotes de 50 títulos — el tope del propio MediaWiki. La
+/// comparten `monumentos.rs` (fichas de `P373`/`P18`) y `wikipedia.rs`
+/// (imágenes enlazadas de un artículo): las tres son la MISMA API con la
+/// MISMA forma de respuesta, solo cambia de dónde salió la lista de títulos.
+pub(crate) async fn imageinfo_por_lotes(ctx: &Ctx, titulos: &[String]) -> anyhow::Result<Vec<PaginaImg>> {
+    let mut fuera = Vec::new();
+    for lote in titulos.chunks(50) {
+        let titles = lote.join("|");
+        let url = format!(
+            "{API}?action=query&format=json&formatversion=1\
+             &prop=imageinfo&iiprop=url%7Csize%7Cextmetadata&iiurlwidth=2048&titles={}",
+            urlencoding::encode(&titles)
+        );
+        let _g = ctx.limitador.permiso().await;
+        let r = ctx.cliente.get(&url).send().await?;
+        if !r.status().is_success() {
+            anyhow::bail!("Commons respondió {} a imageinfo", r.status());
+        }
+        let cuerpo: RespuestaImg = r.json().await?;
+        if let Some(q) = cuerpo.query {
+            fuera.extend(q.pages.into_values());
+        }
+    }
+    Ok(fuera)
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct Categoria {
     title: String,

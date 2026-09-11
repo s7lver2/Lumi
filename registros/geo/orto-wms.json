@@ -1,0 +1,16 @@
+{
+  "servicios": [
+    {
+      "id": "pnoa-es",
+      "nombre": "PNOA (IGN, España)",
+      "url": "https://www.ign.es/wms-inspire/pnoa-ma",
+      "capa": "OI.OrthoimageCoverage",
+      "formato": "image/jpeg",
+      "crs": "CRS:84",
+      "version": "1.3.0",
+      "licencia": "CC BY 4.0 (IGN, NOTA-A)",
+      "atribucion": "Instituto Geográfico Nacional de España, PNOA",
+      "cobertura": [[-9.5, 35.9], [4.4, 43.9]]
+    }
+  ]
+}

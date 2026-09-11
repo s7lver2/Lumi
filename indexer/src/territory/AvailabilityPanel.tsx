@@ -25,6 +25,8 @@ export function AvailabilityPanel({
   onSondear: () => void;
 }) {
   const delCache = sondeos.length > 0 && sondeos.every((s) => s.del_cache);
+  const conError = sondeos.filter((s) => s.error);
+  const porFuenteConError = new Set(conError.map((s) => s.fuente));
 
   return (
     <aside className="absolute left-3 top-[68px] z-20 w-[286px] rounded-card border border-white/[.13]
@@ -46,9 +48,16 @@ export function AvailabilityPanel({
           // Mapbox cenital no se pinta: «hay satélite en todas partes» no
           // informa de nada. Se lista para poder incluirlo en la descarga.
           const pintable = f.tipo !== "cenital";
+          const falla = porFuenteConError.has(f.id);
           return (
             <div key={f.id} className={`flex items-center gap-2.5 ${on ? "" : "opacity-50"}`}
-              title={f.id === "flickr" ? "Flickr desactivó su API para cuentas gratuitas: hace falta una cuenta Pro" : undefined}>
+              title={
+                falla
+                  ? conError.find((s) => s.fuente === f.id)?.error ?? "no se pudo sondear"
+                  : f.id === "flickr"
+                    ? "Flickr desactivó su API para cuentas gratuitas: hace falta una cuenta Pro"
+                    : undefined
+              }>
               <button
                 onClick={() => onCambiar(f.id, !on)}
                 aria-label={`${on ? "Apagar" : "Encender"} ${nombre(f.id)}`}
@@ -67,7 +76,9 @@ export function AvailabilityPanel({
                   opacity: f.puntos_exactos ? 1 : 0.55,
                 }}
               />
-              <span className="flex-1 text-[11.5px] text-fg">{nombre(f.id)}</span>
+              <span className={`flex-1 text-[11.5px] ${falla ? "text-warning-fg" : "text-fg"}`}>
+                {nombre(f.id)}
+              </span>
               <span className={`font-mono text-[10px] ${f.gratis ? "text-subtle" : "text-warning-fg"}`}>
                 {!pintable ? "global" : f.puntos_exactos ? "exacto" : "muestreo"}
               </span>
@@ -91,7 +102,9 @@ export function AvailabilityPanel({
       >
         {sondeando
           ? `Sondeando… ${progreso ? `${progreso.hechos}/${progreso.total}` : ""}`
-          : sondeos.length > 0 ? "Volver a sondear" : "Sondear el área"}
+          : conError.length > 0
+            ? "Sondear de nuevo lo que falló"
+            : sondeos.length > 0 ? "Volver a sondear" : "Sondear el área"}
       </button>
 
       <div className="mt-3 flex items-start gap-2">
