@@ -195,7 +195,7 @@ fn marcar_hecho(app: &crate::App, paquete: &str, asset: &str) -> Result<()> {
 
 /// La carpeta del release donde vive `ficha.json`, con el nombre del asset
 /// pegado al final: los assets de un paquete viven junto a su ficha.
-fn url_de(ficha_url: &str, asset: &str) -> String {
+pub(crate) fn url_de(ficha_url: &str, asset: &str) -> String {
     match ficha_url.rfind('/') {
         Some(i) => format!("{}/{asset}", &ficha_url[..i]),
         None => asset.to_string(),
@@ -299,10 +299,49 @@ async fn bajar_con_vigilante(
     let clave = *clave;
     let destino = destino.to_path_buf();
     let progreso_tarea = progreso.clone();
-    let mut tarea = tokio::spawn(async move {
+    let tarea = tokio::spawn(async move {
         paquete::traer_y_abrir(&http, &url, &sha256_esperado, &clave, &destino, &progreso_tarea).await
     });
+    vigilar(tarea, progreso).await
+}
 
+/// El mismo vigilante, para un cuerpo publicado en varias partes.
+///
+/// La vigilancia en sí no cambia ni una línea: `EnCurso` cuenta bytes sin
+/// saber nada de partes, y `traer_y_abrir_multiparte` los acumula a través
+/// de las fronteras justamente para que siga valiendo tal cual. Lo único
+/// distinto es qué future se lanza.
+async fn bajar_multiparte_con_vigilante(
+    http: &reqwest::Client,
+    ficha_url: &str,
+    asset: &lumi_index::ficha::Asset,
+    clave: &[u8; 32],
+    destino: &std::path::Path,
+    progreso: &EnCurso,
+) -> Result<()> {
+    let http = http.clone();
+    let ficha_url = ficha_url.to_string();
+    let asset = asset.clone();
+    let clave = *clave;
+    let destino = destino.to_path_buf();
+    let progreso_tarea = progreso.clone();
+    let tarea = tokio::spawn(async move {
+        paquete::traer_y_abrir_multiparte(
+            &http, &ficha_url, &asset, &clave, &destino, &progreso_tarea,
+        )
+        .await
+    });
+    vigilar(tarea, progreso).await
+}
+
+/// La vigilancia propiamente dicha, extraída tal cual para que el camino de
+/// un fichero y el de varias partes la compartan en vez de duplicar el
+/// `select!` — no mira el contenido de la descarga, solo si su contador de
+/// bytes sigue moviéndose.
+async fn vigilar(
+    mut tarea: tokio::task::JoinHandle<Result<()>>,
+    progreso: &EnCurso,
+) -> Result<()> {
     // Generoso a propósito: un asset legítimo pero lento sigue avanzando
     // bytes de sobra dentro de este margen. Lo que esto caza es la
     // ausencia TOTAL de avance, no la lentitud.
@@ -413,7 +452,15 @@ async fn instalar_uno(
             p.asset_bytes_hechos = 0;
             p.asset_bytes_total = 0;
         }
-        bajar_con_vigilante(http, &url_de(ficha_url, &a.nombre), &a.sha256, &clave, &raiz, &app.indices_en_curso).await?;
+        // Un cuerpo que no cabía en un asset del proveedor se publicó
+        // partido: hay que reunir sus partes antes de descifrar. `partes`
+        // vacío es el caso normal —y el único que existía hasta ahora—, así
+        // que una ficha de siempre pasa por exactamente el mismo camino.
+        if a.partes.is_empty() {
+            bajar_con_vigilante(http, &url_de(ficha_url, &a.nombre), &a.sha256, &clave, &raiz, &app.indices_en_curso).await?;
+        } else {
+            bajar_multiparte_con_vigilante(http, ficha_url, a, &clave, &raiz, &app.indices_en_curso).await?;
+        }
         marcar_hecho(app, &ficha.paquete, &a.nombre)?;
         avanzar(app, 1);
     }

@@ -341,17 +341,17 @@ En el bloque que hoy pinta `noCaben` (líneas ~97-117 de la lectura previa), cam
 - `paquete::traer_y_abrir` se mantiene para el caso de un asset sin partes (firma sin cambios, o casi — ver Step 1).
 - Nueva `paquete::traer_y_abrir_multiparte(http, ficha_url, asset: &Asset, clave, destino, progreso) -> Result<()>` que reúne todas las partes y reutiliza la cola de descifrado/despliegue.
 
-- [ ] **Step 1: Extraer la cola común (descifrar + desplegar)**
+- [x] **Step 1: Extraer la cola común (descifrar + desplegar)**
 
 En `paquete.rs`, separar el cuerpo de `traer_y_abrir` en dos funciones: la que ya existe se queda como el camino "un solo fichero, ya en `destino_temporal`", y se extrae una función privada `descifrar_y_desplegar(sellado_temporal: &Path, clave: &[u8; 32], destino: &Path) -> Result<()>` con exactamente el código de las líneas 108-163 de hoy (leer el fichero, descifrar, comprobar tope de descompresión, desplegar el zip) — sin cambiar ni una línea de esa lógica, solo moviéndola.
 
-- [ ] **Step 2: Descargar-y-verificar una URL a un fichero, reutilizable**
+- [x] **Step 2: Descargar-y-verificar una URL a un fichero, reutilizable**
 
 Extraer también el tramo de streaming+hash (líneas 46-106 de hoy) a una función `bajar_verificando(http, url, sha256_esperado, destino_fichero: &Path, progreso, bytes_ya_contados: u64) -> Result<u64>` que devuelve el total de bytes recibidos (para que el llamador multi-parte pueda acumular el contador entre partes) — el parámetro `bytes_ya_contados` es el offset a partir del cual seguir sumando en `progreso.asset_bytes_hechos`, para que la barra no se reinicie a 0 en cada parte.
 
 `traer_y_abrir` (el camino de un solo fichero) pasa a ser una función delgada que llama a `bajar_verificando` una vez y luego a `descifrar_y_desplegar`.
 
-- [ ] **Step 3: `traer_y_abrir_multiparte`**
+- [x] **Step 3: `traer_y_abrir_multiparte`**
 
 ```rust
 pub async fn traer_y_abrir_multiparte(
@@ -395,7 +395,7 @@ Ajustar `url_de` en `mod.rs` a `pub(crate)` si hace falta llamarla desde `paquet
 
 `bajar_verificando_y_anexar` es una pequeña variante de `bajar_verificando` que escribe sobre un `&mut File` ya abierto en vez de crear uno propio (para poder anexar sucesivamente) — factorizar el streaming en una función de más bajo nivel que ambas (`traer_y_abrir` de un solo fichero, y esta) llamen, en vez de duplicar el bucle de `flujo.next()`.
 
-- [ ] **Step 4: `instalar_uno` elige el camino según `a.partes`**
+- [x] **Step 4: `instalar_uno` elige el camino según `a.partes`**
 
 ```rust
 if a.partes.is_empty() {
@@ -407,15 +407,15 @@ if a.partes.is_empty() {
 
 `bajar_multiparte_con_vigilante` sigue el mismo patrón que `bajar_con_vigilante` (vigilar desde fuera con su propio `select!`, ver el comentario ya existente sobre por qué vive en una tarea aparte) pero llamando a `paquete::traer_y_abrir_multiparte` en vez de `traer_y_abrir`. Revisar si el vigilante puede factorizarse para aceptar CUALQUIER future en vez de duplicar el `tokio::select!` — si la señal de progreso (`asset_bytes_hechos`/`asset_bytes_total`) ya es genérica (lo es, vive en `EnCurso` sin saber nada de partes), probablemente sí sin tocar la lógica de vigilancia en sí.
 
-- [ ] **Step 5: Tests**
+- [x] **Step 5: Tests**
 
 Si `paquete.rs` no tiene tests hoy (comprobar), añadir al menos uno que ejercite `traer_y_abrir_multiparte` contra un servidor HTTP de prueba local (o ficheros `file://` si `reqwest` lo permite en este contexto — si no, un test que solo prueba el reensamblado en disco sin red real, inyectando las partes ya escritas, es aceptable y más simple). Seguir el patrón de test que ya use este módulo o el hermano más cercano en `crates/lumid/src/indices/`.
 
-- [ ] **Step 6: Verificar**
+- [x] **Step 6: Verificar**
 
 `cargo test -p lumid` (o el nombre real del paquete).
 
-- [ ] **Commit:** `feat(lumid): instalar un cuerpo publicado en varias partes, reensamblando antes de descifrar`
+- [x] **Commit:** `feat(lumid): instalar un cuerpo publicado en varias partes, reensamblando antes de descifrar`
 
 ---
 
