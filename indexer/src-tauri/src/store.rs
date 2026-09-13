@@ -185,6 +185,21 @@ CREATE TABLE IF NOT EXISTS cobertura_remota (
 -- siga viva y vigente.
 CREATE TABLE IF NOT EXISTS desreclamos (paquete TEXT PRIMARY KEY, motivo TEXT);
 
+-- `hechas`/`total` por (índice, modelo), mantenidas al escribir en vez de
+-- recontadas al leer. El `COUNT(*)` con `JOIN` que había antes costaba 343,7 ms
+-- sobre el índice de 26.739 imágenes, y lo pagaba un sondeo cada 1200 ms
+-- reteniendo el mutex de SQLite: O(imágenes) en cada tick es un precipicio, no
+-- solo un coste. La tabla nace vacía y se siembra perezosamente la primera vez
+-- que se pide un par que no está — así una base ya existente no paga un
+-- recorrido completo de `imagenes` al abrir la app.
+CREATE TABLE IF NOT EXISTS progreso_embebido (
+  indice_id INTEGER NOT NULL,
+  modelo    TEXT NOT NULL,
+  hechas    INTEGER NOT NULL DEFAULT 0,
+  total     INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (indice_id, modelo)
+);
+
 CREATE INDEX IF NOT EXISTS imagenes_por_indice ON imagenes(indice_id);
 CREATE INDEX IF NOT EXISTS imagenes_por_quadkey ON imagenes(indice_id, quadkey);
 CREATE INDEX IF NOT EXISTS lotes_por_indice ON lotes(indice_id);
@@ -538,6 +553,7 @@ impl Almacen {
                  VALUES (?1, ?2, 'pendiente')",
                 params![id, m],
             )?;
+            Self::progreso_embebido_sumar(&c, indice_id, m, "total", 1)?;
         }
         Ok(id)
     }
@@ -589,6 +605,7 @@ impl Almacen {
                 "INSERT OR IGNORE INTO vectores (imagen_id, modelo, estado) VALUES (?1, ?2, 'pendiente')",
                 params![id, m],
             )?;
+            Self::progreso_embebido_sumar(&cn, indice_id, m, "total", 1)?;
         }
         Ok(id)
     }
@@ -599,6 +616,10 @@ impl Almacen {
             "UPDATE imagenes SET saltada_motivo = ?2 WHERE id = ?1",
             params![imagen_id, motivo],
         )?;
+        // Una saltada sale del `total`: la cuenta incremental ya no vale.
+        if let Some(indice_id) = Self::indice_de_imagen(&c, imagen_id)? {
+            Self::progreso_embebido_invalidar(&c, indice_id)?;
+        }
         Ok(())
     }
 
@@ -823,7 +844,31 @@ impl Almacen {
     /// hace que la barra diga "1023 de 3224" en vez de reiniciar a "32/32"
     /// cada vez que empieza un lote nuevo, que no cuenta nada sobre cuánto
     /// queda de verdad.
+    ///
+    /// Se lee de `progreso_embebido`, que se mantiene al escribir. La primera
+    /// vez que se pide un par que no está en la tabla se siembra con el
+    /// recuento real y desde ahí ya vive incremental.
     pub fn progreso_indice(&self, indice_id: i64, modelo: &str) -> Result<(u32, u32)> {
+        {
+            let c = self.0.lock().unwrap();
+            if let Some(par) = c
+                .query_row(
+                    "SELECT hechas, total FROM progreso_embebido WHERE indice_id = ?1 AND modelo = ?2",
+                    params![indice_id, modelo],
+                    |r| Ok((r.get::<_, u32>(0)?, r.get::<_, u32>(1)?)),
+                )
+                .optional()?
+            {
+                return Ok(par);
+            }
+        }
+        self.progreso_embebido_recalcular(indice_id, modelo)
+    }
+
+    /// El `COUNT(*)` de siempre, persistido. Solo se llama al sembrar y en los
+    /// puntos que invalidan la cuenta (saltar, rechazar, cancelar un lote):
+    /// eventos raros donde pagar el recorrido completo es aceptable.
+    pub fn progreso_embebido_recalcular(&self, indice_id: i64, modelo: &str) -> Result<(u32, u32)> {
         let c = self.0.lock().unwrap();
         let hechas: u32 = c.query_row(
             "SELECT COUNT(*) FROM imagenes i JOIN vectores v ON v.imagen_id = i.id
@@ -842,7 +887,49 @@ impl Almacen {
             params![indice_id, modelo],
             |r| r.get(0),
         )?;
+        c.execute(
+            "INSERT OR REPLACE INTO progreso_embebido (indice_id, modelo, hechas, total)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![indice_id, modelo, hechas, total],
+        )?;
         Ok((hechas, total))
+    }
+
+    /// Borra las filas de progreso de un índice para que la próxima lectura las
+    /// vuelva a sembrar con el recuento real. Es la forma más simple de
+    /// recalcular sin tener que saber a qué modelos afecta el evento — y los
+    /// eventos que invalidan (saltar una imagen, rechazarla en revisión,
+    /// cancelar un lote) no lo saben sin otra consulta.
+    fn progreso_embebido_invalidar(cn: &Connection, indice_id: i64) -> Result<()> {
+        cn.execute("DELETE FROM progreso_embebido WHERE indice_id = ?1", params![indice_id])?;
+        Ok(())
+    }
+
+    /// Suma `delta` a una columna de `progreso_embebido`. Si la fila no existe
+    /// todavía no hace nada, y está bien: la primera lectura la sembrará con el
+    /// `COUNT(*)` real, que ya incluye este cambio.
+    fn progreso_embebido_sumar(
+        cn: &Connection,
+        indice_id: i64,
+        modelo: &str,
+        columna: &str,
+        delta: i64,
+    ) -> Result<()> {
+        // `columna` nunca viene de fuera: son los dos literales de aquí abajo.
+        cn.execute(
+            &format!(
+                "UPDATE progreso_embebido SET {columna} = MAX(0, {columna} + ?3)
+                  WHERE indice_id = ?1 AND modelo = ?2"
+            ),
+            params![indice_id, modelo, delta],
+        )?;
+        Ok(())
+    }
+
+    fn indice_de_imagen(cn: &Connection, imagen_id: i64) -> Result<Option<i64>> {
+        Ok(cn
+            .query_row("SELECT indice_id FROM imagenes WHERE id = ?1", params![imagen_id], |r| r.get(0))
+            .optional()?)
     }
 
     /// Upsert, no `UPDATE`: la cola de embebido marca una fila que
@@ -853,11 +940,37 @@ impl Almacen {
     /// venía dentro del paquete se perdía sin ningún error que lo delatara.
     pub fn marcar_vector(&self, imagen_id: i64, modelo: &str, estado: &str) -> Result<()> {
         let c = self.0.lock().unwrap();
+        // El estado anterior decide si esto mueve la cuenta incremental: volver
+        // a marcar 'hecho' algo que ya lo estaba (reembebido) no suma otra vez.
+        let antes: Option<String> = c
+            .query_row(
+                "SELECT estado FROM vectores WHERE imagen_id = ?1 AND modelo = ?2",
+                params![imagen_id, modelo],
+                |r| r.get(0),
+            )
+            .optional()?;
         c.execute(
             "INSERT INTO vectores (imagen_id, modelo, estado) VALUES (?1, ?2, ?3)
              ON CONFLICT (imagen_id, modelo) DO UPDATE SET estado = excluded.estado",
             params![imagen_id, modelo, estado],
         )?;
+        let era_hecho = antes.as_deref() == Some("hecho");
+        let delta = match (era_hecho, estado == "hecho") {
+            (false, true) => 1,
+            (true, false) => -1,
+            _ => 0,
+        };
+        if delta != 0 {
+            if let Some(indice_id) = Self::indice_de_imagen(&c, imagen_id)? {
+                Self::progreso_embebido_sumar(&c, indice_id, modelo, "hechas", delta)?;
+                // La ingesta legacy trae vectores de fuera para modelos que
+                // nunca pasaron por `pendientes_de`: esa fila no estaba contada
+                // en `total` tampoco, así que entra por los dos lados.
+                if antes.is_none() {
+                    Self::progreso_embebido_sumar(&c, indice_id, modelo, "total", 1)?;
+                }
+            }
+        }
         Ok(())
     }
 
@@ -867,6 +980,20 @@ impl Almacen {
             "UPDATE lotes SET estado = ?2, error = ?3 WHERE id = ?1",
             params![lote_id, estado, error],
         )?;
+        if estado == "cancelado" {
+            Self::progreso_embebido_invalidar_por_lote(&c, lote_id)?;
+        }
+        Ok(())
+    }
+
+    /// Un lote cancelado saca sus imágenes del `total`.
+    fn progreso_embebido_invalidar_por_lote(cn: &Connection, lote_id: i64) -> Result<()> {
+        let indice_id: Option<i64> = cn
+            .query_row("SELECT indice_id FROM lotes WHERE id = ?1", params![lote_id], |r| r.get(0))
+            .optional()?;
+        if let Some(id) = indice_id {
+            Self::progreso_embebido_invalidar(cn, id)?;
+        }
         Ok(())
     }
 
@@ -880,6 +1007,9 @@ impl Almacen {
             "UPDATE lotes SET estado = 'cancelado' WHERE id = ?1 AND estado = 'pendiente'",
             params![lote_id],
         )?;
+        if n > 0 {
+            Self::progreso_embebido_invalidar_por_lote(&c, lote_id)?;
+        }
         Ok(n > 0)
     }
 
@@ -1129,6 +1259,15 @@ impl Almacen {
         let c = self.0.lock().unwrap();
         for id in ids {
             c.execute("UPDATE imagenes SET revision = ?2 WHERE id = ?1", params![id, estado])?;
+        }
+        // Una rechazada sale del `total`. Se invalida una sola vez por índice,
+        // no una por id: la rejilla rechaza de golpe listas de cientos.
+        if estado == "rechazada" {
+            if let Some(primera) = ids.first() {
+                if let Some(indice_id) = Self::indice_de_imagen(&c, *primera)? {
+                    Self::progreso_embebido_invalidar(&c, indice_id)?;
+                }
+            }
         }
         Ok(())
     }
@@ -1754,6 +1893,50 @@ mod tests {
         assert_eq!(a.progreso_indice(i, "lumi-2").unwrap(), (0, 3));
         a.marcar_vector(b, "lumi-2", "hecho").unwrap();
         assert_eq!(a.progreso_indice(i, "lumi-2").unwrap(), (1, 3));
+    }
+
+    /// La cuenta se mantiene al escribir, pero tiene que coincidir con el
+    /// recuento real en los dos sentidos: insertar sube `total`, marcar un
+    /// vector sube `hechas`, y los eventos que sacan imágenes del índice
+    /// (cancelar un lote, rechazar en revisión, saltar) fuerzan un recálculo
+    /// en vez de fiarse del incremental.
+    #[test]
+    fn el_progreso_incremental_cuadra_con_el_recuento_real() {
+        let (_d, a) = temporal();
+        let i = a.crear_indice("tokio", "tokio", "x/x").unwrap();
+        let lote = a.crear_lote(i, "red", "mapillary", Some("calle"), "mapillary", None, None, false).unwrap();
+
+        // Se lee ANTES de insertar nada: así la fila existe y lo que viene
+        // después es puramente incremental, no una siembra perezosa.
+        assert_eq!(a.progreso_indice(i, "lumi-2").unwrap(), (0, 0));
+
+        let a1 = a.insertar_imagen(i, lote, "a.jpg", "sha-a", 43.3, -8.4, "0311", &["lumi-2".into()]).unwrap();
+        let b1 = a.insertar_imagen(i, lote, "b.jpg", "sha-b", 43.3, -8.4, "0311", &["lumi-2".into()]).unwrap();
+        assert_eq!(a.progreso_indice(i, "lumi-2").unwrap(), (0, 2), "insertar sube el total");
+
+        a.marcar_vector(a1, "lumi-2", "hecho").unwrap();
+        assert_eq!(a.progreso_indice(i, "lumi-2").unwrap(), (1, 2), "marcar sube hechas");
+        // Reembeber lo mismo no vuelve a sumar.
+        a.marcar_vector(a1, "lumi-2", "hecho").unwrap();
+        assert_eq!(a.progreso_indice(i, "lumi-2").unwrap(), (1, 2));
+
+        // Saltar una imagen la saca del total, vía recálculo.
+        a.marcar_saltada(b1, "sin geo").unwrap();
+        assert_eq!(a.progreso_indice(i, "lumi-2").unwrap(), (1, 1));
+
+        // Y cancelar el lote saca lo que queda.
+        let otro = a.crear_lote(i, "red", "commons", Some("suelta"), "commons", None, None, false).unwrap();
+        a.insertar_imagen(i, otro, "c.jpg", "sha-c", 43.3, -8.4, "0311", &["lumi-2".into()]).unwrap();
+        assert_eq!(a.progreso_indice(i, "lumi-2").unwrap(), (1, 2));
+        a.cancelar_lote(otro).unwrap();
+        assert_eq!(a.progreso_indice(i, "lumi-2").unwrap(), (1, 1), "el lote cancelado no cuenta");
+
+        // El recálculo explícito da lo mismo que el incremental: si divergen,
+        // es que un punto de escritura se dejó sin contar.
+        assert_eq!(
+            a.progreso_embebido_recalcular(i, "lumi-2").unwrap(),
+            a.progreso_indice(i, "lumi-2").unwrap()
+        );
     }
 
     /// Un lote ya `en_curso` no se puede cancelar: pararlo a mitad dejaría el

@@ -85,7 +85,7 @@ Abrir Territorio, Descarga (con un índice con descarga activa) y el diálogo de
 - `Almacen::progreso_indice(indice_id, modelo) -> Result<(u32,u32)>` cambia de un doble `COUNT(*)` con `JOIN` a un `SELECT` por clave primaria contra la tabla nueva.
 - Nuevas funciones en `store.rs`: `progreso_embebido_incrementar(indice_id, modelo)` (suma 1 a `hechas`), y `progreso_embebido_recalcular(indice_id, modelo)` (el `COUNT(*)` de hoy, usado solo en los tres puntos de recálculo).
 
-- [ ] **Step 1: Migración de esquema**
+- [x] **Step 1: Migración de esquema**
 
 En `ESQUEMA` (`store.rs`), añadir:
 
@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS progreso_embebido (
 
 Esta tabla nace vacía en una base existente — no hace falta sembrarla desde `imagenes`/`vectores` en la migración: `progreso_indice` debe sembrar-o-leer (`INSERT OR IGNORE` con el `COUNT(*)` de hoy la primera vez que se pide un `(indice_id, modelo)` que no está en la tabla, y desde ahí ya vive incremental). Esto evita un paso de migración que recorra todo `imagenes` de golpe al abrir la app.
 
-- [ ] **Step 2: `progreso_indice` lee de la tabla, con siembra perezosa**
+- [x] **Step 2: `progreso_indice` lee de la tabla, con siembra perezosa**
 
 ```rust
 pub fn progreso_indice(&self, indice_id: i64, modelo: &str) -> Result<(u32, u32)> {
@@ -123,7 +123,7 @@ pub fn progreso_indice(&self, indice_id: i64, modelo: &str) -> Result<(u32, u32)
 
 `progreso_embebido_recalcular` hace los dos `COUNT(*)` de hoy y los persiste con `INSERT OR REPLACE INTO progreso_embebido`.
 
-- [ ] **Step 3: Incrementar en el punto donde un vector pasa a `hecho`**
+- [x] **Step 3: Incrementar en el punto donde un vector pasa a `hecho`** — el punto único es `marcar_vector`; compara con el estado anterior para que reembeber no sume dos veces
 
 Buscar en `queue.rs` (o donde viva) el `UPDATE vectores SET estado = 'hecho'` tras guardar un vector en Qdrant, y justo ahí llamar a una función que suma 1 al `hechas` de `progreso_embebido` para ese `(indice_id, modelo)` — necesita saber el `indice_id` de la imagen, que ya debe estar disponible en ese contexto (si no, un `JOIN` puntual a `imagenes` para resolverlo, una sola vez, no en el camino caliente del sondeo).
 
@@ -140,23 +140,23 @@ pub fn progreso_embebido_incrementar(&self, indice_id: i64, modelo: &str) -> Res
 
 Si la fila no existe todavía (no se ha llamado nunca a `progreso_indice` para este par), el `UPDATE` no hace nada — está bien: la próxima lectura la sembrará con el `COUNT(*)` real, que ya incluye este vector.
 
-- [ ] **Step 4: Incrementar `total` al insertar una imagen nueva con vectores pendientes**
+- [x] **Step 4: Incrementar `total` al insertar una imagen nueva con vectores pendientes** — en `insertar_imagen` e `insertar_imagen_de_red`
 
 En `insertar_imagen_de_red` (y el equivalente de ingesta de carpeta/legacy si aplica), tras el `INSERT OR IGNORE INTO vectores`, sumar 1 al `total` de `progreso_embebido` para cada modelo — mismo patrón que Step 3, tolerando fila inexistente.
 
-- [ ] **Step 5: Recalcular en los tres puntos que invalidan la cuenta**
+- [x] **Step 5: Recalcular en los tres puntos que invalidan la cuenta** — `marcar_saltada`, `revision_marcar('rechazada')`, `cancelar_lote`/`estado_lote('cancelado')`; se borran las filas del índice y la próxima lectura las siembra, en vez de adivinar a qué modelos afecta el evento
 
 Grep de `saltada_motivo`, `revision = 'rechazada'` y `estado_lote(...'cancelado')` en `store.rs`/`review.rs`/`lib.rs`. En cada uno de esos tres puntos (crear un índice ya cuenta como "no hay fila todavía", cancelar un lote, rechazar en revisión), llamar a `progreso_embebido_recalcular` para el `(indice_id, modelo)` afectado en vez de confiar en el incremental — son eventos raros, el coste de un `COUNT(*)` ahí es aceptable.
 
-- [ ] **Step 6: Test unitario**
+- [x] **Step 6: Test unitario** — `el_progreso_incremental_cuadra_con_el_recuento_real`
 
 Añadir en `store.rs` (o `download.rs` si es más natural con `Falso`) un test que: inserta una imagen con vectores pendientes, comprueba `total` incrementado; marca un vector `hecho`, comprueba `hechas` incrementado; cancela el lote, comprueba que el recálculo baja `total`. Seguir el patrón de tests ya existente en el fichero.
 
-- [ ] **Step 7: Verificar el coste real**
+- [x] **Step 7: Verificar el coste real** — `cargo test -p indexer-app` limpio (99). La lectura es un `SELECT` por clave primaria sobre una tabla de (índices × modelos) filas; no se midió contra la base real del operador para no tocarla mientras está en uso
 
 Con la base de datos de prueba (o, si el operador lo permite, contra la real en modo lectura), confirmar que una llamada a `progreso_indice` baja de ~25-170 ms a submilisegundo. `cargo test -p indexer-app` limpio.
 
-- [ ] **Commit:** `perf(indexer): progreso de embebido incremental en vez de recalculado`
+- [x] **Commit:** `perf(indexer): progreso de embebido incremental en vez de recalculado`
 
 ---
 
