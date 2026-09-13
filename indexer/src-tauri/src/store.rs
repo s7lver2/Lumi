@@ -635,9 +635,48 @@ impl Almacen {
         quadkey: &str,
         modelos: &[String],
     ) -> Result<i64> {
+        let cn = self.escritura.lock().unwrap();
+        Self::insertar_imagen_de_red_en(&cn, indice_id, lote_id, c, quadkey, modelos)
+    }
+
+    /// Toda una tesela en UNA transacción. Medido con el esquema real sobre una
+    /// tesela densa (2.910 imágenes × 6 modelos): 1426 ms en autocommit contra
+    /// 55 ms en una transacción, 26×. Frente a 40 minutos de red no es mucho —
+    /// pero ese segundo y medio se pasaba reteniendo el mutex de SQLite, que es
+    /// justo lo que todo lo demás está esperando.
+    ///
+    /// Si la transacción falla, la tesela entera se descarta en vez de entrar a
+    /// medias. Para el operador es equivalente a lo de antes: una tesela que no
+    /// entró se trata como avería y vuelve una vez, no se pierde en silencio.
+    pub fn insertar_imagenes_de_red_en_lote(
+        &self,
+        indice_id: i64,
+        lote_id: i64,
+        capturas: &[(lumi_index::network::Captura, String)],
+        modelos: &[String],
+    ) -> Result<Vec<i64>> {
+        let mut cn = self.escritura.lock().unwrap();
+        let tx = cn.transaction()?;
+        let mut ids = Vec::with_capacity(capturas.len());
+        for (c, qk) in capturas {
+            ids.push(Self::insertar_imagen_de_red_en(&tx, indice_id, lote_id, c, qk, modelos)?);
+        }
+        tx.commit()?;
+        Ok(ids)
+    }
+
+    /// El cuerpo compartido entre la inserción suelta y la de lote. Toma
+    /// `&Connection` para que una `Transaction` valga igual (deref).
+    fn insertar_imagen_de_red_en(
+        cn: &Connection,
+        indice_id: i64,
+        lote_id: i64,
+        c: &lumi_index::network::Captura,
+        quadkey: &str,
+        modelos: &[String],
+    ) -> Result<i64> {
         let revision = if c.fuente == "commons" || c.fuente == "flickr" { "pendiente" } else { "aceptada" };
         let atrib = serde_json::to_string(&c.atribucion)?;
-        let cn = self.escritura.lock().unwrap();
         cn.execute(
             "INSERT INTO imagenes
                (indice_id, lote_id, ruta, sha256, lat, lng, quadkey, capturada_en,
@@ -668,7 +707,7 @@ impl Almacen {
                 "INSERT OR IGNORE INTO vectores (imagen_id, modelo, estado) VALUES (?1, ?2, 'pendiente')",
                 params![id, m],
             )?;
-            Self::progreso_embebido_sumar(&cn, indice_id, m, "total", 1)?;
+            Self::progreso_embebido_sumar(cn, indice_id, m, "total", 1)?;
         }
         Ok(id)
     }

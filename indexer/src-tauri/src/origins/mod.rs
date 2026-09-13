@@ -252,10 +252,25 @@ impl Ctx {
         }
         let bytes = r.bytes().await?;
         let ruta = self.stage.join(&nombre);
-        std::fs::create_dir_all(&self.stage)?;
-        std::fs::write(&ruta, &bytes)?;
-        if image::image_dimensions(&ruta).is_err() {
-            let _ = std::fs::remove_file(&ruta);
+        // Escribir a disco y decodificar son trabajo bloqueante, y hacerlo
+        // dentro de un `async fn` atasca el runtime de Tokio entero — que es
+        // por donde Tauri enruta TODO el IPC, así que la interfaz se congela
+        // mientras se baja. Mismo fallo que `sellar()` tuvo hasta `d81bfc2`.
+        // El error de decodificación se devuelve como un booleano y el mensaje
+        // se compone fuera, para no mover `url` al hilo bloqueante.
+        let stage = self.stage.clone();
+        let destino = ruta.clone();
+        let decodifica = tokio::task::spawn_blocking(move || -> Result<bool> {
+            std::fs::create_dir_all(&stage)?;
+            std::fs::write(&destino, &bytes)?;
+            if image::image_dimensions(&destino).is_err() {
+                let _ = std::fs::remove_file(&destino);
+                return Ok(false);
+            }
+            Ok(true)
+        })
+        .await??;
+        if !decodifica {
             anyhow::bail!("lo que devolvió {} no decodifica como imagen", crate::keys::redactar(url));
         }
         // Se cuenta lo que de verdad quedó en disco y decodifica, igual que el

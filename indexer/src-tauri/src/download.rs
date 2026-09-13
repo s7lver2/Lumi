@@ -256,7 +256,10 @@ impl Descarga {
         // nutrir es lo que ya se sabía pobre, no lo que resultó estar bien
         // surtido por azar del orden alfabético de quadkey. Sin sondeo (o
         // caducado) ordena como 0 — al final, no al principio.
-        pendientes.sort_by_key(|qk| {
+        // `sort_by_cached_key` y no `sort_by_key`: la clave es una consulta a
+        // SQLite, y sin cachearla se llamaba O(n log n) veces. Nota al pie del
+        // spec de rendimiento (§4), no titular: a 200 teselas son 0,02 s.
+        pendientes.sort_by_cached_key(|qk| {
             std::cmp::Reverse(
                 self.almacen
                     .sondeo_leer(o.id(), qk, crate::probe::CADUCIDAD_DIAS)
@@ -373,23 +376,32 @@ impl Descarga {
                     // foto real seguir cayendo al otro lado — última defensa
                     // aquí: solo entra al índice lo que de verdad cae en la
                     // tesela que se pidió, ni una más.
-                    let mut n = 0u32;
                     let mut descartadas = 0u32;
+                    let mut entran: Vec<(lumi_index::network::Captura, String)> = Vec::new();
                     for c in &caps {
                         let qk_real = quadkey(c.lat, c.lng);
                         if qk_real != qk {
                             descartadas += 1;
                             continue;
                         }
-                        let _ = self.almacen.insertar_imagen_de_red(
-                            self.indice_id,
-                            lote_id,
-                            c,
-                            &qk_real,
-                            &self.modelos,
-                        );
-                        n += 1;
+                        entran.push((c.clone(), qk_real));
                     }
+                    // La tesela entera en una transacción: 26× más rápido que
+                    // imagen a imagen, y sobre todo suelta el mutex de SQLite
+                    // mucho antes. Si falla, la tesela no entra a medias — se
+                    // queda sin marcar `hecho` y vuelve como avería.
+                    let n = match self.almacen.insertar_imagenes_de_red_en_lote(
+                        self.indice_id,
+                        lote_id,
+                        &entran,
+                        &self.modelos,
+                    ) {
+                        Ok(ids) => ids.len() as u32,
+                        Err(e) => {
+                            self.anotar(format!("no se pudieron guardar las imágenes de {qk}: {e}"));
+                            0
+                        }
+                    };
                     // SOLO SE APUNTA LO SERVIDO.
                     let _ = spend::apuntar(&self.almacen, o.id(), unidades, gastado);
 

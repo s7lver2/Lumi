@@ -316,7 +316,7 @@ En `download.rs`, extender los tests existentes (que ya usan `Falso` con varios 
 - `Ctx::bajar_imagen` mueve `fs::write` + `image::image_dimensions` a `tokio::task::spawn_blocking`.
 - Nueva función `Almacen::insertar_imagenes_de_red_en_lote(indice_id, lote_id, capturas: &[(Captura, String)], modelos: &[String]) -> Result<Vec<i64>>` que envuelve todos los `INSERT` de una tesela en una única transacción.
 
-- [ ] **Step 1: `bajar_imagen` no bloquea el runtime**
+- [x] **Step 1: `bajar_imagen` no bloquea el runtime** — el closure devuelve un booleano y el mensaje con `redactar(url)` se compone fuera, para no mover `url` al hilo bloqueante
 
 ```rust
 pub async fn bajar_imagen(&self, url: &str, nombre: &str) -> Result<PathBuf> {
@@ -346,7 +346,7 @@ pub async fn bajar_imagen(&self, url: &str, nombre: &str) -> Result<PathBuf> {
 
 Revisar el mensaje de error exacto de hoy (usa `crate::keys::redactar(url)`) y conservarlo tal cual dentro del closure, o devolverlo fuera si `redactar` no es `Send`/no puede moverse al hilo bloqueante — comprobar su firma antes de escribir esto literal.
 
-- [ ] **Step 2: Inserción por tesela en una transacción**
+- [x] **Step 2: Inserción por tesela en una transacción** — cuerpo compartido `insertar_imagen_de_red_en(&Connection, ...)`, que vale igual para una `Transaction` por deref
 
 En `store.rs`, nueva función:
 
@@ -373,17 +373,17 @@ pub fn insertar_imagenes_de_red_en_lote(
 
 Extraer el cuerpo actual de `insertar_imagen_de_red` a una función privada que tome `&Transaction` (o `&Connection`, rusqlite acepta ambos vía el trait `ConnectionOrTransaction` si existe, o simplemente duplicar la única query parametrizada — es corta) para no duplicar el SQL entre la versión de una imagen y la de lote. Mantener `insertar_imagen_de_red` como está (llamada desde ingesta legacy/carpeta, que no pasa por este camino) delegando internamente a la misma función compartida con una transacción de una sola fila, para no romper otros llamadores.
 
-- [ ] **Step 3: `un_origen` acumula la tesela entera antes de insertar**
+- [x] **Step 3: `un_origen` acumula la tesela entera antes de insertar** — se documenta el cambio de comportamiento (opción preferida del plan): una tesela que falla al insertar no entra a medias, se queda sin marcar `hecho` y vuelve como avería. De paso, `sort_by_cached_key` (§4 del spec)
 
 Este es el cambio de forma más delicado de la tarea: hoy `un_origen` inserta imagen a imagen dentro del `for c in &caps`. Cambiar a: recorrer `caps`, filtrar por `qk_real == qk` (igual que hoy, contando `descartadas`), acumular en un `Vec<(Captura, String)>`, y al final del bucle llamar una vez a `insertar_imagenes_de_red_en_lote`. El resto de la lógica (conteo de `n`, `descartadas`, `spend::apuntar`, marcar la tesela `hecho`/`error`) no cambia de orden, solo se mueve después de la inserción en lote.
 
 **Ojo**: si `insertar_imagenes_de_red_en_lote` falla a mitad (raro, pero SQLite puede fallar), hoy una imagen que fallaba individualmente se ignoraba con `let _ =` y las demás seguían. Con una transacción, un fallo descarta la tesela entera. Decidir: o se mantiene el `let _ =` de antes;  o se documenta el cambio de comportamiento (preferible, y más simple: una tesela que falla al insertar ya se trata como "avería, vuelve una vez" en el `Err(e)` del match exterior de `un_origen`, así que el comportamiento observable para el operador es equivalente — una tesela que no entró se reintenta, no se pierde en silencio).
 
-- [ ] **Step 4: Verificar con los tests existentes**
+- [x] **Step 4: Verificar con los tests existentes** — 100 tests limpios, sin tocar ninguno
 
 Los tests de `download.rs` que comprueban `imagenes`/`teselas_hechas` deben seguir pasando sin modificación — el resultado observable no cambia, solo el camino interno. `cargo test -p indexer-app`.
 
-- [ ] **Commit:** `perf(indexer): descarga no bloquea el runtime, e inserta cada tesela en una transacción`
+- [x] **Commit:** `perf(indexer): descarga no bloquea el runtime, e inserta cada tesela en una transacción`
 
 ---
 
