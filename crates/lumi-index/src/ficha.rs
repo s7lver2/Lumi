@@ -11,12 +11,39 @@ use serde::{Deserialize, Serialize};
 pub const VIGENCIA_DIAS: i64 = 90;
 pub const AVISO_REFRESCO_DIAS: i64 = 15;
 
+/// Un fichero físico de un cuerpo que hubo que partir para poder subirlo.
+/// Solo existe cuando el cuerpo cifrado entero no cabía en un asset del
+/// proveedor; en el caso normal (un asset = un fichero) no hay ninguno.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ParteAsset {
+    pub nombre: String,
+    pub sha256: String,
+    pub bytes: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Asset {
     pub nombre: String,
     pub sha256: String,
     pub bytes: u64,
     pub quadkeys: Vec<String>,
+    /// Cuando el cuerpo cifrado entero supera el tope del proveedor, se
+    /// parte en estos ficheros físicos —EN ESTE ORDEN— que hay que
+    /// descargar y concatenar antes de descifrar. Vacío en el caso normal
+    /// (un asset = un fichero), que es como se publicó todo hasta ahora:
+    /// una ficha vieja sin este campo deserializa con `partes: []` y se
+    /// trata exactamente igual que hoy. Cuando NO está vacío, `nombre` es
+    /// una etiqueta lógica (progreso, disco local) y `sha256`/`bytes`
+    /// describen el blob YA REENSAMBLADO completo, no ningún fichero
+    /// individual.
+    ///
+    /// `skip_serializing_if` no es cosmética: `canonico()` reserializa la
+    /// ficha entera para comprobar la firma, así que escribir `"partes":[]`
+    /// donde el fichero original nunca tuvo la clave rompería la firma de
+    /// todas las fichas ya publicadas (el mismo agujero que `numero_version`
+    /// documenta más abajo).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub partes: Vec<ParteAsset>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -155,7 +182,14 @@ mod tests {
             cifrado: "aa==".into(),
             no_redistribuible: vec!["google".into()],
             fuentes_por_quadkey: vec![("0313101".into(), vec!["mapillary".into()])],
-            cuerpos: vec![],
+            // Un cuerpo del caso normal: un asset = un fichero, sin partes.
+            cuerpos: vec![Asset {
+                nombre: "cuerpo-0313101.bin".into(),
+                sha256: "bb".repeat(32),
+                bytes: 1234,
+                quadkeys: vec!["0313101".into()],
+                partes: vec![],
+            }],
             capas: vec![],
             dependencias: vec![],
             firma: String::new(),
@@ -228,5 +262,52 @@ mod tests {
         let j = serde_json::to_string(&f).unwrap();
         let recibida: Ficha = serde_json::from_str(&j).unwrap();
         assert!(recibida.comprobar().is_ok());
+    }
+
+    // Un cuerpo que cabe en un asset no puede añadir ni una clave al JSON:
+    // es lo que hace que el formato de siempre siga siendo byte a byte el
+    // mismo para todo lo que se publicó hasta ahora.
+    #[test]
+    fn una_ficha_sin_partes_deserializa_como_vacio_y_no_cambia_el_json() {
+        let f = ficha_de_prueba();
+        let j = serde_json::to_string(&f).unwrap();
+        assert!(!j.contains("\"partes\""), "un Asset sin partes no debe añadir la clave al JSON");
+        let recibida: Ficha = serde_json::from_str(&j).unwrap();
+        assert!(recibida.cuerpos[0].partes.is_empty());
+    }
+
+    // El caso que no puede regresionar nunca: una ficha REAL ya publicada,
+    // firmada antes de que `partes` existiera, cuyo JSON no tiene la clave
+    // en absoluto. Tiene que deserializar y su firma tiene que seguir
+    // validando sin tocar nada.
+    #[test]
+    fn una_ficha_publicada_antes_de_partes_sigue_verificando() {
+        let mut f = ficha_de_prueba();
+        f.firmar(&[7u8; 32]).unwrap();
+        let mut j: serde_json::Value = serde_json::to_value(&f).unwrap();
+        if let Some(cuerpos) = j.get_mut("cuerpos").and_then(|c| c.as_array_mut()) {
+            for c in cuerpos {
+                c.as_object_mut().unwrap().remove("partes");
+            }
+        }
+        let recibida: Ficha = serde_json::from_value(j).unwrap();
+        assert!(recibida.cuerpos[0].partes.is_empty());
+        assert!(recibida.comprobar().is_ok());
+    }
+
+    // Y una ficha que SÍ lleva partes también se firma y se comprueba: las
+    // partes entran en `canonico()` como cualquier otro campo, así que
+    // alterar una parte invalida la firma.
+    #[test]
+    fn alterar_una_parte_invalida_la_firma() {
+        let mut f = ficha_de_prueba();
+        f.cuerpos[0].partes = vec![
+            ParteAsset { nombre: "cuerpo-0313101.bin.part001".into(), sha256: "cc".repeat(32), bytes: 1000 },
+            ParteAsset { nombre: "cuerpo-0313101.bin.part002".into(), sha256: "dd".repeat(32), bytes: 234 },
+        ];
+        f.firmar(&secreta()).unwrap();
+        f.comprobar().unwrap();
+        f.cuerpos[0].partes[1].sha256 = "ee".repeat(32);
+        assert!(f.comprobar().is_err());
     }
 }

@@ -61,11 +61,11 @@ pub struct Asset {
 }
 ```
 
-- [ ] **Step 1: Añadir `ParteAsset` y el campo `partes` a `Asset`**
+- [x] **Step 1: Añadir `ParteAsset` y el campo `partes` a `Asset`**
 
 Con la documentación del spec §2 como comentario (por qué `partes` vacío es el caso normal, qué significan `sha256`/`bytes` del `Asset` exterior cuando `partes` no está vacío).
 
-- [ ] **Step 2: Test de compatibilidad — el corazón de esta tarea**
+- [x] **Step 2: Test de compatibilidad — el corazón de esta tarea**
 
 En `ficha.rs::tests`, extender `ficha_de_prueba()` o añadir un test dedicado:
 
@@ -97,11 +97,11 @@ fn una_ficha_publicada_antes_de_partes_sigue_verificando() {
 
 Ajustar `ficha_de_prueba()` si hace falta que lleve al menos un `Asset` en `cuerpos` para que este test tenga algo que comprobar (hoy `cuerpos: vec![]` — puede que haga falta añadir un `Asset` de ejemplo a ese fixture, revisando que no rompa los tests existentes que ya usan `ficha_de_prueba()`).
 
-- [ ] **Step 3: Verificar**
+- [x] **Step 3: Verificar**
 
 `cargo test -p lumi-index`.
 
-- [ ] **Commit:** `feat(lumi-index): Asset admite partes multiples, compatible con fichas ya publicadas`
+- [x] **Commit:** `feat(lumi-index): Asset admite partes multiples, compatible con fichas ya publicadas`
 
 ---
 

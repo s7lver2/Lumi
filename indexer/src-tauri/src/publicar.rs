@@ -880,7 +880,7 @@ pub async fn publicar(
         if let Some((sha, bytes)) = almacen.publicacion_igual_a(indice_id, &nombre, &identidad)? {
             prog.anotar(format!("{nombre} no cambió, se reutiliza lo ya subido"));
             prog.terminar_asset(bytes);
-            cuerpos.push(Asset { nombre, sha256: sha, bytes, quadkeys: t.quadkeys.clone() });
+            cuerpos.push(Asset { nombre, sha256: sha, bytes, quadkeys: t.quadkeys.clone(), partes: vec![] });
             continue;
         }
         let sellado = cifrar_asset_async(prog.clone(), &nombre, claro, clave).await?;
@@ -891,7 +891,7 @@ pub async fn publicar(
         let url = subir_asset(&cliente, &testigo, &repo, release, &nombre, sellado, &prog).await?;
         almacen.publicacion_marcar_subido(indice_id, &nombre, &url)?;
         prog.terminar_asset(bytes);
-        cuerpos.push(Asset { nombre, sha256: sha, bytes, quadkeys: t.quadkeys.clone() });
+        cuerpos.push(Asset { nombre, sha256: sha, bytes, quadkeys: t.quadkeys.clone(), partes: vec![] });
     }
 
     // Las capas: un asset por modelo, con los fragmentos de todas las teselas.
@@ -916,7 +916,7 @@ pub async fn publicar(
                 version,
                 dims,
                 autor: autor.clone(),
-                assets: vec![Asset { nombre, sha256: sha, bytes, quadkeys: vec![] }],
+                assets: vec![Asset { nombre, sha256: sha, bytes, quadkeys: vec![], partes: vec![] }],
             });
             continue;
         }
@@ -933,7 +933,7 @@ pub async fn publicar(
             version,
             dims,
             autor: autor.clone(),
-            assets: vec![Asset { nombre, sha256: sha, bytes, quadkeys: vec![] }],
+            assets: vec![Asset { nombre, sha256: sha, bytes, quadkeys: vec![], partes: vec![] }],
         });
     }
 
@@ -1099,7 +1099,7 @@ pub async fn publicar_capa(
             version,
             dims,
             autor,
-            assets: vec![Asset { nombre, sha256: sha, bytes, quadkeys: vec![] }],
+            assets: vec![Asset { nombre, sha256: sha, bytes, quadkeys: vec![], partes: vec![] }],
         }],
         dependencias: vec![lumi_index::ficha::Dependencia {
             quadkeys: vec![],
