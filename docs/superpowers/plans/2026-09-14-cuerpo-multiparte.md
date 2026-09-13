@@ -120,7 +120,7 @@ Ajustar `ficha_de_prueba()` si hace falta que lleve al menos un `Asset` en `cuer
 pub fn partir_en_trozos(bytes: &[u8], tope: usize) -> Vec<&[u8]>
 ```
 
-- [ ] **Step 1: Implementar**
+- [x] **Step 1: Implementar**
 
 ```rust
 pub fn partir_en_trozos(bytes: &[u8], tope: usize) -> Vec<&[u8]> {
@@ -131,7 +131,7 @@ pub fn partir_en_trozos(bytes: &[u8], tope: usize) -> Vec<&[u8]> {
 
 (`chunks` de la stdlib ya hace exactamente esto — la función existe para darle un nombre del dominio y un sitio donde documentar el porqué, no para reimplementar nada.)
 
-- [ ] **Step 2: Tests**
+- [x] **Step 2: Tests**
 
 ```rust
 #[test]
@@ -158,11 +158,11 @@ fn vacio_no_da_trozos() {
 }
 ```
 
-- [ ] **Step 3: Verificar**
+- [x] **Step 3: Verificar**
 
 `cargo test -p lumi-index`.
 
-- [ ] **Commit:** `feat(lumi-index): partir_en_trozos, de proposito general`
+- [x] **Commit:** `feat(lumi-index): partir_en_trozos, de proposito general`
 
 ---
 

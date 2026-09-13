@@ -29,6 +29,26 @@ pub fn desbordados(trozos: &[Trozo], tope_asset: u64) -> Vec<&Trozo> {
     trozos.iter().filter(|t| t.bytes > tope_asset).collect()
 }
 
+/// Divide `bytes` en trozos de como mucho `tope` bytes cada uno, en orden.
+///
+/// De propósito general — no sabe nada de quadkeys ni de assets, solo corta
+/// un buffer. Se usa cuando el CUERPO CIFRADO de una tesela (ya troceado por
+/// geografía en `trocear`, y aun así de un tamaño que no cabe en un asset del
+/// proveedor) necesita partirse por transporte: lo que se parte es el viaje
+/// de un blob que sigue siendo una sola unidad lógica, no el contenido.
+///
+/// `chunks` de la stdlib ya hace exactamente esto; la función existe para
+/// darle un nombre del dominio y un sitio donde documentar el porqué, no
+/// para reimplementar nada.
+pub fn partir_en_trozos(bytes: &[u8], tope: usize) -> Vec<&[u8]> {
+    if bytes.is_empty() {
+        return Vec::new();
+    }
+    // `max(1)` porque `chunks(0)` entra en pánico; un tope de cero no tiene
+    // significado en el dominio, así que se trata como "de uno en uno".
+    bytes.chunks(tope.max(1)).collect()
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Trozo {
     /// La quadkey más corta que contiene a todas las de dentro. Nombra el
@@ -147,5 +167,28 @@ mod tests {
     #[test]
     fn sin_quadkeys_no_hay_trozos() {
         assert!(trocear(&[], 1_000).is_empty());
+    }
+
+    #[test]
+    fn partir_en_trozos_respeta_el_tope_y_no_pierde_bytes() {
+        let datos: Vec<u8> = (0..250u32).map(|i| (i % 256) as u8).collect();
+        let trozos = partir_en_trozos(&datos, 100);
+        assert_eq!(trozos.len(), 3);
+        assert_eq!(trozos[0].len(), 100);
+        assert_eq!(trozos[1].len(), 100);
+        assert_eq!(trozos[2].len(), 50);
+        let reunido: Vec<u8> = trozos.concat();
+        assert_eq!(reunido, datos);
+    }
+
+    #[test]
+    fn lo_que_cabe_en_un_tope_da_un_solo_trozo() {
+        let datos = vec![1u8, 2, 3];
+        assert_eq!(partir_en_trozos(&datos, 100).len(), 1);
+    }
+
+    #[test]
+    fn vacio_no_da_trozos() {
+        assert!(partir_en_trozos(&[], 100).is_empty());
     }
 }
