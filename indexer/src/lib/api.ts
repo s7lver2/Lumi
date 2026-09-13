@@ -184,7 +184,9 @@ export interface ProgresoDescarga {
   ultimo: string;
   registro: string[];
 }
-export interface FichaRevision { id: number; ruta: string; fuente: string; licencia: string | null }
+/** `ruta_miniatura` es `null` en todo lo bajado antes de que las miniaturas
+ *  existieran: ahí la rejilla usa el original, como hacía siempre. */
+export interface FichaRevision { id: number; ruta: string; ruta_miniatura: string | null; fuente: string; licencia: string | null }
 export interface Cuentas { pendientes: number; aceptadas: number; rechazadas: number }
 export interface Publicable { fuente: string; en_el_indice: number; viajan: number; licencia: string; motivo: string }
 

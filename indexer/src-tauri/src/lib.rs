@@ -1114,8 +1114,10 @@ async fn revision_pendientes(
     estado: tauri::State<'_, Estado>,
     indice_id: i64,
 ) -> Result<Vec<review::Ficha>, String> {
-    // 120 caben en la rejilla sin que el navegador se ahogue decodificando
-    // miniaturas. La paginación real llega si hace falta.
+    // Sigue en 120, aunque las miniaturas abaratan mucho cada ficha: el tope
+    // se queda por la razón que ya estaba anotada —no hay paginación real— y
+    // subirlo a ciegas solo cambiaría dónde duele. Las 34.966 fotos bajadas
+    // antes de que existieran las miniaturas siguen pesando lo que pesaban.
     review::pendientes(&estado.almacen, indice_id, 120).map_err(|e| e.to_string())
 }
 

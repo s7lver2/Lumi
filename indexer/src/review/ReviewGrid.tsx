@@ -174,7 +174,7 @@ function Rejilla({ visibles, fuera, onClic }: {
                       className={`relative aspect-[4/3] overflow-hidden rounded-md border border-border
                         ${no ? "opacity-30 ring-[1.5px] ring-danger" : ""}`}
                     >
-                      <img src={convertFileSrc(f.ruta)} alt="" loading="lazy"
+                      <img src={convertFileSrc(f.ruta_miniatura ?? f.ruta)} alt="" loading="lazy"
                         className="h-full w-full object-cover" />
                       <span className="absolute bottom-1 left-1 rounded-[3px] bg-black/50 px-1 py-px
                         font-mono text-[8px] text-white/75">

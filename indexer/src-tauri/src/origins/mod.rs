@@ -191,6 +191,20 @@ pub fn centro_y_radio_km(b: lumi_index::tiles::Bbox) -> (f64, f64, f64) {
     (lat, lng, (radio * 1.2).max(0.05))
 }
 
+/// Lado largo de la miniatura que se escribe junto a cada imagen bajada.
+/// `thumbnail` mantiene la proporción, así que es un tope, no un tamaño.
+pub const LADO_MINIATURA: u32 = 512;
+
+/// La miniatura de una imagen vive junto a ella, con `-mini` antes de la
+/// extensión: `mly-123.jpg` → `mly-123-mini.jpg`. Determinista a propósito, sin
+/// columna nueva en la base de datos — pero quien la necesita la pide por aquí
+/// y no reconstruye el nombre a mano, y menos en otro lenguaje.
+pub fn ruta_miniatura(ruta: &std::path::Path) -> PathBuf {
+    let ext = ruta.extension().and_then(|e| e.to_str()).unwrap_or("jpg");
+    let base = ruta.file_stem().and_then(|e| e.to_str()).unwrap_or("imagen");
+    ruta.with_file_name(format!("{base}-mini.{ext}"))
+}
+
 /// Lo que todo adaptador necesita: un cliente HTTP, su clave si la tiene, y el
 /// directorio de paso donde deja lo que baje.
 pub struct Ctx {
@@ -292,10 +306,18 @@ impl Ctx {
         let decodifica = tokio::task::spawn_blocking(move || -> Result<bool> {
             std::fs::create_dir_all(&stage)?;
             std::fs::write(&destino, &bytes)?;
-            if image::image_dimensions(&destino).is_err() {
+            // Decodificar entera en vez de leer solo la cabecera: la pasada
+            // sirve a la vez para validar que es una imagen de verdad y para
+            // escribir la miniatura, que es lo que la rejilla de revisión
+            // necesita. Las fotos reales van de 228 KB de mediana a 13 MB, y
+            // un JPEG de 4000×3000 son ~48 MB de mapa de bits en el WebView.
+            let Ok(img) = image::open(&destino) else {
                 let _ = std::fs::remove_file(&destino);
                 return Ok(false);
-            }
+            };
+            // Si la miniatura falla, la imagen sigue valiendo: la revisión cae
+            // al original, igual que con todo lo bajado antes de este cambio.
+            let _ = img.thumbnail(LADO_MINIATURA, LADO_MINIATURA).save(ruta_miniatura(&destino));
             Ok(true)
         })
         .await??;

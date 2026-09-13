@@ -516,7 +516,7 @@ En `DescargaYEmbebidoView.tsx` → `EmbedView`, si `useServicios().estado !== 'v
 
 Revisar `ProjectsView`, `IndexDetail`, `ReviewGrid`, `TerritoryView`, `PublishDialog` — ninguna debe quedar bloqueada por `useServicios()`. Si alguna llamada a `api.*` falla silenciosamente porque Redis/Qdrant no están (por ejemplo, algo en `IndexDetail` que muestre progreso de embebido), debe degradar mostrando "0 hechas" o el estado real, no reventar — comprobar visualmente.
 
-- [ ] **Step 6: Probar manualmente** — *pendiente: requiere ojos del operador, con Redis/Qdrant parados a propósito*
+- [ ] **Step 6: Probar manualmente** — *pendiente: requiere ojos del operador* — *pendiente: requiere ojos del operador, con Redis/Qdrant parados a propósito*
 
 Con Redis/Qdrant parados a propósito (o el VHDX en frío si es reproducible), confirmar: la app entra a Proyectos de inmediato, Territorio y Revisión funcionan, el carril muestra el indicador de servicios arrancando, y al entrar a Descarga/Embebido se ve el estado real en vez de un modal bloqueante.
 
@@ -680,7 +680,7 @@ Con Redis y Qdrant ya instalados en WSL, confirmar que `arrancar_wsl` sigue dete
 - `review::Ficha` gana un campo `ruta_miniatura: Option<String>` (o se calcula la ruta de la miniatura por convención desde `ruta` en el frontend, si el patrón de nombre es determinista — más simple, preferir esto).
 - `ReviewGrid.tsx` apunta `<img src>` a la miniatura; solo el original se usa al ampliar (si existe esa interacción — comprobar si `ReviewGrid` ya tiene un modo "ampliar", si no, no inventarlo, es fuera de alcance).
 
-- [ ] **Step 1: Generar la miniatura en el mismo `spawn_blocking` de Task 5**
+- [x] **Step 1: Generar la miniatura en el mismo `spawn_blocking` de Task 5** — `origins::ruta_miniatura()`, `nombre-mini.ext`. La validación pasa de `image_dimensions` a `image::open`: una sola pasada valida y genera
 
 Extender el closure de `bajar_imagen` (ya movido a `spawn_blocking` en Task 5) para, tras confirmar que `image::image_dimensions` decodifica, cargar la imagen completa una vez con `image::open`, generar un `thumbnail(512, 512)` (mantiene proporción, `image` ya lo soporta) y guardarlo junto al original con un sufijo determinista (`nombre_sin_ext + "-mini." + ext`, o el criterio que se decida — debe ser trivial de reconstruir desde `ruta` sin ir a la base de datos, para no tener que persistir una columna nueva).
 
@@ -697,7 +697,7 @@ tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
 
 Definir `ruta_miniatura(ruta: &Path) -> PathBuf` como función libre reutilizable desde donde haga falta reconstruir el nombre (backend y, si el frontend necesita el mismo criterio, documentarlo para que `ReviewGrid` lo replique en TS — más simple: que el backend devuelva la ruta de la miniatura ya resuelta en `review::Ficha`, evitando duplicar la convención de nombres en dos lenguajes).
 
-- [ ] **Step 2: `review::Ficha` incluye la ruta de la miniatura**
+- [x] **Step 2: `review::Ficha` incluye la ruta de la miniatura** — resuelta en el backend con `Path::exists()`, para no duplicar la convención de nombres en TypeScript
 
 ```rust
 pub struct Ficha {
@@ -710,17 +710,17 @@ pub struct Ficha {
 
 En la consulta que construye `Ficha` (`review.rs`), calcular `ruta_miniatura` comprobando si el fichero existe en disco (`Path::exists()`) — no confiar en que siempre está, porque las 34.966 imágenes ya bajadas no la tienen.
 
-- [ ] **Step 3: Generación perezosa para lo ya bajado**
+- [x] **Step 3: Generación perezosa para lo ya bajado** — NO implementada, como permite el plan: decodificar y reescalar 120 fotos dentro de `revision_pendientes` bloquearía la respuesta del comando, y no es trivial. Lo ya bajado sigue usando el original
 
 Cuando `ruta_miniatura` es `None` (foto bajada antes de este cambio), `ReviewGrid` sigue usando `ruta` (el original) para esa ficha — no se dispara una migración masiva. Si se quiere generación perezosa real (la primera vez que se pide, se genera y se persiste), documentarlo como posible mejora futura pero NO implementarlo en este plan salvo que sea trivial de añadir en el mismo comando `revision_pendientes` (comprobar si el coste de decodificar-y-reescalar 120 fichas bajo demanda, una vez, es aceptable — probablemente sí, dado que ya se hace `image_dimensions` sobre cada una en algún punto de la ingesta legacy; si no es trivial, dejarlo fuera y decirlo en el commit).
 
-- [ ] **Step 4: `ReviewGrid.tsx` usa la miniatura**
+- [x] **Step 4: `ReviewGrid.tsx` usa la miniatura**
 
 ```tsx
 <img src={convertFileSrc(f.ruta_miniatura ?? f.ruta)} ... />
 ```
 
-- [ ] **Step 5: Retirar (o subir) el tope de 120 si aplica**
+- [x] **Step 5: Retirar (o subir) el tope de 120 si aplica** — se DEJA en 120, y el comentario del código dice por qué: la paginación real sigue sin existir, y las 34.966 fotos anteriores a las miniaturas siguen pesando lo que pesaban, así que subirlo a ciegas solo cambiaría dónde duele
 
 Con miniaturas, el coste por ficha baja lo suficiente para que el tope de `revision_pendientes` pueda subir o quitarse — pero esto depende de medir cuántas fichas puede aguantar el frontend virtualizado de verdad. **No retirarlo a ciegas**: si se sube, subirlo a un número concreto justificado (p.ej. 2000, con una nota de por qué ese número) o dejarlo en 120 y anotar en el commit que el tope sigue existiendo por otra razón (paginación real pendiente, ya anotado en el código actual) — decidir con el operador si hace falta, no es bloqueante para el resto de la tarea.
 
@@ -728,11 +728,9 @@ Con miniaturas, el coste por ficha baja lo suficiente para que el tope de `revis
 
 Abrir Revisión sobre un índice con material ya bajado antes de este cambio (debe verse igual que hoy, con el original) y sobre una descarga nueva de prueba (debe verse la miniatura, notablemente más ligera de cargar).
 
-- [ ] **Step 7: Verificar**
+- [x] **Step 7: Verificar** — 101 tests limpios; `npm run build` + `npm run lint` limpios
 
-`cargo test -p indexer-app`, `cd indexer && npm run build && npm run lint`.
-
-- [ ] **Commit:** `perf(indexer): miniaturas en revisión, generadas al bajar`
+- [x] **Commit:** `perf(indexer): miniaturas en revisión, generadas al bajar`
 
 ---
 

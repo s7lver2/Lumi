@@ -18,6 +18,11 @@ use crate::store::{Almacen, Cuentas};
 pub struct Ficha {
     pub id: i64,
     pub ruta: String,
+    /// La miniatura de 512 px que se escribe al bajar, si existe. `None` en
+    /// todo lo bajado ANTES de que existieran: ahí la rejilla cae al original,
+    /// que es lo que hacía siempre. No se genera una migración masiva para las
+    /// 34.966 ya bajadas.
+    pub ruta_miniatura: Option<String>,
     pub fuente: String,
     pub licencia: Option<String>,
 }
@@ -26,7 +31,13 @@ pub fn pendientes(almacen: &Almacen, indice_id: i64, limite: u32) -> Result<Vec<
     Ok(almacen
         .revision_pendientes(indice_id, limite)?
         .into_iter()
-        .map(|(id, ruta, fuente, licencia)| Ficha { id, ruta, fuente, licencia })
+        .map(|(id, ruta, fuente, licencia)| {
+            // Se comprueba en disco, no se asume: la convención del nombre es
+            // determinista, pero la existencia del fichero no.
+            let mini = crate::origins::ruta_miniatura(std::path::Path::new(&ruta));
+            let ruta_miniatura = mini.exists().then(|| mini.display().to_string());
+            Ficha { id, ruta, ruta_miniatura, fuente, licencia }
+        })
         .collect())
 }
 
