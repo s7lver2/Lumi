@@ -114,7 +114,8 @@ pub struct Flickr {
 
 impl Flickr {
     pub fn nuevo(clave: String, stage: PathBuf) -> Self {
-        Self { ctx: Ctx::nuevo(Some(clave), stage, 4, 2) }
+        // Bytes desde `live.staticflickr.com`, CDN aparte de la API.
+        Self { ctx: Ctx::con_bytes(Some(clave), stage, 4, 2, Some((8, 4))) }
     }
 
     fn url(&self, tesela: &str, pagina: u32) -> String {

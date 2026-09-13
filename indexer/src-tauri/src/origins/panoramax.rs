@@ -120,7 +120,8 @@ impl Panoramax {
     pub fn nuevo(stage: PathBuf) -> Self {
         // Sin cifra de rate limit publicada: se trata como Commons por
         // prudencia (2 req/s, concurrencia 1), no porque Panoramax lo pida.
-        Self { ctx: Ctx::nuevo(None, stage, 2, 1) }
+        // Bytes desde su almacenamiento, aparte de la API.
+        Self { ctx: Ctx::con_bytes(None, stage, 2, 1, Some((8, 4))) }
     }
 
     fn url_de_bbox(&self, b: Bbox) -> String {

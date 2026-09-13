@@ -397,7 +397,7 @@ Los tests de `download.rs` que comprueban `imagenes`/`teselas_hechas` deben segu
 - `Ctx::nuevo` gana un parámetro más: `(req_s_bytes: u32, conc_bytes: usize)`, o mejor, un segundo `Limitador` opcional que por defecto es `None` (usa el mismo `limitador` de siempre — caso Wikimedia, que NO se separa).
 - `bajar_imagen` usa `self.limitador_bytes.as_ref().unwrap_or(&self.limitador)`.
 
-- [ ] **Step 1: `Ctx` gana un limitador de bytes opcional**
+- [x] **Step 1: `Ctx` gana un limitador de bytes opcional**
 
 ```rust
 pub struct Ctx {
@@ -437,7 +437,7 @@ impl Ctx {
 
 `Ctx::nuevo` mantiene su firma actual (compatibilidad con todos los orígenes que no cambian: google, mapbox, commons, wikipedia, monumentos, wms-orto, geograph, inaturalist), delegando a `con_bytes` con `None`.
 
-- [ ] **Step 2: `bajar_imagen` usa el limitador de bytes si existe**
+- [x] **Step 2: `bajar_imagen` usa el limitador de bytes si existe** — vía `Ctx::limitador_de_bytes()`, para poder probar la elección sin red
 
 ```rust
 pub async fn bajar_imagen(&self, url: &str, nombre: &str) -> Result<PathBuf> {
@@ -447,7 +447,7 @@ pub async fn bajar_imagen(&self, url: &str, nombre: &str) -> Result<PathBuf> {
 }
 ```
 
-- [ ] **Step 3: Los orígenes con CDN propio declaran su cola de bytes**
+- [x] **Step 3: Los orígenes con CDN propio declaran su cola de bytes** — mapillary, kartaview, flickr, panoramax, openaerialmap
 
 Según spec §3.4:
 
@@ -466,19 +466,17 @@ Self { ctx: Ctx::con_bytes(None, stage, 4, 2, Some((8, 4))) }
 
 **No tocar** `commons.rs`, `wikipedia.rs`, `monumentos.rs` (siguen con `Ctx::nuevo`, sin cola de bytes separada — comparten `limitador_wikimedia()` para todo, API y CDN) ni `google.rs`/`mapbox.rs` (de pago por petición, no aplica) ni `wms_orto.rs`/`geograph.rs`/`inaturalist.rs` (el spec no los lista con CDN separado).
 
-- [ ] **Step 4: Verificar que Wikimedia sigue compartiendo un único limitador**
+- [x] **Step 4: Verificar que Wikimedia sigue compartiendo un único limitador** — `commons.rs`, `wikipedia.rs` y `monumentos.rs` NO se han tocado: siguen con `Ctx::nuevo` (sin cola de bytes) y sus llamadas a la API siguen pasando por `limitador_wikimedia()`
 
 Grep `limitador_wikimedia` en `commons.rs`, `wikipedia.rs`, `monumentos.rs` — confirmar que ninguno de los tres pasa por `Ctx` en absoluto para sus llamadas a `upload.wikimedia.org` (si `bajar_imagen` de `Ctx` se usa ahí, debe seguir siendo `self.limitador`, es decir, este Task no debe tocar esos tres ficheros en absoluto más que para confirmar que compilan igual).
 
-- [ ] **Step 5: Test**
+- [x] **Step 5: Test** — `la_cola_de_bytes_es_la_del_cdn_solo_si_el_origen_la_declara`
 
 Si hay un test existente que instancia `Ctx` directamente (buscar en `#[cfg(test)]` de `origins/mod.rs`), extenderlo para cubrir `con_bytes` con `Some(...)` y confirmar que `bajar_imagen` respeta el límite de bytes, no el de API — puede hacerse con dos `Limitador` de tasas muy distintas y comprobando el tiempo transcurrido, siguiendo el estilo de test ya usado para `Limitador` si existe, o uno nuevo mínimo.
 
-- [ ] **Step 6: Verificar**
+- [x] **Step 6: Verificar** — 101 tests limpios
 
-`cargo test -p indexer-app`.
-
-- [ ] **Commit:** `perf(indexer): cola de bytes separada del limitador de API, por origen`
+- [x] **Commit:** `perf(indexer): cola de bytes separada del limitador de API, por origen`
 
 ---
 

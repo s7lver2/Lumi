@@ -67,7 +67,8 @@ pub struct OpenAerialMap {
 
 impl OpenAerialMap {
     pub fn nuevo(stage: PathBuf) -> Self {
-        Self { ctx: Ctx::nuevo(None, stage, 4, 2) }
+        // Bytes desde S3, aparte de la API del catálogo.
+        Self { ctx: Ctx::con_bytes(None, stage, 4, 2, Some((8, 4))) }
     }
 
     async fn buscar(&self, tesela: &str) -> Result<Respuesta> {

@@ -56,7 +56,8 @@ pub struct KartaView {
 
 impl KartaView {
     pub fn nuevo(stage: PathBuf) -> Self {
-        Self { ctx: Ctx::nuevo(None, stage, 4, 2) }
+        // Bytes desde `storage*.openstreetcam.org`, CDN aparte de la API.
+        Self { ctx: Ctx::con_bytes(None, stage, 4, 2, Some((8, 4))) }
     }
 
     async fn cerca_de_pagina(&self, p: Punto, pagina: u32) -> Result<Vec<FotoKv>> {

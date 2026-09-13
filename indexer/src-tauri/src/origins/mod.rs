@@ -198,6 +198,16 @@ pub struct Ctx {
     pub clave: Option<String>,
     pub stage: PathBuf,
     pub limitador: Limitador,
+    /// Limitador SOLO para bajar bytes del CDN, separado del de consultas a la
+    /// API. Sin él, bajar una foto de `scontent.xx.fbcdn.net` se cobraba contra
+    /// la cuota de `graph.mapillary.com`, que es el techo de verdad de una
+    /// descarga: casi todo el tiempo son bytes, no consultas.
+    ///
+    /// `None` cuando el proveedor no tiene CDN separado de su API. Wikimedia es
+    /// EL caso: `upload.wikimedia.org` cae bajo la misma política de contacto y
+    /// ritmo que `commons.wikimedia.org`, así que ahí bajar bytes se sigue
+    /// cobrando contra el mismo limitador, a propósito.
+    pub limitador_bytes: Option<Limitador>,
     /// Contador vivo de imágenes bajadas, para `OrigenDeRed::bajadas`. Es lo
     /// único observable desde fuera mientras una tesela larga está en marcha.
     bajadas: std::sync::atomic::AtomicU32,
@@ -208,6 +218,18 @@ pub struct Ctx {
 
 impl Ctx {
     pub fn nuevo(clave: Option<String>, stage: PathBuf, req_s: u32, conc: usize) -> Self {
+        Self::con_bytes(clave, stage, req_s, conc, None)
+    }
+
+    /// Igual que `nuevo`, pero declarando la cola de bytes del proveedor —
+    /// `(req_s, concurrencia)` del CDN, que es distinta de la de su API.
+    pub fn con_bytes(
+        clave: Option<String>,
+        stage: PathBuf,
+        req_s: u32,
+        conc: usize,
+        bytes: Option<(u32, usize)>,
+    ) -> Self {
         Self {
             cliente: reqwest::Client::builder()
                 .timeout(TIMEOUT)
@@ -217,6 +239,7 @@ impl Ctx {
             clave,
             stage,
             limitador: Limitador::nuevo(req_s, conc),
+            limitador_bytes: bytes.map(|(r, c)| Limitador::nuevo(r, c)),
             bajadas: std::sync::atomic::AtomicU32::new(0),
             objetivo: std::sync::atomic::AtomicU32::new(0),
         }
@@ -228,6 +251,12 @@ impl Ctx {
 
     pub fn objetivo(&self) -> u32 {
         self.objetivo.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Contra qué limitador se cobra bajar bytes: el del CDN si el proveedor
+    /// declaró uno, y si no el mismo de la API.
+    pub fn limitador_de_bytes(&self) -> &Limitador {
+        self.limitador_bytes.as_ref().unwrap_or(&self.limitador)
     }
 
     pub fn bajadas(&self) -> u32 {
@@ -245,7 +274,7 @@ impl Ctx {
     /// arbitraria, y `nombre_seguro` existe desde el 7a justamente por eso.
     pub async fn bajar_imagen(&self, url: &str, nombre: &str) -> Result<PathBuf> {
         let nombre = sanear(nombre);
-        let _p = self.limitador.permiso().await;
+        let _p = self.limitador_de_bytes().permiso().await;
         let r = self.cliente.get(url).send().await?;
         if !r.status().is_success() {
             anyhow::bail!("{} respondió {}", crate::keys::redactar(url), r.status());
@@ -457,6 +486,34 @@ mod tests {
             t.await.unwrap();
         }
         assert!(pico.load(Ordering::SeqCst) <= 2, "pico de {}", pico.load(Ordering::SeqCst));
+    }
+
+    /// Bajar bytes se cobra contra la cola del CDN cuando el proveedor declara
+    /// una, y contra la de la API cuando no — que es el caso de Wikimedia, a
+    /// propósito: `upload.wikimedia.org` cae bajo la misma política.
+    #[tokio::test]
+    async fn la_cola_de_bytes_es_la_del_cdn_solo_si_el_origen_la_declara() {
+        use std::time::Instant;
+
+        // Sin declararla, `bajar_imagen` cobra contra el limitador de la API.
+        let api = Ctx::nuevo(None, PathBuf::from("."), 4, 2);
+        assert!(api.limitador_bytes.is_none());
+        assert!(
+            std::ptr::eq(api.limitador_de_bytes(), &api.limitador),
+            "sin CDN declarado se usa el mismo limitador de la API"
+        );
+
+        // Declarándola, se usa la del CDN. Se comprueba por el ritmo: la de la
+        // API es de 1 req/s (un segundo entre permisos) y la de bytes de 1000,
+        // así que dos permisos seguidos tienen que salir casi al instante.
+        let cdn = Ctx::con_bytes(None, PathBuf::from("."), 1, 1, Some((1000, 4)));
+        assert!(!std::ptr::eq(cdn.limitador_de_bytes(), &cdn.limitador));
+        let t0 = Instant::now();
+        {
+            let _a = cdn.limitador_de_bytes().permiso().await;
+        }
+        let _b = cdn.limitador_de_bytes().permiso().await;
+        assert!(t0.elapsed().as_millis() < 500, "tardó {} ms", t0.elapsed().as_millis());
     }
 
     #[test]

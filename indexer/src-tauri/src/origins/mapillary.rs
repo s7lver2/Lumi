@@ -124,7 +124,9 @@ pub struct Mapillary {
 
 impl Mapillary {
     pub fn nuevo(token: String, stage: PathBuf) -> Self {
-        Self { ctx: Ctx::nuevo(Some(token), stage, 8, 4) }
+        // Los bytes van a `scontent.*.fbcdn.net`, un CDN aparte de
+        // `graph.mapillary.com`: su propia cola, 16 req/s y 8 a la vez.
+        Self { ctx: Ctx::con_bytes(Some(token), stage, 8, 4, Some((16, 8))) }
     }
 
     fn url_de_bbox(&self, b: lumi_index::tiles::Bbox, limite: u32, campos: &str) -> String {
