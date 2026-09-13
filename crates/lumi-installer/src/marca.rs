@@ -66,35 +66,51 @@ mod tests {
     // registro de verdad de la máquina que corre los tests.
     const RAIZ_PRUEBA: &str = "Software\\LumiInstallerTests";
 
-    fn limpiar() {
+    /// Una subclave PROPIA por test, no una compartida: `cargo test` corre los
+    /// tests de un mismo módulo en hilos distintos por defecto, y los tres de
+    /// aquí escriben bajo el mismo `app_id` (`cliente`/`indexer`) — con una
+    /// única `RAIZ_PRUEBA` para todos, el `limpiar()` de un test podía borrar
+    /// a mitad la clave que otro acababa de escribir, o dos escrituras
+    /// concurrentes pisarse entre sí. El síntoma real, intermitente: el valor
+    /// de OTRO test aparecía leído en `cliente_e_indexer_son_entradas_independientes`.
+    /// Cada test aísla la suya con su propio nombre como sufijo, así que ya no
+    /// hay clave compartida de la que depender ni orden que asumir.
+    fn raiz_de(test: &str) -> String {
+        format!("{RAIZ_PRUEBA}\\{test}")
+    }
+
+    fn limpiar(raiz: &str) {
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-        let _ = hkcu.delete_subkey_all(RAIZ_PRUEBA);
+        let _ = hkcu.delete_subkey_all(raiz);
     }
 
     #[test]
     fn escribe_y_relee_la_misma_marca() {
-        limpiar();
-        escribir_bajo(RAIZ_PRUEBA, "cliente", "Lumi", "2.3.0", Path::new("C:\\Lumi\\Cliente"))
+        let raiz = raiz_de("escribe_y_relee_la_misma_marca");
+        limpiar(&raiz);
+        escribir_bajo(&raiz, "cliente", "Lumi", "2.3.0", Path::new("C:\\Lumi\\Cliente"))
             .expect("escribir_bajo no deberia fallar");
-        let leida = leer_bajo(RAIZ_PRUEBA, "cliente").expect("deberia haber marca");
+        let leida = leer_bajo(&raiz, "cliente").expect("deberia haber marca");
         assert_eq!(leida.version, "2.3.0");
         assert_eq!(leida.ruta, PathBuf::from("C:\\Lumi\\Cliente"));
-        limpiar();
+        limpiar(&raiz);
     }
 
     #[test]
     fn leer_sin_marca_previa_da_none() {
-        limpiar();
-        assert!(leer_bajo(RAIZ_PRUEBA, "indexer").is_none());
+        let raiz = raiz_de("leer_sin_marca_previa_da_none");
+        limpiar(&raiz);
+        assert!(leer_bajo(&raiz, "indexer").is_none());
     }
 
     #[test]
     fn cliente_e_indexer_son_entradas_independientes() {
-        limpiar();
-        escribir_bajo(RAIZ_PRUEBA, "cliente", "Lumi", "1.0.0", Path::new("C:\\a")).unwrap();
-        escribir_bajo(RAIZ_PRUEBA, "indexer", "Lumi Indexer", "1.0.0", Path::new("C:\\b")).unwrap();
-        assert_eq!(leer_bajo(RAIZ_PRUEBA, "cliente").unwrap().ruta, PathBuf::from("C:\\a"));
-        assert_eq!(leer_bajo(RAIZ_PRUEBA, "indexer").unwrap().ruta, PathBuf::from("C:\\b"));
-        limpiar();
+        let raiz = raiz_de("cliente_e_indexer_son_entradas_independientes");
+        limpiar(&raiz);
+        escribir_bajo(&raiz, "cliente", "Lumi", "1.0.0", Path::new("C:\\a")).unwrap();
+        escribir_bajo(&raiz, "indexer", "Lumi Indexer", "1.0.0", Path::new("C:\\b")).unwrap();
+        assert_eq!(leer_bajo(&raiz, "cliente").unwrap().ruta, PathBuf::from("C:\\a"));
+        assert_eq!(leer_bajo(&raiz, "indexer").unwrap().ruta, PathBuf::from("C:\\b"));
+        limpiar(&raiz);
     }
 }
