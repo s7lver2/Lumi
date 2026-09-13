@@ -278,8 +278,26 @@ impl Servicios {
     /// oficiales del proyecto, a `~/.lumi-indexer/bin` y no a `/usr/local/bin`:
     /// nada de esto necesita tocar el sistema del usuario fuera de su `$HOME`.
     async fn instalar_en_wsl(&self, redis_vivo: bool, qdrant_vivo: bool) -> Result<()> {
-        let falta_redis = !redis_vivo && !Self::hay_en_wsl("redis-server").await;
-        let falta_qdrant = !qdrant_vivo && !Self::hay_en_wsl("$HOME/.lumi-indexer/bin/qdrant").await;
+        // Una sola invocación de `wsl.exe` para las dos comprobaciones: cada
+        // una cuesta 1,34 s medidos en caliente, y el arranque hace varias.
+        //
+        // OJO, contrato posicional: la respuesta viene en el mismo orden en que
+        // se piden, y aquí solo se pide lo que hace falta comprobar. Por eso
+        // los dos `it.next()` de abajo van detrás de su `!..._vivo` — el
+        // cortocircuito de `&&` es lo que mantiene alineada la respuesta con la
+        // pregunta cuando uno de los dos ya estaba vivo y no se preguntó por
+        // él. Si alguien añade un tercer paquete, tiene que mirar esto.
+        let mut a_comprobar: Vec<&str> = Vec::new();
+        if !redis_vivo {
+            a_comprobar.push("redis-server");
+        }
+        if !qdrant_vivo {
+            a_comprobar.push("$HOME/.lumi-indexer/bin/qdrant");
+        }
+        let presentes = Self::hay_en_wsl_lote(&a_comprobar).await;
+        let mut it = presentes.into_iter();
+        let falta_redis = !redis_vivo && !it.next().unwrap_or(false);
+        let falta_qdrant = !qdrant_vivo && !it.next().unwrap_or(false);
 
         // Las dos instalaciones no comparten nada (`apt-get` toca el sistema
         // de paquetes de la distro, la descarga de Qdrant solo `$HOME/.lumi-
@@ -339,15 +357,39 @@ impl Servicios {
         Ok(())
     }
 
-    /// ¿Existe este ejecutable dentro de WSL?
-    async fn hay_en_wsl(que: &str) -> bool {
-        crate::proceso::cmd_async("wsl", false)
-            .args(["-e", "sh", "-lc", &format!("command -v {que} >/dev/null 2>&1 || test -x {que}")])
-            .stdout(Stdio::null())
+    /// ¿Existen estos ejecutables dentro de WSL? Una sola invocación de
+    /// `wsl.exe` para todos: una línea `1`/`0` por paquete, EN EL MISMO ORDEN
+    /// en que se piden. Si algo falla, se responde «no está» para todos —
+    /// reinstalar algo que ya estaba es inocuo, dar por instalado lo que falta
+    /// no lo es.
+    async fn hay_en_wsl_lote(paquetes: &[&str]) -> Vec<bool> {
+        if paquetes.is_empty() {
+            return Vec::new();
+        }
+        let guion = paquetes
+            .iter()
+            .map(|p| format!("{{ command -v {p} >/dev/null 2>&1 || test -x {p}; }} && echo 1 || echo 0"))
+            .collect::<Vec<_>>()
+            .join("; ");
+        let salida = crate::proceso::cmd_async("wsl", false)
+            .args(["-e", "sh", "-lc", &guion])
             .stderr(Stdio::null())
-            .status()
-            .await
-            .is_ok_and(|s| s.success())
+            .output()
+            .await;
+        match salida {
+            Ok(o) => {
+                let filas: Vec<bool> =
+                    String::from_utf8_lossy(&o.stdout).lines().map(|l| l.trim() == "1").collect();
+                // Una respuesta a medias sería peor que ninguna: desalinearía
+                // el contrato posicional.
+                if filas.len() == paquetes.len() {
+                    filas
+                } else {
+                    vec![false; paquetes.len()]
+                }
+            }
+            Err(_) => vec![false; paquetes.len()],
+        }
     }
 
     /// ¿El VHDX de la distribución WSL activa vive en un disco mecánico?

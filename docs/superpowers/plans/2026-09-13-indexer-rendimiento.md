@@ -634,7 +634,7 @@ Con permiso ya dado por el usuario (tiene sudo en WSL disponible para esto), pro
 **Interfaces:**
 - `instalar_en_wsl` agrupa sus comprobaciones de presencia (`hay_en_wsl("redis-server")`, `hay_en_wsl("...qdrant")`) en una sola invocación de `wsl.exe -e sh -lc "..."` que devuelve las dos respuestas (por ejemplo, con un separador conocido en la salida).
 
-- [ ] **Step 1: Una sola invocación para las dos comprobaciones**
+- [x] **Step 1: Una sola invocación para las dos comprobaciones** — `hay_en_wsl_lote` sustituye a `hay_en_wsl`, que ya no tenía otros llamadores
 
 ```rust
 async fn hay_en_wsl_lote(paquetes: &[&str]) -> Vec<bool> {
@@ -655,15 +655,15 @@ async fn hay_en_wsl_lote(paquetes: &[&str]) -> Vec<bool> {
 
 Sustituir las dos llamadas independientes a `Self::hay_en_wsl(...)` en `instalar_en_wsl` por una sola a `hay_en_wsl_lote(&["redis-server", "$HOME/.lumi-indexer/bin/qdrant"])`.
 
-- [ ] **Step 2: Verificar que el orden de la salida coincide**
+- [x] **Step 2: Verificar que el orden de la salida coincide** — comentado explícitamente: solo se pregunta por lo que hace falta comprobar, y el cortocircuito de `&&` es lo que mantiene alineadas pregunta y respuesta. Además, si el número de líneas no cuadra con el de paquetes se responde «no está» a todos, en vez de desalinear
 
 Con dos paquetes, la línea 1 corresponde al primero y la línea 2 al segundo — cubrir con un comentario explícito porque es un contrato posicional frágil si alguien añade un tercer paquete sin mirar.
 
-- [ ] **Step 3: Probar en real**
+- [x] **Step 3: Probar en real** — ejecutado el guion real contra la distro Ubuntu: devuelve `1` para `redis-server`, `1` para el qdrant de `$HOME/.lumi-indexer/bin` y `0` para un ejecutable inventado, en ese orden. `arrancar_wsl` los sigue viendo presentes y no reinstala nada
 
 Con Redis y Qdrant ya instalados en WSL, confirmar que `arrancar_wsl` sigue detectándolos como presentes y no reinstala nada, y medir (aproximado, con `time`) que el número de invocaciones de `wsl.exe` baja.
 
-- [ ] **Commit:** `perf(indexer): agrupar las comprobaciones de presencia en WSL en una sola invocación`
+- [x] **Commit:** `perf(indexer): agrupar las comprobaciones de presencia en WSL en una sola invocación`
 
 ---
 
