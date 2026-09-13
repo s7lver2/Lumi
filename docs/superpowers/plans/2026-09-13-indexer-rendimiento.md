@@ -538,7 +538,7 @@ Con Redis/Qdrant parados a propósito (o el VHDX en frío si es reproducible), c
 - Nuevo comando Tauri `qdrant_migrar_on_disk() -> Result<Vec<String>, String>` (aplica a todas las colecciones existentes, devuelve los nombres tocados) detrás de un botón explícito en Ajustes.
 - Nuevo comando `disco_wsl_es_mecanico() -> Option<bool>` (o similar) que el panel de Rendimiento usa para avisar.
 
-- [ ] **Step 1: Colecciones nuevas nacen con `on_disk`**
+- [x] **Step 1: Colecciones nuevas nacen con `on_disk`**
 
 ```rust
 let cuerpo = json!({
@@ -548,7 +548,7 @@ let cuerpo = json!({
 });
 ```
 
-- [ ] **Step 2: Migración de colecciones existentes vía `PATCH`**
+- [x] **Step 2: Migración de colecciones existentes vía `PATCH`** — **DESVIACIÓN**: el cuerpo del plan no vale. Al PARCHEAR, Qdrant 1.19.0 espera un mapa nombre → cambios, y el vector sin nombre se llama `""`; con `{"vectors": {"on_disk": true}}` responde «invalid type: boolean `true`, expected struct VectorParamsDiff». Lo correcto es `{"vectors": {"": {"on_disk": true}}}`, comprobado contra la instancia real
 
 ```rust
 pub async fn migrar_a_on_disk(&self, nombre: &str) -> Result<()> {
@@ -581,7 +581,7 @@ pub async fn migrar_todas_a_on_disk(&self) -> Result<Vec<String>> {
 
 Confirmar la sintaxis exacta del `PATCH` contra la versión real de Qdrant instalada (1.19.0, ya verificado en la investigación) — probar contra la instancia local antes de dar la tarea por cerrada, no solo confiar en la documentación.
 
-- [ ] **Step 3: Comando Tauri, sin disparo automático**
+- [x] **Step 3: Comando Tauri, sin disparo automático** — `qdrant_migrar_on_disk` no toma `Estado`: `qdrant::Cliente` no vive en él, se construye donde hace falta
 
 En `lib.rs`:
 
@@ -594,11 +594,11 @@ async fn qdrant_migrar_on_disk(estado: tauri::State<'_, Estado>) -> Result<Vec<S
 
 Registrar en `invoke_handler`. **No llamarlo desde ningún punto de arranque** — solo desde el botón del panel.
 
-- [ ] **Step 4: Botón en Ajustes → Rendimiento**
+- [x] **Step 4: Botón en Ajustes → Rendimiento**
 
 En `RendimientoPanel.tsx`, sección nueva con un botón "Migrar Qdrant a disco" (o el rótulo que mejor encaje con el tono del panel), con el aviso de que Qdrant trabajará de fondo un rato y que es seguro repetirlo. Tras pulsarlo, mostrar el resultado (lista de colecciones migradas) o el error.
 
-- [ ] **Step 5: Detección de disco mecánico**
+- [x] **Step 5: Detección de disco mecánico** — un solo `powershell.exe`: registro `Lxss` → `BasePath` → letra de unidad → `Get-Partition` → `Get-PhysicalDisk.MediaType`
 
 En `services.rs` (Windows only, `cfg!(windows)`), una función que:
 1. Resuelve la ruta del VHDX de la distro WSL activa — vía `wsl.exe --list --verbose` para el nombre y el registro (`HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss`) para `BasePath`, o el comando equivalente ya usado en otras partes de `services.rs` si existe una forma más simple.
@@ -607,7 +607,7 @@ En `services.rs` (Windows only, `cfg!(windows)`), una función que:
 
 Esta detección puede implementarse invocando `powershell.exe` con un script corto (mismo patrón que `en_wsl`/`cmd_async` ya usan para invocar procesos externos) — no hace falta una crate de WMI nueva.
 
-- [ ] **Step 6: Comando Tauri y aviso en el panel**
+- [x] **Step 6: Comando Tauri y aviso en el panel** — en esta máquina devuelve `Some(true)`: el VHDX vive en D:, que es un HDD, igual que midió el spec
 
 ```rust
 #[tauri::command]
@@ -618,11 +618,11 @@ async fn disco_wsl_es_mecanico(estado: tauri::State<'_, Estado>) -> Option<bool>
 
 En `RendimientoPanel.tsx`, si `disco_wsl_es_mecanico() === true`, mostrar un aviso (no bloqueante, no modal) explicando en una frase que los vectores de Qdrant viven en un disco mecánico dentro de WSL y que moverlos a un SSD acelera el arranque — con un enlace o referencia al procedimiento documentado (README o similar), sin que la app intente mover nada sola.
 
-- [ ] **Step 7: Verificar contra la instancia real**
+- [x] **Step 7: Verificar contra la instancia real** — probado primero contra `lumi_img__mixvpr_1_0` (13.781 puntos): `on_disk` quedó en `true` en vectores y HNSW, el `scroll` siguió respondiendo, y la colección volvió a `green`. Solo entonces se aplicó a las nueve: todas en `on_disk`, optimizando de fondo (`yellow`, que es lo esperado)
 
 Con permiso ya dado por el usuario (tiene sudo en WSL disponible para esto), probar `migrar_a_on_disk` contra una colección real pequeña primero (`lumi_img__mixvpr_1_0`, 272 MB) y confirmar con `GET /collections/{nombre}` que `on_disk` queda en `true` y que Qdrant sigue sirviendo consultas correctamente después. Solo entonces aplicar a las nueve.
 
-- [ ] **Commit:** `perf(indexer): Qdrant con vectores en disco, y aviso si WSL vive en un HDD`
+- [x] **Commit:** `perf(indexer): Qdrant con vectores en disco, y aviso si WSL vive en un HDD`
 
 ---
 
