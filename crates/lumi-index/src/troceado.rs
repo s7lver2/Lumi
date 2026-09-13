@@ -7,6 +7,28 @@ use serde::{Deserialize, Serialize};
 /// dos horas.
 pub const TOPE_TROZO_BYTES: u64 = 1_800_000_000;
 
+/// El límite DURO del proveedor: 2 GiB por asset de release en GitHub. Es
+/// distinto de `TOPE_TROZO_BYTES` a propósito — aquel es el objetivo al
+/// agrupar, este es la pared contra la que se estrella una subida.
+pub const TOPE_ASSET_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+
+/// Los trozos que NO caben en un asset del proveedor.
+///
+/// `trocear` agrupa quadkeys hasta `tope`, pero una quadkey SOLA más pesada
+/// que el tope no se puede partir más (media tesela no es una unidad
+/// instalable), así que va sola en su trozo aunque lo desborde. Eso está
+/// asumido desde el principio; lo que faltaba era DECIRLO a tiempo.
+///
+/// Sin esto, el desbordamiento solo se descubría subiendo: el paquete se
+/// empaquetaba en memoria, se cifraba, se intentaba subir tres veces y el
+/// operador acababa viendo «no se pudo subir tras tres intentos» después de
+/// horas, sin ninguna pista de que la causa era el tamaño y de que reintentar
+/// no iba a arreglarlo nunca. Caso real: la tesela del centro de León con
+/// 2.910 imágenes pesaba 5,6 GB, casi el triple del límite.
+pub fn desbordados(trozos: &[Trozo], tope_asset: u64) -> Vec<&Trozo> {
+    trozos.iter().filter(|t| t.bytes > tope_asset).collect()
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Trozo {
     /// La quadkey más corta que contiene a todas las de dentro. Nombra el
@@ -84,14 +106,36 @@ mod tests {
 
     // Una tesela sola más grande que el tope no se puede partir más: el
     // troceado es por geografía, y media tesela no es una unidad instalable.
-    // Va sola en su trozo aunque lo desborde, y quien la suba se encontrará
-    // con el límite del proveedor — que es un problema honesto y visible.
+    // Va sola en su trozo aunque lo desborde. Que eso pase sigue siendo
+    // legítimo; lo que NO puede pasar es que se descubra subiendo — para eso
+    // está `desbordados`, ver el test de abajo.
     #[test]
     fn una_tesela_mas_grande_que_el_tope_va_sola() {
         let p = pesos(&[("0313101", 100), ("0313102", 5_000), ("0313103", 100)]);
         let ts = trocear(&p, 1_000);
         let gorda = ts.iter().find(|t| t.bytes == 5_000).expect("falta el trozo gordo");
         assert_eq!(gorda.quadkeys, vec!["0313102"]);
+    }
+
+    /// El caso real que costó una publicación entera: la tesela del centro de
+    /// León pesaba 5,6 GB y el límite de GitHub son 2 GiB. `trocear` la deja
+    /// sola (no puede hacer otra cosa) y `desbordados` es quien lo señala
+    /// ANTES de empaquetar 5,6 GB en memoria y subirlos tres veces.
+    #[test]
+    fn una_tesela_que_no_cabe_en_un_asset_se_señala() {
+        let p = pesos(&[("0313101", 100), ("0313102", 5_000), ("0313103", 100)]);
+        let ts = trocear(&p, 1_000);
+        let fuera = desbordados(&ts, 2_000);
+        assert_eq!(fuera.len(), 1);
+        assert_eq!(fuera[0].quadkeys, vec!["0313102"]);
+    }
+
+    /// Y lo que sí cabe no se señala: un trozo agrupado hasta el tope normal
+    /// está por debajo del límite duro por construcción.
+    #[test]
+    fn lo_que_cabe_no_se_señala() {
+        let p = pesos(&[("0313101", 600), ("0313102", 600), ("0313103", 600)]);
+        assert!(desbordados(&trocear(&p, 1_000), 2_000).is_empty());
     }
 
     #[test]

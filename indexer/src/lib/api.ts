@@ -249,6 +249,9 @@ export interface Previsualizacion {
   trozos: TrozoPrevisto[];
   bytes_total: number;
   no_redistribuibles: string[];
+  /** Trozos que pasan del tope de un asset del proveedor. Si trae algo,
+   *  publicar va a fallar sí o sí — no es un aviso cosmético. */
+  no_caben: TrozoPrevisto[];
 }
 export interface ProgresoPublicacion {
   asset: string;

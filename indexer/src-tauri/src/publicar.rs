@@ -18,7 +18,7 @@ use anyhow::{anyhow, bail, Result};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use lumi_index::cifrado;
 use lumi_index::ficha::{Asset, Capa, Ficha, VIGENCIA_DIAS};
-use lumi_index::troceado::{trocear, Trozo, TOPE_TROZO_BYTES};
+use lumi_index::troceado::{desbordados, trocear, Trozo, TOPE_ASSET_BYTES, TOPE_TROZO_BYTES};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -87,6 +87,10 @@ pub struct Previsualizacion {
     /// Las fuentes cuyos términos no permiten redistribuir. Si esta lista no
     /// está vacía, el diálogo enseña el descargo y exige la casilla.
     pub no_redistribuibles: Vec<String>,
+    /// Los trozos que NO caben en un asset del proveedor. Si esta lista no
+    /// está vacía, publicar va a fallar sí o sí — y el diálogo lo dice ANTES
+    /// en vez de dejar que el operador lo descubra tras horas de subida.
+    pub no_caben: Vec<TrozoPrevisto>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -377,16 +381,15 @@ pub fn previsualizar(almacen: &Almacen, indice_id: i64) -> Result<Previsualizaci
         .filter(|p| p.viajan < p.en_el_indice)
         .map(|p| p.fuente)
         .collect();
+    let previsto = |t: &Trozo| TrozoPrevisto {
+        zona: t.prefijo.clone(),
+        quadkeys: t.quadkeys.len(),
+        bytes: t.bytes,
+    };
     Ok(Previsualizacion {
         bytes_total: trozos.iter().map(|t| t.bytes).sum(),
-        trozos: trozos
-            .iter()
-            .map(|t| TrozoPrevisto {
-                zona: t.prefijo.clone(),
-                quadkeys: t.quadkeys.len(),
-                bytes: t.bytes,
-            })
-            .collect(),
+        no_caben: desbordados(&trozos, TOPE_ASSET_BYTES).into_iter().map(previsto).collect(),
+        trozos: trozos.iter().map(previsto).collect(),
         no_redistribuibles,
     })
 }
@@ -442,6 +445,12 @@ async fn subir_asset(
     );
     let total = cuerpo.len() as u64;
     let mut espera = 2u64;
+    // El motivo del ÚLTIMO intento, para que el fallo final lo lleve. Antes
+    // `bail!("... tras tres intentos")` no decía POR QUÉ ninguno de los tres
+    // funcionó — el detalle real (`detalle_error`, con el cuerpo de GitHub, o
+    // el error de red de `reqwest`) solo iba a `log::warn!`, invisible en el
+    // panel: el operador veía exactamente esa frase muda y nada más.
+    let mut ultimo_motivo = String::new();
     for intento in 1..=3 {
         // Trozos de 2 MB en vez de un único `body(cuerpo.clone())`: hyper no
         // pide el siguiente trozo del stream hasta que el anterior ya salió
@@ -480,13 +489,22 @@ async fn subir_asset(
                 let a: A = r.json().await?;
                 return Ok(a.browser_download_url);
             }
-            Ok(r) => log::warn!("intento {intento} de {nombre}: {}", detalle_error(r).await),
-            Err(e) => log::warn!("intento {intento} de {nombre}: {e}"),
+            Ok(r) => {
+                ultimo_motivo = detalle_error(r).await;
+                log::warn!("intento {intento} de {nombre}: {ultimo_motivo}");
+            }
+            // Un `reqwest::Error` de red/transporte (corte a mitad, DNS,
+            // TLS...) no tiene cuerpo de respuesta que leer — su propio
+            // `Display` ya es el detalle, sin pasar por `detalle_error`.
+            Err(e) => {
+                ultimo_motivo = e.to_string();
+                log::warn!("intento {intento} de {nombre}: {ultimo_motivo}");
+            }
         }
         tokio::time::sleep(std::time::Duration::from_secs(espera)).await;
         espera *= 3;
     }
-    bail!("no se pudo subir {nombre} tras tres intentos")
+    bail!("no se pudo subir {nombre} tras tres intentos: {ultimo_motivo}")
 }
 
 /// Borra el asset `nombre` de un release si ya existe. Solo hace falta para
@@ -816,6 +834,41 @@ pub async fn publicar(
 
     let pesos = pesos_por_quadkey(&almacen, indice_id)?;
     let trozos = trocear(&pesos, TOPE_TROZO_BYTES);
+
+    // Se comprueba ANTES de empaquetar un solo byte. Un trozo que no cabe en
+    // un asset del proveedor no se arregla reintentando: `subir_asset` lo
+    // intenta tres veces y las tres fallan igual, después de haber construido
+    // el zip ENTERO en memoria y haberlo cifrado (otra copia del mismo
+    // tamaño) — para una tesela de 5,6 GB eso son ~11 GB de RAM y horas
+    // tiradas antes de un error que no explica nada.
+    //
+    // No se puede arreglar solo: `trocear` reparte POR TESELA y media tesela
+    // no es una unidad instalable, así que una tesela que por sí sola pasa
+    // del límite solo se resuelve quitándole material (revisar y descartar) o
+    // partiendo el formato publicado en varias partes por tesela, que es un
+    // cambio de formato y no algo que hacer a mitad de una publicación.
+    let fuera = desbordados(&trozos, TOPE_ASSET_BYTES);
+    if !fuera.is_empty() {
+        let detalle = fuera
+            .iter()
+            .map(|t| {
+                format!(
+                    "{} ({} tesela{}, {:.2} GB)",
+                    if t.prefijo.is_empty() { "0" } else { &t.prefijo },
+                    t.quadkeys.len(),
+                    if t.quadkeys.len() == 1 { "" } else { "s" },
+                    t.bytes as f64 / 1e9
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        bail!(
+            "no cabe en un release de GitHub (tope {:.2} GB por asset): {detalle}. \
+             Una tesela sola no se puede partir, así que hay que aligerarla \
+             descartando imágenes en la revisión antes de volver a sellar.",
+            TOPE_ASSET_BYTES as f64 / 1e9
+        );
+    }
 
     let mut cuerpos: Vec<Asset> = Vec::new();
     for t in &trozos {

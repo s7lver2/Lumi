@@ -45,6 +45,10 @@ export function PublishDialog({ indiceId, nombre, proyecto, onHecho }: {
   }), [indiceId]);
 
   const hayNoRedistribuibles = (previa?.no_redistribuibles.length ?? 0) > 0;
+  // Si algún trozo pasa del tope del proveedor, publicar NO puede funcionar:
+  // se bloquea aquí en vez de dejar empaquetar gigas en memoria, cifrarlos y
+  // fallar tres veces al subirlos, que es como se descubría antes.
+  const noCaben = previa?.no_caben ?? [];
 
   async function publicar() {
     setError(null);
@@ -89,9 +93,34 @@ export function PublishDialog({ indiceId, nombre, proyecto, onHecho }: {
             <span className="text-muted">Total</span>
             <span className="font-mono text-fg">{tamano(previa.bytes_total)}</span>
           </div>
+
+          {noCaben.length > 0 && (
+            <div className="mt-3 border-t border-border pt-3">
+              <p className="text-[11px] leading-relaxed text-warning-fg">
+                {noCaben.length === 1 ? "Esta zona no cabe" : "Estas zonas no caben"} en un
+                release de GitHub, que admite 2 GiB por fichero:
+              </p>
+              <div className="mt-2 flex flex-col gap-1">
+                {noCaben.map((t) => (
+                  <div key={t.zona} className="flex items-center justify-between rounded-lg border border-border px-3 py-1.5 font-mono text-[10.5px]">
+                    <span className="text-warning-fg">{t.zona || "raíz"}</span>
+                    <span className="text-subtle">{t.quadkeys} teselas · {tamano(t.bytes)}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[10.5px] leading-relaxed text-subtle">
+                Una tesela no se puede partir en dos ficheros —media tesela no se puede
+                instalar—, así que hay que aligerarla: descarta imágenes en la revisión y
+                vuelve a sellar.
+              </p>
+            </div>
+          )}
+
           <div className="mt-4 flex justify-end">
-            <button onClick={siguienteDesdePaso2}
-              className="jg-press rounded-lg bg-accent px-3.5 py-2 text-[11.5px] font-medium text-black">
+            <button onClick={siguienteDesdePaso2} disabled={noCaben.length > 0}
+              title={noCaben.length > 0 ? "hay zonas que pasan del tope de 2 GiB por fichero" : undefined}
+              className="jg-press rounded-lg bg-accent px-3.5 py-2 text-[11.5px] font-medium text-black
+                disabled:opacity-40">
               {hayNoRedistribuibles ? "Continuar" : "Publicar"}
             </button>
           </div>
