@@ -169,7 +169,7 @@ Con la base de datos de prueba (o, si el operador lo permite, contra la real en 
 - `Almacen` pasa de `Mutex<Connection>` a una estructura con una conexión de escritura (`Mutex<Connection>`, comportamiento actual) y un pequeño *pool* de conexiones de solo lectura (p.ej. `Vec<Mutex<Connection>>` de tamaño fijo, 2-4, elegidas por round-robin o por intento de `try_lock`).
 - Los métodos que solo leen (`progreso_indice`, `sondeo_leer`, `descargas_pendientes`, etc.) usan una conexión de lectura; los que escriben siguen usando la de escritura. Decidir caso por caso: si un método hace `INSERT`/`UPDATE`/`DELETE` en cualquier rama, va por escritura.
 
-- [ ] **Step 1: Diseñar el tipo**
+- [x] **Step 1: Diseñar el tipo**
 
 ```rust
 pub struct Almacen {
@@ -181,7 +181,7 @@ pub struct Almacen {
 
 Cada conexión (escritura y las de lectura) se abre igual, con el mismo `PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;`. Las de lectura además `PRAGMA query_only = TRUE;` — documentar por qué: evita que un método mal clasificado escriba por la conexión equivocada sin que nadie lo note, falla ruidoso en vez de silencioso.
 
-- [ ] **Step 2: `conectar_lectura` y selección round-robin**
+- [x] **Step 2: `conectar_lectura` y selección round-robin** — 3 conexiones
 
 ```rust
 fn conectar_lectura(dir: &Path) -> Result<Connection> {
@@ -197,13 +197,13 @@ fn con_lectura<T>(&self, f: impl FnOnce(&Connection) -> Result<T>) -> Result<T> 
 }
 ```
 
-- [ ] **Step 3: Migrar los métodos de solo lectura**
+- [x] **Step 3: Migrar los métodos de solo lectura** — los cinco calientes: `progreso_indice`, `sondeo_leer`, `descargas_pendientes`, `descargas_estados`, `indices_con_pendientes`. El resto sigue por la conexión de escritura, a propósito
 
 Revisar cada método público de `Almacen` (son ~40, según el listado de la investigación) y clasificarlo. Empezar por los que el spec señala como el problema real: `progreso_indice`, `sondeo_leer`, `descargas_pendientes`, `descargas_estados`, `indices_con_pendientes`. Cambiar su `self.0.lock().unwrap()` (o el equivalente tras Task 2) por `self.con_lectura(...)`.
 
 **No migrar de golpe los ~40**: hacerlo para los de lectura caliente listados arriba primero, confirmar que compila y los tests pasan, y dejar el resto para una pasada posterior si el spec no la exige — el objetivo medible es que el sondeo de progreso deje de bloquear al escritor, no una reescritura completa de `store.rs`.
 
-- [ ] **Step 4: `reabrir_en` cierra TODAS las conexiones**
+- [x] **Step 4: `reabrir_en` cierra TODAS las conexiones**
 
 Este es el punto delicado que el spec señala explícitamente. `reabrir_en` (migración de carpeta, #55) hoy sustituye solo `self.0`. Con el nuevo tipo debe:
 
@@ -223,15 +223,15 @@ pub fn reabrir_en(&self, nuevo_dir: &Path) -> Result<()> {
 
 Verificar que esto realmente suelta TODOS los handles de Windows sobre el `indexer.db` viejo antes de que el llamador intente borrarlo — es la razón de ser de esta función, no romperla.
 
-- [ ] **Step 5: `cache_size` y `temp_store`**
+- [x] **Step 5: `cache_size` y `temp_store`** — en `conectar` y en `conectar_lectura`
 
 En `conectar` y `conectar_lectura`, añadir a los `PRAGMA` existentes: `PRAGMA cache_size = -20000; PRAGMA temp_store = MEMORY;` (20 MB de caché, arriba de los 2 MB por defecto para una base que ya pesa 34 MB y crecerá).
 
-- [ ] **Step 6: Verificar concurrencia**
+- [x] **Step 6: Verificar concurrencia** — `cargo test -p indexer-app` limpio (99), sin tocar ningún test
 
 `cargo test -p indexer-app` — los tests existentes de `download.rs`/`store.rs` deben seguir pasando sin cambios (usan `Almacen::abrir` igual). Si algún test llama directamente a `self.0` o similar desde fuera del módulo, ajustarlo a la nueva forma.
 
-- [ ] **Commit:** `perf(indexer): conexiones de lectura separadas de la de escritura`
+- [x] **Commit:** `perf(indexer): conexiones de lectura separadas de la de escritura`
 
 ---
 

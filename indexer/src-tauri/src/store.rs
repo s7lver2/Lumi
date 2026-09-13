@@ -245,11 +245,30 @@ pub struct TeselaLiberada {
     pub vectores_hechos: Vec<(String, i64)>,
 }
 
-pub struct Almacen(Mutex<Connection>);
+/// Cuántas conexiones de solo lectura. Con WAL, SQLite admite lectores
+/// concurrentes junto a un escritor; una sola conexión para toda la aplicación
+/// tiraba esa propiedad y serializaba los 23 sondeos del frontend, el bucle de
+/// descarga y los de la cola en un único candado. Tres es suficiente: el
+/// problema medido era un sondeo caro bloqueando al escritor, no un enjambre.
+const CONEXIONES_LECTURA: usize = 3;
+
+pub struct Almacen {
+    escritura: Mutex<Connection>,
+    lectura: Vec<Mutex<Connection>>,
+    siguiente_lectura: std::sync::atomic::AtomicUsize,
+}
 
 impl Almacen {
     pub fn abrir(dir: &Path) -> Result<Self> {
-        Ok(Self(Mutex::new(Self::conectar(dir)?)))
+        let escritura = Mutex::new(Self::conectar(dir)?);
+        // Las de lectura se abren DESPUÉS de `conectar`, que es quien crea la
+        // carpeta y aplica el esquema: contra una base que todavía no existe,
+        // una conexión `query_only` no podría crear nada.
+        let mut lectura = Vec::with_capacity(CONEXIONES_LECTURA);
+        for _ in 0..CONEXIONES_LECTURA {
+            lectura.push(Mutex::new(Self::conectar_lectura(dir)?));
+        }
+        Ok(Self { escritura, lectura, siguiente_lectura: std::sync::atomic::AtomicUsize::new(0) })
     }
 
     /// Cierra la conexión actual y abre una nueva contra `nuevo_dir` — mismo
@@ -258,11 +277,31 @@ impl Almacen {
     /// app. Usado por la migración de carpeta de datos (#55): soltar el
     /// `Connection` viejo aquí es lo que libera el handle de Windows sobre
     /// `indexer.db` para que el origen se pueda borrar después.
+    ///
+    /// Tiene que soltar TODAS las conexiones, no solo la de escritura: cada
+    /// conexión de lectura es otro handle de Windows sobre el `indexer.db`
+    /// viejo, y con uno solo abierto el borrado del origen falla.
     pub fn reabrir_en(&self, nuevo_dir: &Path) -> Result<()> {
-        let nueva = Self::conectar(nuevo_dir)?;
-        let mut guard = self.0.lock().unwrap();
-        *guard = nueva;
+        let nueva_escritura = Self::conectar(nuevo_dir)?;
+        let mut nuevas_lectura = Vec::with_capacity(self.lectura.len());
+        for _ in 0..self.lectura.len() {
+            nuevas_lectura.push(Self::conectar_lectura(nuevo_dir)?);
+        }
+        *self.escritura.lock().unwrap() = nueva_escritura;
+        for (vieja, nueva) in self.lectura.iter().zip(nuevas_lectura) {
+            *vieja.lock().unwrap() = nueva;
+        }
         Ok(())
+    }
+
+    /// Ejecuta `f` contra una de las conexiones de solo lectura, por turno
+    /// rotatorio. No espera a que una concreta quede libre: con tres y un
+    /// reparto round-robin, la contención que quedaba se reparte sola.
+    fn con_lectura<T>(&self, f: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
+        let i = self.siguiente_lectura.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            % self.lectura.len();
+        let c = self.lectura[i].lock().unwrap();
+        f(&c)
     }
 
     /// Fusiona el WAL al archivo principal y deja `-wal`/`-shm` vacíos —
@@ -270,7 +309,7 @@ impl Almacen {
     /// copia sea un snapshot consistente en vez de una foto a mitad de
     /// escritura.
     pub fn checkpoint(&self) {
-        let guard = self.0.lock().unwrap();
+        let guard = self.escritura.lock().unwrap();
         let _ = guard.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
     }
 
@@ -279,10 +318,14 @@ impl Almacen {
         let c = Connection::open(dir.join("indexer.db"))?;
         // WAL: lectores concurrentes junto a un escritor. El volumen de
         // escritura aquí es estado de lote, no una carga transaccional.
+        // `cache_size` negativo son KiB, no páginas: 20 MB frente a los 2 MB
+        // por defecto, para una base que ya pesa 34 MB y crece.
         c.execute_batch(
             "PRAGMA journal_mode = WAL;
              PRAGMA busy_timeout = 5000;
-             PRAGMA synchronous = NORMAL;",
+             PRAGMA synchronous = NORMAL;
+             PRAGMA cache_size = -20000;
+             PRAGMA temp_store = MEMORY;",
         )?;
         c.execute_batch(ESQUEMA)?;
         // Migración idempotente: `CREATE TABLE IF NOT EXISTS` no toca una tabla
@@ -381,6 +424,22 @@ impl Almacen {
         Ok(c)
     }
 
+    /// Una conexión de solo lectura. `query_only` no es ceremonia: es lo que
+    /// hace que un método mal clasificado —uno que escribe en alguna rama y se
+    /// migró a `con_lectura` por descuido— falle ruidosamente en vez de
+    /// escribir por la conexión equivocada sin que nadie lo note.
+    fn conectar_lectura(dir: &Path) -> Result<Connection> {
+        let c = Connection::open(dir.join("indexer.db"))?;
+        c.execute_batch(
+            "PRAGMA journal_mode = WAL;
+             PRAGMA busy_timeout = 5000;
+             PRAGMA cache_size = -20000;
+             PRAGMA temp_store = MEMORY;
+             PRAGMA query_only = TRUE;",
+        )?;
+        Ok(c)
+    }
+
     fn ahora() -> i64 {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -395,7 +454,7 @@ impl Almacen {
     /// impedía de verdad que una ingesta, una herencia de territorio o una
     /// descarga siguieran escribiendo filas contra un índice ya sellado.
     pub fn indice_sellado(&self, indice_id: i64) -> Result<bool> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let estado: Option<String> = c
             .query_row("SELECT estado FROM indices WHERE id = ?1", params![indice_id], |r| r.get(0))
             .ok();
@@ -403,7 +462,7 @@ impl Almacen {
     }
 
     pub fn crear_indice(&self, nombre: &str, slug: &str, proyecto: &str) -> Result<i64> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "INSERT INTO indices (nombre, slug, estado, proyecto, creado_en) VALUES (?1, ?2, 'abierto', ?3, ?4)",
             params![nombre, slug, proyecto, Self::ahora()],
@@ -415,14 +474,14 @@ impl Almacen {
     /// «última actividad» de un proyecto sumando sobre todos sus índices;
     /// `None` si el índice ya no existe.
     pub fn creado_en_de_indice(&self, id: i64) -> Result<Option<i64>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         Ok(c.query_row("SELECT creado_en FROM indices WHERE id = ?1", params![id], |r| r.get(0)).optional()?)
     }
 
     /// `numero_version` de un índice — cuántas veces se ha publicado. `1` para
     /// cualquier índice que no se haya publicado todavía.
     pub fn genealogia(&self, indice_id: i64) -> Result<u32> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         Ok(c.query_row(
             "SELECT numero_version FROM indices WHERE id = ?1",
             params![indice_id],
@@ -433,7 +492,7 @@ impl Almacen {
     /// La clave AES (en base64) fijada para publicar este índice, si ya se
     /// generó en un intento anterior — `None` la primera vez.
     pub fn clave_publicacion(&self, indice_id: i64) -> Result<Option<String>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         Ok(c.query_row(
             "SELECT clave_publicacion FROM indices WHERE id = ?1",
             params![indice_id],
@@ -444,7 +503,7 @@ impl Almacen {
     /// Fija la clave de publicación de un índice. Solo se llama una vez por
     /// índice — ver el comentario en la migración de `clave_publicacion`.
     pub fn fijar_clave_publicacion(&self, indice_id: i64, clave: &str) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "UPDATE indices SET clave_publicacion = ?2 WHERE id = ?1",
             params![indice_id, clave],
@@ -456,7 +515,7 @@ impl Almacen {
     /// Vacío para uno creado antes de que esto existiera — quien llama decide
     /// qué hacer con "sin elegir" (ver `modelos_de_niveles`).
     pub fn niveles_elegidos(&self, indice_id: i64) -> Result<Vec<String>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let crudo: Option<String> = c.query_row(
             "SELECT niveles_elegidos FROM indices WHERE id = ?1",
             params![indice_id],
@@ -469,7 +528,7 @@ impl Almacen {
     /// (`indice_portear_nivel`) — subir de nivel solo añade modelos, nunca
     /// invalida vectores ya embebidos bajo la elección anterior.
     pub fn fijar_niveles_elegidos(&self, indice_id: i64, niveles: &[String]) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "UPDATE indices SET niveles_elegidos = ?2 WHERE id = ?1",
             params![indice_id, niveles.join(",")],
@@ -480,14 +539,14 @@ impl Almacen {
     /// `None` si el índice ya no existe — por ejemplo, un plan de descarga
     /// pendiente que apunta a un índice que se borró entretanto.
     pub fn nombre_de_indice(&self, indice_id: i64) -> Result<Option<String>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         Ok(c.query_row("SELECT nombre FROM indices WHERE id = ?1", params![indice_id], |r| r.get(0)).ok())
     }
 
     /// El proyecto (repo etiquetado `lumi-index`) de un índice — `None` en
     /// cualquier índice creado antes de la spec de pestaña de Proyectos.
     pub fn proyecto_de_indice(&self, indice_id: i64) -> Result<Option<String>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let fila: Option<Option<String>> = c
             .query_row("SELECT proyecto FROM indices WHERE id = ?1", params![indice_id], |r| r.get(0))
             .optional()?;
@@ -506,7 +565,7 @@ impl Almacen {
         atribucion: Option<&str>,
         declarada_por_operador: bool,
     ) -> Result<i64> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "INSERT INTO lotes
                (indice_id, clase, origen, tipo, fuente, licencia, atribucion,
@@ -540,7 +599,7 @@ impl Almacen {
         quadkey: &str,
         modelos_pendientes: &[String],
     ) -> Result<i64> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "INSERT INTO imagenes (indice_id, lote_id, ruta, sha256, lat, lng, quadkey, creada_en)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -574,7 +633,7 @@ impl Almacen {
     ) -> Result<i64> {
         let revision = if c.fuente == "commons" || c.fuente == "flickr" { "pendiente" } else { "aceptada" };
         let atrib = serde_json::to_string(&c.atribucion)?;
-        let cn = self.0.lock().unwrap();
+        let cn = self.escritura.lock().unwrap();
         cn.execute(
             "INSERT INTO imagenes
                (indice_id, lote_id, ruta, sha256, lat, lng, quadkey, capturada_en,
@@ -611,7 +670,7 @@ impl Almacen {
     }
 
     pub fn marcar_saltada(&self, imagen_id: i64, motivo: &str) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "UPDATE imagenes SET saltada_motivo = ?2 WHERE id = ?1",
             params![imagen_id, motivo],
@@ -626,7 +685,7 @@ impl Almacen {
     /// Lo que la procedencia de imágenes necesita, y nada más. Las saltadas no
     /// cuentan: no forman parte del índice.
     pub fn filas_procedencia(&self, indice_id: i64) -> Result<Vec<FilaImagen>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let mut q = c.prepare(
             "SELECT l.tipo, l.fuente, i.quadkey
                FROM imagenes i JOIN lotes l ON l.id = i.lote_id
@@ -651,7 +710,7 @@ impl Almacen {
     }
 
     pub fn teselas_trabajo(&self, indice_id: i64) -> Result<Vec<(String, TrabajoDe)>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let mut q = c.prepare(
             "SELECT quadkey, trabajo, fuente_indice FROM teselas WHERE indice_id = ?1",
         )?;
@@ -679,7 +738,7 @@ impl Almacen {
         fuente_indice: Option<&str>,
         sha256: Option<&str>,
     ) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "INSERT OR REPLACE INTO teselas (indice_id, quadkey, trabajo, fuente_indice, sha256)
              VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -692,7 +751,7 @@ impl Almacen {
     /// Se lee ANTES de `borrar_indice`: una vez borradas las filas de SQLite
     /// no hay otra forma de saber qué puntos hay que limpiar también allí.
     pub fn vectores_hechos_de_indice(&self, indice_id: i64) -> Result<Vec<(String, i64)>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let mut q = c.prepare(
             "SELECT v.modelo, v.imagen_id FROM vectores v JOIN imagenes i ON i.id = v.imagen_id
               WHERE i.indice_id = ?1 AND v.estado = 'hecho'",
@@ -708,7 +767,7 @@ impl Almacen {
     /// los puntos ya subidos a Qdrant se limpian aparte, porque viven fuera
     /// de esta base de datos.
     pub fn borrar_indice(&self, indice_id: i64) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "DELETE FROM vectores WHERE imagen_id IN (SELECT id FROM imagenes WHERE indice_id = ?1)",
             params![indice_id],
@@ -727,7 +786,7 @@ impl Almacen {
     /// sección 4 solo necesita que la fila siga existiendo, no un valor
     /// concreto de `trabajo`.
     pub fn liberar_tesela(&self, indice_id: i64, quadkey: &str) -> Result<TeselaLiberada> {
-        let mut c = self.0.lock().unwrap();
+        let mut c = self.escritura.lock().unwrap();
         let tx = c.transaction()?;
         let imagenes: Vec<(i64, String)> = {
             let mut q = tx.prepare("SELECT id, ruta FROM imagenes WHERE indice_id = ?1 AND quadkey = ?2")?;
@@ -757,7 +816,7 @@ impl Almacen {
     /// Repunta el fichero de una imagen clonada tras hardlinkearla (o
     /// copiarla) al directorio de la versión nueva.
     pub fn actualizar_ruta_imagen(&self, imagen_id: i64, ruta: &str) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute("UPDATE imagenes SET ruta = ?2 WHERE id = ?1", params![imagen_id, ruta])?;
         Ok(())
     }
@@ -766,7 +825,7 @@ impl Almacen {
     /// que reconstruye la cola cuando Redis se ha vaciado, y lo que impide
     /// sellar un paquete a medias.
     pub fn sin_vector(&self, indice_id: i64, modelo: &str) -> Result<u32> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let n: u32 = c.query_row(
             "SELECT COUNT(*) FROM imagenes i JOIN vectores v ON v.imagen_id = i.id
               WHERE i.indice_id = ?1 AND v.modelo = ?2 AND v.estado = 'pendiente'
@@ -787,7 +846,7 @@ impl Almacen {
         modelo: &str,
         limite: u32,
     ) -> Result<Vec<(i64, String)>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let mut q = c.prepare(
             "SELECT i.id, i.ruta FROM imagenes i
                JOIN vectores v ON v.imagen_id = i.id
@@ -807,7 +866,7 @@ impl Almacen {
     /// Marca como pendientes todas las imágenes de un índice para un modelo
     /// que todavía no tiene capa. Devuelve cuántas se encolaron.
     pub fn encolar_capa(&self, indice_id: i64, modelo: &str) -> Result<usize> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let n = c.execute(
             "INSERT OR IGNORE INTO vectores (imagen_id, modelo, estado)
              SELECT i.id, ?2, 'pendiente' FROM imagenes i
@@ -824,19 +883,20 @@ impl Almacen {
     /// una sola columna compartida entre todos los modelos y por eso nunca
     /// pudo decir "a lumi-preview le queda trabajo" sin mentir sobre lumi-2.
     pub fn indices_con_pendientes(&self, modelo: &str) -> Result<Vec<i64>> {
-        let c = self.0.lock().unwrap();
-        let mut q = c.prepare(
-            "SELECT DISTINCT i.indice_id FROM imagenes i
-               JOIN vectores v ON v.imagen_id = i.id
-               JOIN lotes l ON l.id = i.lote_id
-              WHERE v.modelo = ?1 AND v.estado = 'pendiente'
-                AND i.saltada_motivo IS NULL
-                AND (i.revision IS NULL OR i.revision <> 'rechazada')
-                AND l.estado <> 'cancelado'
-              ORDER BY i.indice_id",
-        )?;
-        let filas = q.query_map(params![modelo], |r| r.get(0))?.collect::<Result<Vec<_>, _>>()?;
-        Ok(filas)
+        self.con_lectura(|c| {
+            let mut q = c.prepare(
+                "SELECT DISTINCT i.indice_id FROM imagenes i
+                   JOIN vectores v ON v.imagen_id = i.id
+                   JOIN lotes l ON l.id = i.lote_id
+                  WHERE v.modelo = ?1 AND v.estado = 'pendiente'
+                    AND i.saltada_motivo IS NULL
+                    AND (i.revision IS NULL OR i.revision <> 'rechazada')
+                    AND l.estado <> 'cancelado'
+                  ORDER BY i.indice_id",
+            )?;
+            let filas = q.query_map(params![modelo], |r| r.get(0))?.collect::<Result<Vec<_>, _>>()?;
+            Ok(filas)
+        })
     }
 
     /// `(hechas, total)` de ESTE índice para ESTE modelo — el índice entero,
@@ -849,18 +909,16 @@ impl Almacen {
     /// vez que se pide un par que no está en la tabla se siembra con el
     /// recuento real y desde ahí ya vive incremental.
     pub fn progreso_indice(&self, indice_id: i64, modelo: &str) -> Result<(u32, u32)> {
-        {
-            let c = self.0.lock().unwrap();
-            if let Some(par) = c
-                .query_row(
-                    "SELECT hechas, total FROM progreso_embebido WHERE indice_id = ?1 AND modelo = ?2",
-                    params![indice_id, modelo],
-                    |r| Ok((r.get::<_, u32>(0)?, r.get::<_, u32>(1)?)),
-                )
-                .optional()?
-            {
-                return Ok(par);
-            }
+        let guardado = self.con_lectura(|c| {
+            Ok(c.query_row(
+                "SELECT hechas, total FROM progreso_embebido WHERE indice_id = ?1 AND modelo = ?2",
+                params![indice_id, modelo],
+                |r| Ok((r.get::<_, u32>(0)?, r.get::<_, u32>(1)?)),
+            )
+            .optional()?)
+        })?;
+        if let Some(par) = guardado {
+            return Ok(par);
         }
         self.progreso_embebido_recalcular(indice_id, modelo)
     }
@@ -869,7 +927,7 @@ impl Almacen {
     /// puntos que invalidan la cuenta (saltar, rechazar, cancelar un lote):
     /// eventos raros donde pagar el recorrido completo es aceptable.
     pub fn progreso_embebido_recalcular(&self, indice_id: i64, modelo: &str) -> Result<(u32, u32)> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let hechas: u32 = c.query_row(
             "SELECT COUNT(*) FROM imagenes i JOIN vectores v ON v.imagen_id = i.id
               WHERE i.indice_id = ?1 AND v.modelo = ?2 AND v.estado = 'hecho'",
@@ -939,7 +997,7 @@ impl Almacen {
     /// `UPDATE`, ese caso afectaba a cero filas en silencio: el vector que
     /// venía dentro del paquete se perdía sin ningún error que lo delatara.
     pub fn marcar_vector(&self, imagen_id: i64, modelo: &str, estado: &str) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         // El estado anterior decide si esto mueve la cuenta incremental: volver
         // a marcar 'hecho' algo que ya lo estaba (reembebido) no suma otra vez.
         let antes: Option<String> = c
@@ -975,7 +1033,7 @@ impl Almacen {
     }
 
     pub fn estado_lote(&self, lote_id: i64, estado: &str, error: Option<&str>) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "UPDATE lotes SET estado = ?2, error = ?3 WHERE id = ?1",
             params![lote_id, estado, error],
@@ -1002,7 +1060,7 @@ impl Almacen {
     /// escribir. El `WHERE` es la guarda contra la carrera entre que la
     /// interfaz pinta el botón y que la cola lo coge justo antes del click.
     pub fn cancelar_lote(&self, lote_id: i64) -> Result<bool> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let n = c.execute(
             "UPDATE lotes SET estado = 'cancelado' WHERE id = ?1 AND estado = 'pendiente'",
             params![lote_id],
@@ -1023,7 +1081,7 @@ impl Almacen {
     /// dos cosas a la vez. La única excepción es `cancelado`, que sí es una
     /// decisión del operador y no algo que los vectores puedan derivar.
     pub fn listar_lotes(&self, indice_id: i64) -> Result<Vec<(i64, String, String, String)>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let mut q = c.prepare(
             "SELECT l.id, l.clase, l.origen,
                 CASE
@@ -1049,7 +1107,7 @@ impl Almacen {
     /// `(id, nombre, slug, estado)` de todos los índices, más nuevo primero. Es
     /// lo que alimenta la lista del catálogo.
     pub fn listar_indices(&self) -> Result<Vec<(i64, String, String, String)>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let mut q = c.prepare("SELECT id, nombre, slug, estado FROM indices ORDER BY creado_en DESC")?;
         let filas = q
             .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
@@ -1062,7 +1120,7 @@ impl Almacen {
     /// de la lista de índices en el panel de detalle de un proyecto, y de
     /// las estadísticas agregadas (sumadas por quien llame, no aquí).
     pub fn indices_de_proyecto(&self, proyecto: &str) -> Result<Vec<(i64, String, String, String)>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let mut q = c.prepare(
             "SELECT id, nombre, slug, estado FROM indices WHERE proyecto = ?1 ORDER BY creado_en DESC",
         )?;
@@ -1075,7 +1133,7 @@ impl Almacen {
     /// Los índices con `ficha.json` ya subida: la única prueba fiable de que
     /// una publicación llegó al final, en vez de quedarse a medio subir.
     pub fn indices_publicados(&self) -> Result<std::collections::HashSet<i64>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let mut q = c.prepare(
             "SELECT indice_id FROM publicaciones WHERE asset = 'ficha.json' AND subido = 1",
         )?;
@@ -1087,7 +1145,7 @@ impl Almacen {
     /// Guarda un secreto ya cifrado por `Maestra` bajo una clave de ajuste,
     /// como la de Mapbox. Nunca se guarda en claro.
     pub fn guardar_ajuste_sellado(&self, clave: &str, sellado: &[u8]) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "INSERT OR REPLACE INTO ajustes (clave, sellado) VALUES (?1, ?2)",
             params![clave, sellado],
@@ -1096,7 +1154,7 @@ impl Almacen {
     }
 
     pub fn leer_ajuste_sellado(&self, clave: &str) -> Result<Option<Vec<u8>>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         Ok(c
             .query_row("SELECT sellado FROM ajustes WHERE clave = ?1", params![clave], |r| r.get(0))
             .ok())
@@ -1104,7 +1162,7 @@ impl Almacen {
 
 
     pub fn quadkey_de_imagen(&self, imagen_id: i64) -> Result<String> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         Ok(c.query_row("SELECT quadkey FROM imagenes WHERE id = ?1", params![imagen_id], |r| {
             r.get(0)
         })?)
@@ -1114,7 +1172,7 @@ impl Almacen {
     /// `indice.db` (por id). Ese orden es el contrato del fragmento: la fila N
     /// de un `.b1`/`.i8` tiene que ser la imagen N de esta misma lista.
     pub fn imagenes_de_indice(&self, indice_id: i64) -> Result<Vec<(i64, String, String)>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let mut q = c.prepare(
             "SELECT id, ruta, quadkey FROM imagenes
               WHERE indice_id = ?1 AND saltada_motivo IS NULL
@@ -1132,7 +1190,7 @@ impl Almacen {
     /// metadatos que ya guardamos (fecha, tamaño, procedencia). Las saltadas y
     /// las rechazadas no salen: no forman parte del índice.
     pub fn imagenes_mapa(&self, indice_id: i64) -> Result<Vec<FilaMapa>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let mut q = c.prepare(
             "SELECT i.id, i.ruta, i.lat, i.lng, l.fuente, i.capturada_en, i.ancho, i.alto,
                     i.licencia, i.rumbo
@@ -1164,7 +1222,7 @@ impl Almacen {
     /// índice en total. Es el "filas esperadas" contra el que se cuadra cada
     /// modelo al sellar.
     pub fn total_imagenes(&self, indice_id: i64) -> Result<u32> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let n: u32 = c.query_row(
             "SELECT COUNT(*) FROM imagenes WHERE indice_id = ?1 AND saltada_motivo IS NULL
                 AND (revision IS NULL OR revision <> 'rechazada')",
@@ -1177,7 +1235,7 @@ impl Almacen {
     /// Cuántos vectores 'hecho' tiene el índice para un modelo. Es el
     /// "vectores encontrados" del informe de sellado.
     pub fn vectores_hechos(&self, indice_id: i64, modelo: &str) -> Result<u32> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let n: u32 = c.query_row(
             "SELECT COUNT(*) FROM imagenes i JOIN vectores v ON v.imagen_id = i.id
               WHERE i.indice_id = ?1 AND v.modelo = ?2 AND v.estado = 'hecho'
@@ -1194,7 +1252,7 @@ impl Almacen {
     /// fragmento, y por tanto lo que otro operador puede dar por heredado al
     /// instalarlo.
     pub fn fuentes_de_tesela(&self, indice_id: i64, quadkey: &str) -> Result<Vec<String>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let mut q = c.prepare(
             "SELECT DISTINCT l.fuente
                FROM imagenes i JOIN lotes l ON l.id = i.lote_id
@@ -1211,7 +1269,7 @@ impl Almacen {
     /// Lo que el sellado necesita para decidir qué sale del paquete. Las
     /// saltadas y las rechazadas no están: no forman parte del índice.
     pub fn filas_publicables(&self, indice_id: i64) -> Result<Vec<crate::package::FilaPublicable>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let mut q = c.prepare(
             "SELECT i.id, l.fuente, i.licencia, i.quadkey, i.ruta, i.lat, i.lng
                FROM imagenes i JOIN lotes l ON l.id = i.lote_id
@@ -1240,7 +1298,7 @@ impl Almacen {
     /// `(id, ruta, fuente, licencia)` de las sueltas que esperan revisión.
     #[allow(clippy::type_complexity)]
     pub fn revision_pendientes(&self, indice_id: i64, limite: u32) -> Result<Vec<(i64, String, String, Option<String>)>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let mut q = c.prepare(
             "SELECT i.id, i.ruta, l.fuente, i.licencia
                FROM imagenes i JOIN lotes l ON l.id = i.lote_id
@@ -1256,7 +1314,7 @@ impl Almacen {
     }
 
     pub fn revision_marcar(&self, ids: &[i64], estado: &str) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         for id in ids {
             c.execute("UPDATE imagenes SET revision = ?2 WHERE id = ?1", params![id, estado])?;
         }
@@ -1275,7 +1333,7 @@ impl Almacen {
     /// Cierra la revisión aceptando todo lo que siga pendiente. NO resucita lo
     /// ya rechazado: el `WHERE` lo deja fuera a propósito.
     pub fn revision_aceptar_resto(&self, indice_id: i64) -> Result<u32> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let n = c.execute(
             "UPDATE imagenes SET revision = 'aceptada'
               WHERE indice_id = ?1 AND revision = 'pendiente'",
@@ -1285,7 +1343,7 @@ impl Almacen {
     }
 
     pub fn revision_cuentas(&self, indice_id: i64) -> Result<Cuentas> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let de = |e: &str| -> Result<u32> {
             Ok(c.query_row(
                 "SELECT COUNT(*) FROM imagenes WHERE indice_id = ?1 AND revision = ?2",
@@ -1299,7 +1357,7 @@ impl Almacen {
     /// Todas las filas de imagen, incluidas las rechazadas y las saltadas. Es
     /// lo que demuestra que descartar MARCA y no borra.
     pub fn contar_filas_imagenes(&self, indice_id: i64) -> Result<i64> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         Ok(c.query_row(
             "SELECT COUNT(*) FROM imagenes WHERE indice_id = ?1",
             params![indice_id],
@@ -1310,7 +1368,7 @@ impl Almacen {
     /// Solo para los tests de revisión: una suelta pendiente y nada más.
     #[cfg(test)]
     pub fn insertar_imagen_pendiente_de_revision(&self, indice_id: i64, lote_id: i64, nombre: &str) -> Result<i64> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "INSERT INTO imagenes (indice_id, lote_id, ruta, sha256, lat, lng, quadkey, revision, creada_en)
              VALUES (?1, ?2, ?3, ?4, 43.0, -8.0, 'AAA', 'pendiente', ?5)",
@@ -1322,7 +1380,7 @@ impl Almacen {
     /// Sellar es irreversible: pasa el índice a `sellado`, con su ruta y
     /// cuándo. No hay camino de vuelta a `abierto`.
     pub fn sellar_indice(&self, indice_id: i64, ruta: &str) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "UPDATE indices SET estado = 'sellado', ruta = ?2, sellado_en = ?3 WHERE id = ?1",
             params![indice_id, ruta, Self::ahora()],
@@ -1333,7 +1391,7 @@ impl Almacen {
     // ── Sondeos ──────────────────────────────────────────────────────────
 
     pub fn sondeo_guardar(&self, fuente: &str, quadkey: &str, nivel: &str, estimadas: u32) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "INSERT OR REPLACE INTO sondeos (fuente, quadkey, nivel, estimadas, sondeado_en)
              VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -1345,22 +1403,23 @@ impl Almacen {
     /// `None` si no está o si ya caducó. La caducidad se pasa como parámetro y
     /// no como constante para que el test pueda pedir cero días.
     pub fn sondeo_leer(&self, fuente: &str, quadkey: &str, dias: i64) -> Result<Option<(String, u32)>> {
-        let c = self.0.lock().unwrap();
         let corte = Self::ahora() - dias * 86_400;
-        Ok(c.query_row(
-            "SELECT nivel, estimadas FROM sondeos
-              WHERE fuente = ?1 AND quadkey = ?2 AND sondeado_en > ?3",
-            params![fuente, quadkey, corte],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        )
-        .ok())
+        self.con_lectura(|c| {
+            Ok(c.query_row(
+                "SELECT nivel, estimadas FROM sondeos
+                  WHERE fuente = ?1 AND quadkey = ?2 AND sondeado_en > ?3",
+                params![fuente, quadkey, corte],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .ok())
+        })
     }
 
     // ── Gasto ────────────────────────────────────────────────────────────
 
     /// Suma sobre la fila del día. `dia` en `YYYY-MM-DD`.
     pub fn gasto_apuntar(&self, dia: &str, fuente: &str, unidades: u32, coste: f64) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "INSERT INTO gasto (dia, fuente, unidades, coste) VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(dia, fuente) DO UPDATE SET
@@ -1373,7 +1432,7 @@ impl Almacen {
 
     /// `mes` en `YYYY-MM`. El prefijo basta porque `dia` es ISO y ordena solo.
     pub fn gasto_del_mes(&self, mes: &str) -> Result<f64> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let s: Option<f64> = c.query_row(
             "SELECT SUM(coste) FROM gasto WHERE dia LIKE ?1 || '-%'",
             params![mes],
@@ -1384,7 +1443,7 @@ impl Almacen {
 
     /// `(fuente, unidades, coste)` del mes, para el desglose de ajustes.
     pub fn gasto_del_mes_por_origen(&self, mes: &str) -> Result<Vec<(String, u32, f64)>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let mut q = c.prepare(
             "SELECT fuente, SUM(unidades), SUM(coste) FROM gasto
               WHERE dia LIKE ?1 || '-%' GROUP BY fuente ORDER BY SUM(coste) DESC",
@@ -1398,7 +1457,7 @@ impl Almacen {
     // ── Descargas ────────────────────────────────────────────────────────
 
     pub fn descarga_estado(&self, indice_id: i64, fuente: &str, quadkey: &str) -> Result<Option<String>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         Ok(c.query_row(
             "SELECT estado FROM descargas WHERE indice_id = ?1 AND fuente = ?2 AND quadkey = ?3",
             params![indice_id, fuente, quadkey],
@@ -1418,7 +1477,7 @@ impl Almacen {
         unidades: u32,
         motivo: Option<&str>,
     ) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "INSERT INTO descargas (indice_id, fuente, quadkey, estado, imagenes, unidades, motivo)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
@@ -1440,18 +1499,20 @@ impl Almacen {
         fuente: &str,
         pedidas: &[String],
     ) -> Result<Vec<String>> {
-        let c = self.0.lock().unwrap();
         // 'hecho' no se vuelve a pedir porque ya está; 'abandonada' no se
         // vuelve a pedir porque YA SE INTENTÓ LO SUFICIENTE — sin excluirla
         // aquí, una tesela que agotó sus reintentos se pedía de nuevo en
         // cada relanzamiento futuro, fallaba otra vez, y así para siempre.
-        let mut q = c.prepare(
-            "SELECT quadkey FROM descargas
-              WHERE indice_id = ?1 AND fuente = ?2 AND estado IN ('hecho','abandonada')",
-        )?;
-        let resueltas: std::collections::HashSet<String> = q
-            .query_map(params![indice_id, fuente], |r| r.get(0))?
-            .collect::<Result<_, _>>()?;
+        let resueltas: std::collections::HashSet<String> = self.con_lectura(|c| {
+            let mut q = c.prepare(
+                "SELECT quadkey FROM descargas
+                  WHERE indice_id = ?1 AND fuente = ?2 AND estado IN ('hecho','abandonada')",
+            )?;
+            let filas: std::collections::HashSet<String> = q
+                .query_map(params![indice_id, fuente], |r| r.get(0))?
+                .collect::<Result<_, _>>()?;
+            Ok(filas)
+        })?;
         Ok(pedidas.iter().filter(|q| !resueltas.contains(*q)).cloned().collect())
     }
 
@@ -1469,18 +1530,19 @@ impl Almacen {
         if pedidas.is_empty() {
             return Ok(Default::default());
         }
-        let c = self.0.lock().unwrap();
         let marcadores = vec!["?"; pedidas.len()].join(",");
         let sql = format!(
             "SELECT quadkey, estado FROM descargas
               WHERE indice_id = ? AND fuente = ? AND quadkey IN ({marcadores})"
         );
-        let mut q = c.prepare(&sql)?;
-        let mut params: Vec<&dyn rusqlite::ToSql> = vec![&indice_id, &fuente];
-        params.extend(pedidas.iter().map(|p| p as &dyn rusqlite::ToSql));
-        let filas: std::collections::HashMap<String, String> =
-            q.query_map(params.as_slice(), |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<_, _>>()?;
-        Ok(filas)
+        self.con_lectura(|c| {
+            let mut q = c.prepare(&sql)?;
+            let mut params: Vec<&dyn rusqlite::ToSql> = vec![&indice_id, &fuente];
+            params.extend(pedidas.iter().map(|p| p as &dyn rusqlite::ToSql));
+            let filas: std::collections::HashMap<String, String> =
+                q.query_map(params.as_slice(), |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<_, _>>()?;
+            Ok(filas)
+        })
     }
 
     /// Vuelve a poner en juego lo abandonado: borra las filas 'abandonada' de
@@ -1490,7 +1552,7 @@ impl Almacen {
     /// a propósito: un relanzamiento normal de la descarga no debe resucitar
     /// solo lo que ya se dio por perdido.
     pub fn descargas_reintentar_abandonadas(&self, indice_id: i64, fuente: Option<&str>) -> Result<usize> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         Ok(match fuente {
             Some(f) => c.execute(
                 "DELETE FROM descargas WHERE indice_id = ?1 AND fuente = ?2 AND estado = 'abandonada'",
@@ -1516,7 +1578,7 @@ impl Almacen {
         if pedidas.is_empty() {
             return Ok((0, 0, 0));
         }
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let marcadores = vec!["?"; pedidas.len()].join(",");
         let sql = format!(
             "SELECT COUNT(*), COALESCE(SUM(imagenes), 0), COALESCE(SUM(unidades), 0)
@@ -1538,7 +1600,7 @@ impl Almacen {
         url: &str,
         json: &str,
     ) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "INSERT INTO fichas_remotas (paquete, autor, url, json, vista, viva)
              VALUES (?1, ?2, ?3, ?4, ?5, 1)
@@ -1552,7 +1614,7 @@ impl Almacen {
 
     /// `(paquete, autor, url, json, viva)`.
     pub fn fichas_remotas(&self) -> Result<Vec<FilaFichaRemota>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let mut q =
             c.prepare("SELECT paquete, autor, url, json, viva FROM fichas_remotas ORDER BY paquete")?;
         let filas = q
@@ -1566,14 +1628,14 @@ impl Almacen {
     /// Un 404 en cualquiera de sus assets. Deja de reclamar sin borrarse: se
     /// sigue sabiendo que existió, y qué zona dejó libre al caerse.
     pub fn ficha_remota_marcar_muerta(&self, paquete: &str) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute("UPDATE fichas_remotas SET viva = 0 WHERE paquete = ?1", params![paquete])?;
         Ok(())
     }
 
     /// Se reconstruye entera: es caché derivada, no verdad.
     pub fn cobertura_remota_rehacer(&self, filas: &[(String, String, String)]) -> Result<()> {
-        let mut c = self.0.lock().unwrap();
+        let mut c = self.escritura.lock().unwrap();
         let tx = c.transaction()?;
         tx.execute("DELETE FROM cobertura_remota", [])?;
         for (quadkey, fuente, paquete) in filas {
@@ -1591,7 +1653,7 @@ impl Almacen {
     /// las que la web ha desreclamado.
     /// `(quadkey, fuente, paquete, autor, url)`.
     pub fn reclamos_de(&self, quadkeys: &[String]) -> Result<Vec<FilaReclamo>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let mut q = c.prepare(
             "SELECT r.quadkey, r.fuente, r.paquete, f.autor, f.url
                FROM cobertura_remota r JOIN fichas_remotas f ON f.paquete = r.paquete
@@ -1614,7 +1676,7 @@ impl Almacen {
     }
 
     pub fn desreclamos_fijar(&self, lista: &[(String, String)]) -> Result<()> {
-        let mut c = self.0.lock().unwrap();
+        let mut c = self.escritura.lock().unwrap();
         let tx = c.transaction()?;
         tx.execute("DELETE FROM desreclamos", [])?;
         for (paquete, motivo) in lista {
@@ -1632,7 +1694,7 @@ impl Almacen {
     /// Dónde quedó el `.lumidx` al sellar. `None` mientras el índice siga
     /// abierto: no hay nada que publicar de un índice que aún cambia.
     pub fn ruta_de_indice(&self, indice_id: i64) -> Result<Option<String>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         Ok(c.query_row("SELECT ruta FROM indices WHERE id = ?1", params![indice_id], |r| r.get(0))
             .ok()
             .flatten())
@@ -1651,7 +1713,7 @@ impl Almacen {
         sha256: &str,
         bytes: u64,
     ) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "INSERT INTO publicaciones (indice_id, asset, identidad, sha256, bytes)
              VALUES (?1, ?2, ?3, ?4, ?5)
@@ -1663,7 +1725,7 @@ impl Almacen {
     }
 
     pub fn publicacion_marcar_subido(&self, indice_id: i64, asset: &str, url: &str) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "UPDATE publicaciones SET subido = 1, url = ?3
               WHERE indice_id = ?1 AND asset = ?2",
@@ -1684,7 +1746,7 @@ impl Almacen {
     pub fn publicacion_igual_a(
         &self, indice_id: i64, asset: &str, identidad: &str,
     ) -> Result<Option<(String, u64)>> {
-        Ok(self.0.lock().unwrap().query_row(
+        Ok(self.escritura.lock().unwrap().query_row(
             "SELECT sha256, bytes FROM publicaciones
               WHERE indice_id = ?1 AND asset = ?2 AND identidad = ?3 AND subido = 1 AND url IS NOT NULL",
             params![indice_id, asset, identidad],
@@ -1697,7 +1759,7 @@ impl Almacen {
     pub fn guardar_ficha_propia(
         &self, indice_id: i64, numero_version: u32, ficha_json: &str, publicada_en: i64,
     ) -> Result<()> {
-        self.0.lock().unwrap().execute(
+        self.escritura.lock().unwrap().execute(
             "INSERT OR REPLACE INTO propias_fichas (indice_id, numero_version, ficha_json, publicada_en)
              VALUES (?1, ?2, ?3, ?4)",
             params![indice_id, numero_version, ficha_json, publicada_en],
@@ -1709,7 +1771,7 @@ impl Almacen {
     /// `(numero_version, ficha_json)`. `None` significa "nunca se ha publicado
     /// esto todavía", no "falló al leer".
     pub fn ultima_ficha_propia(&self, indice_id: i64) -> Result<Option<(u32, String)>> {
-        Ok(self.0.lock().unwrap().query_row(
+        Ok(self.escritura.lock().unwrap().query_row(
             "SELECT numero_version, ficha_json FROM propias_fichas
              WHERE indice_id = ?1 ORDER BY numero_version DESC LIMIT 1",
             [indice_id],
@@ -1721,7 +1783,7 @@ impl Almacen {
     /// de la PRÓXIMA publicación" — se llama al terminar `publicar()` con
     /// éxito, nunca al crear el índice.
     pub fn bumpear_numero_version(&self, indice_id: i64) -> Result<()> {
-        self.0.lock().unwrap().execute(
+        self.escritura.lock().unwrap().execute(
             "UPDATE indices SET numero_version = numero_version + 1 WHERE id = ?1",
             [indice_id],
         )?;
@@ -1731,7 +1793,7 @@ impl Almacen {
     /// Los assets que faltan por subir. Igual que `descargas_pendientes`:
     /// solo `subido = 1` excluye.
     pub fn publicacion_pendientes(&self, indice_id: i64) -> Result<Vec<(String, String, u64)>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         let mut q = c.prepare(
             "SELECT asset, sha256, bytes FROM publicaciones
               WHERE indice_id = ?1 AND subido = 0 ORDER BY asset",
@@ -1749,7 +1811,7 @@ impl Almacen {
     /// guardado por `publicacion_marcar_subido`. `None` antes de la primera
     /// publicación con éxito.
     pub fn publicacion_ficha_url(&self, indice_id: i64) -> Result<Option<String>> {
-        Ok(self.0.lock().unwrap().query_row(
+        Ok(self.escritura.lock().unwrap().query_row(
             "SELECT url FROM publicaciones
               WHERE indice_id = ?1 AND asset = 'ficha.json' AND subido = 1",
             [indice_id],
@@ -1758,7 +1820,7 @@ impl Almacen {
     }
 
     pub fn descarga_sumar_reintento(&self, indice_id: i64, fuente: &str, quadkey: &str) -> Result<u32> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "UPDATE descargas SET reintentos = reintentos + 1
               WHERE indice_id = ?1 AND fuente = ?2 AND quadkey = ?3",
@@ -1776,7 +1838,7 @@ impl Almacen {
     /// `valor` y no en `sellado`: cifrar un número que la propia pantalla
     /// enseña sería teatro.
     pub fn guardar_ajuste(&self, clave: &str, valor: &str) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute(
             "INSERT INTO ajustes (clave, valor) VALUES (?1, ?2)
              ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor",
@@ -1786,14 +1848,14 @@ impl Almacen {
     }
 
     pub fn leer_ajuste(&self, clave: &str) -> Result<Option<String>> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         Ok(c.query_row("SELECT valor FROM ajustes WHERE clave = ?1", params![clave], |r| r.get(0))
             .ok()
             .flatten())
     }
 
     pub fn borrar_ajuste(&self, clave: &str) -> Result<()> {
-        let c = self.0.lock().unwrap();
+        let c = self.escritura.lock().unwrap();
         c.execute("DELETE FROM ajustes WHERE clave = ?1", params![clave])?;
         Ok(())
     }
