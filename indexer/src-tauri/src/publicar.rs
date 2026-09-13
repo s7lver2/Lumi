@@ -906,8 +906,22 @@ pub async fn publicar(
             // pasa por exactamente el mismo camino que un asset entero
             // (`publicacion_apuntar`, `subir_asset`, `marcar_subido`), así que
             // una subida cortada se retoma parte a parte igual que siempre.
+            //
+            // El tamaño de cada parte es `TOPE_TROZO_BYTES` (1,8 GB), NO
+            // `TOPE_ASSET_BYTES` (2 GiB exactos): GitHub rechaza con 422
+            // «size must be less than 2147483648» — ESTRICTAMENTE menor, no
+            // como mucho igual. `chunks()` produce trozos de tamaño EXACTO
+            // al tope pedido salvo el último, así que partir con
+            // `TOPE_ASSET_BYTES` generaba partes de exactamente 2147483648
+            // bytes en cuanto había más de una — el 100% de las subidas
+            // multiparte reales, no un caso raro. Verificado en vivo el
+            // 2026-09-14 contra la tesela de León: el primer intento con
+            // `TOPE_ASSET_BYTES` falló así. `TOPE_TROZO_BYTES` ya existe con
+            // margen bajo el límite duro para exactamente este motivo (ver
+            // su propio comentario), así que se reutiliza en vez de sumar
+            // una constante más.
             let trozos_bytes =
-                lumi_index::troceado::partir_en_trozos(&sellado, TOPE_ASSET_BYTES as usize);
+                lumi_index::troceado::partir_en_trozos(&sellado, TOPE_TROZO_BYTES as usize);
             let cuantas = trozos_bytes.len();
             prog.anotar(format!(
                 "{nombre} pesa {:.2} GB: se sube en {cuantas} ficheros",
@@ -1367,10 +1381,38 @@ mod tests {
     }
 
     /// Un cuerpo que SÍ cabe no se parte: es el caso que usa casi todo el
-    /// mundo y no puede cambiar de forma por esta feature.
+    /// mundo y no puede cambiar de forma por esta feature. Con el mismo
+    /// tope (`TOPE_TROZO_BYTES`) que usa `publicar()` de verdad, no con
+    /// `TOPE_ASSET_BYTES` — ver el comentario del bug real en `publicar()`
+    /// sobre por qué esos dos NO son intercambiables aquí.
     #[test]
     fn un_cuerpo_que_cabe_no_se_parte() {
         let cuerpo = vec![7u8; 1024];
-        assert_eq!(lumi_index::troceado::partir_en_trozos(&cuerpo, TOPE_ASSET_BYTES as usize).len(), 1);
+        assert_eq!(lumi_index::troceado::partir_en_trozos(&cuerpo, TOPE_TROZO_BYTES as usize).len(), 1);
+    }
+
+    /// El bug real reportado por el operador: GitHub rechazó la primera
+    /// parte de una subida multiparte con 422 «size must be less than
+    /// 2147483648» — ese número es `TOPE_ASSET_BYTES` exacto, y GitHub exige
+    /// ESTRICTAMENTE menos, no como mucho igual. Partir con `TOPE_ASSET_BYTES`
+    /// como tamaño de trozo produce partes de ese tamaño EXACTO en cuanto hay
+    /// más de una (`chunks()` no deja margen), así que el fallo era
+    /// determinista, no una casualidad de tamaño. Este test fija que ninguna
+    /// parte puede medir `TOPE_ASSET_BYTES` o más cuando se parte con el tope
+    /// que `publicar()` usa de verdad.
+    #[test]
+    fn ninguna_parte_alcanza_el_limite_duro_del_proveedor() {
+        // Un cuerpo mayor que dos veces TOPE_TROZO_BYTES para forzar varias
+        // partes completas, no solo una parcial al final.
+        let cuerpo = vec![9u8; (TOPE_TROZO_BYTES * 2 + 500) as usize];
+        let partes = lumi_index::troceado::partir_en_trozos(&cuerpo, TOPE_TROZO_BYTES as usize);
+        assert!(partes.len() >= 2, "el cuerpo de prueba debe partirse en varias");
+        for p in &partes {
+            assert!(
+                (p.len() as u64) < TOPE_ASSET_BYTES,
+                "una parte de {} bytes no puede alcanzar el límite duro de {TOPE_ASSET_BYTES}",
+                p.len()
+            );
+        }
     }
 }
