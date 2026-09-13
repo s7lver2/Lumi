@@ -44,8 +44,15 @@ impl Cliente {
         if self.http.get(&url).send().await?.status().is_success() {
             return Ok(());
         }
+        // `on_disk` en los vectores y en el grafo HNSW. Sin esto, Qdrant carga
+        // enteros los vectores en precisión completa (12288-d × 4 B) y el
+        // grafo: nueve colecciones, 292.000 puntos, 9,0 GB en disco y 9,9 GB
+        // de RSS — se paga lo caro sin aprovechar lo barato, porque la
+        // cuantización binaria que ya sirve la búsqueda ocupa ~32× menos y los
+        // originales solo se tocan al reordenar candidatos.
         let cuerpo = json!({
-            "vectors": { "size": dims, "distance": "Cosine" },
+            "vectors": { "size": dims, "distance": "Cosine", "on_disk": true },
+            "hnsw_config": { "on_disk": true },
             "quantization_config": { "binary": { "always_ram": true } }
         });
         let r = self.http.put(&url).json(&cuerpo).send().await?;
@@ -53,6 +60,45 @@ impl Cliente {
             bail!("Qdrant rechazó crear «{nombre}»: {}", r.text().await.unwrap_or_default());
         }
         Ok(())
+    }
+
+    /// Pasa una colección YA EXISTENTE a `on_disk`. No se recrea: reindexar
+    /// 292.000 vectores desde cero costaría horas de GPU ya pagadas. Qdrant
+    /// aplica el cambio en su siguiente optimización, de fondo.
+    pub async fn migrar_a_on_disk(&self, nombre: &str) -> Result<()> {
+        let url = format!("{}/collections/{nombre}", self.base);
+        // OJO con la forma del `vectors`: al CREAR (`PUT`) se admite la
+        // configuración del vector sin nombre directamente, pero al PARCHEAR
+        // (`PATCH`) Qdrant espera un mapa de nombre → cambios, y el vector por
+        // defecto se llama "". Con `{"vectors": {"on_disk": true}}` responde
+        // «invalid type: boolean `true`, expected struct VectorParamsDiff» —
+        // comprobado contra la instancia real (Qdrant 1.19.0).
+        let cuerpo = json!({
+            "vectors": { "": { "on_disk": true } },
+            "hnsw_config": { "on_disk": true },
+        });
+        let r = self.http.patch(&url).json(&cuerpo).send().await?;
+        if !r.status().is_success() {
+            bail!("Qdrant rechazó migrar «{nombre}» a on_disk: {}", r.text().await.unwrap_or_default());
+        }
+        Ok(())
+    }
+
+    /// Todas las colecciones que haya, migradas. Es seguro repetirlo: poner
+    /// `on_disk` en algo que ya lo tiene no hace nada.
+    pub async fn migrar_todas_a_on_disk(&self) -> Result<Vec<String>> {
+        let r = self.http.get(format!("{}/collections", self.base)).send().await?;
+        let cuerpo: serde_json::Value = r.json().await?;
+        let nombres: Vec<String> = cuerpo["result"]["collections"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|c| c["name"].as_str().map(String::from)).collect())
+            .unwrap_or_default();
+        let mut hechas = Vec::new();
+        for n in &nombres {
+            self.migrar_a_on_disk(n).await?;
+            hechas.push(n.clone());
+        }
+        Ok(hechas)
     }
 
     /// Sube un bloque de puntos, troceado en lotes que quepan bajo el límite

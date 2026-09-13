@@ -9,11 +9,16 @@ export function RendimientoPanel() {
   const [hfTokenHay, setHfTokenHay] = useState<boolean | null>(null);
   const [hfTokenCampo, setHfTokenCampo] = useState("");
   const [hfTokenGuardando, setHfTokenGuardando] = useState(false);
+  const [discoMecanico, setDiscoMecanico] = useState<boolean | null>(null);
+  const [migrando, setMigrando] = useState(false);
+  const [migradas, setMigradas] = useState<string[] | null>(null);
+  const [errorMigrar, setErrorMigrar] = useState<string | null>(null);
 
   useEffect(() => { void api.colaConsumoLeer().then(setConsumoBajo); }, []);
   useEffect(() => { void api.descargaParalelaLeer().then(setDescargaParalela); }, []);
   useEffect(() => { void api.autoarranqueLeer().then(setAutoarranque); }, []);
   useEffect(() => { void api.hfTokenHay().then(setHfTokenHay); }, []);
+  useEffect(() => { void api.discoWslEsMecanico().then(setDiscoMecanico).catch(() => setDiscoMecanico(null)); }, []);
 
   async function cambiarConsumo(bajo: boolean) {
     setConsumoBajo(bajo);
@@ -28,6 +33,19 @@ export function RendimientoPanel() {
   async function cambiarAutoarranque(v: boolean) {
     setAutoarranque(v);
     await api.autoarranqueFijar(v);
+  }
+
+  async function migrarQdrant() {
+    setMigrando(true);
+    setErrorMigrar(null);
+    setMigradas(null);
+    try {
+      setMigradas(await api.qdrantMigrarOnDisk());
+    } catch (e) {
+      setErrorMigrar(String(e));
+    } finally {
+      setMigrando(false);
+    }
   }
 
   async function guardarHfToken() {
@@ -109,6 +127,41 @@ export function RendimientoPanel() {
                 autoarranque ? "translate-x-[18px]" : "translate-x-0.5"}`} />
             </button>
           </label>
+        </div>
+
+        <div className="mt-6">
+          <p className="text-sm text-fg">Vectores de Qdrant en disco</p>
+          <p className="mt-[5px] text-[11px] leading-relaxed text-muted">
+            Qdrant carga en memoria los vectores en precisión completa y su grafo de búsqueda, aunque
+            lo que de verdad sirve las consultas es la versión cuantizada, que ocupa unas 32 veces
+            menos. Pasarlos a disco deja en memoria solo lo barato. Qdrant lo aplica de fondo en su
+            siguiente optimización, así que trabajará un rato; es seguro repetirlo.
+          </p>
+          <div className="mt-3">
+            <button onClick={() => void migrarQdrant()} disabled={migrando}
+              className="jg-press rounded-lg border border-border px-3.5 py-2 text-[11.5px] text-fg disabled:opacity-40">
+              {migrando ? "Migrando…" : "Migrar Qdrant a disco"}
+            </button>
+          </div>
+          {migradas && (
+            <p className="mt-2 text-[10.5px] leading-relaxed text-subtle">
+              {migradas.length === 0
+                ? "No hay ninguna colección todavía."
+                : <>Migradas {migradas.length}: <span className="font-mono">{migradas.join(", ")}</span></>}
+            </p>
+          )}
+          {errorMigrar && (
+            <p className="mt-2 whitespace-pre-wrap text-[10.5px] leading-relaxed text-danger-fg">{errorMigrar}</p>
+          )}
+          {discoMecanico === true && (
+            <p className="mt-3 rounded-lg border border-warning/40 bg-warning/[.08] px-3.5 py-2.5
+              text-[11px] leading-relaxed text-warning-fg">
+              Los vectores viven en un disco mecánico dentro de WSL: ahí el arranque de Qdrant lee a
+              unos pocos MB/s y tarda minutos. Mover el disco virtual de WSL a un SSD
+              (<span className="font-mono">wsl --export</span> / <span className="font-mono">--import</span>)
+              lo arregla de verdad. El Indexer no lo mueve solo: es un procedimiento manual.
+            </p>
+          )}
         </div>
 
         <div className="mt-6">

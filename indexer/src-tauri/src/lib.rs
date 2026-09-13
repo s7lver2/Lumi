@@ -453,6 +453,23 @@ fn descarga_paralela_fijar(estado: tauri::State<'_, Estado>, activo: bool) -> Re
         .map_err(|e| e.to_string())
 }
 
+/// Pasa las colecciones de Qdrant a `on_disk`. Devuelve los nombres tocados.
+///
+/// NO se dispara sola en ningún punto de arranque: solo desde el botón de
+/// Ajustes → Rendimiento. Qdrant aplica el cambio en su siguiente
+/// optimización, así que trabajará de fondo un rato; repetirlo es inocuo.
+#[tauri::command]
+async fn qdrant_migrar_on_disk() -> Result<Vec<String>, String> {
+    qdrant::Cliente::nuevo().migrar_todas_a_on_disk().await.map_err(|e| e.to_string())
+}
+
+/// `Some(true)` si el VHDX de WSL vive en un disco mecánico. `None` cuando no
+/// se pudo determinar — no es motivo para romper nada.
+#[tauri::command]
+async fn disco_wsl_es_mecanico(estado: tauri::State<'_, Estado>) -> Result<Option<bool>, String> {
+    Ok(estado.servicios.disco_wsl_es_mecanico().await)
+}
+
 /// Si el Indexer está registrado para arrancar con el sistema, ahora mismo.
 #[tauri::command]
 fn autoarranque_leer(app: tauri::AppHandle) -> bool {
@@ -2163,6 +2180,8 @@ pub fn run() {
             cola_consumo_fijar,
             descarga_paralela_leer,
             descarga_paralela_fijar,
+            qdrant_migrar_on_disk,
+            disco_wsl_es_mecanico,
             autoarranque_leer,
             autoarranque_fijar,
             indice_progreso_embebido,

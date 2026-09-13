@@ -350,6 +350,48 @@ impl Servicios {
             .is_ok_and(|s| s.success())
     }
 
+    /// ¿El VHDX de la distribución WSL activa vive en un disco mecánico?
+    ///
+    /// Importa porque ahí es donde vive el almacenamiento de Qdrant, y en un
+    /// plato girando las lecturas dispersas del arranque van a 8,6 MB/s
+    /// medidos: cargar 9 GB serían ~17 minutos. La aplicación NO mueve nada —
+    /// mover el VHDX a un SSD es un procedimiento manual del operador
+    /// (`wsl --export` / `--import`). Esto solo lo detecta para poder avisar,
+    /// en vez de dejar que se descubra por lentitud.
+    ///
+    /// `None` cuando no se pudo determinar: fuera de Windows, sin WSL
+    /// registrado, o si el disco no declara su tipo. Nunca es motivo para
+    /// romper un flujo.
+    pub async fn disco_wsl_es_mecanico(&self) -> Option<bool> {
+        if !cfg!(windows) {
+            return None;
+        }
+        // Un solo `powershell.exe`, sin crate de WMI: la ruta del VHDX sale del
+        // registro de WSL (`Lxss`), su letra de unidad de la propia ruta, y el
+        // tipo del disco físico que la respalda de `Get-PhysicalDisk` cruzando
+        // por `Get-Partition`.
+        const GUION: &str = r#"
+$l='HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss'
+$d=(Get-ItemProperty $l -ErrorAction Stop).DefaultDistribution
+$p=(Get-ItemProperty (Join-Path $l $d) -ErrorAction Stop).BasePath
+$letra=[regex]::Match($p,'[A-Za-z]:').Value.TrimEnd(':')
+$part=Get-Partition -DriveLetter $letra -ErrorAction Stop
+(Get-PhysicalDisk | Where-Object DeviceId -eq $part.DiskNumber).MediaType
+"#;
+        let salida = crate::proceso::cmd_async("powershell", false)
+            .args(["-NoProfile", "-NonInteractive", "-Command", GUION])
+            .stderr(Stdio::null())
+            .output()
+            .await
+            .ok()?;
+        let tipo = String::from_utf8_lossy(&salida.stdout).trim().to_ascii_uppercase();
+        match tipo.as_str() {
+            "" | "UNSPECIFIED" => None,
+            "HDD" => Some(true),
+            _ => Some(false),
+        }
+    }
+
     /// Un comando que TERMINA (instalar), no un servicio. Su salida va al log
     /// según llega, porque `apt-get` y `curl` tardan y un rectángulo mudo
     /// durante dos minutos se lee como colgado.
