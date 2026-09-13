@@ -312,22 +312,22 @@ En `publicar.rs::tests` (o `troceado.rs` si encaja mejor), un test que:
 **Interfaces:**
 - `Previsualizacion.no_caben` sigue existiendo (ya lo calcula `previsualizar()`, sin cambios ahí) pero deja de deshabilitar el botón de publicar.
 
-- [ ] **Step 1: `PublishDialog.tsx` — de bloqueo a aviso**
+- [x] **Step 1: `PublishDialog.tsx` — de bloqueo a aviso**
 
 En el bloque que hoy pinta `noCaben` (líneas ~97-117 de la lectura previa), cambiar:
 - El texto de *"Esta zona no cabe en un release de GitHub... hay que aligerarla"* a algo como *"Esta zona pesa más que el límite de GitHub por fichero: se subirá partida en varios ficheros."* — informativo, no una advertencia de fallo.
 - Quitar `disabled={noCaben.length > 0}` y su `title` del botón de publicar.
 - Mantener el resto del bloque (la lista de zonas con sus tamaños) — sigue siendo información útil, ya no es una lista de "esto va a fallar".
 
-- [ ] **Step 2: Revisar si `api.ts` necesita cambios**
+- [x] **Step 2: Revisar si `api.ts` necesita cambios**
 
 `Previsualizacion` en `api.ts` ya debe tener `no_caben: TrozoPrevisto[]` reflejando el tipo de Rust — comprobar que sigue cuadrando (no debería hacer falta tocarlo, `TrozoPrevisto` no cambia).
 
-- [ ] **Step 3: Verificar**
+- [x] **Step 3: Verificar**
 
 `cd indexer && npm run build && npm run lint`.
 
-- [ ] **Commit:** `feat(indexer): publicar una zona pesada ya no esta bloqueado, solo avisa`
+- [x] **Commit:** `feat(indexer): publicar una zona pesada ya no esta bloqueado, solo avisa`
 
 ---
 
