@@ -380,6 +380,13 @@ impl Almacen {
             // resubir todo cada vez que se corrige algo. NULL en filas de
             // antes de esto — se tratan como "hay que resubir", nunca al revés.
             "ALTER TABLE publicaciones ADD COLUMN identidad TEXT",
+            // El JSON de `Vec<ParteAsset>` cuando este asset hubo que
+            // partirlo en varios ficheros físicos para poder subirlo. NULL
+            // en el caso normal (un asset = un fichero) y en toda fila
+            // anterior a esto, que es exactamente lo mismo: sin partes.
+            // Guardarlo es lo que hace que republicar una tesela de 5 GB sin
+            // cambios tarde segundos en vez de repetir el split entero.
+            "ALTER TABLE publicaciones ADD COLUMN partes_json TEXT",
         ] {
             let _ = c.execute(alter, []);
         }
@@ -1756,13 +1763,31 @@ impl Almacen {
         sha256: &str,
         bytes: u64,
     ) -> Result<()> {
+        self.publicacion_apuntar_con_partes(indice_id, asset, identidad, sha256, bytes, None)
+    }
+
+    /// Igual que `publicacion_apuntar`, pero apuntando además en qué ficheros
+    /// físicos se partió este asset. Es una función hermana y no un parámetro
+    /// más de la de siempre porque todos los caminos menos uno (el cuerpo que
+    /// no cabe en un asset del proveedor) no parten nada y no tienen por qué
+    /// enterarse de que esto existe.
+    pub fn publicacion_apuntar_con_partes(
+        &self,
+        indice_id: i64,
+        asset: &str,
+        identidad: Option<&str>,
+        sha256: &str,
+        bytes: u64,
+        partes_json: Option<&str>,
+    ) -> Result<()> {
         let c = self.escritura.lock().unwrap();
         c.execute(
-            "INSERT INTO publicaciones (indice_id, asset, identidad, sha256, bytes)
-             VALUES (?1, ?2, ?3, ?4, ?5)
+            "INSERT INTO publicaciones (indice_id, asset, identidad, sha256, bytes, partes_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT(indice_id, asset) DO UPDATE SET
-               identidad = excluded.identidad, sha256 = excluded.sha256, bytes = excluded.bytes",
-            params![indice_id, asset, identidad, sha256, bytes as i64],
+               identidad = excluded.identidad, sha256 = excluded.sha256, bytes = excluded.bytes,
+               partes_json = excluded.partes_json",
+            params![indice_id, asset, identidad, sha256, bytes as i64, partes_json],
         )?;
         Ok(())
     }
@@ -1786,14 +1811,19 @@ impl Almacen {
     /// deriva del propio release de la ficha (ver `url_de` en
     /// `lumid::indices`), y con un solo release por paquete esa URL es
     /// siempre la misma exista ya el asset o se acabe de subir ahora.
+    ///
+    /// El tercer elemento es el `partes_json` de esa publicación anterior:
+    /// `None` en el caso normal, y el JSON de `Vec<ParteAsset>` cuando aquel
+    /// asset hubo que partirlo — reconstruirlo desde ahí es lo que evita
+    /// repetir un split de varios GB por una tesela que no se ha tocado.
     pub fn publicacion_igual_a(
         &self, indice_id: i64, asset: &str, identidad: &str,
-    ) -> Result<Option<(String, u64)>> {
+    ) -> Result<Option<(String, u64, Option<String>)>> {
         Ok(self.escritura.lock().unwrap().query_row(
-            "SELECT sha256, bytes FROM publicaciones
+            "SELECT sha256, bytes, partes_json FROM publicaciones
               WHERE indice_id = ?1 AND asset = ?2 AND identidad = ?3 AND subido = 1 AND url IS NOT NULL",
             params![indice_id, asset, identidad],
-            |r| Ok((r.get(0)?, r.get::<_, i64>(1)? as u64)),
+            |r| Ok((r.get(0)?, r.get::<_, i64>(1)? as u64, r.get(2)?)),
         ).optional()?)
     }
 

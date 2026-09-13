@@ -176,7 +176,7 @@ fn vacio_no_da_trozos() {
 - `Almacen::publicacion_apuntar` gana un parámetro `partes_json: Option<&str>` (o una función hermana `publicacion_apuntar_con_partes`, decidir por lo que quede más legible en el punto de llamada — probablemente una función nueva es más simple que tocar la firma de la que ya usan cuerpos/capas/ficha sin partes).
 - `Almacen::publicacion_igual_a` devuelve ahora `(sha256, bytes, Option<String> /* partes_json */)` en vez de `(sha256, bytes)`.
 
-- [ ] **Step 1: Migración — columna `partes_json`**
+- [x] **Step 1: Migración — columna `partes_json`**
 
 En `store.rs`, añadir a la lista de `ALTER TABLE` idempotentes (junto a `identidad` en `publicaciones`):
 
@@ -184,7 +184,7 @@ En `store.rs`, añadir a la lista de `ALTER TABLE` idempotentes (junto a `identi
 "ALTER TABLE publicaciones ADD COLUMN partes_json TEXT",
 ```
 
-- [ ] **Step 2: `publicacion_apuntar` guarda `partes_json`**
+- [x] **Step 2: `publicacion_apuntar` guarda `partes_json`**
 
 Extender la firma (o añadir una variante) para aceptar `Option<&str>` con el JSON de `Vec<ParteAsset>` ya serializado, `NULL` cuando el trozo no se dividió:
 
@@ -208,7 +208,7 @@ pub fn publicacion_apuntar(
 
 Revisar TODOS los llamadores existentes (`publicar_capa`, la ficha, las capas) y pasarles `None` explícito — no cambia su comportamiento.
 
-- [ ] **Step 3: `publicacion_igual_a` devuelve también `partes_json`**
+- [x] **Step 3: `publicacion_igual_a` devuelve también `partes_json`**
 
 ```rust
 pub fn publicacion_igual_a(
@@ -225,7 +225,7 @@ pub fn publicacion_igual_a(
 
 Ajustar el único llamador actual en `publicar.rs` (las capas y el cuerpo) al nuevo tipo de retorno.
 
-- [ ] **Step 4: El split en `publicar()`**
+- [x] **Step 4: El split en `publicar()`**
 
 Tras `cifrar_asset_async` (donde hoy se calcula `sha`/`bytes` y se sube tal cual), sustituir el tramo:
 
@@ -265,7 +265,7 @@ if bytes <= TOPE_ASSET_BYTES {
 
 **Ojo con el contador `prog` (total de assets/bytes para la barra de progreso)**: `Publicacion::nueva(total, bytes_total)` se construye ANTES de saber cuántas partes tendrá un cuerpo grande. Revisar dónde se calcula `total`/`bytes_total` hoy (antes de entrar al bucle de `trozos`) y, si hace falta, recalcular `total` sumando `desbordados(...)` particionado en partes esperadas — o, más simple: dejar que `total` siga contando TROZOS lógicos (no partes físicas) como hace hoy, y que la barra de "hechos/total" se mantenga a nivel de trozo (cada trozo grande solo incrementa `hechos` una vez al terminar TODAS sus partes) mientras que el detalle de bytes (`avance_subida`) ya refleja el progreso real dentro de la subida — comprobar cuál de las dos lecturas es más simple de implementar sin romper la semántica ya documentada de `ProgresoPublicacion` y preferir esa.
 
-- [ ] **Step 5: Reutilización cuando el contenido no cambió**
+- [x] **Step 5: Reutilización cuando el contenido no cambió**
 
 En el chequeo de identidad que ya existe (antes de `cifrar_asset_async`), al recibir `Some((sha, bytes, partes_json))` de `publicacion_igual_a`:
 
@@ -281,11 +281,11 @@ if let Some((sha, bytes, partes_json)) = almacen.publicacion_igual_a(indice_id, 
 }
 ```
 
-- [ ] **Step 6: Retirar el bloqueo de `no_caben`**
+- [x] **Step 6: Retirar el bloqueo de `no_caben`**
 
 En `publicar()`, quitar el `bail!` que hoy corta antes de empaquetar cuando `desbordados(...)` no está vacío (el comentario que lo acompaña queda obsoleto — actualizarlo o quitarlo, no dejarlo mintiendo). `previsualizar()` puede seguir calculando `no_caben` para informar en el diálogo (ver Task 4), pero deja de ser motivo de fallo.
 
-- [ ] **Step 7: Test — split y reensamblado a nivel de bytes**
+- [x] **Step 7: Test — split y reensamblado a nivel de bytes**
 
 En `publicar.rs::tests` (o `troceado.rs` si encaja mejor), un test que:
 1. Genera un `Vec<u8>` de prueba (unos pocos MB, no GB — usar un tope pequeño para el test, no `TOPE_ASSET_BYTES` real).
@@ -295,11 +295,11 @@ En `publicar.rs::tests` (o `troceado.rs` si encaja mejor), un test que:
 
 (El test de extremo a extremo real — cifrar, partir, subir a GitHub, bajar, reensamblar, descifrar — es la prueba de aceptación del spec, Task 6, no un test unitario.)
 
-- [ ] **Step 8: Verificar**
+- [x] **Step 8: Verificar**
 
 `cargo test` desde la raíz (toca `lumi-index`, `indexer-app`).
 
-- [ ] **Commit:** `feat(indexer): partir el cuerpo cifrado en varios assets cuando supera el tope del proveedor`
+- [x] **Commit:** `feat(indexer): partir el cuerpo cifrado en varios assets cuando supera el tope del proveedor`
 
 ---
 

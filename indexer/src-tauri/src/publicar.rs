@@ -835,18 +835,13 @@ pub async fn publicar(
     let pesos = pesos_por_quadkey(&almacen, indice_id)?;
     let trozos = trocear(&pesos, TOPE_TROZO_BYTES);
 
-    // Se comprueba ANTES de empaquetar un solo byte. Un trozo que no cabe en
-    // un asset del proveedor no se arregla reintentando: `subir_asset` lo
-    // intenta tres veces y las tres fallan igual, después de haber construido
-    // el zip ENTERO en memoria y haberlo cifrado (otra copia del mismo
-    // tamaño) — para una tesela de 5,6 GB eso son ~11 GB de RAM y horas
-    // tiradas antes de un error que no explica nada.
-    //
-    // No se puede arreglar solo: `trocear` reparte POR TESELA y media tesela
-    // no es una unidad instalable, así que una tesela que por sí sola pasa
-    // del límite solo se resuelve quitándole material (revisar y descartar) o
-    // partiendo el formato publicado en varias partes por tesela, que es un
-    // cambio de formato y no algo que hacer a mitad de una publicación.
+    // Un trozo que no cabe en un asset del proveedor ya NO es motivo de
+    // fallo: `trocear` reparte POR TESELA y media tesela no es una unidad
+    // instalable, así que una tesela que por sí sola pasa del límite se
+    // publica partiendo su CUERPO CIFRADO en varios ficheros físicos que el
+    // lado que instala reensambla antes de descifrar (ver el bucle de abajo).
+    // Se anota aquí, antes de empaquetar un solo byte, para que el registro
+    // diga desde el principio que esta publicación va a subir partida.
     let fuera = desbordados(&trozos, TOPE_ASSET_BYTES);
     if !fuera.is_empty() {
         let detalle = fuera
@@ -862,12 +857,10 @@ pub async fn publicar(
             })
             .collect::<Vec<_>>()
             .join(", ");
-        bail!(
-            "no cabe en un release de GitHub (tope {:.2} GB por asset): {detalle}. \
-             Una tesela sola no se puede partir, así que hay que aligerarla \
-             descartando imágenes en la revisión antes de volver a sellar.",
+        prog.anotar(format!(
+            "pasa del tope de {:.2} GB por asset ({detalle}): se subirá partido en varios ficheros",
             TOPE_ASSET_BYTES as f64 / 1e9
-        );
+        ));
     }
 
     let mut cuerpos: Vec<Asset> = Vec::new();
@@ -877,21 +870,97 @@ pub async fn publicar(
         let ficheros = ficheros_del_trozo(&raiz, t, &por_qk);
         let claro = empaquetar_solo(prog.clone(), &nombre, raiz.clone(), ficheros).await?;
         let identidad = sha256_hex(&claro);
-        if let Some((sha, bytes)) = almacen.publicacion_igual_a(indice_id, &nombre, &identidad)? {
+        if let Some((sha, bytes, partes_json)) =
+            almacen.publicacion_igual_a(indice_id, &nombre, &identidad)?
+        {
             prog.anotar(format!("{nombre} no cambió, se reutiliza lo ya subido"));
             prog.terminar_asset(bytes);
-            cuerpos.push(Asset { nombre, sha256: sha, bytes, quadkeys: t.quadkeys.clone(), partes: vec![] });
+            // Si la vez anterior hubo que partirlo, se reconstruyen las
+            // partes desde lo apuntado en vez de repetir un split de varios
+            // GB por una tesela que no se ha tocado. Un JSON corrupto (que no
+            // debería existir) se trata como "sin partes", que es el caso
+            // normal: la ficha saldría apuntando a un fichero único que no
+            // existe, pero eso lo detecta la verificación de sha256 al
+            // instalar, y es preferible a tirar la publicación entera.
+            let partes: Vec<lumi_index::ficha::ParteAsset> =
+                partes_json.and_then(|j| serde_json::from_str(&j).ok()).unwrap_or_default();
+            cuerpos.push(Asset { nombre, sha256: sha, bytes, quadkeys: t.quadkeys.clone(), partes });
             continue;
         }
         let sellado = cifrar_asset_async(prog.clone(), &nombre, claro, clave).await?;
         let sha = sha256_hex(&sellado);
         let bytes = sellado.len() as u64;
-        almacen.publicacion_apuntar(indice_id, &nombre, Some(&identidad), &sha, bytes)?;
-        prog.anotar(format!("subiendo {nombre}"));
-        let url = subir_asset(&cliente, &testigo, &repo, release, &nombre, sellado, &prog).await?;
-        almacen.publicacion_marcar_subido(indice_id, &nombre, &url)?;
-        prog.terminar_asset(bytes);
-        cuerpos.push(Asset { nombre, sha256: sha, bytes, quadkeys: t.quadkeys.clone(), partes: vec![] });
+
+        if bytes <= TOPE_ASSET_BYTES {
+            // El camino de siempre: un cuerpo, un fichero, `partes` vacío y
+            // un JSON de ficha idéntico al que se lleva publicando desde el
+            // principio.
+            almacen.publicacion_apuntar(indice_id, &nombre, Some(&identidad), &sha, bytes)?;
+            prog.anotar(format!("subiendo {nombre}"));
+            let url = subir_asset(&cliente, &testigo, &repo, release, &nombre, sellado, &prog).await?;
+            almacen.publicacion_marcar_subido(indice_id, &nombre, &url)?;
+            prog.terminar_asset(bytes);
+            cuerpos.push(Asset { nombre, sha256: sha, bytes, quadkeys: t.quadkeys.clone(), partes: vec![] });
+        } else {
+            // No cabe: se parte el blob YA CIFRADO por transporte. Cada parte
+            // pasa por exactamente el mismo camino que un asset entero
+            // (`publicacion_apuntar`, `subir_asset`, `marcar_subido`), así que
+            // una subida cortada se retoma parte a parte igual que siempre.
+            let trozos_bytes =
+                lumi_index::troceado::partir_en_trozos(&sellado, TOPE_ASSET_BYTES as usize);
+            let cuantas = trozos_bytes.len();
+            prog.anotar(format!(
+                "{nombre} pesa {:.2} GB: se sube en {cuantas} ficheros",
+                bytes as f64 / 1e9
+            ));
+            let mut partes: Vec<lumi_index::ficha::ParteAsset> = Vec::new();
+            let mut url_primera = String::new();
+            for (i, trozo) in trozos_bytes.iter().enumerate() {
+                let nombre_parte = format!("{nombre}.part{:03}", i + 1);
+                let sha_parte = sha256_hex(trozo);
+                let bytes_parte = trozo.len() as u64;
+                // `identidad` a `None` en las partes: la comparación de
+                // contenido sin cifrar se hace UNA vez, sobre el cuerpo
+                // lógico, no sobre cada rodaja de su cifrado (que cambia de
+                // nonce en cada cifrado y nunca se podría comparar).
+                almacen.publicacion_apuntar(indice_id, &nombre_parte, None, &sha_parte, bytes_parte)?;
+                prog.anotar(format!("subiendo {nombre_parte} ({}/{cuantas})", i + 1));
+                let url = subir_asset(
+                    &cliente, &testigo, &repo, release, &nombre_parte, trozo.to_vec(), &prog,
+                )
+                .await?;
+                almacen.publicacion_marcar_subido(indice_id, &nombre_parte, &url)?;
+                if i == 0 {
+                    url_primera = url;
+                }
+                partes.push(lumi_index::ficha::ParteAsset {
+                    nombre: nombre_parte,
+                    sha256: sha_parte,
+                    bytes: bytes_parte,
+                });
+            }
+            // Un solo `terminar_asset` para todo el cuerpo, con los bytes del
+            // blob reensamblado: `total` cuenta TROZOS LÓGICOS (ver
+            // `Publicacion::nueva` en lib.rs, `trozos.len() + 2`), así que una
+            // tesela partida en tres sigue valiendo uno. Contar cada parte
+            // dejaría la barra por encima del 100%.
+            prog.terminar_asset(bytes);
+
+            let partes_json = serde_json::to_string(&partes)?;
+            almacen.publicacion_apuntar_con_partes(
+                indice_id, &nombre, Some(&identidad), &sha, bytes, Some(&partes_json),
+            )?;
+            // La fila LÓGICA también se marca subida — no hay ningún fichero
+            // con ese nombre en el release, pero es la fila que consulta
+            // `publicacion_igual_a` (exige `subido = 1 AND url IS NOT NULL`),
+            // y sin esto la reutilización no se activaría nunca y cada
+            // republicación repetiría el split entero. La URL que se guarda es
+            // la de la primera parte, a falta de una del cuerpo completo; el
+            // instalador no la usa (deriva las suyas del release de la ficha,
+            // ver `url_de` en `lumid::indices`).
+            almacen.publicacion_marcar_subido(indice_id, &nombre, &url_primera)?;
+            cuerpos.push(Asset { nombre, sha256: sha, bytes, quadkeys: t.quadkeys.clone(), partes });
+        }
     }
 
     // Las capas: un asset por modelo, con los fragmentos de todas las teselas.
@@ -908,7 +977,10 @@ pub async fn publicar(
         }
         let claro = empaquetar_solo(prog.clone(), &nombre, raiz.clone(), ficheros).await?;
         let identidad = sha256_hex(&claro);
-        if let Some((sha, bytes)) = almacen.publicacion_igual_a(indice_id, &nombre, &identidad)? {
+        // Las capas no se parten: un fragmento de vectores es órdenes de
+        // magnitud más pequeño que un cuerpo de imágenes, así que el tercer
+        // elemento (`partes_json`) aquí siempre es `None` y se ignora.
+        if let Some((sha, bytes, _)) = almacen.publicacion_igual_a(indice_id, &nombre, &identidad)? {
             prog.anotar(format!("{nombre} no cambió, se reutiliza lo ya subido"));
             prog.terminar_asset(bytes);
             capas.push(Capa {
@@ -1257,5 +1329,48 @@ mod tests {
     fn un_422_de_otro_motivo_no_se_confunde_con_repo_vacio() {
         let cuerpo = r#"{"message":"Validation Failed","errors":[{"resource":"Release","code":"already_exists","field":"tag_name"}]}"#;
         assert!(!es_repo_vacio(cuerpo));
+    }
+
+    /// Lo único de la multi-parte que se puede probar sin red: que partir un
+    /// blob y volver a pegar las partes EN ORDEN devuelve exactamente los
+    /// mismos bytes. Si esto falla, lo que se instala es un fichero distinto
+    /// del que se cifró y AES-GCM lo rechaza entero, sin decir en qué parte
+    /// se torció — de ahí que cada parte lleve además su propio sha256.
+    ///
+    /// El tope es pequeño a propósito: la prueba es del corte, no de la
+    /// memoria. El extremo a extremo real (cifrar, partir, subir a GitHub,
+    /// bajar, reensamblar, descifrar) es la prueba de aceptación del spec.
+    #[test]
+    fn el_cuerpo_partido_se_reensambla_byte_a_byte() {
+        let cuerpo: Vec<u8> = (0..300_000u32).map(|i| (i.wrapping_mul(2654435761) >> 13) as u8).collect();
+        let tope = 100_000usize;
+        let partes = lumi_index::troceado::partir_en_trozos(&cuerpo, tope);
+        assert_eq!(partes.len(), 3);
+        assert!(partes.iter().all(|p| p.len() <= tope));
+        assert_eq!(partes.concat(), cuerpo);
+        assert_eq!(sha256_hex(&partes.concat()), sha256_hex(&cuerpo));
+    }
+
+    /// El sha256 de cada parte es estable: mismo trozo, mismo hash. Es lo que
+    /// permite verificar parte a parte al bajar y saber CUÁL falló.
+    #[test]
+    fn el_sha256_de_cada_parte_es_estable_y_distingue_las_partes() {
+        let cuerpo: Vec<u8> = (0..250u32).map(|i| (i % 256) as u8).collect();
+        let partes = lumi_index::troceado::partir_en_trozos(&cuerpo, 100);
+        let hashes: Vec<String> = partes.iter().map(|p| sha256_hex(p)).collect();
+        let otra_vez: Vec<String> = lumi_index::troceado::partir_en_trozos(&cuerpo, 100)
+            .iter()
+            .map(|p| sha256_hex(p))
+            .collect();
+        assert_eq!(hashes, otra_vez);
+        assert_ne!(hashes[0], hashes[1], "dos partes distintas no pueden dar el mismo hash");
+    }
+
+    /// Un cuerpo que SÍ cabe no se parte: es el caso que usa casi todo el
+    /// mundo y no puede cambiar de forma por esta feature.
+    #[test]
+    fn un_cuerpo_que_cabe_no_se_parte() {
+        let cuerpo = vec![7u8; 1024];
+        assert_eq!(lumi_index::troceado::partir_en_trozos(&cuerpo, TOPE_ASSET_BYTES as usize).len(), 1);
     }
 }
