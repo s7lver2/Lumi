@@ -51,13 +51,13 @@
 **Interfaces:**
 - No cambia ninguna prop pública; solo cambia CÓMO se cargan `MapCanvas`, `DownloadMap`, `CoverageMap` e `IndexMapDialog`.
 
-- [ ] **Step 1: Diferir los cuatro componentes que importan `mapbox-gl`**
+- [x] **Step 1: Diferir los cuatro componentes que importan `mapbox-gl`**
 
 Localizar los cuatro puntos (`territory/MapCanvas.tsx`, `download/DownloadMap.tsx`, `catalog/CoverageMap.tsx`, `catalog/IndexMapDialog.tsx`) y envolver su import con `React.lazy()` en el componente que los monta (`TerritoryView`, `DownloadView`, la pantalla de catálogo, el diálogo). Usar `<Suspense fallback={...}>` con un *fallback* mínimo coherente con el vocabulario visual existente (mirar `Booting.tsx` para el tono — sin tarjeta de cristal, sin spinner genérico).
 
 No tocar `@turf/*`: cae en el mismo chunk diferido de `TerritoryView` sin trabajo extra, verificar que efectivamente lo hace tras el build (Step 2).
 
-- [ ] **Step 2: Verificar el tamaño del chunk principal**
+- [x] **Step 2: Verificar el tamaño del chunk principal** — 2.320,27 kB → 468,38 kB; `mapbox-gl` en su propio trozo de 1.822,72 kB
 
 ```bash
 cd indexer && npm run build
@@ -65,11 +65,11 @@ cd indexer && npm run build
 
 Confirmar en la salida que el chunk principal baja de 2.320 kB a menos de 600 kB, y que aparece un chunk separado con `mapbox-gl` que solo se carga bajo demanda. Si el build sigue avisando de un chunk grande, revisar qué import estático quedó sin diferir (grep `from "mapbox-gl"` en `indexer/src` debe dar solo los cuatro ficheros de mapa, y esos cuatro deben quedar fuera del árbol de imports estáticos de `App.tsx`).
 
-- [ ] **Step 3: Probar manualmente que las pantallas de mapa siguen funcionando**
+- [ ] **Step 3: Probar manualmente que las pantallas de mapa siguen funcionando** — *pendiente: requiere ojos del operador*
 
 Abrir Territorio, Descarga (con un índice con descarga activa) y el diálogo de cobertura del catálogo; confirmar que el mapa se pinta igual que antes, sin regresión visual ni de interacción (dibujar polígono, ver teselas).
 
-- [ ] **Commit:** `perf(indexer): diferir mapbox-gl a las rutas que lo usan`
+- [x] **Commit:** `perf(indexer): diferir mapbox-gl a las rutas que lo usan`
 
 ---
 

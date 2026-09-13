@@ -1,17 +1,22 @@
 import { difference } from "@turf/difference";
 import { featureCollection, polygon } from "@turf/helpers";
 import { union } from "@turf/union";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
 import { api, type Clasificacion, type Estimacion, type FichaOrigen, type Punto, type SondeoTesela } from "../lib/api";
 import { Overlay } from "../ui/Overlay";
+import { PantallaCargaMapa } from "../ui/PantallaCargaMapa";
 import { AvailabilityPanel } from "./AvailabilityPanel";
 import { BlockedDialog } from "./BlockedDialog";
 import { CoveragePanel } from "./CoveragePanel";
 import { EstimateDialog } from "./EstimateDialog";
-import { MapCanvas } from "./MapCanvas";
 import { MapLegend } from "./MapLegend";
 import { PlanDialog } from "./PlanDialog";
+
+/** `MapCanvas` arrastra `mapbox-gl` (1,8 MB de los 2,3 MB del bundle) y
+ *  `@turf/*`. Diferirlo saca todo eso del trozo que el WebView parsea antes
+ *  del primer píxel; solo se paga al abrir Territorio. */
+const MapCanvas = lazy(() => import("./MapCanvas").then((m) => ({ default: m.MapCanvas })));
 
 type Instantanea = { dibujo: Punto[][]; clasificacion: Clasificacion | null };
 
@@ -305,19 +310,21 @@ export function TerritoryView({
   return (
     <div className="relative flex h-full">
       <div className="flex-1">
-        <MapCanvas
-          dibujo={dibujo}
-          clasificacion={clasificacion}
-          teselasYaIndexadas={teselasYaIndexadas}
-          onPoligonoListo={(p) => void alTerminarDibujo(p)}
-          onVerticeEditado={(a) => void alEditarVertice(a)}
-          combineMode={combineMode}
-          onCombineModeChange={setCombineMode}
-          activos={activos}
-          sondeos={sondeos}
-          tokenMapillary={tokenMapillary}
-          onLugarBuscadoChange={setHayLugarBuscado}
-        />
+        <Suspense fallback={<PantallaCargaMapa />}>
+          <MapCanvas
+            dibujo={dibujo}
+            clasificacion={clasificacion}
+            teselasYaIndexadas={teselasYaIndexadas}
+            onPoligonoListo={(p) => void alTerminarDibujo(p)}
+            onVerticeEditado={(a) => void alEditarVertice(a)}
+            combineMode={combineMode}
+            onCombineModeChange={setCombineMode}
+            activos={activos}
+            sondeos={sondeos}
+            tokenMapillary={tokenMapillary}
+            onLugarBuscadoChange={setHayLugarBuscado}
+          />
+        </Suspense>
       </div>
 
       {/* Sin esto no hay ninguna pista de que hay una barra de herramientas de

@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
 import { api, type ProgresoDescarga } from "../lib/api";
 import { color, nombre } from "../lib/origenes";
 import { IndexQueueBar } from "../ui/IndexQueueBar";
-import { DownloadMap } from "./DownloadMap";
+import { PantallaCargaMapa } from "../ui/PantallaCargaMapa";
+
+/** Diferido: arrastra `mapbox-gl`, y esta pantalla no es la primera que se ve. */
+const DownloadMap = lazy(() => import("./DownloadMap").then((m) => ({ default: m.DownloadMap })));
 
 const eur = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
 
@@ -228,7 +231,9 @@ export function DownloadView({ indiceId, imagenesEstimadas, onTerminado }: {
         {/* El mapa abajo, no arriba: lo de arriba son números que se leen de
             un vistazo; esto es lo que se mira mientras corre, de fondo. */}
         <div className="mt-[18px] min-h-0 flex-1 overflow-hidden rounded-lg border border-border">
-          <DownloadMap teselas={p.teselas} />
+          <Suspense fallback={<PantallaCargaMapa />}>
+            <DownloadMap teselas={p.teselas} />
+          </Suspense>
         </div>
 
         {/* Bajar e indexar son dos colas separadas: una foto que acaba de

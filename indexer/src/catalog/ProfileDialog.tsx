@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import { api, type Perfil, type PerfilGithub } from "../lib/api";
-import { CoverageMap } from "./CoverageMap";
+import { PantallaCargaMapa } from "../ui/PantallaCargaMapa";
 import { opacidadSegmento, SegmentBar } from "./SourceBar";
+
+/** Diferido: arrastra `mapbox-gl`. */
+const CoverageMap = lazy(() => import("./CoverageMap").then((m) => ({ default: m.CoverageMap })));
 
 function fecha(epochSeg: string): string {
   const n = Number(epochSeg);
@@ -96,7 +99,9 @@ export function ProfileDialog({ cuenta, onCerrar }: { cuenta: string; onCerrar: 
 
           <p className="text-[8px] uppercase tracking-[.11em] text-subtle">cobertura</p>
           <div className="mt-2.5">
-            <CoverageMap quadkeys={perfil!.quadkeys} />
+            <Suspense fallback={<PantallaCargaMapa />}>
+              <CoverageMap quadkeys={perfil!.quadkeys} />
+            </Suspense>
           </div>
 
           <p className="mt-4 text-[8px] uppercase tracking-[.11em] text-subtle">publicaciones recientes</p>

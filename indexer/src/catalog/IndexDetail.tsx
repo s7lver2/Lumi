@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import { FolderImportDialog } from "../ingest/FolderImportDialog";
 import { LegacyImportDialog } from "../ingest/LegacyImportDialog";
@@ -8,10 +8,13 @@ import { estadoActual } from "../publish/publishTracker";
 import { SealDialog } from "../seal/SealDialog";
 import { Icon } from "../ui/Icon";
 import { Overlay } from "../ui/Overlay";
-import { IndexMapDialog } from "./IndexMapDialog";
+import { PantallaCargaMapa } from "../ui/PantallaCargaMapa";
 import { PortearNivelDialog } from "./PortearNivelDialog";
 import { ProvenanceTable } from "./ProvenanceTable";
 import { TeselasPanel } from "./TeselasPanel";
+
+/** Diferido: arrastra `mapbox-gl`, y solo se abre bajo demanda. */
+const IndexMapDialog = lazy(() => import("./IndexMapDialog").then((m) => ({ default: m.IndexMapDialog })));
 
 /** `soloLectura` esconde todo lo que escribe, exactamente el mismo mecanismo
  *  que ya usa con un índice sellado: mirar el índice de otra persona no
@@ -206,7 +209,9 @@ export function IndexDetail({ id, onVolver, onIrAEmbebido, soloLectura = false }
         )}
         {mapaAbierto && (
           <Overlay>
-            <IndexMapDialog indiceId={id} nombreIndice={detalle.nombre} onCerrar={() => setMapaAbierto(false)} />
+            <Suspense fallback={<PantallaCargaMapa />}>
+              <IndexMapDialog indiceId={id} nombreIndice={detalle.nombre} onCerrar={() => setMapaAbierto(false)} />
+            </Suspense>
           </Overlay>
         )}
         {publicando && detalle.proyecto && (
