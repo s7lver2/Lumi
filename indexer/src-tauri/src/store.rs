@@ -11,6 +11,10 @@ use anyhow::Result;
 use lumi_index::manifest::{FilaImagen, Tipo, TrabajoDe};
 use rusqlite::{params, Connection, OptionalExtension};
 
+/// Si la descarga avanza por varios orígenes a la vez. Texto `"true"`/`"false"`
+/// en `ajustes`, mismo patrón que `concurrencia_gpu`. Ausente = activado.
+pub const CLAVE_DESCARGA_PARALELA: &str = "descarga_paralela";
+
 const ESQUEMA: &str = "
 CREATE TABLE IF NOT EXISTS indices (
     id         INTEGER PRIMARY KEY,

@@ -195,13 +195,49 @@ impl Descarga {
     /// descarga completa mientras KartaView ni había empezado:
     /// `DownloadView` se navegaba fuera sola, y "Detener" parecía no hacer
     /// nada porque el operador ya no estaba en la pantalla para verlo parar.
-    pub async fn correr(&self, origenes: &[Origen], nuevas: &std::collections::BTreeMap<String, Vec<String>>) {
-        for o in origenes {
-            if self.parar.load(Ordering::SeqCst) {
-                break;
+    ///
+    /// Con `paralelo`, los orígenes avanzan a la vez en vez de uno tras otro.
+    /// Es seguro por construcción y no le pide ni una petición más a nadie:
+    /// cada `Origen` tiene su propio `Ctx` con su propio `Limitador`, y donde
+    /// dos comparten proveedor (commons, wikipedia y monumentos pasan por
+    /// `limitador_wikimedia()`) siguen serializándose ENTRE ELLOS aunque el
+    /// bucle los lance juntos. Lo que cambia es solo CUÁNDO se descarga cada
+    /// cosa, no QUÉ: sobre el índice de 26.739 imágenes, 83,4 min en serie
+    /// contra 40,5 min en paralelo, que es el suelo del origen más lento.
+    ///
+    /// El interruptor se lee al arrancar la descarga, no aquí dentro: cambiar
+    /// el ajuste a mitad no reconfigura un plan en curso.
+    pub async fn correr(
+        self: &Arc<Self>,
+        origenes: &[Origen],
+        nuevas: &std::collections::BTreeMap<String, Vec<String>>,
+        paralelo: bool,
+    ) {
+        if paralelo {
+            let mut tareas = tokio::task::JoinSet::new();
+            for o in origenes.iter().cloned() {
+                let Some(teselas) = nuevas.get(o.id()).cloned() else { continue };
+                let este = Arc::clone(self);
+                tareas.spawn(async move {
+                    // Defensivo, no una garantía nueva: `un_origen` ya
+                    // comprueba `parar` en su propio bucle de teselas. Esto
+                    // solo evita arrancar un origen que ni ha empezado si se
+                    // pidió parar entre construir el plan y correrlo.
+                    if este.parar.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    este.un_origen(&o, &teselas).await;
+                });
             }
-            let Some(teselas) = nuevas.get(o.id()) else { continue };
-            self.un_origen(o, teselas).await;
+            while tareas.join_next().await.is_some() {}
+        } else {
+            for o in origenes {
+                if self.parar.load(Ordering::SeqCst) {
+                    break;
+                }
+                let Some(teselas) = nuevas.get(o.id()) else { continue };
+                self.un_origen(o, teselas).await;
+            }
         }
         self.progreso.lock().unwrap().trabajando = false;
         // Llegar aquí —por el motivo que sea— es la prueba de que esta
@@ -619,9 +655,9 @@ mod tests {
         // (el bug está en la VENTANA temporal, no en el valor final), pero
         // deja documentado el invariante que el arreglo garantiza: puede
         // comprobarse ANTES de que `correr()` haga nada.
-        let d2 = Descarga::nueva(a.clone(), i, 100.0, &[]);
+        let d2 = std::sync::Arc::new(Descarga::nueva(a.clone(), i, 100.0, &[]));
         assert!(d2.progreso().trabajando, "trabajando debe ser true desde la construcción");
-        d2.correr(&[o], &std::collections::BTreeMap::from([("f".to_string(), vec![qk])])).await;
+        d2.correr(&[o], &std::collections::BTreeMap::from([("f".to_string(), vec![qk])]), false).await;
         assert!(!d2.progreso().trabajando, "y correr() lo apaga al terminar, aunque no hiciera nada");
     }
 
@@ -646,14 +682,48 @@ mod tests {
         let i = a.crear_indice("x", "x", "x/x").unwrap();
         let o1: Origen = std::sync::Arc::new(Falso::nuevo("uno", Tipo::Suelta, Tarifa::Gratis).con("AAA", 1));
         let o2: Origen = std::sync::Arc::new(Falso::nuevo("dos", Tipo::Suelta, Tarifa::Gratis).con("BBB", 1));
-        let d = Descarga::nueva(a.clone(), i, 100.0, &[]);
+        let d = std::sync::Arc::new(Descarga::nueva(a.clone(), i, 100.0, &[]));
         let nuevas = std::collections::BTreeMap::from([
             ("uno".to_string(), vec!["AAA".to_string()]),
             ("dos".to_string(), vec!["BBB".to_string()]),
         ]);
-        d.correr(&[o1, o2], &nuevas).await;
+        d.correr(&[o1, o2], &nuevas, false).await;
         assert!(!d.progreso().trabajando, "termina apagado");
         assert_eq!(d.progreso().teselas_hechas, 2, "los dos orígenes se procesan, no solo el primero");
+    }
+
+    /// El paralelismo cambia CUÁNDO se descarga cada cosa, no QUÉ: el
+    /// resultado observable tiene que ser idéntico al del modo secuencial.
+    #[tokio::test]
+    async fn en_paralelo_baja_exactamente_lo_mismo_que_en_serie() {
+        // Cada modo contra su propia base: sobre la misma, el segundo pase se
+        // saltaría las teselas que el primero ya dejó `hecho`.
+        async fn correr_con(paralelo: bool) -> Progreso {
+            let (_d, a) = temporal();
+            let i = a.crear_indice("x", "x", "x/x").unwrap();
+            let qk1 = lumi_index::tiles::quadkey(43.36, -8.41);
+            let qk2 = lumi_index::tiles::quadkey(40.42, -3.70);
+            let o1: Origen =
+                std::sync::Arc::new(Falso::nuevo("uno", Tipo::Suelta, Tarifa::Gratis).con(&qk1, 3));
+            let o2: Origen =
+                std::sync::Arc::new(Falso::nuevo("dos", Tipo::Suelta, Tarifa::Gratis).con(&qk2, 2));
+            let d = std::sync::Arc::new(Descarga::nueva(a.clone(), i, 100.0, &[]));
+            let nuevas = std::collections::BTreeMap::from([
+                ("uno".to_string(), vec![qk1]),
+                ("dos".to_string(), vec![qk2]),
+            ]);
+            d.correr(&[o1, o2], &nuevas, paralelo).await;
+            d.progreso()
+        }
+
+        let serie = correr_con(false).await;
+        let paralelo = correr_con(true).await;
+
+        assert!(!paralelo.trabajando, "termina apagado igual que en serie");
+        assert_eq!(paralelo.teselas_hechas, serie.teselas_hechas, "las mismas teselas");
+        assert_eq!(paralelo.imagenes, serie.imagenes, "y las mismas imágenes");
+        assert_eq!(paralelo.fallidas, serie.fallidas);
+        assert_eq!(serie.teselas_hechas, 2, "y la referencia de verdad hizo las dos");
     }
 
     #[tokio::test]
@@ -771,10 +841,10 @@ mod tests {
         let i = a.crear_indice("x", "x", "x/x").unwrap();
         a.guardar_ajuste(CLAVE_PLAN_PENDIENTE, "{\"lo que sea\":true}").unwrap();
         let o: Origen = std::sync::Arc::new(Falso::nuevo("uno", Tipo::Suelta, Tarifa::Gratis).con("AAA", 1));
-        let d = Descarga::nueva(a.clone(), i, 100.0, &[]);
+        let d = std::sync::Arc::new(Descarga::nueva(a.clone(), i, 100.0, &[]));
         let nuevas = std::collections::BTreeMap::from([("uno".to_string(), vec!["AAA".to_string()])]);
 
-        d.correr(&[o], &nuevas).await;
+        d.correr(&[o], &nuevas, false).await;
 
         assert_eq!(a.leer_ajuste(CLAVE_PLAN_PENDIENTE).unwrap(), None);
     }

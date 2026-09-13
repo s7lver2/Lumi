@@ -248,11 +248,11 @@ En `conectar` y `conectar_lectura`, añadir a los `PRAGMA` existentes: `PRAGMA c
 - `Descarga::correr` pasa a tomar `self: &Arc<Self>` (o quedarse en `&self` si el `JoinSet` puede clonar `Arc<Descarga>` desde fuera — decidir según cómo ya se construye en `lib.rs`) y lanzar los orígenes en un `JoinSet` cuando el ajuste está activo; si no, mantiene el `for` secuencial actual byte por byte.
 - Nuevos comandos Tauri: `descarga_paralela_leer() -> bool`, `descarga_paralela_fijar(bool)`, mismo patrón que `cola_concurrencia_leer`/`fijar`.
 
-- [ ] **Step 1: Almacenar y leer el ajuste**
+- [x] **Step 1: Almacenar y leer el ajuste** — `CLAVE_DESCARGA_PARALELA` en `store.rs`, comandos en `lib.rs`, default `true`
 
 En `store.rs`, añadir constante `pub const CLAVE_DESCARGA_PARALELA: &str = "descarga_paralela";` junto a las claves existentes (`CLAVE_HF_TOKEN`, etc. — buscar dónde viven). En `lib.rs`, comandos `descarga_paralela_leer`/`descarga_paralela_fijar` calcando `cola_concurrencia_leer`/`fijar` (`lib.rs:420-429`), con default `true` cuando la clave no existe (`leer_ajuste(...).ok().flatten().map(|v| v == "true").unwrap_or(true)`).
 
-- [ ] **Step 2: `Descarga` necesita `Arc<Self>` para el `JoinSet`**
+- [x] **Step 2: `Descarga` necesita `Arc<Self>` para el `JoinSet`** — ya vivía tras un `Arc` en `lib.rs`; `correr` pasa a `self: &Arc<Self>`
 
 Revisar cómo se construye y se guarda `Descarga` hoy en `lib.rs` (`estado.descarga: Mutex<Option<...>>`). Si ya vive detrás de un `Arc` (probable, dado que `Almacen` ya lo está y el patrón se repite), el cambio es local a `correr`:
 
@@ -285,25 +285,23 @@ pub async fn correr(self: &Arc<Self>, origenes: &[Origen], nuevas: &BTreeMap<Str
 
 **OJO con `self.parar.load` dentro de cada tarea del `JoinSet`**: en el modo paralelo, `parar()` debe seguir cortando cada origen en curso (que ya lo hace, `un_origen` comprueba `self.parar` en su propio bucle de teselas) — el chequeo de arriba, antes de arrancar la tarea, es solo para no lanzar un origen que ni ha empezado si ya se pidió parar entre que se construyó el plan y que corrió el `JoinSet`. No es una garantía nueva, es defensiva.
 
-- [ ] **Step 3: Pasar el ajuste desde `lib.rs`**
+- [x] **Step 3: Pasar el ajuste desde `lib.rs`** — leído una vez en `descarga_arrancar`
 
 En el comando Tauri que arranca la descarga (`descarga_arrancar` o el nombre real — grep `CLAVE_PLAN_PENDIENTE` en `lib.rs` para encontrarlo), leer `descarga_paralela_leer()` **una vez, al arrancar**, y pasarlo a `correr`. No releerlo dentro del bucle — el spec es explícito en que cambiar el ajuste a mitad no debe afectar un plan en curso.
 
-- [ ] **Step 4: Panel de Ajustes**
+- [x] **Step 4: Panel de Ajustes**
 
 En `RendimientoPanel.tsx`, junto al control de concurrencia de GPU y modo de baja prioridad, añadir un toggle "Descargar de varios orígenes a la vez" con una nota breve (una frase, tono del resto del panel) explicando que cada origen tiene su propio límite de peticiones y que esto no cambia el ritmo contra ningún proveedor — es información que el operador necesita para confiar en el interruptor, no relleno.
 
 En `api.ts`, añadir `descargaParalelaLeer()`/`descargaParalelaFijar(bool)` calcando las funciones de concurrencia de GPU ya existentes.
 
-- [ ] **Step 5: Test unitario del modo paralelo**
+- [x] **Step 5: Test unitario del modo paralelo** — `en_paralelo_baja_exactamente_lo_mismo_que_en_serie`, que corre el mismo plan en los dos modos contra bases distintas y compara el progreso final
 
 En `download.rs`, extender los tests existentes (que ya usan `Falso` con varios orígenes, ver `correr_procesa_todos_los_origenes_y_solo_entonces_apaga_trabajando`) con una variante que llame `correr(..., true)` y compruebe que el resultado final (`teselas_hechas`, `imagenes`, `trabajando`) es idéntico al modo secuencial — el paralelismo no debe cambiar QUÉ se descarga, solo CUÁNDO.
 
-- [ ] **Step 6: Verificar**
+- [x] **Step 6: Verificar** — `cargo test -p indexer-app` 100 tests limpios; `npm run build` + `npm run lint` limpios
 
-`cargo test -p indexer-app`, `cd indexer && npm run build && npm run lint`.
-
-- [ ] **Commit:** `feat(indexer): descargar de varios orígenes a la vez, tras un interruptor`
+- [x] **Commit:** `feat(indexer): descargar de varios orígenes a la vez, tras un interruptor`
 
 ---
 

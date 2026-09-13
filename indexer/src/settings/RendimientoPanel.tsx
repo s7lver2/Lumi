@@ -4,18 +4,25 @@ import { api } from "../lib/api";
 
 export function RendimientoPanel() {
   const [consumoBajo, setConsumoBajo] = useState<boolean | null>(null);
+  const [descargaParalela, setDescargaParalela] = useState<boolean | null>(null);
   const [autoarranque, setAutoarranque] = useState<boolean | null>(null);
   const [hfTokenHay, setHfTokenHay] = useState<boolean | null>(null);
   const [hfTokenCampo, setHfTokenCampo] = useState("");
   const [hfTokenGuardando, setHfTokenGuardando] = useState(false);
 
   useEffect(() => { void api.colaConsumoLeer().then(setConsumoBajo); }, []);
+  useEffect(() => { void api.descargaParalelaLeer().then(setDescargaParalela); }, []);
   useEffect(() => { void api.autoarranqueLeer().then(setAutoarranque); }, []);
   useEffect(() => { void api.hfTokenHay().then(setHfTokenHay); }, []);
 
   async function cambiarConsumo(bajo: boolean) {
     setConsumoBajo(bajo);
     await api.colaConsumoFijar(bajo);
+  }
+
+  async function cambiarDescargaParalela(v: boolean) {
+    setDescargaParalela(v);
+    await api.descargaParalelaFijar(v);
   }
 
   async function cambiarAutoarranque(v: boolean) {
@@ -66,6 +73,26 @@ export function RendimientoPanel() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="mt-6">
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-border bg-[#0b0d0f] px-3 py-2.5">
+            <span className="text-[11px] text-fg">
+              Descargar de varios orígenes a la vez
+              <span className="mt-0.5 block text-[9.5px] leading-relaxed text-subtle">
+                Cada origen tiene su propio límite de peticiones, así que esto no cambia el ritmo
+                contra ningún proveedor: solo deja de esperar a que Mapillary termine entero para
+                empezar con KartaView. Apágalo si un proveedor se porta mal.
+              </span>
+            </span>
+            <button role="switch" aria-checked={descargaParalela ?? false} disabled={descargaParalela === null}
+              onClick={() => void cambiarDescargaParalela(!descargaParalela)}
+              className={`relative h-5 w-9 shrink-0 rounded-full border transition-colors disabled:opacity-40 ${
+                descargaParalela ? "border-draw bg-draw" : "border-white/15 bg-white/10"}`}>
+              <span className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-fg ring-1 ring-black/20 transition-transform ${
+                descargaParalela ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+            </button>
+          </label>
         </div>
 
         <div className="mt-6">

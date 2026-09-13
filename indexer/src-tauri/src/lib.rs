@@ -428,6 +428,31 @@ fn cola_concurrencia_fijar(estado: tauri::State<'_, Estado>, n: usize) {
     estado.cola.fijar_concurrencia(n);
 }
 
+/// Si la descarga corre varios orígenes a la vez. Ausente = sí: el paralelismo
+/// es entre orígenes y cada uno tiene su propio limitador, así que no aumenta
+/// el ritmo que ve ningún proveedor; dejarlo apagado por defecto regalaría el
+/// 2,1× a quien no supiera que el interruptor existe.
+#[tauri::command]
+fn descarga_paralela_leer(estado: tauri::State<'_, Estado>) -> bool {
+    estado
+        .almacen
+        .leer_ajuste(store::CLAVE_DESCARGA_PARALELA)
+        .ok()
+        .flatten()
+        .map(|v| v == "true")
+        .unwrap_or(true)
+}
+
+/// Cambia el interruptor. No afecta a una descarga ya en curso: el valor se
+/// lee una vez, al arrancarla.
+#[tauri::command]
+fn descarga_paralela_fijar(estado: tauri::State<'_, Estado>, activo: bool) -> Result<(), String> {
+    estado
+        .almacen
+        .guardar_ajuste(store::CLAVE_DESCARGA_PARALELA, if activo { "true" } else { "false" })
+        .map_err(|e| e.to_string())
+}
+
 /// Si el Indexer está registrado para arrancar con el sistema, ahora mismo.
 #[tauri::command]
 fn autoarranque_leer(app: tauri::AppHandle) -> bool {
@@ -996,8 +1021,11 @@ async fn descarga_arrancar(
         &modelos,
     ));
     *estado.descarga.lock().unwrap() = Some(d.clone());
+    // Se lee UNA VEZ, aquí: cambiar el interruptor a mitad no reconfigura un
+    // plan en curso.
+    let paralelo = descarga_paralela_leer(estado.clone());
     tauri::async_runtime::spawn(async move {
-        d.correr(&origenes, &nuevas).await;
+        d.correr(&origenes, &nuevas, paralelo).await;
     });
     Ok(())
 }
@@ -2133,6 +2161,8 @@ pub fn run() {
             cola_concurrencia_fijar,
             cola_consumo_leer,
             cola_consumo_fijar,
+            descarga_paralela_leer,
+            descarga_paralela_fijar,
             autoarranque_leer,
             autoarranque_fijar,
             indice_progreso_embebido,
