@@ -1188,7 +1188,7 @@ async fn paquete_sellar_arrancar(
     let s = Arc::new(package::Sellado::nuevo(0));
     *estado.sellado.lock().unwrap() = Some(s.clone());
     tauri::async_runtime::spawn(async move {
-        let r = sellar(&almacen, &modelos, indice_id, &destino, &s).await;
+        let r = sellar(almacen, modelos, indice_id, destino, s.clone()).await;
         s.terminar(r);
     });
     Ok(())
@@ -1237,45 +1237,64 @@ async fn agregar_capa_a_sellado(
         }
     }
 
+    // Fase async: solo la lectura de Qdrant. El resto —escribir fragmentos,
+    // reescribir manifiesto/cobertura y sobre todo `package::firmar`, que
+    // relee y rehashea el PAQUETE ENTERO (todas sus imágenes, no solo las
+    // de este modelo)— es E/S síncrona de miles de ficheros seguidos, y por
+    // el mismo motivo que `sellar()` (ver su comentario) tiene que correr
+    // fuera del runtime de tokio: si no, un paquete grande deja la
+    // aplicación entera sin responder mientras dura, aunque esta llamada
+    // solo añada una capa a un índice que ya estaba sellado.
     let qdrant = qdrant::Cliente::nuevo();
     let coleccion = qdrant::coleccion_de(&modelo.id, &modelo.version);
+    let mut vectores_por_qk: std::collections::BTreeMap<String, Vec<Vec<f32>>> = Default::default();
     for (qk, ids) in &por_qk {
         let vectores = qdrant.leer(&coleccion, ids).await.map_err(|e| e.to_string())?;
-        let dir = raiz.join("fragmentos").join(qk);
-        package::escribir_fragmento(&dir, &modelo.id, &modelo.version, &vectores)
-            .map_err(|e| format!("no se pudo escribir el fragmento {}: {e}", dir.display()))?;
+        vectores_por_qk.insert(qk.clone(), vectores);
     }
 
-    let manifiesto_path = raiz.join("manifiesto.json");
-    let mut manifiesto: lumi_index::manifest::Manifiesto =
-        serde_json::from_slice(&std::fs::read(&manifiesto_path).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
-    if !manifiesto.modelos.iter().any(|(m, ..)| m == &modelo.id) {
-        manifiesto.modelos.push((modelo.id.clone(), modelo.version.clone(), modelo.dims));
-    }
-    std::fs::write(&manifiesto_path, serde_json::to_vec_pretty(&manifiesto).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
-
-    // El hash y el tamaño de cada tesela cubren TODO su fragmento (ver
-    // `package::medir_fragmento`), así que cambian en cuanto ese fragmento
-    // gana un fichero más — se recalculan solo para las teselas tocadas.
-    let cobertura_path = raiz.join("cobertura.json");
-    let mut cobertura: lumi_index::coverage::Cobertura =
-        serde_json::from_slice(&std::fs::read(&cobertura_path).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
-    for t in &mut cobertura.teselas {
-        if por_qk.contains_key(&t.quadkey) {
-            let dir = raiz.join("fragmentos").join(&t.quadkey);
-            let (bytes, sha256) = package::medir_fragmento(&dir).map_err(|e| e.to_string())?;
-            t.bytes = bytes;
-            t.sha256 = sha256;
+    let modelo = modelo.clone();
+    let raiz = raiz.to_path_buf();
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        for (qk, vectores) in &vectores_por_qk {
+            let dir = raiz.join("fragmentos").join(qk);
+            package::escribir_fragmento(&dir, &modelo.id, &modelo.version, vectores)
+                .map_err(|e| format!("no se pudo escribir el fragmento {}: {e}", dir.display()))?;
         }
-    }
-    std::fs::write(&cobertura_path, serde_json::to_vec_pretty(&cobertura).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
 
-    package::firmar(raiz).map_err(|e| format!("no se pudo volver a firmar el paquete: {e}"))?;
-    Ok(())
+        let manifiesto_path = raiz.join("manifiesto.json");
+        let mut manifiesto: lumi_index::manifest::Manifiesto =
+            serde_json::from_slice(&std::fs::read(&manifiesto_path).map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string())?;
+        if !manifiesto.modelos.iter().any(|(m, ..)| m == &modelo.id) {
+            manifiesto.modelos.push((modelo.id.clone(), modelo.version.clone(), modelo.dims));
+        }
+        std::fs::write(&manifiesto_path, serde_json::to_vec_pretty(&manifiesto).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+
+        // El hash y el tamaño de cada tesela cubren TODO su fragmento (ver
+        // `package::medir_fragmento`), así que cambian en cuanto ese fragmento
+        // gana un fichero más — se recalculan solo para las teselas tocadas.
+        let cobertura_path = raiz.join("cobertura.json");
+        let mut cobertura: lumi_index::coverage::Cobertura =
+            serde_json::from_slice(&std::fs::read(&cobertura_path).map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string())?;
+        for t in &mut cobertura.teselas {
+            if vectores_por_qk.contains_key(&t.quadkey) {
+                let dir = raiz.join("fragmentos").join(&t.quadkey);
+                let (bytes, sha256) = package::medir_fragmento(&dir).map_err(|e| e.to_string())?;
+                t.bytes = bytes;
+                t.sha256 = sha256;
+            }
+        }
+        std::fs::write(&cobertura_path, serde_json::to_vec_pretty(&cobertura).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+
+        package::firmar(&raiz).map_err(|e| format!("no se pudo volver a firmar el paquete: {e}"))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("se interrumpió a mitad: {e}"))?
 }
 
 /// Modelos ya completos para este índice (todas sus imágenes con vector) que
@@ -1331,18 +1350,41 @@ async fn paquete_agregar_capa(
 
 /// El sellado de verdad. El paquete resultante lleva binario e int8 de cada
 /// modelo, las imágenes, el manifiesto, la cobertura y SHA256SUMS.
+/// El sellado tiene dos fases de naturaleza MUY distinta, y hasta ahora vivían
+/// mezcladas en la misma función `async`: leer los vectores de Qdrant es lo
+/// único que de verdad necesita `.await` (una llamada de red por fragmento),
+/// mientras que copiar ~10.000 imágenes y releer+hashear el paquete ENTERO
+/// para `SHA256SUMS` son miles de llamadas de E/S síncrona, una detrás de
+/// otra, sin un solo punto donde ceder el hilo.
+///
+/// Hecho tal cual dentro de una función `async` (como estaba antes), esas
+/// llamadas ocupaban un hilo del runtime de tokio SIN SOLTARLO durante todo
+/// ese tiempo — y como Tauri reparte los `invoke` de TODA la interfaz (el
+/// sondeo de descargas, de la cola, de revisión, de embebido…) sobre ESE
+/// MISMO runtime, sellar un índice de varios miles de imágenes dejaba la
+/// aplicación entera sin responder mientras durase. Con antivirus
+/// inspeccionando cada fichero de una carpeta de decenas de miles, eso
+/// podían ser minutos — «el ordenador se congela» reportado dos veces sobre
+/// el índice 4 (10.346 imágenes) era exactamente esto, no un origen de red
+/// ni nada de lo tocado en sesiones anteriores.
+///
+/// La fase de red se resuelve primero y se guarda en memoria; TODO lo demás
+/// —fragmentos, filas, copia de imágenes, manifiesto, cobertura, firmado—
+/// pasa entero a `tokio::task::spawn_blocking`, que lo corre en un hilo
+/// dedicado del pool bloqueante de tokio: por mucho que tarde, no compite
+/// por los mismos hilos que la interfaz necesita para seguir respondiendo.
 async fn sellar(
-    almacen: &store::Almacen,
-    modelos: &[models::Modelo],
+    almacen: Arc<store::Almacen>,
+    modelos: Vec<models::Modelo>,
     indice_id: i64,
-    destino: &str,
-    prog: &package::Sellado,
+    destino: String,
+    prog: Arc<package::Sellado>,
 ) -> Result<package::Informe, String> {
     prog.etapa("comprobando");
     let esperadas = almacen.total_imagenes(indice_id).map_err(|e| e.to_string())?;
 
     let mut por_modelo = Vec::new();
-    for m in modelos {
+    for m in &modelos {
         let hechos = almacen.vectores_hechos(indice_id, &m.id).map_err(|e| e.to_string())?;
         por_modelo.push((m.id.clone(), esperadas, hechos));
     }
@@ -1353,7 +1395,7 @@ async fn sellar(
     // Se aborta ANTES de escribir un solo byte si las cuentas no cuadran.
     package::comprobar(&informe).map_err(|e| e.to_string())?;
 
-    let raiz = std::path::PathBuf::from(destino);
+    let raiz = std::path::PathBuf::from(&destino);
     std::fs::create_dir_all(&raiz)
         .map_err(|e| format!("no se pudo crear la carpeta de destino {}: {e}", raiz.display()))?;
     let imagenes = almacen.imagenes_de_indice(indice_id).map_err(|e| e.to_string())?;
@@ -1385,138 +1427,156 @@ async fn sellar(
     prog.fijar_total((por_qk.len() * modelos.len() + imagenes_que_viajan) as u32);
     prog.etapa("vectores");
 
+    // Única fase que de verdad necesita `.await`: se resuelve entera aquí y
+    // se guarda en memoria (un fragmento son unos KB de f32, nunca miles de
+    // ellos a la vez pesan lo que pesan las imágenes) para que la escritura
+    // a disco quede toda del otro lado de `spawn_blocking`, sin partirla.
     let qdrant = qdrant::Cliente::nuevo();
-    for m in modelos {
+    let mut vectores_por: std::collections::HashMap<(String, String), Vec<Vec<f32>>> = Default::default();
+    for m in &modelos {
         let coleccion = qdrant::coleccion_de(&m.id, &m.version);
         for (qk, filas) in &por_qk {
             let ids: Vec<i64> = filas.iter().map(|(id, _)| *id).collect();
             let vectores = qdrant.leer(&coleccion, &ids).await.map_err(|e| e.to_string())?;
+            vectores_por.insert((m.id.clone(), qk.clone()), vectores);
+        }
+    }
+
+    tokio::task::spawn_blocking(move || -> Result<package::Informe, String> {
+        for (clave, vectores) in &vectores_por {
+            let (modelo_id, qk) = clave;
+            let m = modelos
+                .iter()
+                .find(|m| &m.id == modelo_id)
+                .expect("la clave viene de iterar sobre estos mismos modelos, arriba");
             let dir = raiz.join("fragmentos").join(qk);
-            package::escribir_fragmento(&dir, &m.id, &m.version, &vectores)
+            package::escribir_fragmento(&dir, &m.id, &m.version, vectores)
                 .map_err(|e| format!("no se pudo escribir el fragmento {}: {e}", dir.display()))?;
             prog.avanzar();
         }
-    }
 
-    // Las filas que hacen utilizable el paquete. Sin `lat`/`lng` y `fuente`
-    // por imagen, un vector instalado no se puede situar en el mapa ni
-    // atribuir a nadie, y eso es justo lo que le pasaba a `lumid`: esperaba
-    // encontrarlas en un `indice.db` dentro del paquete que este sellado nunca
-    // escribió, así que instalar un índice fallaba SIEMPRE, publicado o no.
-    //
-    // Se escriben recorriendo `por_qk`, no lanzando otra consulta, para que el
-    // orden sea EL MISMO que el de los fragmentos por construcción y no por
-    // coincidencia: `por_qk` es literalmente la lista con la que se acaban de
-    // escribir los `.i8` de ahí arriba.
-    let datos: std::collections::HashMap<i64, &package::FilaPublicable> =
-        publicables.iter().map(|f| (f.id, f)).collect();
-    for (qk, filas) in &por_qk {
-        let mut salida = Vec::with_capacity(filas.len());
-        for (id, ruta) in filas {
-            let Some(d) = datos.get(id) else {
-                // No puede pasar (`por_qk` se filtra con `viajan`, que sale de
-                // `publicables`), pero saltarla en silencio correría una
-                // posición y dejaría cada imagen pegada a las coordenadas de
-                // otra. Antes se rompe.
-                return Err(format!(
-                    "la imagen {id} viaja en {qk} pero no está entre las publicables:                      las filas no cuadrarían con el fragmento"
-                ));
-            };
-            // Lo que viaja es el nombre, no la ruta de la máquina que sella:
-            // es como se copia a `imagenes/` unas líneas más abajo.
-            let nombre = std::path::Path::new(ruta)
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or(ruta)
-                .to_string();
-            salida.push(lumi_index::filas::FilaImagen {
-                ruta: nombre,
-                lat: d.lat,
-                lng: d.lng,
-                fuente: d.fuente.clone(),
+        // Las filas que hacen utilizable el paquete. Sin `lat`/`lng` y `fuente`
+        // por imagen, un vector instalado no se puede situar en el mapa ni
+        // atribuir a nadie, y eso es justo lo que le pasaba a `lumid`: esperaba
+        // encontrarlas en un `indice.db` dentro del paquete que este sellado nunca
+        // escribió, así que instalar un índice fallaba SIEMPRE, publicado o no.
+        //
+        // Se escriben recorriendo `por_qk`, no lanzando otra consulta, para que el
+        // orden sea EL MISMO que el de los fragmentos por construcción y no por
+        // coincidencia: `por_qk` es literalmente la lista con la que se acaban de
+        // escribir los `.i8` de ahí arriba.
+        let datos: std::collections::HashMap<i64, &package::FilaPublicable> =
+            publicables.iter().map(|f| (f.id, f)).collect();
+        for (qk, filas) in &por_qk {
+            let mut salida = Vec::with_capacity(filas.len());
+            for (id, ruta) in filas {
+                let Some(d) = datos.get(id) else {
+                    // No puede pasar (`por_qk` se filtra con `viajan`, que sale de
+                    // `publicables`), pero saltarla en silencio correría una
+                    // posición y dejaría cada imagen pegada a las coordenadas de
+                    // otra. Antes se rompe.
+                    return Err(format!(
+                        "la imagen {id} viaja en {qk} pero no está entre las publicables:                      las filas no cuadrarían con el fragmento"
+                    ));
+                };
+                // Lo que viaja es el nombre, no la ruta de la máquina que sella:
+                // es como se copia a `imagenes/` unas líneas más abajo.
+                let nombre = std::path::Path::new(ruta)
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(ruta)
+                    .to_string();
+                salida.push(lumi_index::filas::FilaImagen {
+                    ruta: nombre,
+                    lat: d.lat,
+                    lng: d.lng,
+                    fuente: d.fuente.clone(),
+                });
+            }
+            lumi_index::filas::escribir(&raiz, qk, &salida).map_err(|e| e.to_string())?;
+        }
+
+        prog.etapa("imágenes");
+        let imgs_dir = raiz.join("imagenes");
+        std::fs::create_dir_all(&imgs_dir)
+            .map_err(|e| format!("no se pudo crear {}: {e}", imgs_dir.display()))?;
+        for (id, ruta, _) in &imagenes {
+            if !viajan.contains(id) {
+                continue;
+            }
+            let origen = std::path::Path::new(ruta);
+            if let Some(nombre) = origen.file_name() {
+                // Se copia, no se mueve ni se recomprime: el original de una
+                // carpeta local nunca se toca.
+                let _ = std::fs::copy(origen, imgs_dir.join(nombre));
+            }
+            prog.avanzar();
+        }
+
+        prog.etapa("manifiesto");
+        let filas_proc = almacen.filas_procedencia(indice_id).map_err(|e| e.to_string())?;
+        let teselas_trab = almacen.teselas_trabajo(indice_id).map_err(|e| e.to_string())?;
+        let manifiesto = lumi_index::manifest::Manifiesto {
+            version: 1,
+            nombre: destino.clone(),
+            slug: destino.clone(),
+            sellado_en: chrono_ahora(),
+            version_indexer: env!("CARGO_PKG_VERSION").to_string(),
+            modelos: modelos.iter().map(|m| (m.id.clone(), m.version.clone(), m.dims)).collect(),
+            imagenes: lumi_index::manifest::porcentajes(&filas_proc),
+            trabajo: lumi_index::manifest::porcentajes_trabajo(&teselas_trab),
+            atribuciones: Vec::new(),
+        };
+        let manifiesto_path = raiz.join("manifiesto.json");
+        std::fs::write(
+            &manifiesto_path,
+            serde_json::to_vec_pretty(&manifiesto).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| format!("no se pudo escribir {}: {e}", manifiesto_path.display()))?;
+
+        // Una entrada por quadkey que de verdad viaja. `por_qk` ya está filtrado
+        // por `viajan`, así que aquí no hay que volver a decidir nada: solo contar
+        // y declarar de dónde salió cada tesela.
+        let mut teselas = Vec::with_capacity(por_qk.len());
+        for (qk, filas) in &por_qk {
+            let dir = raiz.join("fragmentos").join(qk);
+            // El tamaño y el hash del fragmento son lo que hace COMPROBABLE la
+            // autoría: quitar la atribución rompería SHA256SUMS.
+            let (bytes, sha256) = package::medir_fragmento(&dir).map_err(|e| e.to_string())?;
+            teselas.push(lumi_index::coverage::TeselaCubierta {
+                quadkey: qk.clone(),
+                sha256,
+                bytes,
+                imagenes: filas.len() as u32,
+                fuentes: package::fuentes_que_viajan(&publicables, qk),
             });
         }
-        lumi_index::filas::escribir(&raiz, qk, &salida).map_err(|e| e.to_string())?;
-    }
+        let cobertura = lumi_index::coverage::Cobertura {
+            version: 1,
+            indice: destino.clone(),
+            sellado_en: chrono_ahora(),
+            atribucion: lumi_index::coverage::Atribucion {
+                autor: String::new(),
+                url: String::new(),
+                licencia: String::new(),
+            },
+            teselas,
+        };
+        let cobertura_path = raiz.join("cobertura.json");
+        std::fs::write(
+            &cobertura_path,
+            serde_json::to_vec_pretty(&cobertura).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| format!("no se pudo escribir {}: {e}", cobertura_path.display()))?;
 
-    prog.etapa("imágenes");
-    let imgs_dir = raiz.join("imagenes");
-    std::fs::create_dir_all(&imgs_dir)
-        .map_err(|e| format!("no se pudo crear {}: {e}", imgs_dir.display()))?;
-    for (id, ruta, _) in &imagenes {
-        if !viajan.contains(id) {
-            continue;
-        }
-        let origen = std::path::Path::new(ruta);
-        if let Some(nombre) = origen.file_name() {
-            // Se copia, no se mueve ni se recomprime: el original de una
-            // carpeta local nunca se toca.
-            let _ = std::fs::copy(origen, imgs_dir.join(nombre));
-        }
-        prog.avanzar();
-    }
+        prog.etapa("firmando");
+        package::firmar(&raiz).map_err(|e| format!("no se pudo firmar el paquete en {}: {e}", raiz.display()))?;
+        almacen.sellar_indice(indice_id, &destino).map_err(|e| e.to_string())?;
 
-    prog.etapa("manifiesto");
-    let filas_proc = almacen.filas_procedencia(indice_id).map_err(|e| e.to_string())?;
-    let teselas_trab = almacen.teselas_trabajo(indice_id).map_err(|e| e.to_string())?;
-    let manifiesto = lumi_index::manifest::Manifiesto {
-        version: 1,
-        nombre: destino.to_string(),
-        slug: destino.to_string(),
-        sellado_en: chrono_ahora(),
-        version_indexer: env!("CARGO_PKG_VERSION").to_string(),
-        modelos: modelos.iter().map(|m| (m.id.clone(), m.version.clone(), m.dims)).collect(),
-        imagenes: lumi_index::manifest::porcentajes(&filas_proc),
-        trabajo: lumi_index::manifest::porcentajes_trabajo(&teselas_trab),
-        atribuciones: Vec::new(),
-    };
-    let manifiesto_path = raiz.join("manifiesto.json");
-    std::fs::write(
-        &manifiesto_path,
-        serde_json::to_vec_pretty(&manifiesto).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| format!("no se pudo escribir {}: {e}", manifiesto_path.display()))?;
-
-    // Una entrada por quadkey que de verdad viaja. `por_qk` ya está filtrado
-    // por `viajan`, así que aquí no hay que volver a decidir nada: solo contar
-    // y declarar de dónde salió cada tesela.
-    let mut teselas = Vec::with_capacity(por_qk.len());
-    for (qk, filas) in &por_qk {
-        let dir = raiz.join("fragmentos").join(qk);
-        // El tamaño y el hash del fragmento son lo que hace COMPROBABLE la
-        // autoría: quitar la atribución rompería SHA256SUMS.
-        let (bytes, sha256) = package::medir_fragmento(&dir).map_err(|e| e.to_string())?;
-        teselas.push(lumi_index::coverage::TeselaCubierta {
-            quadkey: qk.clone(),
-            sha256,
-            bytes,
-            imagenes: filas.len() as u32,
-            fuentes: package::fuentes_que_viajan(&publicables, qk),
-        });
-    }
-    let cobertura = lumi_index::coverage::Cobertura {
-        version: 1,
-        indice: destino.to_string(),
-        sellado_en: chrono_ahora(),
-        atribucion: lumi_index::coverage::Atribucion {
-            autor: String::new(),
-            url: String::new(),
-            licencia: String::new(),
-        },
-        teselas,
-    };
-    let cobertura_path = raiz.join("cobertura.json");
-    std::fs::write(
-        &cobertura_path,
-        serde_json::to_vec_pretty(&cobertura).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| format!("no se pudo escribir {}: {e}", cobertura_path.display()))?;
-
-    prog.etapa("firmando");
-    package::firmar(&raiz).map_err(|e| format!("no se pudo firmar el paquete en {}: {e}", raiz.display()))?;
-    almacen.sellar_indice(indice_id, destino).map_err(|e| e.to_string())?;
-
-    Ok(informe)
+        Ok(informe)
+    })
+    .await
+    .map_err(|e| format!("el sellado se interrumpió a mitad: {e}"))?
 }
 
 #[tauri::command]
