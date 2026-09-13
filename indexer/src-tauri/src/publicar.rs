@@ -29,6 +29,24 @@ use crate::store::Almacen;
 /// esta aplicación son segundos de época y aquí basta con sumar.
 const DIA: i64 = 86_400;
 
+/// El estado y el cuerpo de una respuesta de la API de GitHub que falló.
+///
+/// Antes cada `bail!` de este fichero mostraba solo `r.status()` — un
+/// «422 Unprocessable Entity» a secas. Ese código es el mismo para una
+/// docena de motivos distintos (repositorio vacío, `tag_name` inválido, un
+/// asset duplicado…), y la API SIEMPRE explica cuál de ellos es en el cuerpo
+/// JSON (`{"message":"Validation Failed","errors":[{"message":"Repository
+/// is empty."}]}`). Descartar ese cuerpo convertía cualquier fallo en una
+/// adivinanza — este mismo bug se diagnosticó pidiéndole el error a la API
+/// directamente porque el mensaje real nunca llegaba a los logs.
+async fn detalle_error(r: reqwest::Response) -> String {
+    let estado = r.status();
+    match r.text().await {
+        Ok(cuerpo) if !cuerpo.trim().is_empty() => format!("{estado} — {}", cuerpo.trim()),
+        _ => estado.to_string(),
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Repo {
     pub nombre: String,
@@ -276,6 +294,15 @@ pub async fn proyectos(almacen: &Almacen, testigo: &str) -> Result<Vec<Proyecto>
 /// diferencia de publicar en uno ya existente (que se etiqueta la primera vez
 /// que se sube algo), aquí no hay «primera subida» que dispare el etiquetado
 /// solo, así que se hace explícito.
+///
+/// `auto_init: true` es lo que evita el 422 «Repository is empty.» de
+/// `asegurar_release`: un repositorio recién creado sin ningún commit no
+/// tiene rama por defecto de verdad (no hay a qué commit apuntarla), y
+/// GitHub no puede crear un release —que necesita etiquetar un commit— en
+/// uno así. `sembrar_commit_inicial` repara esto en un repositorio YA
+/// existente que llegara vacío por otra vía (creado a mano en GitHub, por
+/// ejemplo); esto evita que un repo creado POR EL INDEXER nazca ya en ese
+/// estado.
 pub async fn crear_repo(testigo: &str, nombre: &str, privado: bool) -> Result<Proyecto> {
     #[derive(serde::Deserialize)]
     struct R {
@@ -286,11 +313,11 @@ pub async fn crear_repo(testigo: &str, nombre: &str, privado: bool) -> Result<Pr
         .post("https://api.github.com/user/repos")
         .bearer_auth(testigo)
         .header("user-agent", "lumi-indexer")
-        .json(&serde_json::json!({ "name": nombre, "private": privado }))
+        .json(&serde_json::json!({ "name": nombre, "private": privado, "auto_init": true }))
         .send()
         .await?;
     if !r.status().is_success() {
-        bail!("no se pudo crear el repositorio: {}", r.status());
+        bail!("no se pudo crear el repositorio: {}", detalle_error(r).await);
     }
     let creado: R = r.json().await?;
     etiquetar_repo(&cliente, testigo, &creado.full_name).await?;
@@ -453,7 +480,7 @@ async fn subir_asset(
                 let a: A = r.json().await?;
                 return Ok(a.browser_download_url);
             }
-            Ok(r) => log::warn!("intento {intento} de {nombre}: {}", r.status()),
+            Ok(r) => log::warn!("intento {intento} de {nombre}: {}", detalle_error(r).await),
             Err(e) => log::warn!("intento {intento} de {nombre}: {e}"),
         }
         tokio::time::sleep(std::time::Duration::from_secs(espera)).await;
@@ -524,6 +551,15 @@ fn etiqueta_de(paquete: &str) -> String {
 
 /// El release donde van los assets. Si ya existe con esa etiqueta se reutiliza:
 /// reanudar una subida cortada no puede crear un release nuevo cada vez.
+///
+/// Repara EN EL ACTO el caso que costó un 422 en producción: un repositorio
+/// creado a mano en GitHub (o con una versión de `crear_repo` de antes de
+/// `auto_init`) sin ningún commit no tiene rama de verdad, y GitHub no puede
+/// crear un release ahí — «Repository is empty.» en el cuerpo del error,
+/// que antes de `detalle_error` ni siquiera se veía. `sembrar_commit_inicial`
+/// crea el primer commit (un `LEEME.md` mínimo) y el intento se repite una
+/// vez; si el repositorio no era ese el problema, el segundo intento falla
+/// con el mismo detalle y ya no se reintenta más.
 async fn asegurar_release(
     cliente: &reqwest::Client,
     testigo: &str,
@@ -543,17 +579,80 @@ async fn asegurar_release(
     if existente.status().is_success() {
         return Ok(existente.json::<R>().await?.id);
     }
-    let creado = cliente
-        .post(format!("https://api.github.com/repos/{repo}/releases"))
+
+    let crear = || {
+        cliente
+            .post(format!("https://api.github.com/repos/{repo}/releases"))
+            .bearer_auth(testigo)
+            .header("user-agent", "lumi-indexer")
+            .json(&serde_json::json!({ "tag_name": etiqueta, "name": etiqueta }))
+            .send()
+    };
+
+    let creado = crear().await?;
+    if creado.status().is_success() {
+        return Ok(creado.json::<R>().await?.id);
+    }
+    let estado = creado.status();
+    let cuerpo = creado.text().await.unwrap_or_default();
+    if estado == reqwest::StatusCode::UNPROCESSABLE_ENTITY && es_repo_vacio(&cuerpo) {
+        sembrar_commit_inicial(cliente, testigo, repo).await?;
+        let reintento = crear().await?;
+        if reintento.status().is_success() {
+            return Ok(reintento.json::<R>().await?.id);
+        }
+        bail!("no se pudo crear el release: {}", detalle_error(reintento).await);
+    }
+    bail!("no se pudo crear el release: {estado} — {}", cuerpo.trim());
+}
+
+/// Si el cuerpo de un 422 de «crear release» es el de un repositorio sin
+/// ningún commit. Aparte para poder fijar el texto exacto con un test —
+/// GitHub no documenta esta cadena como parte estable de su API, así que si
+/// alguna vez la cambian, este es el único sitio que hay que tocar.
+fn es_repo_vacio(cuerpo: &str) -> bool {
+    cuerpo.to_ascii_lowercase().contains("repository is empty")
+}
+
+/// El primer commit de un repositorio sin ninguno, vía la API de contenidos
+/// — no hace falta git local para esto, un `PUT` de un fichero crea la rama
+/// por defecto apuntando a él. Un repositorio de catálogo no necesita más
+/// que poder existir; el contenido real son los assets del release, no
+/// ficheros en la rama.
+async fn sembrar_commit_inicial(cliente: &reqwest::Client, testigo: &str, repo: &str) -> Result<()> {
+    #[derive(serde::Deserialize)]
+    struct RepoInfo {
+        default_branch: String,
+    }
+    let r = cliente
+        .get(format!("https://api.github.com/repos/{repo}"))
         .bearer_auth(testigo)
         .header("user-agent", "lumi-indexer")
-        .json(&serde_json::json!({ "tag_name": etiqueta, "name": etiqueta }))
         .send()
         .await?;
-    if !creado.status().is_success() {
-        bail!("no se pudo crear el release: {}", creado.status());
+    if !r.status().is_success() {
+        bail!("no se pudo leer el repositorio para sembrar su primer commit: {}", detalle_error(r).await);
     }
-    Ok(creado.json::<R>().await?.id)
+    let rama = r.json::<RepoInfo>().await?.default_branch;
+
+    let contenido = "Catálogo publicado por Lumi Indexer.\n\nLos paquetes viajan como assets de sus releases, \
+        no como ficheros en esta rama — este commit solo existe porque un repositorio sin ninguno \
+        no puede tener releases.\n";
+    let r = cliente
+        .put(format!("https://api.github.com/repos/{repo}/contents/LEEME.md"))
+        .bearer_auth(testigo)
+        .header("user-agent", "lumi-indexer")
+        .json(&serde_json::json!({
+            "message": "Primer commit: prepara el repositorio para publicar releases",
+            "content": STANDARD.encode(contenido),
+            "branch": rama,
+        }))
+        .send()
+        .await?;
+    if !r.status().is_success() {
+        bail!("no se pudo sembrar el primer commit: {}", detalle_error(r).await);
+    }
+    Ok(())
 }
 
 /// Los ficheros de un trozo: las imágenes de sus quadkeys.
@@ -1087,5 +1186,23 @@ mod tests {
     fn el_tag_no_depende_de_cuantas_veces_se_haya_publicado() {
         assert_eq!(etiqueta_de("All Tokyo"), "all-tokyo");
         assert_eq!(etiqueta_de("All Tokyo"), etiqueta_de("All Tokyo"));
+    }
+
+    /// El caso real que costó el 422 en producción: `s7lver2/LumiDatasetv2`,
+    /// repo creado sin `auto_init`, cero commits. Verificado el 2026-09-13
+    /// contra la API real de GitHub — este es el cuerpo exacto que devuelve.
+    #[test]
+    fn detecta_el_422_de_repositorio_vacio() {
+        let cuerpo = r#"{"message":"Validation Failed","errors":[{"resource":"Release","code":"custom","message":"Repository is empty."}],"documentation_url":"https://docs.github.com/rest/releases/releases#create-a-release"}"#;
+        assert!(es_repo_vacio(cuerpo));
+    }
+
+    /// Cualquier otro 422 (una etiqueta duplicada, un `tag_name` inválido…)
+    /// NO debe disparar el reintento con un commit sembrado — eso solo tiene
+    /// sentido para el caso concreto de "no hay ningún commit".
+    #[test]
+    fn un_422_de_otro_motivo_no_se_confunde_con_repo_vacio() {
+        let cuerpo = r#"{"message":"Validation Failed","errors":[{"resource":"Release","code":"already_exists","field":"tag_name"}]}"#;
+        assert!(!es_repo_vacio(cuerpo));
     }
 }
