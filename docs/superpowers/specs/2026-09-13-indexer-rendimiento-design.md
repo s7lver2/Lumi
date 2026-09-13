@@ -448,9 +448,10 @@ No encargar trabajo sobre esto:
 
 ## 9. Lo que este spec NO arregla
 
-- **La tesela que no cabe en un release** (`03436a5`). Sigue necesitando o
-  aligerarla en revisión, o partir el cuerpo publicado en varias partes por
-  tesela — cambio de formato con su propio spec.
+- **La tesela que no cabe en un release** (`03436a5`). Fuera del alcance de
+  este spec; resuelto después por el suyo propio
+  (`2026-09-14-cuerpo-multiparte-design.md`): el cuerpo cifrado se parte en
+  varios ficheros físicos que el lado que instala reensambla.
 - **La invalidación del caché de `sondeos` cuando cambia el código de un
   origen.** Sigue siendo limpieza manual de la base.
 - **El tope de 8 modelos registrados.** Que `cargar_registro` no distinga

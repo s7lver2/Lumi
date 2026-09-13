@@ -25,6 +25,12 @@ pub const TOPE_ASSET_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 /// horas, sin ninguna pista de que la causa era el tamaño y de que reintentar
 /// no iba a arreglarlo nunca. Caso real: la tesela del centro de León con
 /// 2.910 imágenes pesaba 5,6 GB, casi el triple del límite.
+///
+/// Ya NO es motivo de fallo: desde el spec del cuerpo multi-parte, un trozo
+/// desbordado se publica partiendo su cuerpo CIFRADO en varios ficheros
+/// físicos (ver `partir_en_trozos`). Esto sigue existiendo para avisar de
+/// que esa publicación va a subir partida, que es información útil, no una
+/// lista de "esto va a fallar".
 pub fn desbordados(trozos: &[Trozo], tope_asset: u64) -> Vec<&Trozo> {
     trozos.iter().filter(|t| t.bytes > tope_asset).collect()
 }

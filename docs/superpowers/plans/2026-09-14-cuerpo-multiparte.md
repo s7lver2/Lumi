@@ -423,6 +423,16 @@ Si `paquete.rs` no tiene tests hoy (comprobar), añadir al menos uno que ejercit
 
 **Files:** ninguno (verificación, no código)
 
+> **PENDIENTE DE OJOS DEL OPERADOR.** Esta tarea NO la puede cerrar un
+> agente: necesita una cuenta de GitHub real, un testigo, y horas de subida
+> y bajada de datos de verdad (5,594 GB en un sentido y en otro), además de
+> la decisión de contra qué repositorio se prueba. Se deja igual que las
+> pruebas manuales del plan de rendimiento anterior. Lo que SÍ se puede
+> probar sin red —que partir y reensamblar bytes es correcto, que un blob
+> partido se reensambla, descifra y despliega, y que pegarlo al revés lo
+> rechaza AES-GCM— está cubierto por los tests de Task 3 Step 7 y Task 5
+> Step 5, que pasan.
+
 - [ ] **Step 1: Publicar de verdad la tesela real**
 
 Con permiso del operador y contra un repositorio de prueba (no el de producción, salvo que el operador prefiera lo contrario): publicar el índice que contiene `03133320022212` (5,594 GB). Confirmar en el registro de la publicación que sube en varios assets con nombres `.partNNN`, y que la ficha resultante (leer el `ficha.json` subido) lleva el campo `partes` con las entradas esperadas.
@@ -443,7 +453,8 @@ Si hay una ficha real ya publicada antes de esta feature, instalarla de nuevo (o
 
 ## Validación final del plan completo
 
-- [ ] `cargo test` desde la raíz, limpio.
-- [ ] `cd indexer && npm run build && npm run lint`, limpio.
-- [ ] Task 6 completa, con confirmación real del operador de que la tesela de León se publicó e instaló.
-- [ ] Repasar que ningún commit dejó una nota de "esto no se puede publicar" obsoleta en el código o en `docs/superpowers/plans/2026-09-13-indexer-rendimiento.md`/specs anteriores que mencionen esta limitación como si siguiera vigente.
+- [x] `cargo test` desde la raíz, limpio (110 + 11 + 17 + 31 tests). Además
+  `cargo test` en `indexer/src-tauri`, que está fuera del workspace: 104 limpios.
+- [x] `cd indexer && npm run build && npm run lint`, limpio.
+- [ ] Task 6 completa, con confirmación real del operador de que la tesela de León se publicó e instaló. **Pendiente del operador**, ver la nota de Task 6.
+- [x] Repasar que ningún commit dejó una nota de "esto no se puede publicar" obsoleta en el código o en `docs/superpowers/plans/2026-09-13-indexer-rendimiento.md`/specs anteriores que mencionen esta limitación como si siguiera vigente.
