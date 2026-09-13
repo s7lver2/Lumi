@@ -501,10 +501,79 @@ async fn subir_asset(
                 log::warn!("intento {intento} de {nombre}: {ultimo_motivo}");
             }
         }
+        // Un fallo aquí no distingue "de verdad no se subió" de "GitHub ya
+        // creó el asset y la respuesta se perdió por el camino" — un corte
+        // de red justo DESPUÉS de que el servidor terminara de procesar un
+        // `POST` de varios cientos de MB (que tarda minutos, no milisegundos)
+        // no es una rareza. Sin esto, el intento siguiente reintentaba con
+        // el mismo nombre, GitHub respondía 422 «already_exists», y ese
+        // error —que no es la causa real, es su síntoma— era lo único que
+        // llegaba al operador. Verificado en vivo el 2026-09-14: paso 8/12
+        // de una subida real falló así, con el asset ya presente en el
+        // release desde el intento anterior.
+        if let Some(a) = buscar_asset_remoto(cliente, testigo, repo, release, nombre).await {
+            log::warn!("{nombre} ya existía en el release pese al fallo aparente: se reutiliza");
+            return Ok(a.browser_download_url);
+        }
         tokio::time::sleep(std::time::Duration::from_secs(espera)).await;
         espera *= 3;
     }
     bail!("no se pudo subir {nombre} tras tres intentos: {ultimo_motivo}")
+}
+
+/// Un asset ya presente en el release, tal como GitHub lo describe.
+/// Compartido por `borrar_asset_si_existe` (la ficha, que SIEMPRE se
+/// reemplaza) y `subir_asset` (cuerpos/capas, donde "ya existe" tras un
+/// fallo aparente hay que tratarlo como éxito, no como conflicto).
+struct AssetRemoto {
+    id: i64,
+    name: String,
+    browser_download_url: String,
+}
+
+async fn listar_assets_remotos(
+    cliente: &reqwest::Client,
+    testigo: &str,
+    repo: &str,
+    release: i64,
+) -> Vec<AssetRemoto> {
+    #[derive(serde::Deserialize)]
+    struct A {
+        id: i64,
+        name: String,
+        browser_download_url: String,
+    }
+    let Ok(r) = cliente
+        .get(format!("https://api.github.com/repos/{repo}/releases/{release}/assets?per_page=100"))
+        .bearer_auth(testigo)
+        .header("user-agent", "lumi-indexer")
+        .send()
+        .await
+    else {
+        return Vec::new();
+    };
+    if !r.status().is_success() {
+        return Vec::new();
+    }
+    r.json::<Vec<A>>()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|a| AssetRemoto { id: a.id, name: a.name, browser_download_url: a.browser_download_url })
+        .collect()
+}
+
+async fn buscar_asset_remoto(
+    cliente: &reqwest::Client,
+    testigo: &str,
+    repo: &str,
+    release: i64,
+    nombre: &str,
+) -> Option<AssetRemoto> {
+    listar_assets_remotos(cliente, testigo, repo, release)
+        .await
+        .into_iter()
+        .find(|a| a.name == nombre)
 }
 
 /// Borra el asset `nombre` de un release si ya existe. Solo hace falta para
@@ -519,22 +588,7 @@ async fn borrar_asset_si_existe(
     release: i64,
     nombre: &str,
 ) -> Result<()> {
-    #[derive(serde::Deserialize)]
-    struct A {
-        id: i64,
-        name: String,
-    }
-    let r = cliente
-        .get(format!("https://api.github.com/repos/{repo}/releases/{release}/assets?per_page=100"))
-        .bearer_auth(testigo)
-        .header("user-agent", "lumi-indexer")
-        .send()
-        .await?;
-    if !r.status().is_success() {
-        return Ok(());
-    }
-    let assets: Vec<A> = r.json().await.unwrap_or_default();
-    if let Some(a) = assets.into_iter().find(|a| a.name == nombre) {
+    if let Some(a) = buscar_asset_remoto(cliente, testigo, repo, release, nombre).await {
         let _ = cliente
             .delete(format!("https://api.github.com/repos/{repo}/releases/assets/{}", a.id))
             .bearer_auth(testigo)
