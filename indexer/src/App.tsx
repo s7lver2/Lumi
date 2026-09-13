@@ -14,8 +14,7 @@ import { RendimientoPanel } from "./settings/RendimientoPanel";
 import { StoragePanel } from "./settings/StoragePanel";
 import { Booting } from "./setup/Booting";
 import { IdentityStep } from "./setup/IdentityStep";
-import { ServicesBoot } from "./setup/ServicesBoot";
-import { ServicesFailDialog } from "./setup/ServicesFailDialog";
+import { useServicios } from "./setup/ServicesBoot";
 import { ServicesPanel } from "./setup/ServicesPanel";
 import { SetupWizard } from "./setup/SetupWizard";
 import { TerritoryView } from "./territory/TerritoryView";
@@ -54,13 +53,7 @@ export function App() {
   // `null` mientras se comprueba. Sin esto, el asistente parpadearía un
   // instante en cada arranque antes de descubrir que ya estaba hecho.
   const [setupListo, setSetupListo] = useState<boolean | null>(null);
-  // El mensaje del popup cuando Redis/Qdrant no arrancan solos al abrir la
-  // app tras el primer arranque (el asistente ya se completó, así que aquí no
-  // se vuelve a mostrar `ServicesStep`, pero los dos servicios SIGUEN siendo
-  // procesos hijos que mueren al cerrar el Indexer la vez anterior).
-  const [serviciosFallo, setServiciosFallo] = useState<string | null>(null);
-  // Se ofrece una vez, cuando los servicios ya arrancaron y NO hay cuenta
-  // conectada. Con cuenta no se pregunta nada: la identidad es opcional y
+  // Se ofrece una vez, al entrar, cuando NO hay cuenta conectada. Con cuenta no se pregunta nada: la identidad es opcional y
   // preguntar en cada arranque por algo opcional es exactamente el ruido que
   // el paso saltable existe para evitar.
   const [ofrecerIdentidad, setOfrecerIdentidad] = useState(false);
@@ -108,11 +101,19 @@ export function App() {
     });
   }, [destino, descargaIndiceId, indiceAbierto]);
 
-  async function traspasarServicios() {
-    const sesion = await api.identidadLeer().catch(() => null);
-    if (sesion) setDentro(true);
-    else setOfrecerIdentidad(true);
-  }
+  // Redis y Qdrant se levantan DE FONDO desde que se entra, ya no antes de
+  // entrar: los necesita solo la cola de embebido, y esperar por ellos
+  // costaba la sesión entera cuando los vectores tardaban en cargar.
+  const servicios = useServicios(dentro, saludo?.so === "windows");
+
+  // Entrar ya no depende de los servicios, solo de la identidad — que es
+  // instantánea. Si hay sesión se entra; si no, se ofrece conectarla una vez.
+  useEffect(() => {
+    if (!saludo || setupListo !== true || dentro || ofrecerIdentidad) return;
+    void api.identidadLeer()
+      .catch(() => null)
+      .then((sesion) => { if (sesion) setDentro(true); else setOfrecerIdentidad(true); });
+  }, [saludo, setupListo, dentro, ofrecerIdentidad]);
 
   useEffect(() => { void api.saludo().then(setSaludo); }, []);
   useEffect(() => { void api.descargaPendiente().then(setPendiente); }, []);
@@ -180,17 +181,10 @@ export function App() {
               }}
             />
           )}
-          {saludo && setupListo === true && !dentro && !serviciosFallo && !ofrecerIdentidad && (
-            <ServicesBoot saludo={saludo} onListo={() => void traspasarServicios()} onFallo={setServiciosFallo} />
-          )}
-          {saludo && setupListo === true && !dentro && serviciosFallo && (
-            <ServicesFailDialog
-              mensaje={serviciosFallo}
-              onListo={() => { setServiciosFallo(null); void traspasarServicios(); }}
-              onReintentar={() => setServiciosFallo(null)}
-              onAjustes={() => { setServiciosFallo(null); setDentro(true); setDestino("ajustes"); }}
-            />
-          )}
+          {/* El hueco entre saber que el asistente ya se completó y resolver
+              la identidad. Son milisegundos, pero sin esto la ventana se queda
+              en negro ese instante. */}
+          {saludo && setupListo === true && !dentro && !ofrecerIdentidad && <Booting />}
           {saludo && setupListo === true && !dentro && ofrecerIdentidad && (
             <IdentityStep onHecho={() => setDentro(true)} onSaltar={() => setDentro(true)} />
           )}
@@ -202,6 +196,7 @@ export function App() {
               activo={destino}
               descargaActiva={descargaIndiceId !== null || pendiente !== null}
               embebiendoActivo={embebiendoActivo}
+              serviciosEstado={servicios.estado}
               onIr={(d) => { setDestino(d); if (d !== "descarga" && d !== "revision") { setIndiceAbierto(null); setNombreIndiceAbierto(""); } }}
             />
             <div className="absolute inset-y-0 left-11 right-0 flex flex-col">
@@ -278,7 +273,10 @@ export function App() {
                         indiceId={(descargaIndiceId ?? indiceAbierto)!}
                         descargando={descargaIndiceId !== null}
                         imagenesEstimadas={imagenesEstimadas}
+                        servicios={servicios}
+                        enWindows={saludo?.so === "windows"}
                         onTerminadoDescarga={() => void alTerminarDescarga()}
+                        onIrAAjustes={() => { setDestino("ajustes"); setPestana("servicios"); }}
                         onCambiarIndice={() => { setIndiceAbierto(null); setNombreIndiceAbierto(""); setDestino("proyectos"); }}
                       />
                 )}

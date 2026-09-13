@@ -1,3 +1,4 @@
+import type { EstadoServicios } from "../setup/ServicesBoot";
 import { Icon } from "./Icon";
 
 export type Destino = "proyectos" | "territorio" | "descarga" | "revision" | "ajustes";
@@ -21,8 +22,9 @@ export type Destino = "proyectos" | "territorio" | "descarga" | "revision" | "aj
  *  punto naranja se enciende con cualquiera de los dos (`descargaActiva` o
  *  `embebiendoActivo`) — es lo que dice, desde cualquier otro sitio, que algo
  *  sigue corriendo detrás. */
-export function Rail({ activo, descargaActiva, embebiendoActivo, onIr }: {
-  activo: Destino; descargaActiva?: boolean; embebiendoActivo?: boolean; onIr: (d: Destino) => void;
+export function Rail({ activo, descargaActiva, embebiendoActivo, serviciosEstado, onIr }: {
+  activo: Destino; descargaActiva?: boolean; embebiendoActivo?: boolean;
+  serviciosEstado?: EstadoServicios; onIr: (d: Destino) => void;
 }) {
   return (
     <nav className="absolute inset-y-0 left-0 z-30 flex w-11 flex-col items-center gap-[3px]
@@ -33,14 +35,25 @@ export function Rail({ activo, descargaActiva, embebiendoActivo, onIr }: {
       <div className="flex-1" />
       <RailBtn icon="ingesta" title="Descarga y embebido" on={activo === "descarga"}
         activo={descargaActiva || embebiendoActivo} onClick={() => onIr("descarga")} />
-      <RailBtn icon="ajustes" title="Ajustes" on={activo === "ajustes"} onClick={() => onIr("ajustes")} />
+      {/* Redis y Qdrant ya no son un portón: se levantan de fondo y su
+          estado se cuenta aquí, con el mismo punto que «Descarga» y
+          «Embebido». Va sobre «Ajustes» porque es desde ahí (Servicios
+          locales) desde donde se resuelve si falla. */}
+      <RailBtn icon="ajustes" title={
+        serviciosEstado === "arrancando" ? "Ajustes — levantando los servicios locales"
+          : serviciosEstado === "fallo" ? "Ajustes — los servicios locales no arrancaron"
+            : "Ajustes"
+      } on={activo === "ajustes"}
+        activo={serviciosEstado === "arrancando" || serviciosEstado === "fallo"}
+        aviso={serviciosEstado === "fallo" ? "danger" : "warning"}
+        onClick={() => onIr("ajustes")} />
     </nav>
   );
 }
 
-function RailBtn({ icon, title, on, activo, onClick }: {
+function RailBtn({ icon, title, on, activo, aviso = "warning", onClick }: {
   icon: "layers" | "territorio" | "ingesta" | "ajustes" | "check" | "embebido";
-  title: string; on: boolean; activo?: boolean; onClick: () => void;
+  title: string; on: boolean; activo?: boolean; aviso?: "warning" | "danger"; onClick: () => void;
 }) {
   return (
     <button onClick={onClick} title={title} aria-label={title} aria-current={on || undefined}
@@ -48,7 +61,10 @@ function RailBtn({ icon, title, on, activo, onClick }: {
         on ? "bg-white/[.07] text-fg" : "text-subtle hover:bg-white/[.04] hover:text-fg"
       }`}>
       {on && <span className="absolute inset-y-[7px] -left-[10px] w-0.5 rounded-r bg-fg" />}
-      {activo && !on && <span className="absolute right-[3px] top-[3px] h-1.5 w-1.5 rounded-full bg-warning" />}
+      {activo && !on && (
+        <span className={`absolute right-[3px] top-[3px] h-1.5 w-1.5 rounded-full ${
+          aviso === "danger" ? "bg-danger" : "bg-warning"}`} />
+      )}
       <Icon name={icon} size={15} />
     </button>
   );

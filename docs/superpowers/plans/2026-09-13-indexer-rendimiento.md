@@ -494,33 +494,33 @@ Si hay un test existente que instancia `Ctx` directamente (buscar en `#[cfg(test
 - El estado de servicios (arrancando/vivo/fallido) se sondea en segundo plano y se expone como una prop/contexto ligero que `Rail` pinta como un indicador (mismo vocabulario que `descargaActiva`/`embebiendoActivo`).
 - `EmbedView` (dentro de `DescargaYEmbebidoView.tsx`) es la única pantalla que exige servicios vivos: si no lo están, pinta el estado real (reutilizando el contenido hoy en `ServicesBoot`/`LogBox`/`ServicesFailDialog`) en el lugar de la rejilla de progreso, no como modal.
 
-- [ ] **Step 1: Mover el arranque de servicios a un hook que corre siempre, sin bloquear**
+- [x] **Step 1: Mover el arranque de servicios a un hook que corre siempre, sin bloquear** — `useServicios(activo, enWindows)` en `setup/ServicesBoot.tsx`, junto a la pieza presentacional `ServiciosArrancando`
 
 Extraer la lógica de `ServicesBoot` (arrancar, sondear cada 800 ms, tope de 375 sondeos, distinguir Windows/no-Windows) a un hook `useServicios()` que devuelve `{ estado: 'arrancando' | 'vivo' | 'fallo', detalle?: string }`. Este hook se monta en `App.tsx` en cuanto `dentro` es verdadero (ya no antes de entrar) y sigue corriendo en segundo plano independientemente de qué pantalla se mire.
 
-- [ ] **Step 2: `App.tsx` entra directamente tras identidad, sin esperar servicios**
+- [x] **Step 2: `App.tsx` entra directamente tras identidad, sin esperar servicios** — `traspasarServicios` desaparece; la identidad se resuelve en un efecto y `Booting` cubre ese instante
 
 El flujo `saludo && setupListo === true && !dentro` deja de ramificar en `ServicesBoot`/`ServicesFailDialog`/`ofrecerIdentidad` en secuencia obligatoria. En su lugar: se resuelve identidad (`traspasarServicios` ya hace esto, pero renombrar si conviene ahora que ya no "traspasa" servicios, solo identidad) y se entra (`setDentro(true)`) en paralelo a que `useServicios()` arranca en segundo plano.
 
 `ofrecerIdentidad` no depende de servicios — puede mostrarse igual de rápido que hoy, revisando que no dependía implícitamente de que Redis/Qdrant ya estuvieran vivos en ningún punto (no debería, según el código leído).
 
-- [ ] **Step 3: El indicador en el carril**
+- [x] **Step 3: El indicador en el carril** — punto sobre «Ajustes» (es desde ahí donde se resuelve): naranja mientras arranca, rojo si falló, con el título explicándolo
 
 En `Rail.tsx`, añadir un tercer punto de estado (junto a `descargaActiva`/`embebiendoActivo`) que refleje `useServicios().estado`, con el mismo lenguaje visual (punto naranja mientras arranca, algo distinto si falló — revisar `Rail.tsx` para el patrón exacto de los otros dos indicadores y replicarlo, no inventar uno nuevo).
 
-- [ ] **Step 4: Solo `EmbedView` exige servicios**
+- [x] **Step 4: Solo `EmbedView` exige servicios**
 
 En `DescargaYEmbebidoView.tsx` → `EmbedView`, si `useServicios().estado !== 'vivo'`, renderizar el contenido informativo (arrancando: el mensaje + `LogBox` que hoy tiene `ServicesBoot`; fallo: el contenido de `ServicesFailDialog`, con su botón "Ajustes" y "Reintentar") en el lugar donde hoy iría la rejilla de progreso de embebido — no como diálogo modal que tapa el resto de la app.
 
-- [ ] **Step 5: Verificar el resto de pantallas no dependen de servicios**
+- [x] **Step 5: Verificar el resto de pantallas no dependen de servicios** — revisado por código: ninguna llama a `serviciosEstado`, y el progreso de embebido de `IndexDetail` sale de SQLite (`indice_progreso_embebido`), no de Qdrant, así que degrada a «0 hechas» en vez de reventar. *No verificado a ojo: ver Step 6*
 
 Revisar `ProjectsView`, `IndexDetail`, `ReviewGrid`, `TerritoryView`, `PublishDialog` — ninguna debe quedar bloqueada por `useServicios()`. Si alguna llamada a `api.*` falla silenciosamente porque Redis/Qdrant no están (por ejemplo, algo en `IndexDetail` que muestre progreso de embebido), debe degradar mostrando "0 hechas" o el estado real, no reventar — comprobar visualmente.
 
-- [ ] **Step 6: Probar manualmente**
+- [ ] **Step 6: Probar manualmente** — *pendiente: requiere ojos del operador, con Redis/Qdrant parados a propósito*
 
 Con Redis/Qdrant parados a propósito (o el VHDX en frío si es reproducible), confirmar: la app entra a Proyectos de inmediato, Territorio y Revisión funcionan, el carril muestra el indicador de servicios arrancando, y al entrar a Descarga/Embebido se ve el estado real en vez de un modal bloqueante.
 
-- [ ] **Commit:** `feat(indexer): los servicios locales arrancan en segundo plano, sin bloquear la entrada`
+- [x] **Commit:** `feat(indexer): los servicios locales arrancan en segundo plano, sin bloquear la entrada`
 
 ---
 

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 
 import { DownloadView } from "../download/DownloadView";
 import { api, type Modelo, type ProgresoCola, type ProgresoIndiceEmbed, type ProgresoPesos, type ResumenIndice } from "../lib/api";
+import { ServiciosArrancando, type Servicios } from "../setup/ServicesBoot";
+import { ServicesFailDialog } from "../setup/ServicesFailDialog";
 import { Icon } from "../ui/Icon";
 
 /** Descarga y embebido son dos pantallas completas separadas, nunca
@@ -19,20 +21,32 @@ import { Icon } from "../ui/Icon";
  *  `descargando` viene del padre: es quien sabe si ESTE `indiceId` tiene una
  *  descarga activa ahora mismo (`descargaIndiceId === indiceId`) o si se
  *  llegó aquí solo a ver/reanudar embebido de una sesión anterior. */
-export function DescargaYEmbebidoView({ indiceId, descargando, imagenesEstimadas, onTerminadoDescarga, onCambiarIndice }: {
+export function DescargaYEmbebidoView({ indiceId, descargando, imagenesEstimadas, servicios, enWindows, onTerminadoDescarga, onIrAAjustes, onCambiarIndice }: {
   indiceId: number;
   descargando: boolean;
   imagenesEstimadas: number | null;
+  servicios: Servicios;
+  enWindows: boolean;
   onTerminadoDescarga: () => void;
+  onIrAAjustes: () => void;
   onCambiarIndice: () => void;
 }) {
+  // Descargar NO necesita Redis ni Qdrant: si los servicios siguen
+  // levantándose, esta pantalla funciona igual.
   if (descargando) {
     return <DownloadView indiceId={indiceId} imagenesEstimadas={imagenesEstimadas} onTerminado={onTerminadoDescarga} />;
   }
-  return <EmbedView indiceId={indiceId} onCambiarIndice={onCambiarIndice} />;
+  return <EmbedView indiceId={indiceId} servicios={servicios} enWindows={enWindows}
+    onIrAAjustes={onIrAAjustes} onCambiarIndice={onCambiarIndice} />;
 }
 
-function EmbedView({ indiceId, onCambiarIndice }: { indiceId: number; onCambiarIndice: () => void }) {
+function EmbedView({ indiceId, servicios, enWindows, onIrAAjustes, onCambiarIndice }: {
+  indiceId: number;
+  servicios: Servicios;
+  enWindows: boolean;
+  onIrAAjustes: () => void;
+  onCambiarIndice: () => void;
+}) {
   const [filas, setFilas] = useState<ProgresoIndiceEmbed[]>([]);
   const [cola, setCola] = useState<ProgresoCola[]>([]);
   const [modelos, setModelos] = useState<Modelo[]>([]);
@@ -95,6 +109,33 @@ function EmbedView({ indiceId, onCambiarIndice }: { indiceId: number; onCambiarI
       setPesos({ modelo_id: modeloId, pct: 0, mib: 0, total_mib: 0, terminado: true, error: String(e), registro: [] });
       setDescargandoPesos(null);
     }
+  }
+
+  // La ÚNICA pantalla que exige servicios vivos. Su estado se pinta donde
+  // iría la rejilla de progreso, no como un diálogo modal que tapa la app:
+  // el resto del Indexer sigue siendo usable mientras tanto.
+  if (servicios.estado !== "vivo") {
+    return (
+      <div className="h-full overflow-y-auto">
+        <div className="mx-auto flex max-w-[820px] flex-col gap-4 p-8">
+          <div>
+            <p className="text-sm text-fg">Embebido</p>
+            <p className="mt-[5px] text-[11px] leading-relaxed text-muted">
+              Embeber es lo único que necesita Redis y Qdrant vivos. El resto del Indexer
+              —territorio, descarga, revisión, catálogo— funciona sin ellos.
+            </p>
+          </div>
+          {servicios.estado === "arrancando"
+            ? <ServiciosArrancando enWindows={enWindows} instalando={servicios.instalando} />
+            : <ServicesFailDialog
+                mensaje={servicios.detalle ?? "Redis y Qdrant no respondieron."}
+                onListo={servicios.reintentar}
+                onReintentar={servicios.reintentar}
+                onAjustes={onIrAAjustes}
+              />}
+        </div>
+      </div>
+    );
   }
 
   return (

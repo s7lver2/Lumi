@@ -10,7 +10,11 @@ import { LogBox } from "./LogBox";
 // lentas — el margen sube, el sondeo sigue siendo el mismo mecanismo.
 const TOPE_SONDEOS = 90;
 
-/** El popup cuando Redis y/o Qdrant no arrancaron solos al abrir la app.
+/** Lo que se enseña cuando Redis y/o Qdrant no arrancaron solos. Ya NO es un
+ *  portón modal a la entrada: se pinta dentro de la pantalla de embebido, que
+ *  es la única que los necesita, mientras el resto del Indexer sigue usable.
+ *  El contenido se conserva tal cual — solo cambió dónde vive.
+ *
  *  Misma composición que los estados anómalos de Lumi (DESIGN.md):
  *  icono grande centrado con halo, título corto, una línea de contexto, el
  *  detalle crudo, fila de botones.
