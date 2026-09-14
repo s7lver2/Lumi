@@ -129,6 +129,20 @@ export function ProjectPicker({ onOpen, refresh }: {
     }
   }
 
+  /** Le quita el candado a quien esté dentro, sin esperar a que lo suelte
+   *  solo o a que caduque -- el dueño del proyecto o un administrador del
+   *  servidor. La persona expulsada se entera por el mismo canal que ya usan
+   *  las invitaciones (ver `App.tsx`). */
+  async function kick(p: Project) {
+    setError(null);
+    try {
+      await api.post(`/v1/projects/${p.id}/kick`, {}, token);
+      await load();
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
   const cont = vista === "grid"
     ? "grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(232px,1fr))]"
     : vista === "rows"
@@ -180,6 +194,11 @@ export function ProjectPicker({ onOpen, refresh }: {
                   // mismo criterio que ya aplica el servidor en `guard()`.
                   label: "Renombrar", hint: "F2", disabled: p.role !== "owner" && !isAdmin,
                   onClick: () => setRenaming(p),
+                },
+                {
+                  label: p.locked_by ? `Sacar a ${p.locked_by}` : "Sacar a quien esté dentro",
+                  disabled: !p.locked_by || (p.role !== "owner" && !isAdmin),
+                  onClick: () => void kick(p),
                 },
                 null,
                 {

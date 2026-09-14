@@ -372,6 +372,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/invites/:id/decline", post(routes::projects::decline_invite))
         .route("/v1/projects/:id/enter", post(routes::projects::enter))
         .route("/v1/projects/:id/leave", post(routes::projects::leave))
+        .route("/v1/projects/:id/kick", post(routes::projects::kick))
         .route("/v1/projects/:id/images", get(routes::images::project_gallery))
         .route(
             "/v1/projects/:id/cases",
