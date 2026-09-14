@@ -68,10 +68,9 @@ anchura, con:
 - un icono a la izquierda que representa ESE contenido, no un icono genérico de "ajuste" —
   reutilizado del catálogo ya existente en `Icon.tsx`, ninguno nuevo:
   - Portada con estadísticas → `pulse`
-  - EXIF por imagen → icono de cámara con GPS (nuevo trazo, sigue el patrón de `DESIGN.md`
-    §Iconos: `viewBox 0 0 24 24`, `strokeWidth 1.8`, sin relleno)
+  - EXIF por imagen → `image`
   - Hipótesis de geolocalización → `globe`
-  - Veredictos de agentes → `user`
+  - Veredictos de agentes → `users`
   - Integridad de archivo → `shield`
   - Rasgos como imagen → `boxes`
 - la etiqueta y el `hint`, como hoy
