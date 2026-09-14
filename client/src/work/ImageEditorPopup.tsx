@@ -356,8 +356,17 @@ export function ImageEditorPopup({
             </div>
 
             {cargando ? (
-              <div className="mt-6 flex items-center justify-center py-16">
-                <Icon name="spinner" size={20} className="text-muted" />
+              // Skeleton con la forma real del editor (barra de herramientas +
+              // lienzo) en vez de un spinner suelto -- se nota antes qué va a
+              // aparecer, y una foto grande que tarda en llegar no se siente
+              // como si la pantalla se hubiera quedado colgada.
+              <div className="mt-4 animate-pulse">
+                <div className="flex items-center gap-2">
+                  <div className="h-[30px] w-[92px] rounded-lg bg-elevated" />
+                  <div className="h-[30px] w-[76px] rounded-lg bg-elevated" />
+                  <div className="ml-auto h-[26px] w-[60px] rounded-md bg-elevated" />
+                </div>
+                <div className="mt-3 rounded-xl bg-elevated" style={{ height: 300 }} />
               </div>
             ) : (
               <>

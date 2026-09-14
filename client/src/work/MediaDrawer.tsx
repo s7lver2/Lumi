@@ -3,7 +3,9 @@ import { api, type FeatureFlags, type Image, type MediaFolder, type ProjectImage
 import { blobToBase64, copyImageBytes, lumiUrl, overwriteImageBytes } from "../lib/bridge";
 import { useDismissable } from "../lib/useDismissable";
 import { ContextMenu, type MenuState } from "../ui/ContextMenu";
+import { Backdrop, FloatingCard, Pop } from "../ui/FloatingCard";
 import { Icon } from "../ui/Icon";
+import { Center } from "../ui/layout";
 import { Drawer } from "./Drawer";
 import { ImageEditorPopup } from "./ImageEditorPopup";
 
@@ -358,7 +360,39 @@ function EditorDesdeMedia({ imagen, closing, onExportar, onCerrar }: {
     return () => { if (src) URL.revokeObjectURL(src); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imagen.id]);
-  if (!src) return null;
+  if (!src) {
+    // Mismo esqueleto que `ImageEditorPopup` enseña mientras decodifica --
+    // sin esto, una foto grande tardando en llegar del servidor no mostraba
+    // NADA hasta que el editor entero aparecía de golpe, y se sentía como
+    // que el click en "Editar" no había hecho nada.
+    return (
+      <>
+        <Backdrop closing={closing} onClick={undefined} />
+        <Center className="z-[52]">
+          <Pop closing={closing} className="w-[700px] max-w-[calc(100vw-48px)]">
+            <FloatingCard className="p-[17px]">
+              <div className="flex items-center gap-2.5">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/[.06] text-fg">
+                  <Icon name="crop" size={15} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-medium text-fg">Editar antes de subir</p>
+                  <p className="truncate text-[11px] text-muted">{imagen.filename}</p>
+                </div>
+              </div>
+              <div className="mt-4 animate-pulse">
+                <div className="flex items-center gap-2">
+                  <div className="h-[30px] w-[92px] rounded-lg bg-elevated" />
+                  <div className="h-[30px] w-[76px] rounded-lg bg-elevated" />
+                </div>
+                <div className="mt-3 rounded-xl bg-elevated" style={{ height: 300 }} />
+              </div>
+            </FloatingCard>
+          </Pop>
+        </Center>
+      </>
+    );
+  }
   return (
     <ImageEditorPopup srcDataUrl={src} fileName={imagen.filename} closing={closing}
       // El upscaler desde Media sigue necesitando un `case_id` para

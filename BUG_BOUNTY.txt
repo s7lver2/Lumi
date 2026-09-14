@@ -129,7 +129,7 @@
 - en el cliente, cuando tienes seleccionado un caso, quiero que en una esquina del mapa haya un pequeño icono de un candadito, el cual si lo pulsas te permite mover el mapa libremente
 - [x] en el cliente, quiero que mejoremos el movimiento de rotacion de la tierra durante el analisis (más fluido: jumpTo→easeTo lineal encadenado para que el compositor interpole; y transmite "buscando" con una modulación suave de velocidad en vez de girar a ritmo constante)
 - [x] en el cliente, quiero que demos mas feedback sobre el progreso de un caso que se este procesando, pero que sea configurable desde el panel de administracion (fases del pipeline + tiempo estimado, interruptor "Progreso detallado del análisis" en Calibración)
-- en el cliente, lo de edtiar una imagen tarda muchisimo en abrir, y preferiría un estilo de carga de skeleton en lugar del circulito de cargando que hay ahora
+- [x] en el cliente, lo de edtiar una imagen tarda muchisimo en abrir, y preferiría un estilo de carga de skeleton en lugar del circulito de cargando que hay ahora
 - [x] en el cliente, parece ser que hay una especie de bug en el cual al eliminar una imagen desde el panel de media, en este mismo sigue estando y al intentar eliminarla otra vez nos indica que ya no existe (causa: en "Todo el proyecto", la lista de imágenes del proyecto no se refrescaba tras borrar/mover -- solo se pedía al abrir el panel)
 - [x] en el cliente, si cambiamos el modo de plantea a plano durante una transición, esta para en seco (setProjection interrumpía flyTo/easeTo en curso; ahora espera a "moveend" si la cámara se está moviendo)
 - en el cliente, al cambiar entre pestañas como la de invitacion y media, se puede ver como el indicador de intentos esta por detras, se puede ver por unos segundos
