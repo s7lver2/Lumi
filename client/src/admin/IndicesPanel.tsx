@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 
-import { api, type IndiceInstalado } from "../lib/api";
-import { InstallFlow } from "./InstallFlow";
+import { api, type IndiceInstalado, type ProgresoInstalacion } from "../lib/api";
+import { startIndicesEvents } from "../lib/bridge";
+import { InstallFlow, ProgresoInstalacionCard } from "./InstallFlow";
 
 const KB = 1024;
 function tamano(bytes: number): string {
@@ -18,6 +20,12 @@ export function IndicesPanel({ token }: { token: string }) {
   const [error, setError] = useState<string | null>(null);
   const [instalando, setInstalando] = useState(false);
   const [borrando, setBorrando] = useState<string | null>(null);
+  // Una instalación que ya estaba en marcha ANTES de entrar a esta pantalla
+  // -- típicamente llegando desde el "ver progreso →" del toast (`IndexToast`).
+  // Sin esto, `instalando` seguía en `false` (nadie había pulsado "Instalar"
+  // en ESTA instancia del panel) y el botón del toast navegaba aquí sin
+  // enseñar nada, aunque el servidor sí estuviera instalando de verdad.
+  const [progresoActivo, setProgresoActivo] = useState<ProgresoInstalacion | null>(null);
 
   function cargar() {
     api.get<IndiceInstalado[]>("/v1/indices", token)
@@ -25,6 +33,25 @@ export function IndicesPanel({ token }: { token: string }) {
       .catch((e) => setError(String(e)));
   }
   useEffect(cargar, [token]);
+
+  useEffect(() => {
+    let vivo = true;
+    let veniaSiguiendola = false;
+    void startIndicesEvents(token);
+    const un = listen<ProgresoInstalacion>("indices-progress", (e) => {
+      if (!vivo) return;
+      // Solo se empieza a enseñar si YA estaba en marcha al llegar (o si
+      // esta misma pantalla la sigue desde que empezó) -- una foto
+      // "terminado" de una instalación vieja, de antes de montar el panel,
+      // no tiene nada que aportar aquí.
+      if (!e.payload.terminado) veniaSiguiendola = true;
+      if (veniaSiguiendola) {
+        setProgresoActivo(e.payload);
+        if (e.payload.terminado) cargar();
+      }
+    });
+    return () => { vivo = false; void un.then((f) => f()); };
+  }, [token]);
 
   async function desinstalar(paquete: string) {
     setBorrando(paquete);
@@ -97,6 +124,13 @@ export function IndicesPanel({ token }: { token: string }) {
           <InstallFlow token={token}
             onCerrar={() => setInstalando(false)}
             onInstalado={() => { setInstalando(false); cargar(); }} />
+        </div>
+      )}
+
+      {!instalando && progresoActivo && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50"
+          onClick={(e) => e.target === e.currentTarget && progresoActivo.terminado && setProgresoActivo(null)}>
+          <ProgresoInstalacionCard progreso={progresoActivo} onCerrar={() => setProgresoActivo(null)} />
         </div>
       )}
     </div>
