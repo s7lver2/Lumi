@@ -11,12 +11,22 @@ export const DRAWER_W = 360;
 export const RAIL_W = 80;
 
 /** El armazón: el carril de la derecha, con su animación de entrada y salida.
- *  Lo que lleva dentro lo pone quien lo monta. */
+ *  Lo que lleva dentro lo pone quien lo monta.
+ *
+ *  Resultados/Invitar/Media son cajones HERMANOS pero de componentes
+ *  distintos (Invitar lo monta `App`, los otros dos `CaseView`) -- con un
+ *  `z-index` fijo compartido, quien gane el empate era quien cayera último
+ *  en el DOM, no quien estuviera realmente abierto. Cambiar de "invitar" a
+ *  "media" pintaba Invitar (más tarde en el árbol) por ENCIMA de Media
+ *  mientras los 420ms de la transición se cruzaban -- Media se veía "por
+ *  detrás, flotando" aunque fuera el que se estaba abriendo de verdad. El
+ *  que está abierto (o cerrándose) sube de plano; en reposo cerrado, todos
+ *  vuelven al mismo nivel de siempre. */
 export function Drawer({ open, children }: { open: boolean; children: React.ReactNode }) {
   return (
     <aside
-      style={{ width: DRAWER_W, transform: open ? "none" : "translateX(100%)" }}
-      className="absolute bottom-0 right-0 top-0 z-[22] flex flex-col gap-2 overflow-y-auto
+      style={{ width: DRAWER_W, transform: open ? "none" : "translateX(100%)", zIndex: open ? 25 : 22 }}
+      className="absolute bottom-0 right-0 top-0 flex flex-col gap-2 overflow-y-auto
         border-l border-border bg-[rgba(16,18,21,.92)] p-3 backdrop-blur-xl
         transition-transform duration-[420ms] ease-expo">
       {children}
