@@ -25,9 +25,9 @@ export function MediaDrawer({
   features: FeatureFlags | null;
   open: boolean;
   onClose: () => void;
-  /** Click izquierdo en una sola imagen SIN selección activa: mirar lo que
-   *  ya tiene (resultados existentes), no lanzar un análisis nuevo -- ese
-   *  paso es explícito ("Analizar"), igual que en el carrete principal. */
+  /** Click izquierdo en una sola imagen SIN selección activa: abre el mismo
+   *  popup de elegir modelo (mini/pro/agentes) que se usa para trabajar con
+   *  una imagen recién subida -- no el selector de agentes directo. */
   onSeleccionar: (imagen: Image) => void;
   /** Botón "Analizar", con una o varias seleccionadas (una petición por
    *  imagen, reutilizando el flujo que ya existe) -- lo decide `CaseView`,

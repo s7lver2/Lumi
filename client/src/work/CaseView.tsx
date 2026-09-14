@@ -555,10 +555,14 @@ export function CaseView({
             imagenesDelCaso={list} features={features}
             open={drawerId === "media"} onClose={() => setDrawer(null)}
             onSeleccionar={(img) => {
+              // El mismo popup de elegir modelo (mini/pro/agentes) que se usa
+              // para trabajar con la imagen recién subida -- no el de agentes
+              // directo, ni solo seleccionar y enseñar resultados existentes.
               setSel(img.id);
               setSelAnalysis(null);
               setFly(null);
-              setDrawer("results");
+              setDrawer(null);
+              setStaged([img.id]);
             }}
             onAnalizar={(imgs) => {
               setDrawer(null);
