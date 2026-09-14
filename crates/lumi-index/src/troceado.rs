@@ -57,9 +57,14 @@ pub fn partir_en_trozos(bytes: &[u8], tope: usize) -> Vec<&[u8]> {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Trozo {
-    /// La quadkey más corta que contiene a todas las de dentro. Nombra el
-    /// asset, y es lo que hace que un trozo se pueda describir por su zona en
-    /// vez de por un número de orden que no significa nada.
+    /// Nombra el asset — es lo que hace que un trozo se pueda describir por
+    /// su zona en vez de por un número de orden que no significa nada.
+    /// Normalmente ES la quadkey más corta que contiene a todas las de
+    /// dentro (`prefijo_comun`); cuando dos trozos DISTINTOS de la misma
+    /// llamada calculan el mismo valor (ver `desambiguar_prefijos`), este
+    /// campo lleva un sufijo que rompe el empate — deja de ser literalmente
+    /// un prefijo compartido, pero sigue siendo la identidad del asset, que
+    /// es lo único que a quien llama le hace falta que sea única.
     pub prefijo: String,
     pub quadkeys: Vec<String>,
     pub bytes: u64,
@@ -86,6 +91,42 @@ pub fn trocear(pesos: &[(String, u64)], tope: u64) -> Vec<Trozo> {
     }
     if !actual.is_empty() {
         trozos.push(cerrar(actual, bytes));
+    }
+    desambiguar_prefijos(trozos)
+}
+
+/// `prefijo_comun` solo mira DENTRO de un trozo — nada le impide coincidir
+/// con el de otro. Una zona urbana lo bastante densa se parte en varios
+/// trozos por tamaño (`tope`) mucho antes de que sus quadkeys dejen de
+/// compartir el mismo padre, así que dos trozos VECINOS y DISTINTOS pueden
+/// calcular el mismo prefijo sin que nada en `trocear` lo note.
+///
+/// Sin desambiguar, `publicar()` construye el mismo nombre de fichero para
+/// los dos (`cuerpo-{prefijo}.lumidx.enc`): el segundo pisa al primero en
+/// GitHub al subir, y la ficha se queda con dos entradas para el mismo
+/// nombre — una apuntando a contenido que ya no existe. Caso real,
+/// 2026-09-14: el centro de León (`03133320022*`) es denso de sobra para
+/// que dos trozos distintos calcularan ambos el prefijo `03133320022`.
+///
+/// El desempate es estable: SOLO se toca a los que colisionan (la inmensa
+/// mayoría de índices, sin zonas tan densas, no cambia ni un nombre), y el
+/// sufijo es su posición dentro del grupo de colisión, en el mismo orden
+/// determinista en que `trocear` ya los produce.
+fn desambiguar_prefijos(mut trozos: Vec<Trozo>) -> Vec<Trozo> {
+    // Dueño de sus propias `String`, no prestado de `trozos`: se necesita
+    // seguir leyendo estos recuentos mientras se muta `trozos` más abajo, y
+    // un mapa de `&str` prestados de ahí mismo se lo impediría.
+    let mut apariciones: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    for t in &trozos {
+        *apariciones.entry(t.prefijo.clone()).or_insert(0) += 1;
+    }
+    let mut visto: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    for t in &mut trozos {
+        if apariciones[&t.prefijo] > 1 {
+            let n = visto.entry(t.prefijo.clone()).or_insert(0);
+            *n += 1;
+            t.prefijo = format!("{}-{n}", t.prefijo);
+        }
     }
     trozos
 }
@@ -128,6 +169,48 @@ mod tests {
             trocear(&p, 1_000).into_iter().flat_map(|t| t.quadkeys).collect();
         vistas.sort();
         assert_eq!(vistas, vec!["0313101", "0313102", "0313103"]);
+    }
+
+    /// El caso real que costó una publicación entera: una zona tan densa
+    /// que hace falta partirla en dos trozos POR TAMAÑO, pero las quadkeys
+    /// de los dos siguen compartiendo el mismo padre — `prefijo_comun`
+    /// calcula el mismo valor para ambos porque solo mira dentro de cada
+    /// trozo. Sin desambiguar, los dos cuerpos se llamarían igual y el
+    /// segundo pisaría al primero al publicar.
+    #[test]
+    fn dos_trozos_con_el_mismo_prefijo_comun_no_colisionan() {
+        // Seis quadkeys, todas bajo "0313332002", partidas en tres trozos de
+        // dos por el tope — las tres calcularían "0313332002" a secas si
+        // nada las distinguiera.
+        let p = pesos(&[
+            ("03133320020", 600), ("03133320021", 600),
+            ("03133320022", 600), ("03133320023", 600),
+            ("03133320024", 600), ("03133320025", 600),
+        ]);
+        let trozos = trocear(&p, 1_200);
+        assert_eq!(trozos.len(), 3, "seis quadkeys de 600 con tope 1200 dan tres trozos");
+
+        let prefijos: Vec<&str> = trozos.iter().map(|t| t.prefijo.as_str()).collect();
+        let mut unicos = prefijos.clone();
+        unicos.sort();
+        unicos.dedup();
+        assert_eq!(unicos.len(), prefijos.len(), "cada trozo debe tener un nombre distinto: {prefijos:?}");
+
+        // Y el desempate es legible, no un hash opaco: sigue empezando por
+        // el prefijo real, con un sufijo que solo distingue.
+        for p in &prefijos {
+            assert!(p.starts_with("0313332002"), "«{p}» perdió el prefijo real al desambiguar");
+        }
+    }
+
+    /// El caso normal —sin colisión— no debe cambiar ni un nombre: la
+    /// desambiguación solo toca lo que de verdad colisiona.
+    #[test]
+    fn sin_colision_los_prefijos_no_llevan_sufijo() {
+        let p = pesos(&[("0313101", 600), ("0313102", 600), ("0313103", 600)]);
+        for t in trocear(&p, 1_000) {
+            assert!(!t.prefijo.contains('-'), "«{}» no debería llevar sufijo sin colisión", t.prefijo);
+        }
     }
 
     // Una tesela sola más grande que el tope no se puede partir más: el
