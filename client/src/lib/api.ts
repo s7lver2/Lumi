@@ -22,11 +22,13 @@ export interface AnalisisDesincronizado {
   analysis_id: number; model: string; agente: string | null; created_at: number;
 }
 
-/** Los tres interruptores del spec 2026-09-10. Los tres nacen apagados. */
+/** Los tres interruptores del spec 2026-09-10 más `progreso_detallado_activo`.
+ *  Los cuatro nacen apagados. */
 export interface FeatureFlags {
   upscaler_activo: boolean; upscaler_activo_desc: string;
   media_por_proyecto_activo: boolean; media_por_proyecto_activo_desc: string;
   modo_calibracion: boolean; modo_calibracion_desc: string;
+  progreso_detallado_activo: boolean; progreso_detallado_activo_desc: string;
 }
 
 /** `GET/PATCH /v1/admin/rendimiento` -- `crates/lumid/src/routes/rendimiento.rs`. */
@@ -534,7 +536,7 @@ export interface PatchLogSettingsReq { base?: string; categorias?: Record<string
  *  ninguna parte: se emite y se olvida, así que si te lo pierdes, se perdió. */
 export type Cambio =
   | { tipo: "estado"; analysis_id: number; case_id: number; estado: Analysis["state"] }
-  | { tipo: "progreso"; analysis_id: number; fase: string; pct: number }
+  | { tipo: "progreso"; analysis_id: number; fase: string; pct: number; eta_s: number | null }
   | { tipo: "invitacion"; project_id: number; project_name: string; invited_by: string }
   | { tipo: "red"; nuevo_addr: string };
 

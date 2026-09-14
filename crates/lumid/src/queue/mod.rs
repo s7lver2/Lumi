@@ -184,6 +184,13 @@ pub struct Queue {
     /// profundidad frente a tiny-roma) y el operador puede querer activar
     /// solo uno de los dos según cuánta memoria tenga libre.
     agentes_persistente: crate::persistente::Persistente,
+    /// Media móvil (no persistida: se pierde al reiniciar, y no pasa nada,
+    /// se reconstruye con los primeros análisis) de cuánto tarda un análisis
+    /// COMPLETO de principio a fin -- lo único que hace falta para el "tiempo
+    /// estimado" del feedback de progreso (spec: owner pidió fases del
+    /// pipeline + ETA). En milisegundos porque `AtomicU64` no tiene variante
+    /// en coma flotante.
+    duracion_media_ms: std::sync::atomic::AtomicU64,
 }
 
 /// Mientras esto viva, su dueño cuenta como conectado. Se suelta cuando el
@@ -262,6 +269,9 @@ impl Queue {
             vectores: Mutex::new(HashMap::new()),
             verif_persistente: crate::persistente::Persistente::nuevo("verificación"),
             agentes_persistente: crate::persistente::Persistente::nuevo("agentes"),
+            // 0 = "todavía sin ninguna muestra" -- `eta_de` lo trata como
+            // "no hay estimación" en vez de como una duración real de 0s.
+            duracion_media_ms: std::sync::atomic::AtomicU64::new(0),
         });
 
         // No se lanzan aquí: el vigilante del bucle ve que faltan todos y los
@@ -663,14 +673,11 @@ impl Queue {
                 }
                 // NO se escribe. Se emite y se olvida: persistir cada línea de
                 // progreso es lo único que rompería el mutex único de SQLite.
-                if let Some((user_id, _)) = self.dueno_y_caso(id) {
-                    let _ = self.difusion.send(Cambio::Progreso {
-                        user_id,
-                        analysis_id: id,
-                        fase,
-                        pct,
-                    });
-                }
+                // Sin ETA propia: esta es la fase de embedido del trabajador,
+                // que no sabe cuánto lleva corriendo el análisis completo --
+                // `notificar_fase` sí la calcula para "recuperando"/
+                // "verificando", más abajo en este mismo módulo.
+                self.notificar_fase(id, &fase, pct, 0.0);
             }
             Evento::Vectores { dispositivo, id, modelo, dims, fichero } => {
                 if !self.es_suyo(&dispositivo, id) {
@@ -730,10 +737,12 @@ impl Queue {
 
                 let vectores = self.vectores.lock().unwrap().remove(&id).unwrap_or_default();
                 self.soltar(&dispositivo, id);
+                self.notificar_fase(id, "recuperando", 0, inicio_analisis.elapsed().as_secs_f64());
                 match crate::recuperar::candidatos(&self.store, &nivel, &vectores).await {
                     Ok(c) if !c.is_empty() => {
                         let consulta = self.imagen_del_analisis(id).unwrap_or_default();
                         let rutas = self.rutas_de_candidatos(&c);
+                        self.notificar_fase(id, "verificando", 0, inicio_analisis.elapsed().as_secs_f64());
                         // En paralelo con el verificador, no antes: un agente
                         // equivocado no puede matar un candidato antes de que
                         // RANSAC tenga ocasión de confirmarlo.
@@ -964,10 +973,9 @@ impl Queue {
                                 hip.peso = hip.peso.min(TECHO_CONFIANZA_SIN_VERIFICAR);
                             }
                         }
-                        tracing::info!(
-                            "análisis #{id}: post-proceso completo en {:.1}s",
-                            inicio_analisis.elapsed().as_secs_f64(),
-                        );
+                        let secs_totales = inicio_analisis.elapsed().as_secs_f64();
+                        tracing::info!("análisis #{id}: post-proceso completo en {secs_totales:.1}s");
+                        self.registrar_duracion(secs_totales);
                         self.guardar_resultado(id, &h, &respaldo);
                     }
                     // Sin candidatos NO es una avería: es una respuesta.
@@ -1376,6 +1384,41 @@ impl Queue {
             });
         }
         let _ = self.admin_eventos.send(EventoAdmin::ColaCambio);
+    }
+
+    /// Fase del pipeline (no de un worker concreto): "recuperando",
+    /// "verificando"... Detrás de `progreso_detallado_activo`
+    /// (`routes::features`) -- son eventos de más por análisis, y el owner
+    /// que nunca mira esto no tiene por qué pagar ni la CPU de calcularlos
+    /// ni el tráfico SSE de mandarlos. `elapsed_s` es cuánto lleva corriendo
+    /// ESTE análisis; la ETA sale de restarlo a la media móvil de análisis
+    /// anteriores, nunca negativa.
+    fn notificar_fase(&self, analysis_id: i64, fase: &str, pct: u8, elapsed_s: f64) {
+        if !crate::routes::features::activo(&self.store, crate::routes::features::CLAVE_PROGRESO_DETALLADO) {
+            return;
+        }
+        let Some((user_id, _)) = self.dueno_y_caso(analysis_id) else { return };
+        let media_ms = self.duracion_media_ms.load(std::sync::atomic::Ordering::Relaxed);
+        let eta_s = (media_ms > 0).then(|| (media_ms as f64 / 1000.0 - elapsed_s).max(0.0));
+        let _ = self.difusion.send(Cambio::Progreso {
+            user_id,
+            analysis_id,
+            fase: fase.to_string(),
+            pct,
+            eta_s,
+        });
+    }
+
+    /// Media móvil exponencial (peso 0.3 a la muestra nueva): reacciona a un
+    /// servidor que se ha vuelto más lento o más rápido en unos pocos
+    /// análisis, sin que uno solo atípico (una carga en frío, una red lenta)
+    /// dispare la estimación entera de un salto.
+    fn registrar_duracion(&self, secs: f64) {
+        use std::sync::atomic::Ordering;
+        let ms = (secs * 1000.0) as u64;
+        let anterior = self.duracion_media_ms.load(Ordering::Relaxed);
+        let nueva = if anterior == 0 { ms } else { ((anterior as f64) * 0.7 + (ms as f64) * 0.3) as u64 };
+        self.duracion_media_ms.store(nueva, Ordering::Relaxed);
     }
 
     fn repartir_ahora(self: &Arc<Self>) {

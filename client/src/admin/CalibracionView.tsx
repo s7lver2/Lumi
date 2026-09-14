@@ -72,6 +72,8 @@ export function CalibracionView({ token }: { token: string }) {
           label="Media por proyecto" hint={flags.media_por_proyecto_activo_desc} />
         <Interruptor activo={flags.modo_calibracion} onChange={(v) => void set("modo_calibracion", v)}
           label="Modo de calibración" hint={flags.modo_calibracion_desc} />
+        <Interruptor activo={flags.progreso_detallado_activo} onChange={(v) => void set("progreso_detallado_activo", v)}
+          label="Progreso detallado del análisis" hint={flags.progreso_detallado_activo_desc} />
       </div>
 
       <RendimientoEditor token={token} />

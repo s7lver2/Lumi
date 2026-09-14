@@ -529,8 +529,9 @@ pub struct PatchRendimientoReq {
     pub agentes_timeout_s: Option<u64>,
 }
 
-/// Los tres interruptores del spec 2026-09-10 (`routes::features`). Los tres
-/// nacen apagados — a diferencia de `RendimientoSettings::limpieza_por_presion`.
+/// Los tres interruptores del spec 2026-09-10 más `progreso_detallado_activo`
+/// (`routes::features`). Los cuatro nacen apagados — a diferencia de
+/// `RendimientoSettings::limpieza_por_presion`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeatureFlags {
     pub upscaler_activo: bool,
@@ -539,6 +540,10 @@ pub struct FeatureFlags {
     pub media_por_proyecto_activo_desc: String,
     pub modo_calibracion: bool,
     pub modo_calibracion_desc: String,
+    /// Fases del pipeline (recuperando/verificando) + tiempo estimado
+    /// durante un análisis, en el `Cambio::Progreso` del SSE de la cola.
+    pub progreso_detallado_activo: bool,
+    pub progreso_detallado_activo_desc: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -546,6 +551,7 @@ pub struct PatchFeatureFlagsReq {
     pub upscaler_activo: Option<bool>,
     pub media_por_proyecto_activo: Option<bool>,
     pub modo_calibracion: Option<bool>,
+    pub progreso_detallado_activo: Option<bool>,
 }
 
 
@@ -1069,6 +1075,11 @@ pub enum Cambio {
         analysis_id: i64,
         fase: String,
         pct: u8,
+        /// Segundos estimados restantes, según la media móvil de análisis
+        /// recientes (`routes::features::CLAVE_PROGRESO_DETALLADO`). `None`
+        /// mientras no hay ninguna muestra todavía (recién arrancado el
+        /// daemon) o cuando el ajuste está apagado del todo.
+        eta_s: Option<f64>,
     },
     /// Invitación nueva a un proyecto, por el mismo canal que ya tiene abierto
     /// cualquier sesión conectada (`/v1/queue/events`) — sin esto, enterarse
