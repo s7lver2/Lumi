@@ -129,6 +129,18 @@ que Redis no tiene binario nativo), viven dentro del disco de la propia distro d
 significaría una operación aparte contra WSL desde el lado de Windows — se dejó fuera a propósito
 por ser un pedido urgente centrado en las imágenes, que es lo que de verdad llena el disco.
 
+### Checklist de prerrequisitos antes de levantar servicios en WSL
+
+Hoy `ServicesStep`/`ServicesFailDialog` (`indexer/src/setup/`) intentan arrancar Qdrant/Redis
+en WSL directamente y, si algo falta —WSL no instalado, virtualización apagada en la BIOS,
+la distro sin arrancar, sin espacio—, lo único que se ve es el error crudo que devuelve
+`api.serviciosArrancar()`. Sería mejor una pantalla previa con una serie de comprobaciones
+(WSL instalado y con qué versión, virtualización activa, distro disponible, espacio libre...)
+cada una con su marca de sí/no, y un tutorial corto enlazado desde la que falle en vez de un
+mensaje de error suelto. Se aparcó porque no bloquea nada: el flujo actual ya funciona para
+quien tiene WSL en orden, y esto es una mejora de la primera vez que se abre el Indexer, no
+un arreglo de un caso roto.
+
 ### Versiones de índice: agrupar v1/v2/v3 bajo una tarjeta con selector
 
 `indice_crear` para una versión nueva (`viene_de` no nulo) inserta una fila normal en
