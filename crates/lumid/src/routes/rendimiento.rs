@@ -14,6 +14,7 @@ use lumi_proto::api::{PatchRendimientoReq, RendimientoSettings};
 const CLAVE_VERIFICACION: &str = "verificacion_persistente";
 const CLAVE_AGENTES: &str = "agentes_persistente";
 const CLAVE_LIMPIEZA_PRESION: &str = "limpieza_por_presion";
+const CLAVE_AGENTES_TIMEOUT_S: &str = "agentes_timeout_s";
 
 const DESC_ON: &str = "activado: mantiene los modelos cargados en VRAM entre análisis — respuestas mucho más rápidas, pero consume esa memoria todo el tiempo, incluso sin trabajo pendiente.";
 const DESC_OFF: &str = "desactivado: cada análisis carga y descarga sus modelos — más lento, pero sin huella de memoria en reposo.";
@@ -51,6 +52,11 @@ fn settings(app: &App) -> RendimientoSettings {
         agentes_persistente,
         limpieza_por_presion_desc: desc_limpieza(limpieza_por_presion),
         limpieza_por_presion,
+        // `agentar::limite_configurado` es quien de verdad aplica esto en el
+        // camino caliente; aquí solo se refleja el mismo valor (o su
+        // ausencia, como el `LIMITE` de fábrica) para que la UI no duplique
+        // esa lógica de parseo/clamp.
+        agentes_timeout_s: crate::agentar::limite_configurado(&app.store).as_secs(),
     }
 }
 
@@ -82,6 +88,20 @@ pub async fn patch(
             .set_meta(CLAVE_LIMPIEZA_PRESION, if v { "1" } else { "0" })
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         tracing::info!("limpieza por presión de memoria {} por el administrador {admin}", if v { "activada" } else { "desactivada" });
+    }
+    if let Some(v) = req.agentes_timeout_s {
+        // El propio clamp vive en `agentar::limite_configurado` (para que
+        // un valor viejo fuera de rango, guardado antes de que existiera el
+        // límite, degrade en vez de romper), pero validarlo también aquí
+        // evita guardar algo que la UI nunca pudo haber pedido y que solo
+        // confundiría al releer este mismo endpoint.
+        if !(10..=600).contains(&v) {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+        app.store
+            .set_meta(CLAVE_AGENTES_TIMEOUT_S, &v.to_string())
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        tracing::info!("timeout de agentes fijado a {v}s por el administrador {admin}");
     }
     // ponytail: un cambio en caliente no relanza ni mata un proceso
     // persistente que ya estuviera vivo — `verificar::afinar` y

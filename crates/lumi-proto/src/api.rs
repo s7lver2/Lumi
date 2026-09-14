@@ -511,6 +511,13 @@ pub struct RendimientoSettings {
     /// mano, no un modo opt-in.
     pub limpieza_por_presion: bool,
     pub limpieza_por_presion_desc: String,
+    /// Segundos antes de seguir sin agentes (`agentar::LIMITE` por defecto,
+    /// 120). Un VLM en frío ya se come casi todo ese margen solo en cargar
+    /// -- una máquina lenta, o varios agentes pesados a la vez, puede
+    /// necesitar más para llegar a contestar algo en vez de agotarlo
+    /// siempre. El modo standalone usa el doble de este valor, no uno
+    /// independiente (ver `agentar::LIMITE_STANDALONE`).
+    pub agentes_timeout_s: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -519,6 +526,7 @@ pub struct PatchRendimientoReq {
     pub verificacion_persistente: Option<bool>,
     pub agentes_persistente: Option<bool>,
     pub limpieza_por_presion: Option<bool>,
+    pub agentes_timeout_s: Option<u64>,
 }
 
 /// Los tres interruptores del spec 2026-09-10 (`routes::features`). Los tres

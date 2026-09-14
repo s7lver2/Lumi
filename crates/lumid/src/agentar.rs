@@ -23,12 +23,26 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 /// no pierde el resultado principal.
 pub const LIMITE: Duration = Duration::from_secs(120);
 
-/// El modo Agentes standalone (`queue::correr_agente_unico`) no tiene ningún
-/// resultado de respaldo: el agente ES la respuesta entera. Cargar el motor
-/// VLM en frío ya se come casi todo `LIMITE` por sí solo, así que aquí hace
-/// falta más margen -- el doble, suficiente para una carga en frío sin ser
-/// una espera eterna.
-pub const LIMITE_STANDALONE: Duration = Duration::from_secs(240);
+/// Debajo de esto no da tiempo NI a que un VLM ligero conteste sin agentes
+/// persistentes; por encima, un análisis colgado esperando agentes se nota
+/// como si el propio Lumi se hubiera parado (ver `routes::rendimiento`).
+const TIMEOUT_MIN_S: u64 = 10;
+const TIMEOUT_MAX_S: u64 = 600;
+
+/// El límite de verdad para un análisis normal: `LIMITE` (120s) salvo que
+/// `routes::rendimiento` tenga guardado un valor propio (spec: "personalizar
+/// el tiempo de timeout de los agentes" -- un VLM en frío sin el modo
+/// persistente activado se come casi todo el valor por defecto solo en
+/// cargar, y en una máquina más lenta o con motores más pesados eso nunca
+/// llega a contestar nada dentro de los 120s de fábrica).
+pub fn limite_configurado(store: &crate::store::Store) -> Duration {
+    let s = store
+        .get_meta("agentes_timeout_s")
+        .and_then(|v| v.parse::<u64>().ok())
+        .map(|v| v.clamp(TIMEOUT_MIN_S, TIMEOUT_MAX_S))
+        .unwrap_or(LIMITE.as_secs());
+    Duration::from_secs(s)
+}
 
 /// Los dos ajustes booleanos que `correr`/`correr_persistente` necesitan,
 /// juntos en un struct en vez de dos parámetros sueltos más -- sin esto,

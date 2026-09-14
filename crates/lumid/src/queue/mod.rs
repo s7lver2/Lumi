@@ -767,7 +767,7 @@ impl Queue {
                                 &dispositivo,
                                 &self.store,
                                 &self.agentes_persistente,
-                                crate::agentar::LIMITE,
+                                crate::agentar::limite_configurado(&self.store),
                             ),
                         );
                         let afinados = afinados.unwrap_or_default();
@@ -1039,7 +1039,11 @@ impl Queue {
             &dispositivo,
             &self.store,
             &self.agentes_persistente,
-            crate::agentar::LIMITE_STANDALONE,
+            // El doble del normal, no un tope aparte: aquí el agente ES la
+            // respuesta entera (sin resultado de respaldo si se agota el
+            // tiempo), y cargar el motor VLM en frío ya se come casi todo
+            // el límite normal por sí solo.
+            crate::agentar::limite_configurado(&self.store) * 2,
         )
         .await;
         self.soltar(&dispositivo, id);

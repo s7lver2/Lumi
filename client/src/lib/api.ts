@@ -29,6 +29,20 @@ export interface FeatureFlags {
   modo_calibracion: boolean; modo_calibracion_desc: string;
 }
 
+/** `GET/PATCH /v1/admin/rendimiento` -- `crates/lumid/src/routes/rendimiento.rs`. */
+export interface RendimientoSettings {
+  verificacion_persistente: boolean; verificacion_persistente_desc: string;
+  agentes_persistente: boolean; agentes_persistente_desc: string;
+  limpieza_por_presion: boolean; limpieza_por_presion_desc: string;
+  agentes_timeout_s: number;
+}
+export interface PatchRendimientoReq {
+  verificacion_persistente?: boolean;
+  agentes_persistente?: boolean;
+  limpieza_por_presion?: boolean;
+  agentes_timeout_s?: number;
+}
+
 export interface Capability { id: string; label: string; state: "on" | "partial" | "off"; reason: string | null }
 export interface GpuInfo { index: number; name: string; vram_total_mb: number; pcie: string }
 export interface GpuSample {
