@@ -41,6 +41,13 @@ pub async fn create(
     if req.tipo != "diario" && req.tipo != "semanal" {
         return Err(err(StatusCode::BAD_REQUEST, "tipo desconocido"));
     }
+    // ANTES de `app.store.conn()`, no después: `effective()` pide el mismo
+    // `Mutex` internamente (vía `limits::rows`), y no es reentrante -- con
+    // el guard de abajo todavía vivo (se reusa para el INSERT y las
+    // consultas de después), pedirlo dos veces desde el mismo hilo se
+    // autobloquea para siempre, con el mismo efecto en cadena que ya se
+    // vio y arregló en `queue::guardar_agentes`.
+    let l = crate::limits::effective(&app.store, uid);
     let c = app.store.conn();
     // Solo una pendiente a la vez por tipo, mismo criterio que
     // "la primera resolución gana" de access_requests.
@@ -54,7 +61,6 @@ pub async fn create(
     if ya > 0 {
         return Err(err(StatusCode::CONFLICT, "ya tienes una solicitud pendiente de este tipo"));
     }
-    let l = crate::limits::effective(&app.store, uid);
     let valor_actual = if req.tipo == "diario" { l.max_daily } else { l.max_weekly };
     let t = now();
     c.execute(
@@ -105,14 +111,21 @@ pub async fn resolve(
 ) -> Result<StatusCode, Fail> {
     let admin = require_admin(&app, &bearer(&headers))
         .map_err(|c| (c, "hace falta ser administrador".to_string()))?;
-    let c = app.store.conn();
-    let (status, user_id, tipo, propuesto): (String, i64, String, i64) = c
-        .query_row(
+    // El guard se suelta al final de este bloque, ANTES de `limits::set()`
+    // más abajo: `set()` pide el mismo `Mutex` internamente, y con un guard
+    // vivo eso se autobloquea para siempre igual que en `guardar_agentes`
+    // (ver ese fix) -- aquí el guard SÍ hacía falta otra vez después (el
+    // `UPDATE` final), así que se vuelve a pedir tras soltarlo, no se
+    // reordena sin más como en `create`.
+    let (status, user_id, tipo, propuesto): (String, i64, String, i64) = {
+        let c = app.store.conn();
+        c.query_row(
             "SELECT status, user_id, tipo, valor_propuesto FROM credit_requests WHERE id = ?1",
             [id],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
         )
-        .map_err(|_| err(StatusCode::NOT_FOUND, "no existe esa solicitud"))?;
+        .map_err(|_| err(StatusCode::NOT_FOUND, "no existe esa solicitud"))?
+    };
     if status != "pending" {
         return Err(err(StatusCode::CONFLICT, &format!("esa solicitud ya está {status}")));
     }
@@ -122,6 +135,9 @@ pub async fn resolve(
         let key = if tipo == "diario" { "max_daily" } else { "max_weekly" };
         crate::limits::set(&app.store, Some(user_id), key, &serde_json::json!(valor))
             .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    }
+    let c = app.store.conn();
+    if req.approve {
         c.execute(
             "UPDATE credit_requests SET status = 'approved', resolved_at = ?1, resolved_by = ?2 WHERE id = ?3",
             rusqlite::params![t, admin, id],
