@@ -55,7 +55,7 @@ iconos SVG a mano ya definidos en `client/src/ui/Icon.tsx` (sin iconos nuevos).
   el tipo `PasoId = "aspecto" | "contenido" | "firma"` y el subcomponente `FilaContenido`,
   que la Tarea 2 reutiliza tal cual.
 
-- [ ] **Step 1: Reemplazar el contenido completo de `ExportPopup.tsx`**
+- [x] **Step 1: Reemplazar el contenido completo de `ExportPopup.tsx`**
 
 Sustituye TODO el fichero por:
 
@@ -376,19 +376,19 @@ export function ExportPopup({
 }
 ```
 
-- [ ] **Step 2: Comprobar que compila**
+- [x] **Step 2: Comprobar que compila**
 
 Run: `cd client && npm run build`
 Expected: `tsc -b && vite build` termina sin errores (el mismo resultado que antes de tocar
 el fichero — build limpio).
 
-- [ ] **Step 3: Lint del fichero tocado**
+- [x] **Step 3: Lint del fichero tocado**
 
 Run: `cd client && npx oxlint src/work/ExportPopup.tsx`
 Expected: sin warnings nuevos. (El fichero no usaba hooks con dependencias antes, así que no
 debería aparecer ningún `react-hooks/exhaustive-deps` nuevo.)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add client/src/work/ExportPopup.tsx
@@ -414,7 +414,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 - Produces: `BocetoInforme`, un componente de presentación puro (`{ paso, opts } => JSX`)
   interno al fichero, sin más consumidores previstos.
 
-- [ ] **Step 1: Añadir el componente `BocetoInforme`**
+- [x] **Step 1: Añadir el componente `BocetoInforme`**
 
 Inserta esto justo después de `FilaContenido` y antes de `type ClaveContenido = ...`:
 
@@ -456,7 +456,7 @@ function BocetoInforme({ paso, opts }: { paso: PasoId; opts: ExportInformeOpts }
 }
 ```
 
-- [ ] **Step 2: Ensanchar el popup y partir el cuerpo en dos columnas**
+- [x] **Step 2: Ensanchar el popup y partir el cuerpo en dos columnas**
 
 Cambia el ancho del `Pop`:
 
@@ -563,19 +563,19 @@ columnas:
             </div>
 ```
 
-- [ ] **Step 3: Comprobar que compila**
+- [x] **Step 3: Comprobar que compila**
 
 Run: `cd client && npm run build`
 Expected: sin errores. Presta atención especial a que `opts`, `excluidas`, `images`,
 `toggleImagen`, `set`, `error` sigan resolviéndose (siguen siendo el mismo closure de
 componente, solo cambia el JSX que los envuelve).
 
-- [ ] **Step 4: Lint del fichero tocado**
+- [x] **Step 4: Lint del fichero tocado**
 
 Run: `cd client && npx oxlint src/work/ExportPopup.tsx`
 Expected: sin warnings nuevos.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/src/work/ExportPopup.tsx
