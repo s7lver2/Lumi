@@ -144,49 +144,51 @@ pub fn leer_b1(r: &mut impl Read) -> Result<Vec<Vec<bool>>> {
     Ok(fuera)
 }
 
-/// Lee los vectores de un modelo/versión de la carpeta `fragmentos/` de un
-/// paquete ya abierto (`fragmentos/<quadkey>/<modelo>-<version>.i8`),
-/// AGRUPADOS por quadkey y con el quadkey delante.
-///
-/// Agrupados y no concatenados porque el formato del fragmento ata cada vector
-/// a su imagen por POSICIÓN dentro del fichero de ESE quadkey, y no dice nada
-/// sobre en qué orden concatenar teselas distintas. Devolver una lista plana
-/// obligaba a quien llama a suponer ese orden global, y esa suposición era una
-/// forma silenciosa de pegarle a cada imagen las coordenadas de otra. Con las
-/// filas del paquete partidas por quadkey igual que los fragmentos
-/// (`lumi_index::filas`), el emparejamiento es local a la tesela y exacto.
-pub fn leer_fragmentos_por_quadkey(
+/// Los quadkeys de `fragmentos/` que existen en un paquete ya abierto, sin
+/// leer nada todavía -- lo que hace falta para recorrerlos DE UNO EN UNO en
+/// vez de cargar el paquete entero en memoria a la vez (ver
+/// `leer_fragmento_de_quadkey`). El quadkey va delante y no concatenado
+/// porque el formato del fragmento ata cada vector a su imagen por POSICIÓN
+/// dentro del fichero de ESA tesela, y no dice nada sobre en qué orden
+/// concatenar teselas distintas -- devolver una lista plana obligaría a
+/// suponer ese orden global, y esa suposición sería una forma silenciosa de
+/// pegarle a cada imagen las coordenadas de otra. Con las filas del paquete
+/// partidas por quadkey igual que los fragmentos (`lumi_index::filas`), el
+/// emparejamiento es local a la tesela y exacto.
+pub fn quadkeys_de_capa(dir: &std::path::Path) -> Vec<String> {
+    let mut quadkeys: Vec<_> = match std::fs::read_dir(dir) {
+        Ok(it) => it.flatten().filter_map(|e| e.file_name().to_str().map(str::to_string)).collect(),
+        Err(_) => return Vec::new(),
+    };
+    quadkeys.sort();
+    quadkeys
+}
+
+/// El fragmento de UN quadkey, o `None` si esa tesela no tiene vectores de
+/// este modelo/versión. Separado de `leer_fragmentos_por_quadkey` para que
+/// quien sube a Qdrant pueda leer-subir-soltar tesela a tesela: con
+/// lumi-2 a 12288 dimensiones, cargar las 200 000 imágenes de un paquete
+/// grande de una sentada son ~9.8 GB en memoria a la vez, y ese pico es
+/// justo lo que colgaba/tumbaba el daemon al instalar un índice grande.
+pub fn leer_fragmento_de_quadkey(
     dir: &std::path::Path,
+    quadkey: &str,
     modelo: &str,
     version: &str,
     dims: u32,
-) -> Result<Vec<(String, Vec<Vec<f32>>)>> {
-    let mut quadkeys: Vec<_> = match std::fs::read_dir(dir) {
-        Ok(it) => it.flatten().map(|e| e.path()).collect(),
-        Err(_) => return Ok(Vec::new()),
-    };
-    quadkeys.sort();
-
-    let nombre = format!("{modelo}-{version}.i8");
-    let mut fuera = Vec::new();
-    for qk in quadkeys {
-        let f = qk.join(&nombre);
-        if !f.exists() {
-            continue;
-        }
-        let Some(clave) = qk.file_name().and_then(|s| s.to_str()).map(str::to_string) else {
-            continue;
-        };
-        let mut file = std::fs::File::open(&f)?;
-        let vs = leer_i8(&mut file)?;
-        if let Some(v) = vs.first() {
-            if dims != 0 && v.len() != dims as usize {
-                bail!("{}: {} dimensiones, se esperaban {dims}", f.display(), v.len());
-            }
-        }
-        fuera.push((clave, vs));
+) -> Result<Option<Vec<Vec<f32>>>> {
+    let f = dir.join(quadkey).join(format!("{modelo}-{version}.i8"));
+    if !f.exists() {
+        return Ok(None);
     }
-    Ok(fuera)
+    let mut file = std::fs::File::open(&f)?;
+    let vs = leer_i8(&mut file)?;
+    if let Some(v) = vs.first() {
+        if dims != 0 && v.len() != dims as usize {
+            bail!("{}: {} dimensiones, se esperaban {dims}", f.display(), v.len());
+        }
+    }
+    Ok(Some(vs))
 }
 
 #[cfg(test)]

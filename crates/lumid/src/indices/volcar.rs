@@ -110,34 +110,54 @@ pub async fn paquete(app: &crate::App, ficha: &Ficha, raiz: &Path) -> Result<usi
         let coleccion = crate::qdrant::coleccion_de(&capa.modelo, &capa.version);
         cliente.asegurar_coleccion(&coleccion, capa.dims).await?;
 
-        // Misma lección que las filas más arriba: leer TODOS los fragmentos de
-        // una capa es E/S de disco más descuantizar i8→f32 por cada vector del
-        // paquete entero, síncrono y de una sentada -- con solo dos hilos de
-        // tokio (`worker_threads = 2`), esto bloqueaba uno entero y, con la
-        // primera capa de un índice grande (aquí "lumi preview", la que trae
-        // más teselas), se notaba como el daemon colgado justo en ese punto.
         let raiz_fragmentos = raiz.join("fragmentos");
-        let modelo = capa.modelo.clone();
-        let version = capa.version.clone();
-        let dims = capa.dims;
-        let fragmentos = tokio::task::spawn_blocking(move || {
-            lumi_index::vectors::leer_fragmentos_por_quadkey(&raiz_fragmentos, &modelo, &version, dims)
-        })
-        .await??;
+        // Tesela a tesela, no el paquete entero de una sentada: con lumi-2 a
+        // 12288 dimensiones, 200 000 imágenes son ~9.8 GB en f32 (ver
+        // `vectors.rs`) -- cargar TODAS las teselas de una capa en un único
+        // `Vec` antes de subir la primera es el pico de memoria que tumbaba
+        // el daemon (OOM) al instalar un índice grande, aquí con la capa
+        // "lumi preview" (la que trae más teselas). El `spawn_blocking` de
+        // antes evitaba el CUELGUE del runtime pero no este pico -- ahora
+        // cada tesela se lee, se sube y se suelta antes de pasar a la
+        // siguiente, así que en memoria solo hay una tesela a la vez.
+        let quadkeys = {
+            let raiz_fragmentos = raiz_fragmentos.clone();
+            tokio::task::spawn_blocking(move || lumi_index::vectors::quadkeys_de_capa(&raiz_fragmentos)).await?
+        };
 
         let mut de_esta_capa = 0usize;
-        for (qk, vectores) in fragmentos {
+        for qk in quadkeys {
             let Some(ids) = ids_por_tesela.get(&qk) else {
                 // Un fragmento cuya tesela no trajo filas. Subirlo dejaría
-                // puntos que no se pueden atribuir a nada, que es justo lo que
-                // el orden de este volcado existe para evitar.
-                tracing::warn!(
-                    "{}: hay fragmento de {qk} para {}-{} pero el paquete no trajo sus filas; \
-                     esa tesela no se sube",
-                    ficha.paquete,
-                    capa.modelo,
-                    capa.version
-                );
+                // puntos que no se pueden atribuir a nada, que es justo lo
+                // que el orden de este volcado existe para evitar. Un
+                // `.exists()` es un solo stat, no la lectura pesada que
+                // justifica el `spawn_blocking` de abajo -- se hace aquí
+                // mismo, sin más ceremonia, solo para no avisar de teselas
+                // que ni siquiera traen fragmento de este modelo.
+                if raiz_fragmentos.join(&qk).join(format!("{}-{}.i8", capa.modelo, capa.version)).exists() {
+                    tracing::warn!(
+                        "{}: hay fragmento de {qk} para {}-{} pero el paquete no trajo sus filas; \
+                         esa tesela no se sube",
+                        ficha.paquete,
+                        capa.modelo,
+                        capa.version
+                    );
+                }
+                continue;
+            };
+            let (raiz_fragmentos, modelo, version, dims) =
+                (raiz_fragmentos.clone(), capa.modelo.clone(), capa.version.clone(), capa.dims);
+            let qk_owned = qk.clone();
+            let vectores = tokio::task::spawn_blocking(move || {
+                lumi_index::vectors::leer_fragmento_de_quadkey(&raiz_fragmentos, &qk_owned, &modelo, &version, dims)
+            })
+            .await??;
+            let Some(vectores) = vectores else {
+                // Filas sin fragmento (al revés del caso de arriba): un
+                // paquete puede traer más teselas de filas que de vectores
+                // de UN modelo concreto si no todas las capas cubren
+                // exactamente las mismas teselas.
                 continue;
             };
             // Emparejar por posición con longitudes distintas le pegaría a
