@@ -110,12 +110,20 @@ pub async fn paquete(app: &crate::App, ficha: &Ficha, raiz: &Path) -> Result<usi
         let coleccion = crate::qdrant::coleccion_de(&capa.modelo, &capa.version);
         cliente.asegurar_coleccion(&coleccion, capa.dims).await?;
 
-        let fragmentos = lumi_index::vectors::leer_fragmentos_por_quadkey(
-            &raiz.join("fragmentos"),
-            &capa.modelo,
-            &capa.version,
-            capa.dims,
-        )?;
+        // Misma lección que las filas más arriba: leer TODOS los fragmentos de
+        // una capa es E/S de disco más descuantizar i8→f32 por cada vector del
+        // paquete entero, síncrono y de una sentada -- con solo dos hilos de
+        // tokio (`worker_threads = 2`), esto bloqueaba uno entero y, con la
+        // primera capa de un índice grande (aquí "lumi preview", la que trae
+        // más teselas), se notaba como el daemon colgado justo en ese punto.
+        let raiz_fragmentos = raiz.join("fragmentos");
+        let modelo = capa.modelo.clone();
+        let version = capa.version.clone();
+        let dims = capa.dims;
+        let fragmentos = tokio::task::spawn_blocking(move || {
+            lumi_index::vectors::leer_fragmentos_por_quadkey(&raiz_fragmentos, &modelo, &version, dims)
+        })
+        .await??;
 
         let mut de_esta_capa = 0usize;
         for (qk, vectores) in fragmentos {
