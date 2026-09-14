@@ -125,6 +125,12 @@ export function MapCanvas({
    *  recuerda en este equipo. El globo es la verdad geográfica; el plano es
    *  más cómodo para comparar dos puntos lejanos de un vistazo. */
   const [globe, setGlobe] = useState(() => localStorage.getItem("lumi.mapa.plano") !== "1");
+  /** Candado del mapa (spec: "se re-centra solo y molesta"): por defecto
+   *  cerrado -- un resultado nuevo o cambiar de intento siguen volando la
+   *  cámara ahí, el comportamiento de siempre. Abierto, la cámara es tuya:
+   *  ningún `flyTo` la mueve hasta que lo cierres otra vez. No es una
+   *  preferencia de equipo como `globe` -- nace cerrado en cada caso nuevo. */
+  const [camaraLibre, setCamaraLibre] = useState(false);
   // `/v1/map/config` exige sesión como todas las rutas del daemon. Iba sin
   // token, así que el mapa contestaba siempre "sesión inválida" y el lienzo
   // no llegaba ni a construirse: no era un problema del proveedor, era esta
@@ -331,7 +337,7 @@ export function MapCanvas({
   // Nada de `essential: true`: esa bandera se salta el «reducir movimiento»
   // del sistema, y quien lo ha activado lo ha activado por algo.
   useEffect(() => {
-    if (flyTo && map.current) {
+    if (flyTo && map.current && !camaraLibre) {
       map.current.flyTo({
         center: [flyTo.lng, flyTo.lat], zoom: flyTo.zoom,
         // Inclinarse solo al llegar cerca: a zoom de mundo entero una cámara
@@ -346,7 +352,11 @@ export function MapCanvas({
     // efecto se disparaba con `map.current` todavía a `null`, no volvía a
     // dispararse solo (`flyTo` no cambia otra vez), y el vuelo se perdía —
     // el mapa aparecía ya puesto en el punto, sin ningún tramo que animar.
-  }, [flyTo, ready]);
+    //
+    // `camaraLibre` no relanza el vuelo al desbloquear: es justo lo que no
+    // debe pasar (el punto de tener la cámara libre es que NADA la mueva
+    // sin pedirlo), solo evita el próximo `flyTo` mientras esté activo.
+  }, [flyTo, ready, camaraLibre]);
 
   // Mientras se procesa: alejarse a ver el globo entero y girarlo despacio.
   // Al terminar (o al desmontarse este efecto) solo se endereza el rumbo —
@@ -529,6 +539,20 @@ export function MapCanvas({
             place-items-center rounded-lg border border-white/10 bg-[rgba(16,18,21,.78)]
             text-subtle backdrop-blur-md hover:text-fg">
           <Icon name={globe ? "globe" : "boxes"} size={14} />
+        </button>
+      )}
+      {/* Candado (spec: "se re-centra solo y molesta"): cerrado (por defecto)
+          dice "un resultado nuevo puede volar la cámara aquí", abierto dice
+          "esto es tuyo, nada lo mueve" -- mismo rincón que el de globo/plano,
+          justo encima. */}
+      {ready && (
+        <button onClick={() => setCamaraLibre((v) => !v)}
+          title={camaraLibre ? "Cámara libre: nada la mueve automáticamente" : "Bloqueada: un resultado nuevo puede volar aquí"}
+          aria-label={camaraLibre ? "Bloquear cámara" : "Liberar cámara"}
+          className={`jg-press absolute bottom-[104px] left-[56px] z-20 grid h-[30px] w-[30px]
+            place-items-center rounded-lg border backdrop-blur-md
+            ${camaraLibre ? "border-accent/40 bg-accent/10 text-accent" : "border-white/10 bg-[rgba(16,18,21,.78)] text-subtle hover:text-fg"}`}>
+          <Icon name={camaraLibre ? "lock-open" : "lock"} size={14} />
         </button>
       )}
       {warn && (
