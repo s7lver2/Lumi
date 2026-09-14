@@ -14,7 +14,7 @@ type Modo = "caso" | "proyecto";
  *  carril de cajones que Resultados/Invitar/Exportar. Carpetas virtuales,
  *  metadato puro -- borrar una nunca borra sus imágenes. */
 export function MediaDrawer({
-  token, caseId, projectId, imagenesDelCaso, features, open, onClose, onAnalizar, onCambio,
+  token, caseId, projectId, imagenesDelCaso, features, open, onClose, onSeleccionar, onAnalizar, onCambio,
 }: {
   token: string | undefined;
   caseId: number;
@@ -25,9 +25,13 @@ export function MediaDrawer({
   features: FeatureFlags | null;
   open: boolean;
   onClose: () => void;
-  /** Click izquierdo en una imagen, o "Analizar" con varias seleccionadas
-   *  (una petición por imagen, reutilizando el flujo que ya existe) -- lo
-   *  decide `CaseView`, que es quien sabe abrir `AgentPickerPopup`/lanzar. */
+  /** Click izquierdo en una sola imagen SIN selección activa: mirar lo que
+   *  ya tiene (resultados existentes), no lanzar un análisis nuevo -- ese
+   *  paso es explícito ("Analizar"), igual que en el carrete principal. */
+  onSeleccionar: (imagen: Image) => void;
+  /** Botón "Analizar", con una o varias seleccionadas (una petición por
+   *  imagen, reutilizando el flujo que ya existe) -- lo decide `CaseView`,
+   *  que es quien sabe abrir `AgentPickerPopup`/lanzar. */
   onAnalizar: (imagenes: Image[]) => void;
   /** Tras mover/borrar/sobrescribir/copiar: `CaseView` recarga su lista. */
   onCambio: () => void;
@@ -112,6 +116,23 @@ export function MediaDrawer({
     } catch (e) {
       setError(String(e));
     }
+  }
+
+  const [carpetaSobrevolada, setCarpetaSobrevolada] = useState<number | null | "sin-carpeta">(null);
+
+  function idsDelDrag(e: React.DragEvent): number[] {
+    try {
+      const raw = e.dataTransfer.getData("application/x-lumi-image-ids");
+      return raw ? (JSON.parse(raw) as number[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  function soltarEn(e: React.DragEvent, folderId: number | null) {
+    e.preventDefault();
+    setCarpetaSobrevolada(null);
+    const ids = idsDelDrag(e);
+    if (ids.length > 0) void mover(ids, folderId);
   }
 
   async function eliminar(ids: number[]) {
@@ -204,8 +225,12 @@ export function MediaDrawer({
             Todas
           </button>
           <button onClick={() => setCarpetaActual(null)}
-            className={`rounded-md border px-2 py-1 text-[10px]
-              ${carpetaActual === null ? "border-fg text-fg" : "border-border text-subtle"}`}>
+            onDragOver={(e) => { e.preventDefault(); setCarpetaSobrevolada("sin-carpeta"); }}
+            onDragLeave={() => setCarpetaSobrevolada((v) => (v === "sin-carpeta" ? null : v))}
+            onDrop={(e) => soltarEn(e, null)}
+            className={`rounded-md border px-2 py-1 text-[10px] transition-colors
+              ${carpetaSobrevolada === "sin-carpeta" ? "border-fg bg-white/[.08] text-fg"
+                : carpetaActual === null ? "border-fg text-fg" : "border-border text-subtle"}`}>
             Sin carpeta
           </button>
           {carpetas.map((c) => (
@@ -216,8 +241,12 @@ export function MediaDrawer({
                   { label: "Borrar carpeta", danger: true, onClick: () => void borrarCarpeta(c.id) },
                 ] });
               }}
-              className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[10px]
-                ${carpetaActual === c.id ? "border-fg text-fg" : "border-border text-subtle"}`}>
+              onDragOver={(e) => { e.preventDefault(); setCarpetaSobrevolada(c.id); }}
+              onDragLeave={() => setCarpetaSobrevolada((v) => (v === c.id ? null : v))}
+              onDrop={(e) => soltarEn(e, c.id)}
+              className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] transition-colors
+                ${carpetaSobrevolada === c.id ? "border-fg bg-white/[.08] text-fg"
+                  : carpetaActual === c.id ? "border-fg text-fg" : "border-border text-subtle"}`}>
               <Icon name="folder" size={10} /> {c.nombre}
             </button>
           ))}
@@ -257,10 +286,16 @@ export function MediaDrawer({
         <div className="grid grid-cols-3 gap-1.5 overflow-y-auto pr-0.5">
           {imagenes.map((im) => (
             <button key={im.id}
+              draggable
+              onDragStart={(e) => {
+                const ids = seleccion.has(im.id) ? Array.from(seleccion) : [im.id];
+                e.dataTransfer.setData("application/x-lumi-image-ids", JSON.stringify(ids));
+                e.dataTransfer.effectAllowed = "move";
+              }}
               onClick={(e) => {
                 if (e.ctrlKey || e.metaKey || e.shiftKey) { toggleSeleccion(im.id, e); return; }
                 if (seleccion.size > 0) { toggleSeleccion(im.id, e); return; }
-                onAnalizar([im]);
+                onSeleccionar(im);
               }}
               onContextMenu={(e) => menuContextual(e, im)}
               className={`group relative aspect-square overflow-hidden rounded-md border

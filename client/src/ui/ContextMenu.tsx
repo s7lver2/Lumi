@@ -39,15 +39,22 @@ export function ContextMenu({ state, onClose }:
 
   useEffect(() => {
     if (!state) return;
+    // Un mousedown DENTRO del propio menú no cuenta como "fuera": sin este
+    // filtro, cualquier click en un ítem cerraba el menú (y lo desmontaba)
+    // en el mousedown, antes de que el mouseup/click llegara a disparar su
+    // `onClick` -- ningún botón del menú respondía nunca.
+    const fuera = (e: Event) => !(box.current && e.target instanceof Node && box.current.contains(e.target));
+    const cerrarSiFuera = (e: MouseEvent) => { if (fuera(e)) onClose(); };
     const cerrar = () => onClose();
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     // `mousedown` en captura: cerrar antes de que el clic haga cualquier otra
-    // cosa por debajo.
-    document.addEventListener("mousedown", cerrar, true);
+    // cosa por debajo -- salvo que sea dentro del propio menú, o ningún
+    // botón de aquí dentro llegaría a disparar su `onClick`.
+    document.addEventListener("mousedown", cerrarSiFuera, true);
     document.addEventListener("keydown", esc);
     window.addEventListener("blur", cerrar);
     return () => {
-      document.removeEventListener("mousedown", cerrar, true);
+      document.removeEventListener("mousedown", cerrarSiFuera, true);
       document.removeEventListener("keydown", esc);
       window.removeEventListener("blur", cerrar);
     };

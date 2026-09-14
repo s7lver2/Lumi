@@ -549,6 +549,12 @@ export function CaseView({
           <MediaDrawer token={token} caseId={case_.id} projectId={project.id}
             imagenesDelCaso={list} features={features}
             open={drawerId === "media"} onClose={() => setDrawer(null)}
+            onSeleccionar={(img) => {
+              setSel(img.id);
+              setSelAnalysis(null);
+              setFly(null);
+              setDrawer("results");
+            }}
             onAnalizar={(imgs) => {
               setDrawer(null);
               if (imgs.length === 1) { setAgentPickerImage(imgs[0]); return; }
