@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { ErrorBoundary } from './ui/ErrorBoundary.tsx'
 import { aplicarEscalaInterfaz, aplicarReducirMovimiento, leerEscalaInterfaz, leerReducirMovimiento } from './lib/apariencia.ts'
 
 aplicarReducirMovimiento(leerReducirMovimiento())
@@ -16,6 +17,8 @@ window.addEventListener("contextmenu", (e) => e.preventDefault())
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 )
