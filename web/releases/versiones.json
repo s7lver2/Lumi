@@ -1474,7 +1474,43 @@
           "sha256": "66c037cbb21333c6940f0697efdd19d06c6cf88903824fd41fada399c5c707dd"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.43",
+      "publicado": "2026-09-14T20:05:15Z",
+      "notas": "joder macho",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.43/app.exe",
+          "bytes": 16111104,
+          "sha256": "b7f73353e26801550ef12de080df0326c47680cb08911c0fe017637af33158f5"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.43",
+      "publicado": "2026-09-14T20:05:15Z",
+      "notas": "joder macho",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.43/lumid",
+          "bytes": 24046904,
+          "sha256": "94c1ca44126670ce473e59efae969b200dea47684addbdcddc3fc7579d54da77"
+        },
+        {
+          "plataforma": "assets",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.43/lumid-assets.tar.gz",
+          "bytes": 1020508,
+          "sha256": "b43200e80d6e81d6ff8b5989b32a45b50738cab40235136c4ef4b3dea210060c"
+        }
+      ]
     }
   ],
-  "firma": "xh2GaLzdj/PphYn4+TT/JW9+VQorjC8gFcGXawt4IKOnLwmv/q6/RLGP0pJz1kPoIxf9psHPMapeu63htZj1AQ=="
+  "firma": "L+PITgr6TmUfm7XEsziZVjZaXZgvol3i0nn4iJnly3zdlwQBypyHkAisbkJHdptCcnsTgedTLnfFFl0AuuqBBg=="
 }
