@@ -57,6 +57,42 @@ function FilaContenido({ icono, activo, onChange, label, hint, deshabilitado }: 
   );
 }
 
+/** Maqueta CSS aproximada de la portada (pasos Aspecto/Contenido) o del pie
+ *  de firma (paso Firma) -- NO es el PDF real: eso lo sigue compilando
+ *  `tectonic` solo cuando se pulsa "Vista previa". Da una pista instantánea
+ *  de qué va a llevar el informe sin ese coste en cada toque. */
+function BocetoInforme({ paso, opts }: { paso: PasoId; opts: ExportInformeOpts }) {
+  if (paso === "firma") {
+    return (
+      <div className="flex aspect-[210/297] flex-col justify-end rounded-[9px] border border-border bg-surface p-3.5">
+        <div className="border-t border-white/10 pt-2">
+          <div className="h-[3px] w-2/3 rounded-full bg-white/10" />
+          <p className="mt-2 text-[9px] leading-snug text-subtle">
+            {opts.firmado_por ? `Firmado por ${opts.firmado_por}` : "(sin firma)"}
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex aspect-[210/297] flex-col rounded-[9px] border border-border bg-surface p-3.5">
+      <div className={`rounded-[6px] bg-elevated ${opts.disposicion === "banda" ? "h-[46%]" : "h-[34%]"}`} />
+      {opts.portada_estadisticas && (
+        <div className="mt-2.5 flex gap-1">
+          <div className="h-[22px] flex-1 rounded bg-panel" />
+          <div className="h-[22px] flex-1 rounded bg-panel" />
+          <div className="h-[22px] flex-1 rounded bg-panel" />
+        </div>
+      )}
+      <div className="mt-2.5 flex flex-col gap-1.5">
+        <div className="h-[5px] w-[70%] rounded-full bg-border" />
+        {opts.hipotesis_geolocalizacion && <div className="h-[5px] w-[90%] rounded-full bg-border" />}
+        {opts.veredictos_agentes && <div className="h-[5px] w-[50%] rounded-full bg-border" />}
+      </div>
+    </div>
+  );
+}
+
 type ClaveContenido =
   | "portada_estadisticas" | "exif_por_imagen" | "hipotesis_geolocalizacion"
   | "veredictos_agentes" | "integridad_sha256" | "rasgos_como_imagen";
@@ -181,7 +217,7 @@ export function ExportPopup({
     <>
       <Backdrop closing={closing} onClick={guardando ? undefined : onClose} />
       <Center className="z-[55]">
-        <Pop closing={closing} className="w-[460px] max-w-[calc(100vw-48px)]">
+        <Pop closing={closing} className="w-[640px] max-w-[calc(100vw-48px)]">
           <FloatingCard className="flex max-h-[calc(100vh-64px)] flex-col p-[17px]">
             <div className="flex shrink-0 items-center gap-2">
               <span className="flex-1 truncate text-[13px] font-medium text-fg">Exportar «{caseName}»</span>
@@ -196,85 +232,92 @@ export function ExportPopup({
 
             <Pasos actual={paso} onIr={setPaso} />
 
-            <div className="overflow-y-auto pr-0.5">
-              {paso === "aspecto" && (
-                <div className="flex flex-col">
-                  <FilaContenido icono="sparkle" activo={opts.tema === "oscuro"}
-                    onChange={(v) => set("tema", v ? "oscuro" : "claro")}
-                    label="Tema oscuro" hint="Apagado usa el documento imprimible de siempre (fondo claro)" />
-                  <FilaContenido icono="layers" activo={opts.disposicion === "banda"}
-                    onChange={(v) => set("disposicion", v ? "banda" : "compacta")}
-                    deshabilitado={opts.tema !== "oscuro"}
-                    label="Foto a ancho completo"
-                    hint={opts.tema !== "oscuro"
-                      ? "Solo disponible en el tema oscuro"
-                      : "Miniatura grande en vez de al lado de los datos"} />
-                </div>
-              )}
-
-              {paso === "contenido" && (
-                <div className="flex flex-col">
-                  {CAMPOS_CONTENIDO.map((c) => (
-                    <FilaContenido key={c.key} icono={c.icono} activo={opts[c.key]}
-                      onChange={(v) => set(c.key, v)} label={c.label} hint={c.hint} />
-                  ))}
-                </div>
-              )}
-
-              {paso === "firma" && (
-                <>
-                  <div>
-                    <label className="block text-[11px] text-muted" htmlFor="firmado-por">Firmado por</label>
-                    <input id="firmado-por" type="text" value={opts.firmado_por}
-                      onChange={(e) => set("firmado_por", e.target.value)}
-                      placeholder="(sin firma)"
-                      className="mt-1.5 w-full rounded-[9px] border border-border bg-[#0d0f12] px-2.5 py-[7px]
-                        text-[12px] text-fg outline-none transition-[border-color] duration-300 ease-expo
-                        placeholder:text-subtle focus:border-white/40" />
-                    <p className="mt-1.5 text-[10px] text-subtle">
-                      Vacío omite la sección de firma. La fecha es la de generación, no la de creación del caso.
-                    </p>
+            <div className="flex gap-5">
+              <div className="min-w-0 flex-[1.15] overflow-y-auto pr-0.5">
+                {paso === "aspecto" && (
+                  <div className="flex flex-col">
+                    <FilaContenido icono="sparkle" activo={opts.tema === "oscuro"}
+                      onChange={(v) => set("tema", v ? "oscuro" : "claro")}
+                      label="Tema oscuro" hint="Apagado usa el documento imprimible de siempre (fondo claro)" />
+                    <FilaContenido icono="layers" activo={opts.disposicion === "banda"}
+                      onChange={(v) => set("disposicion", v ? "banda" : "compacta")}
+                      deshabilitado={opts.tema !== "oscuro"}
+                      label="Foto a ancho completo"
+                      hint={opts.tema !== "oscuro"
+                        ? "Solo disponible en el tema oscuro"
+                        : "Miniatura grande en vez de al lado de los datos"} />
                   </div>
+                )}
 
-                  <div className="mt-3">
-                    <label className="block text-[11px] text-muted" htmlFor="notas-informe">Notas del investigador</label>
-                    <textarea id="notas-informe" value={opts.notas} rows={3}
-                      onChange={(e) => set("notas", e.target.value)}
-                      placeholder="Observaciones o contexto del caso (opcional)"
-                      className="mt-1.5 w-full resize-none rounded-[9px] border border-border bg-[#0d0f12] px-2.5 py-[7px]
-                        text-[12px] text-fg outline-none transition-[border-color] duration-300 ease-expo
-                        placeholder:text-subtle focus:border-white/40" />
-                    <p className="mt-1.5 text-[10px] text-subtle">Vacío omite la sección entera del informe.</p>
+                {paso === "contenido" && (
+                  <div className="flex flex-col">
+                    {CAMPOS_CONTENIDO.map((c) => (
+                      <FilaContenido key={c.key} icono={c.icono} activo={opts[c.key]}
+                        onChange={(v) => set(c.key, v)} label={c.label} hint={c.hint} />
+                    ))}
                   </div>
+                )}
 
-                  {images.length > 0 && (
-                    <div className="mt-3">
-                      <p className="text-[11px] text-muted">Imágenes incluidas</p>
-                      <div className="mt-1.5 flex max-h-[180px] flex-col gap-1 overflow-y-auto rounded-[9px]
-                        border border-border bg-[#0d0f12] p-1.5">
-                        {images.map((im) => {
-                          const incluida = !excluidas.has(im.id);
-                          return (
-                            <label key={im.id}
-                              className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 hover:bg-white/[.04]">
-                              <input type="checkbox" checked={incluida} onChange={() => toggleImagen(im.id)}
-                                className="h-3.5 w-3.5 shrink-0 accent-accent" />
-                              <img src={lumiUrl(`/v1/images/${im.id}/thumb`)} alt=""
-                                className="h-6 w-6 shrink-0 rounded bg-elevated object-cover" />
-                              <span className="truncate text-[11px] text-fg">{im.filename}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
+                {paso === "firma" && (
+                  <>
+                    <div>
+                      <label className="block text-[11px] text-muted" htmlFor="firmado-por">Firmado por</label>
+                      <input id="firmado-por" type="text" value={opts.firmado_por}
+                        onChange={(e) => set("firmado_por", e.target.value)}
+                        placeholder="(sin firma)"
+                        className="mt-1.5 w-full rounded-[9px] border border-border bg-[#0d0f12] px-2.5 py-[7px]
+                          text-[12px] text-fg outline-none transition-[border-color] duration-300 ease-expo
+                          placeholder:text-subtle focus:border-white/40" />
                       <p className="mt-1.5 text-[10px] text-subtle">
-                        Todas marcadas por defecto -- desmarca las que no deban entrar en el informe.
+                        Vacío omite la sección de firma. La fecha es la de generación, no la de creación del caso.
                       </p>
                     </div>
-                  )}
-                </>
-              )}
 
-              {error && <p className="mt-3 text-[10.5px] leading-snug text-danger-fg">{error}</p>}
+                    <div className="mt-3">
+                      <label className="block text-[11px] text-muted" htmlFor="notas-informe">Notas del investigador</label>
+                      <textarea id="notas-informe" value={opts.notas} rows={3}
+                        onChange={(e) => set("notas", e.target.value)}
+                        placeholder="Observaciones o contexto del caso (opcional)"
+                        className="mt-1.5 w-full resize-none rounded-[9px] border border-border bg-[#0d0f12] px-2.5 py-[7px]
+                          text-[12px] text-fg outline-none transition-[border-color] duration-300 ease-expo
+                          placeholder:text-subtle focus:border-white/40" />
+                      <p className="mt-1.5 text-[10px] text-subtle">Vacío omite la sección entera del informe.</p>
+                    </div>
+
+                    {images.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-[11px] text-muted">Imágenes incluidas</p>
+                        <div className="mt-1.5 flex max-h-[180px] flex-col gap-1 overflow-y-auto rounded-[9px]
+                          border border-border bg-[#0d0f12] p-1.5">
+                          {images.map((im) => {
+                            const incluida = !excluidas.has(im.id);
+                            return (
+                              <label key={im.id}
+                                className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 hover:bg-white/[.04]">
+                                <input type="checkbox" checked={incluida} onChange={() => toggleImagen(im.id)}
+                                  className="h-3.5 w-3.5 shrink-0 accent-accent" />
+                                <img src={lumiUrl(`/v1/images/${im.id}/thumb`)} alt=""
+                                  className="h-6 w-6 shrink-0 rounded bg-elevated object-cover" />
+                                <span className="truncate text-[11px] text-fg">{im.filename}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                        <p className="mt-1.5 text-[10px] text-subtle">
+                          Todas marcadas por defecto -- desmarca las que no deban entrar en el informe.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {error && <p className="mt-3 text-[10.5px] leading-snug text-danger-fg">{error}</p>}
+              </div>
+
+              <div className="w-[190px] shrink-0">
+                <BocetoInforme paso={paso} opts={opts} />
+                <p className="mt-2 text-center text-[9.5px] text-subtle">boceto aproximado, no el PDF final</p>
+              </div>
             </div>
 
             <div className="mt-3 flex shrink-0 gap-2">
