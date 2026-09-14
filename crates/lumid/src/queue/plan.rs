@@ -50,14 +50,15 @@ pub struct Asignacion {
     pub dispositivo: String,
 }
 
-pub fn repartir(
-    candidatos: &[Candidato],
-    duenos: &HashMap<i64, Dueno>,
-    libres: &[Libre],
-) -> Vec<Asignacion> {
-    // 1. Descarta lo que no puede correr ahora mismo. Un candidato sin dueño
-    //    conocido se cae solo con el `?`: es un usuario borrado y su trabajo no
-    //    tiene a quién pertenecer.
+/// Descarta lo que no puede correr ahora mismo y ordena lo que queda: la misma
+/// política que usa `repartir`, separada para que calcular una posición en
+/// cola no tenga que duplicar el criterio de orden.
+fn ordenados<'a>(
+    candidatos: &'a [Candidato],
+    duenos: &'a HashMap<i64, Dueno>,
+) -> Vec<(&'a Candidato, &'a Dueno)> {
+    // Un candidato sin dueño conocido se cae solo con el `?`: es un usuario
+    // borrado y su trabajo no tiene a quién pertenecer.
     let mut cola: Vec<(&Candidato, &Dueno)> = candidatos
         .iter()
         .filter_map(|c| Some((c, duenos.get(&c.user_id)?)))
@@ -66,17 +67,39 @@ pub fn repartir(
         .filter(|(_, d)| d.en_curso < d.max_concurrent)
         .collect();
 
-    // 2. Ordena: conectado antes que segundo plano, luego prioridad de mayor a
-    //    menor, y a igualdad el que lleva más esperando. `sort_by` es estable,
-    //    así que un empate total respeta el orden en que vinieron.
+    // Conectado antes que segundo plano, luego prioridad de mayor a menor, y
+    // a igualdad el que lleva más esperando. `sort_by` es estable, así que un
+    // empate total respeta el orden en que vinieron.
     cola.sort_by(|(ca, da), (cb, db)| {
         db.conectado
             .cmp(&da.conectado)
             .then(db.prioridad.cmp(&da.prioridad))
             .then(ca.created_at.cmp(&cb.created_at))
     });
+    cola
+}
 
-    // 3. Asigna. `comprometidos` cuenta lo que ESTE reparto ya dio: sin eso, un
+/// Cuántos candidatos elegibles van por delante de `analysis_id` en el orden
+/// de reparto. `None` si ese trabajo no está en la lista (ya corriendo, o su
+/// dueño no puede correr nada ahora mismo).
+pub fn posicion(
+    candidatos: &[Candidato],
+    duenos: &HashMap<i64, Dueno>,
+    analysis_id: i64,
+) -> Option<usize> {
+    ordenados(candidatos, duenos)
+        .iter()
+        .position(|(c, _)| c.analysis_id == analysis_id)
+}
+
+pub fn repartir(
+    candidatos: &[Candidato],
+    duenos: &HashMap<i64, Dueno>,
+    libres: &[Libre],
+) -> Vec<Asignacion> {
+    let cola = ordenados(candidatos, duenos);
+
+    // Asigna. `comprometidos` cuenta lo que ESTE reparto ya dio: sin eso, un
     //    usuario con cupo 2 y cinco trabajos se llevaría los cinco de una
     //    tacada, porque `en_curso` es la foto de antes de empezar a repartir.
     let mut comprometidos: HashMap<i64, i64> = HashMap::new();
@@ -195,5 +218,27 @@ mod tests {
         // No se salta el resto de límites: bloqueado sigue bloqueando.
         let d = HashMap::from([(1, dueno(true, false, false, 2, 0, 0))]);
         assert!(repartir(&[cand_api(10, 1, 100)], &d, &uno).is_empty(), "bloqueado sigue bloqueando aunque sea de API");
+    }
+
+    #[test]
+    fn la_posicion_sigue_el_mismo_orden_que_repartir() {
+        let d = HashMap::from([
+            (1, dueno(false, true, false, 5, 0, 0)),
+            (2, dueno(false, true, false, 5, 3, 0)),
+        ]);
+        let candidatos = [cand(10, 1, 100), cand(20, 2, 200), cand(30, 1, 50)];
+        // Mismo orden que en `la_politica_de_reparto`: 20 (más prioridad),
+        // 30 (llegó antes), 10.
+        assert_eq!(posicion(&candidatos, &d, 20), Some(0));
+        assert_eq!(posicion(&candidatos, &d, 30), Some(1));
+        assert_eq!(posicion(&candidatos, &d, 10), Some(2));
+
+        // Un id que no está en la lista no tiene posición.
+        assert_eq!(posicion(&candidatos, &d, 999), None);
+
+        // Un candidato cuyo dueño está bloqueado no aparece: no tiene
+        // posición que enseñar, no un cero engañoso.
+        let d_bloqueado = HashMap::from([(1, dueno(true, true, false, 5, 0, 0))]);
+        assert_eq!(posicion(&[cand(10, 1, 100)], &d_bloqueado, 10), None);
     }
 }

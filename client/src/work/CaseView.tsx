@@ -66,12 +66,16 @@ export function CaseView({
   const [dragging, setDragging] = useState(false);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [fly, setFly] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
-  /** Fase + ETA del último `Cambio` de tipo "progreso" que ha llegado, sea de
-   *  quien sea -- a qué análisis pertenece se decide al PINTAR (contra
-   *  `shown`), no aquí, para no depender de una `analyses` capturada en el
-   *  momento de montar el listener (`progreso_detallado_activo`, spec de
-   *  feedback de progreso). */
-  const [progresoFase, setProgresoFase] = useState<{ analysisId: number; fase: string; pct: number; etaS: number | null } | null>(null);
+  /** Fase, ETA y posición en cola del análisis que se está siguiendo ahora
+   *  mismo, sea de quien sea -- a qué análisis pertenece se decide al PINTAR
+   *  (contra `shown`), no aquí, para no depender de una `analyses` capturada
+   *  en el momento de montar el listener (`progreso_detallado_activo`, spec
+   *  de feedback de progreso). Fase/ETA y posición llegan por eventos
+   *  separados ("progreso" solo mientras corre, "cola" solo mientras espera),
+   *  así que se van rellenando sobre el mismo objeto en vez de pisarse. */
+  const [progresoFase, setProgresoFase] = useState<
+    { analysisId: number; fase?: string; pct?: number; etaS?: number | null; posicion?: number } | null
+  >(null);
   /** Las imágenes que el popup tiene delante. `null` = popup cerrado. */
   const [staged, setStaged] = useState<number[] | null>(null);
   const popup = useDismissable(staged !== null, 180);
@@ -231,7 +235,17 @@ export function CaseView({
     const un = listen<Cambio>("queue-change", (e) => {
       const c = e.payload;
       if (c.tipo === "progreso") {
-        setProgresoFase({ analysisId: c.analysis_id, fase: c.fase, pct: c.pct, etaS: c.eta_s });
+        setProgresoFase((p) =>
+          p?.analysisId === c.analysis_id
+            ? { ...p, fase: c.fase, pct: c.pct, etaS: c.eta_s }
+            : { analysisId: c.analysis_id, fase: c.fase, pct: c.pct, etaS: c.eta_s });
+        return;
+      }
+      if (c.tipo === "cola") {
+        setProgresoFase((p) =>
+          p?.analysisId === c.analysis_id
+            ? { ...p, posicion: c.posicion }
+            : { analysisId: c.analysis_id, posicion: c.posicion });
         return;
       }
       if (c.tipo !== "estado" || c.case_id !== case_.id) return;
@@ -528,9 +542,6 @@ export function CaseView({
         const m = /^a(\d+)/.exec(id);
         if (m) setSelAnalysis(Number(m[1]));
       }} />
-      {procesando && features?.progreso_detallado_activo && progresoFase?.analysisId === shown?.id && (
-        <FaseAnalisis fase={progresoFase.fase} etaS={progresoFase.etaS} />
-      )}
       {rail}
 
       {dragging && <DropFrame />}
@@ -563,6 +574,11 @@ export function CaseView({
             onMenu={setMenu} />
           <ResultsDrawer open={drawerId === "results"} image={image} analysis={shown}
             busy={busy}
+            progreso={
+              features?.progreso_detallado_activo && progresoFase?.analysisId === shown?.id
+                ? progresoFase
+                : null
+            }
             onAnalyze={() => (sel !== null ? setStaged([sel]) : void pick())}
             onCenter={(lat, lng) => setFly({ lat, lng, zoom: 14 })} />
           <MediaDrawer token={token} caseId={case_.id} projectId={project.id}
@@ -692,27 +708,3 @@ export function CaseView({
   );
 }
 
-const ETIQUETA_FASE: Record<string, string> = {
-  embebiendo: "Calculando el vector de la imagen…",
-  recuperando: "Buscando candidatos en el índice…",
-  verificando: "Verificando geometría y preguntando a los agentes…",
-};
-
-/** Fase + ETA sobre el globo mientras gira (spec de feedback de progreso:
- *  "fases del pipeline" + "tiempo estimado", detrás de
- *  `progreso_detallado_activo` en el panel admin). Encima del mapa y no
- *  dentro de un cajón: es la MISMA información que ya cuenta el giro del
- *  globo, con palabras, no una pantalla nueva que abrir. */
-function FaseAnalisis({ fase, etaS }: { fase: string; etaS: number | null }) {
-  const etiqueta = ETIQUETA_FASE[fase] ?? "Procesando…";
-  const eta = etaS === null ? null : etaS < 60 ? `~${Math.max(1, Math.round(etaS))}s` : `~${Math.round(etaS / 60)}min`;
-  return (
-    <div className="pointer-events-none absolute left-1/2 top-4 z-[20] -translate-x-1/2 rounded-full
-      border border-white/10 bg-[rgba(16,18,21,.82)] px-3 py-1.5 backdrop-blur-md"
-      style={{ animation: "jg-fade-rise .4s cubic-bezier(.16,1,.3,1) both" }}>
-      <span className="text-[10.5px] text-subtle">
-        {etiqueta}{eta && <span className="ml-1.5 font-mono text-[10px] text-muted">{eta} restante</span>}
-      </span>
-    </div>
-  );
-}
