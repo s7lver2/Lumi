@@ -548,11 +548,13 @@ async fn subir_asset(
 /// Un asset ya presente en el release, tal como GitHub lo describe.
 /// Compartido por `borrar_asset_si_existe` (la ficha, que SIEMPRE se
 /// reemplaza) y `subir_asset` (cuerpos/capas, donde "ya existe" tras un
-/// fallo aparente hay que tratarlo como éxito, no como conflicto).
+/// fallo aparente hay que borrarlo para resubir los bytes de esta llamada,
+/// nunca dar por buena la URL de quien sabe qué intento). Ninguno de los dos
+/// necesita más que identificarlo y borrarlo — no se reutiliza contenido
+/// ajeno, así que no hace falta la URL de descarga.
 struct AssetRemoto {
     id: i64,
     name: String,
-    browser_download_url: String,
 }
 
 async fn listar_assets_remotos(
@@ -565,7 +567,6 @@ async fn listar_assets_remotos(
     struct A {
         id: i64,
         name: String,
-        browser_download_url: String,
     }
     let Ok(r) = cliente
         .get(format!("https://api.github.com/repos/{repo}/releases/{release}/assets?per_page=100"))
@@ -583,7 +584,7 @@ async fn listar_assets_remotos(
         .await
         .unwrap_or_default()
         .into_iter()
-        .map(|a| AssetRemoto { id: a.id, name: a.name, browser_download_url: a.browser_download_url })
+        .map(|a| AssetRemoto { id: a.id, name: a.name })
         .collect()
 }
 
