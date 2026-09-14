@@ -53,10 +53,16 @@ export function MediaDrawer({
     api.get<MediaFolder[]>(`/v1/cases/${caseId}/media/folders?modo=${m}`, token).then(setCarpetas).catch(() => {});
   }
   useEffect(() => { if (open) cargarCarpetas(modo); }, [open, modo, caseId, token]);
-  useEffect(() => {
-    if (!open || modo !== "proyecto") return;
+  // Nombrada aparte y no solo dentro del useEffect: mover/eliminar/borrar
+  // carpeta en modo "Todo el proyecto" tienen que poder refrescarla también
+  // -- antes solo se pedía una vez al abrir el panel o cambiar de modo, así
+  // que borrar una imagen la dejaba viendose (y "ya no existe" al repetir
+  // el borrado) hasta cerrar y reabrir el panel.
+  function cargarImagenesProyecto() {
+    if (modo !== "proyecto") return;
     api.get<ProjectImage[]>(`/v1/projects/${projectId}/images`, token).then(setImagenesProyecto).catch(() => {});
-  }, [open, modo, projectId, token]);
+  }
+  useEffect(() => { if (open) cargarImagenesProyecto(); }, [open, modo, projectId, token]);
 
   const imagenes: Image[] = useMemo(() => {
     const base: Image[] = modo === "proyecto" ? (imagenesProyecto ?? []) : imagenesDelCaso;
@@ -104,6 +110,7 @@ export function MediaDrawer({
       setCarpetas((v) => v.filter((c) => c.id !== id));
       if (carpetaActual === id) setCarpetaActual("todas");
       onCambio();
+      cargarImagenesProyecto();
     } catch (e) {
       setError(String(e));
     }
@@ -113,6 +120,7 @@ export function MediaDrawer({
     try {
       await Promise.all(ids.map((id) => api.patch(`/v1/images/${id}/mover`, { folder_id: folderId }, token)));
       onCambio();
+      cargarImagenesProyecto();
     } catch (e) {
       setError(String(e));
     }
@@ -141,6 +149,7 @@ export function MediaDrawer({
       await Promise.all(ids.map((id) => api.del(`/v1/images/${id}`, token)));
       setSeleccion(new Set());
       onCambio();
+      cargarImagenesProyecto();
     } catch (e) {
       setError(String(e));
     }
