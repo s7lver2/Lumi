@@ -125,7 +125,12 @@ export function ImageEditorPopup({
     const img = new Image();
     img.onload = () => {
       const canvas = canvasRef.current;
-      if (!canvas) return;
+      // Con el lienzo ahora siempre montado (ver el `hidden`/`contents` de
+      // más abajo) esto no debería pasar nunca -- si pasa, mejor decirlo (y
+      // sacar al esqueleto de en medio para que el error se vea) que
+      // quedarse ahí para siempre en silencio, que es como se reportó este
+      // mismo bug la primera vez.
+      if (!canvas) { setError("no se pudo preparar el lienzo del editor"); setCargando(false); return; }
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
       canvas.getContext("2d")?.drawImage(img, 0, 0);
@@ -355,7 +360,7 @@ export function ImageEditorPopup({
               </button>
             </div>
 
-            {cargando ? (
+            {cargando && (
               // Skeleton con la forma real del editor (barra de herramientas +
               // lienzo) en vez de un spinner suelto -- se nota antes qué va a
               // aparecer, y una foto grande que tarda en llegar no se siente
@@ -368,8 +373,21 @@ export function ImageEditorPopup({
                 </div>
                 <div className="mt-3 rounded-xl bg-elevated" style={{ height: 300 }} />
               </div>
-            ) : (
-              <>
+            )}
+            {/* El lienzo vive FUERA del `if (cargando)` de arriba a propósito,
+                aunque quede oculto detrás del esqueleto: `canvasRef` tiene que
+                existir YA cuando `img.onload` (el efecto de más abajo) vaya a
+                dibujar en él. Antes el canvas solo se montaba cuando
+                `cargando` pasaba a `false` -- pero lo único que ponía
+                `cargando` a `false` era ese mismo `onload`, que comprobaba
+                `canvasRef.current` y se rendía en silencio si todavía era
+                `null` (`if (!canvas) return`, sin error, sin log). Con una
+                imagen que tarda lo bastante en decodificar como para que el
+                efecto corra antes de que React monte el `else` de abajo --
+                lo que "cuando haces drag and drop" reproducía siempre, no el
+                selector de archivos, aunque el camino final sea el mismo --
+                el editor se quedaba en el esqueleto para siempre. */}
+            <div className={cargando ? "hidden" : "contents"}>
                 <div className="mt-4 flex items-center gap-2">
                   <button onClick={() => setHerramienta("recorte")} disabled={bloqueado}
                     className={`jg-press flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px]
@@ -452,8 +470,7 @@ export function ImageEditorPopup({
                     Usar esta versión
                   </button>
                 </div>
-              </>
-            )}
+            </div>
           </FloatingCard>
         </Pop>
       </Center>
