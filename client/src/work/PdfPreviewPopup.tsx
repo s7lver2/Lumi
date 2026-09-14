@@ -2,7 +2,7 @@ import { Backdrop, FloatingCard, Pop } from "../ui/FloatingCard";
 import { Icon } from "../ui/Icon";
 import { Center } from "../ui/layout";
 
-/** Solo la vista del PDF -- la configuración vive en `ExportDrawer`, que es
+/** Solo la vista del PDF -- la configuración vive en `ExportPopup`, que es
  *  quien genera `url` (un blob) y quien la revoca al cerrar. Sin controles
  *  propios: cambiar qué lleva el informe se hace en el cajón, no aquí. */
 export function PdfPreviewPopup({ url, onClose }: { url: string; onClose: () => void }) {

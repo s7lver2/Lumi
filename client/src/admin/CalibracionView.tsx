@@ -5,7 +5,7 @@ import {
 import { Icon } from "../ui/Icon";
 import { Seccion } from "./AdminPanel";
 
-/** Mismo `role="switch"` que ya usan `ExportDrawer`/otros -- no hay un
+/** Mismo `role="switch"` que ya usan `ExportPopup`/otros -- no hay un
  *  `Interruptor` compartido en el repo todavía (cada pantalla define el
  *  suyo), así que este sigue el mismo patrón visual en vez de inventar uno
  *  nuevo. */

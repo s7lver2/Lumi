@@ -42,6 +42,9 @@ export default function App() {
   /** Resultados e invitar piden el mismo carril de la derecha, así que el
    *  estado es uno solo: abrir cualquiera de los dos recoge el otro. */
   const [drawer, setDrawer] = useState<DrawerId>(null);
+  /** Exportar es un popup, no un cajón -- no comparte hueco con `drawer`
+   *  (ver `Drawer.tsx::DrawerId`), así que lleva su propio estado. */
+  const [exportOpen, setExportOpen] = useState(false);
   /** Sube cada vez que se acepta una invitación desde la campana. El selector
    *  de proyectos lo mira para saber cuándo recargar su lista sin tener que
    *  desmontarse: la campana y el selector son hermanos y no se enteran solos
@@ -264,6 +267,7 @@ export default function App() {
     setAuth(null);
     useWorkspace.getState().clear();
     setDrawer(null);
+    setExportOpen(false);
     setMode("entry");
   }
 
@@ -273,6 +277,7 @@ export default function App() {
     leaveProject();
     useWorkspace.getState().clear();
     setDrawer(null);
+    setExportOpen(false);
     setMode("picker");
   }
 
@@ -435,11 +440,12 @@ export default function App() {
           if (!project) { setMode("picker"); return null; }
           const rail = (
             <Rail active={
-              drawer === "invite" ? "members" : drawer === "media" ? "media" : drawer === "export" ? "export" : "cases"
+              drawer === "invite" ? "members" : drawer === "media" ? "media" : exportOpen ? "export" : "cases"
             }
               canManage={project.role === "owner"} isAdmin={isAdmin}
               onCases={() => {
                 setDrawer(null);
+                setExportOpen(false);
                 if (mode === "case") { useWorkspace.getState().setCase(null); setMode("project"); }
               }}
               onMembers={() => setDrawer(drawer === "invite" ? null : "invite")}
@@ -447,7 +453,8 @@ export default function App() {
               // criterio: solo dentro de un caso -- en la lista de casos
               // (`mode === "project"`) ninguno de los dos botones se pasa.
               onMedia={mode === "case" ? () => setDrawer(drawer === "media" ? null : "media") : undefined}
-              onExport={mode === "case" ? () => setDrawer(drawer === "export" ? null : "export") : undefined}
+              // Popup, no cajón -- no pasa por `setDrawer` (ver `exportOpen`).
+              onExport={mode === "case" ? () => setExportOpen((v) => !v) : undefined}
               // El panel de administración es una parada aparte: mientras se
               // está ahí no se está trabajando en el proyecto, así que se
               // suelta el candado para no bloquearlo a los demás por nada.
@@ -463,6 +470,7 @@ export default function App() {
           return mode === "case" && case_ ? (
             <CaseView project={project} case_={case_} rail={rail} drawer={cajon}
               drawerId={drawer} setDrawer={setDrawer}
+              exportOpen={exportOpen} onCloseExport={() => setExportOpen(false)}
               onIrAModelos={() => { leaveProject(); setMode("admin"); }} />
           ) : (
             <ProjectView project={project} rail={rail} drawer={cajon}

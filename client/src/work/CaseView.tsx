@@ -19,7 +19,7 @@ import { DrawerTab, DRAWER_W, RAIL_W, type DrawerId } from "./Drawer";
 import { DropFrame, DropTarget } from "./DropTarget";
 import { AgentPickerPopup } from "./AgentPickerPopup";
 import { AgentResultPopup } from "./AgentResultPopup";
-import { ExportDrawer } from "./ExportDrawer";
+import { ExportPopup } from "./ExportPopup";
 import { MapCanvas, type Marker } from "./MapCanvas";
 import { MediaDrawer } from "./MediaDrawer";
 import { ResultsDrawer } from "./ResultsDrawer";
@@ -28,7 +28,7 @@ import { UploadPopup } from "./UploadPopup";
 const GB = 1024 * 1024 * 1024;
 
 export function CaseView({
-  project, case_, rail, drawer, drawerId, setDrawer, onIrAModelos,
+  project, case_, rail, drawer, drawerId, setDrawer, exportOpen, onCloseExport, onIrAModelos,
 }: {
   project: Project;
   case_: Case;
@@ -37,6 +37,10 @@ export function CaseView({
   drawer: React.ReactNode;
   drawerId: DrawerId;
   setDrawer: (d: DrawerId) => void;
+  /** Exportar es un popup (`ExportPopup`), no un cajón -- su estado lo lleva
+   *  `App` junto al del resto del carril, igual que `drawerId`. */
+  exportOpen: boolean;
+  onCloseExport: () => void;
   /** El admin de un agente sin motor instalado puede saltar directo a
    *  Modelos — decide `App`, que es quien sabe cambiar de `mode`. */
   onIrAModelos: () => void;
@@ -186,6 +190,7 @@ export function CaseView({
    *  ya vive aquí sin necesitar un `mode` propio. */
   const [agentResult, setAgentResult] = useState<{ image: Image; analysis: Analysis } | null>(null);
   const agentResultPopup = useDismissable(agentResult !== null, 180);
+  const exportPop = useDismissable(exportOpen, 180);
 
   /** El diálogo de guardado (nativo, del lado Rust) puede volver sin ruta si
    *  el investigador lo cierra sin elegir nada -- eso no es un error que
@@ -565,10 +570,13 @@ export function CaseView({
               void analyze(models[0] ?? "mini", imgs.map((i) => i.id));
             }}
             onCambio={() => void load()} />
-          <ExportDrawer token={token} caseId={case_.id} caseName={case_.name} images={list}
-            firmadoPorDefecto={username} open={drawerId === "export"}
-            onClose={() => setDrawer(null)} onGuardar={guardarInforme} />
         </>
+      )}
+
+      {exportPop.rendered && (
+        <ExportPopup token={token} caseId={case_.id} caseName={case_.name} images={list}
+          firmadoPorDefecto={username} closing={exportPop.closing}
+          onClose={onCloseExport} onGuardar={guardarInforme} />
       )}
 
       {drawer}
