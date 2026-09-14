@@ -1372,7 +1372,58 @@
           "sha256": "58bc6119e3232bd4ff62e0394ad71d4240c59d744967bde020609031cfe39099"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.41",
+      "publicado": "2026-09-14T10:03:36Z",
+      "notas": "indexer",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.41/app.exe",
+          "bytes": 16107520,
+          "sha256": "97790558e572edadbd482a32e3d5e25423ca78edcb4e9f7eb5b3647d8775fb24"
+        }
+      ]
+    },
+    {
+      "producto": "indexer",
+      "version": "2.0.41",
+      "publicado": "2026-09-14T10:03:36Z",
+      "notas": "indexer",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.41/indexer-app.exe",
+          "bytes": 23519744,
+          "sha256": "40f1f21a6c30d8cbef8290a8b7b609f0d1965ba68a70752684c0bbae53e1df8b"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.41",
+      "publicado": "2026-09-14T10:03:36Z",
+      "notas": "indexer",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.41/lumid",
+          "bytes": 23959296,
+          "sha256": "e6f801bda0e5ba4a8e63ad0bea040e96ef30aa363579aeecbdd1c0ae969aaa0b"
+        },
+        {
+          "plataforma": "assets",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.41/lumid-assets.tar.gz",
+          "bytes": 1020508,
+          "sha256": "fc6e518dc59d7712e455e2fce017b9050d77fbaea009ad81940e05c839b5be57"
+        }
+      ]
     }
   ],
-  "firma": "M0jajQ1aAAG6Fi60VWxdWrW8DtNZqsr/2LHi4G/DiK6kJcFDStbNc/6t1/K5w3N0N34urI5EY3tqo4xdGVoeCQ=="
+  "firma": "A26jYEHwH6xT3iLsUuomHtQlKuJ9mDpXK+pCIBsLmdboHur02rshgDB8e9mIR0HJYtZXqE/C5rRlRE56hiC4Bw=="
 }
