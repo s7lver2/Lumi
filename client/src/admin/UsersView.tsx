@@ -79,6 +79,7 @@ export function UsersView({ token, abrirUserId }: { token: string; abrirUserId?:
     return [
       { label: u.blocked ? "Desbloquear" : "Bloquear", onClick: () => void patchLista(u.id, { blocked: !u.blocked }) },
       { label: "Exigir cambio de contraseña", onClick: () => void patchLista(u.id, { must_change_password: true }) },
+      { label: u.is_admin ? "Quitar administrador" : "Promover a administrador", onClick: () => void patchLista(u.id, { is_admin: !u.is_admin }) },
     ];
   }
 
@@ -188,6 +189,10 @@ export function UsersView({ token, abrirUserId }: { token: string; abrirUserId?:
           <button onClick={() => patch(u.id, { must_change_password: true })}
             className="rounded-lg border border-white/15 px-3 py-1.5 text-[11px] text-fg active:translate-y-px">
             Exigir cambio de contraseña
+          </button>
+          <button onClick={() => patch(u.id, { is_admin: !u.is_admin })}
+            className="rounded-lg border border-white/15 px-3 py-1.5 text-[11px] text-fg active:translate-y-px">
+            {u.is_admin ? "Quitar administrador" : "Promover a administrador"}
           </button>
         </div>
         {error && <p className="mt-3 text-xs text-danger-fg">{error}</p>}

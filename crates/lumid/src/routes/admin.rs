@@ -266,6 +266,25 @@ pub async fn patch_user(
     }
     {
         let c = app.store.conn();
+        if req.is_admin == Some(false) {
+            // Sin esto, quitarle el admin al único que queda vuelve a poner
+            // el servidor en "sin reclamar" (`store::state`, cuenta cuántos
+            // `is_admin = 1` hay) -- cualquiera podría reclamarlo de cero.
+            let otros: i64 = c
+                .query_row("SELECT COUNT(*) FROM users WHERE is_admin = 1 AND id != ?1", [id], |r| r.get(0))
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            if otros == 0 {
+                return Err(bad("no puedes quitarle el admin al único administrador que queda"));
+            }
+        }
+        if let Some(v) = req.is_admin {
+            c.execute("UPDATE users SET is_admin = ?1 WHERE id = ?2", rusqlite::params![v as i64, id])
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            tracing::info!(
+                "usuario {id} {} administrador por {admin}",
+                if v { "promovido a" } else { "degradado de" }
+            );
+        }
         if let Some(b) = req.blocked {
             c.execute("UPDATE users SET blocked = ?1 WHERE id = ?2", rusqlite::params![b as i64, id])
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;

@@ -684,6 +684,13 @@ pub struct PatchUserReq {
     /// vuelve a heredar del global. Es la única forma de volver atrás.
     #[serde(default)]
     pub limits: std::collections::HashMap<String, serde_json::Value>,
+    /// Antes solo se podía nacer administrador (al aprobar la solicitud de
+    /// acceso, `granted_is_admin`) -- promover o degradar una cuenta ya
+    /// existente no tenía ruta. `Some(false)` se rechaza si dejaría el
+    /// servidor sin ningún administrador (`store::state` lo trataría como
+    /// "sin reclamar" de nuevo).
+    #[serde(default)]
+    pub is_admin: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
