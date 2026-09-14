@@ -304,13 +304,23 @@ export function MapCanvas({
   // Cambiar de proyección sin rehacer el mapa: reconstruirlo tiraría el estilo,
   // las teselas ya descargadas y la posición de la cámara.
   useEffect(() => {
+    const m = map.current;
     // Los dos motores llaman igual al método y esperan la clave con distinto
     // nombre: MapLibre lee `type` y Mapbox lee `name`. Se mandan las dos y
     // cada uno coge la suya, que es más corto que preguntar cuál está montado.
     const p = globe ? "globe" : "mercator";
-    (map.current as { setProjection?: (o: unknown) => void } | null)
-      ?.setProjection?.({ type: p, name: p });
+    const aplicar = () => (m as { setProjection?: (o: unknown) => void } | null)?.setProjection?.({ type: p, name: p });
+    // Cambiar de proyección a mitad de un vuelo (`flyTo`/`easeTo` en curso,
+    // por ejemplo el globo girando mientras se procesa, o volando al
+    // resultado) reinicia la cámara de golpe y corta la animación en seco --
+    // se espera a que termine ("moveend") en vez de interrumpirla.
+    if (m?.isMoving()) {
+      m.once("moveend", aplicar);
+    } else {
+      aplicar();
+    }
     localStorage.setItem("lumi.mapa.plano", globe ? "0" : "1");
+    return () => { m?.off("moveend", aplicar); };
   }, [globe]);
 
   // Volar a un punto concreto. `curve` y `speed` son lo que convierte un salto
@@ -382,19 +392,32 @@ export function MapCanvas({
     // se desplaza bajo un observador fijo en el espacio).
     let lng = m.getCenter().lng;
     const lat = m.getCenter().lat;
-    // A 60fps esto pedía una tesela nueva a MapLibre en cada frame (`jumpTo`
-    // mueve el centro) mientras un análisis está en curso -- justo cuando el
-    // servidor más ocupado está y menos falta hace competir con la API por
-    // conexiones. ~20fps sigue leyéndose como giro continuo y no como algo a
-    // saltos, y es un tercio de las peticiones. `PASO_POR_S` mantiene la
-    // MISMA velocidad angular (2,4°/s) que antes, repartida en menos pasos.
+    // Se sigue pidiendo la posición solo ~20 veces por segundo -- a 60fps
+    // esto pedía una tesela nueva a MapLibre en cada frame mientras un
+    // análisis está en curso, justo cuando el servidor más ocupado está y
+    // menos falta hace competir con la API por conexiones. Lo que cambia es
+    // CÓMO se llega de una posición a la siguiente: antes `jumpTo` la
+    // plantaba de golpe, así que entre "tesela nueva" y "tesela nueva" la
+    // cámara se quedaba quieta 50ms y saltaba -- se leía a trompicones
+    // (owner: "se ve entrecortada"). Un `easeTo` lineal de la MISMA
+    // duración deja que el compositor de MapLibre interpole los frames de
+    // por medio a su propio framerate (60fps de verdad), sin pedir ni una
+    // tesela más que antes.
     const PASO_POR_S = 2.4;
-    let anterior = performance.now();
+    const PASO_MS = 50;
+    // Modulación de velocidad, no una vuelta a ritmo de metrónomo: un
+    // planeta que acelera y frena suavemente (±35% sobre la base, período
+    // de ~4s) se lee como algo buscando dónde fijarse, no como un
+    // decorado girando de fondo (owner: "que transmita lo de buscando").
+    const inicio = performance.now();
+    const PERIODO_MODULACION_MS = 4000;
+    let anterior = inicio;
     const girar = (ahora: number) => {
       if (!vivo) return;
-      if (ahora - anterior >= 50) {
-        lng -= (PASO_POR_S * (ahora - anterior)) / 1000;
-        m.jumpTo({ center: [lng, lat], bearing: 0, pitch: 0 });
+      if (ahora - anterior >= PASO_MS) {
+        const factor = 1 + 0.35 * Math.sin(((ahora - inicio) / PERIODO_MODULACION_MS) * 2 * Math.PI);
+        lng -= (PASO_POR_S * factor * (ahora - anterior)) / 1000;
+        m.easeTo({ center: [lng, lat], bearing: 0, pitch: 0, duration: PASO_MS, easing: (t) => t });
         anterior = ahora;
       }
       raf = requestAnimationFrame(girar);
