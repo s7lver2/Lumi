@@ -29,6 +29,40 @@ fn clave_umbral(id: &str) -> String {
     format!("umbral_inliers:{id}")
 }
 
+/// Solo lo que el picker del panel necesita: elegir por nombre, no por id
+/// tecleado a ciegas, y ver de un vistazo cuáles ya tienen un override
+/// guardado en este servidor. Los 7 verificadores del registro caben en una
+/// sola lista sin paginar.
+#[derive(serde::Serialize)]
+pub struct VerificadorVista {
+    pub id: String,
+    pub nombre: String,
+    pub tipo: String,
+    pub overridden: bool,
+}
+
+pub async fn listar_verificadores(
+    State(app): State<App>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<VerificadorVista>>, Fail> {
+    require_admin(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".into()))?;
+    requiere_calibracion(&app)?;
+    let fuera = app
+        .queue
+        .verificadores
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|v| VerificadorVista {
+            overridden: app.store.get_meta(&clave_umbral(&v.id)).is_some(),
+            id: v.id.clone(),
+            nombre: v.nombre.clone(),
+            tipo: v.tipo.clone(),
+        })
+        .collect();
+    Ok(Json(fuera))
+}
+
 #[derive(serde::Serialize)]
 pub struct UmbralVista {
     pub verificador: String,

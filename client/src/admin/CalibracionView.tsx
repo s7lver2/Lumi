@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type FeatureFlags } from "../lib/api";
+import { api, type AgenteVista, type FeatureFlags, type VerificadorVista } from "../lib/api";
 import { Icon } from "../ui/Icon";
 import { Seccion } from "./AdminPanel";
 
@@ -105,12 +105,25 @@ export function CalibracionView({ token }: { token: string }) {
 
 interface UmbralVista { verificador: string; umbral_inliers: number; overridden: boolean }
 
+const SELECT = "w-full rounded-lg border border-border bg-elevated px-2.5 py-1.5 text-[11px] text-fg outline-none transition-colors duration-300 ease-expo focus:border-white/40";
+
 function UmbralesEditor({ token }: { token: string }) {
-  const [id, setId] = useState("roma");
+  const [lista, setLista] = useState<VerificadorVista[]>([]);
+  const [id, setId] = useState("");
   const [vista, setVista] = useState<UmbralVista | null>(null);
   const [valor, setValor] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // La lista real del registro, no un id tecleado a ciegas: son 7 como
+  // mucho, caben enteros en un desplegable.
+  useEffect(() => {
+    api.get<VerificadorVista[]>("/v1/admin/verificadores", token)
+      .then((l) => { setLista(l); if (l.length > 0) setId(l[0].id); })
+      .catch((e) => setError(String(e)));
+  }, [token]);
+
+  useEffect(() => { if (id) void buscar(); }, [id]);
 
   async function buscar() {
     setError(null);
@@ -133,6 +146,10 @@ function UmbralesEditor({ token }: { token: string }) {
       );
       setVista(v);
       setValor(String(v.umbral_inliers));
+      // El override recién guardado/borrado cambia qué fila de la lista
+      // lleva la marca "override" -- sin esto, el desplegable se quedaba
+      // enseñando el estado de antes de guardar hasta recargar la pantalla.
+      setLista((l) => l.map((x) => (x.id === id ? { ...x, overridden: v.overridden } : x)));
     } catch (e) {
       setError(String(e));
     } finally {
@@ -147,12 +164,14 @@ function UmbralesEditor({ token }: { token: string }) {
         Override por servidor sobre <code className="font-mono text-subtle">UMBRAL_INLIERS</code>. Surte
         efecto en el siguiente análisis, sin reiniciar <code className="font-mono text-subtle">lumid</code>.
       </p>
-      <div className="mt-2.5 flex items-center gap-2">
-        <input value={id} onChange={(e) => setId(e.target.value)} placeholder="id del verificador (p.ej. roma)"
-          className={INPUT} />
-        <button onClick={() => void buscar()} className="jg-press shrink-0 rounded-lg border border-white/15 px-3 py-1.5 text-[11px] text-fg">
-          Ver
-        </button>
+      <div className="mt-2.5">
+        <select value={id} onChange={(e) => setId(e.target.value)} className={SELECT}>
+          {lista.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.nombre} ({v.tipo}){v.overridden ? " · override" : ""}
+            </option>
+          ))}
+        </select>
       </div>
       {vista && (
         <div className="mt-2.5 flex items-center gap-2">
@@ -181,11 +200,23 @@ function UmbralesEditor({ token }: { token: string }) {
 }
 
 function PromptsEditor({ token }: { token: string }) {
-  const [id, setId] = useState("hora-sombras");
+  const [lista, setLista] = useState<AgenteVista[]>([]);
+  const [id, setId] = useState("");
   const [json, setJson] = useState("");
   const [overridden, setOverridden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Misma fuente que ya usa el picker de agentes del modo Agentes -- sin
+  // duplicar el registro en dos sitios, y con el mismo nombre visible que
+  // ve el investigador, no el id crudo.
+  useEffect(() => {
+    api.get<AgenteVista[]>("/v1/agentes", token)
+      .then((l) => { setLista(l); if (l.length > 0) setId(l[0].id); })
+      .catch((e) => setError(String(e)));
+  }, [token]);
+
+  useEffect(() => { if (id) void buscar(); }, [id]);
 
   async function buscar() {
     setError(null);
@@ -235,12 +266,14 @@ function PromptsEditor({ token }: { token: string }) {
         si es uno fusionado). Se valida contra el struct de Rust antes de guardarse -- uno que no deserialice
         se rechaza con 400 y nunca llega a persistirse.
       </p>
-      <div className="mt-2.5 flex items-center gap-2">
-        <input value={id} onChange={(e) => setId(e.target.value)} placeholder="id del agente"
-          className={INPUT} />
-        <button onClick={() => void buscar()} className="jg-press shrink-0 rounded-lg border border-white/15 px-3 py-1.5 text-[11px] text-fg">
-          Ver
-        </button>
+      <div className="mt-2.5">
+        <select value={id} onChange={(e) => setId(e.target.value)} className={SELECT}>
+          {lista.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.nombre}{a.sub_preguntas.length > 0 ? " (fusionado)" : ""}{!a.instalado ? " · motor sin instalar" : ""}
+            </option>
+          ))}
+        </select>
       </div>
       {json && (
         <>

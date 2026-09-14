@@ -420,6 +420,14 @@ export interface AgenteVista {
    *  §1). Vacío en los que no lo son. */
   sub_preguntas: string[];
 }
+/** Un verificador del registro, para el picker de calibración -- ver
+ *  `GET /v1/admin/verificadores` (`crates/lumid/src/routes/calibracion.rs`). */
+export interface VerificadorVista {
+  id: string; nombre: string; tipo: string;
+  /** `true` cuando ya hay un override de `umbral_inliers` guardado en este
+   *  servidor para este verificador, no el valor del registro. */
+  overridden: boolean;
+}
 export interface Usage { used_bytes: number; limit_gb: number; overridden: boolean }
 export interface IndiceInstalado {
   paquete: string; nombre: string; autor: string;

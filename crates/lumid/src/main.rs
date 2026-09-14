@@ -300,6 +300,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/admin/features", get(routes::features::get).patch(routes::features::patch))
         .route("/v1/features", get(routes::features::get_public))
         .route("/v1/cases/:id/images/upscale", post(routes::images::upscale))
+        .route("/v1/admin/verificadores", get(routes::calibracion::listar_verificadores))
         .route(
             "/v1/admin/verificadores/:id/umbrales",
             get(routes::calibracion::get_umbral).patch(routes::calibracion::patch_umbral),
