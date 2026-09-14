@@ -259,8 +259,8 @@ Im\'agenes incluidas: & \ttfamily{{ n_imagenes }} \\
 Con hip\'otesis: & \ttfamily{{ estadisticas.n_con_hipotesis }} \\
 Con veredicto de agente: & \ttfamily{{ estadisticas.n_con_agente }} \\
 \textbf{Sin resolver:} & \textbf{\ttfamily {{ estadisticas.n_sin_resolver }}} \\
-{% if estadisticas.confianza_media_pct is defined and estadisticas.confianza_media_pct %}
-Confianza media: & \ttfamily{{ estadisticas.confianza_media_pct }}\,\% \\
+{% if estadisticas.peso_medio_txt is defined and estadisticas.peso_medio_txt %}
+Peso medio: & \ttfamily{{ estadisticas.peso_medio_txt }} \\
 {% endif %}
 \end{tabular}\\[10pt]
 {\color{lumiborde}\rule{\linewidth}{0.4pt}}
@@ -304,21 +304,10 @@ Confianza media: & \ttfamily{{ estadisticas.confianza_media_pct }}\,\% \\
 \end{tikzpicture}\\[4pt]
 {\footnotesize\ttfamily\color{lumigris}{{ resueltas }} resuelt{% if resueltas == 1 %}a{% else %}as{% endif %} \textperiodcentered\ \color{lumiavisotxt}{{ estadisticas.n_sin_resolver }} sin resolver}
 
-% Franja de confianza: un punto por imagen sobre un eje 0-100 -- ense\~na la
-% forma del caso de un vistazo (ver `PuntoFranjaCtx` en `export.rs`).
-{% if franja %}
-\vspace{18pt}
-\begin{tikzpicture}[x=1pt,y=1pt]
-  \draw[lumiborde,line width=0.6pt] (0,0) -- (280,0);
-  \foreach \x/\lbl in {0/0,140/50,280/100} {
-    \draw[lumiborde,line width=0.6pt] (\x,-2) -- (\x,2);
-    \node[below,font=\ttfamily\tiny,text=lumigris,yshift=-3pt] at (\x,-2) {\lbl};
-  }
-  {% for p in franja %}
-  \fill[{% if p.sin_resuelto %}lumiaviso{% else %}lumifg{% endif %}] ({{ p.pct * 2.8 }},0) circle (1.6pt);
-  {% endfor %}
-\end{tikzpicture}
-{% endif %}
+% La franja de confianza (un punto por imagen sobre un eje 0-100) se retiró:
+% asumía que el peso de una hipótesis es una fracción 0.0-1.0 comparable
+% entre imágenes distintas, y ninguna de las dos cosas es cierta -- ver el
+% comentario donde vivía `PuntoFranjaCtx` en `export.rs`.
 {% endif %}
 {% endif %}
 
@@ -343,17 +332,13 @@ Confianza media: & \ttfamily{{ estadisticas.confianza_media_pct }}\,\% \\
 % --------------------------------------------------- Ficha banda (§6b) --
 \begin{tikzpicture}
 \node[anchor=south west,inner sep=0] (lumifoto) {\includegraphics[width=\linewidth,height=150pt,keepaspectratio]{ {{- img.thumb_file -}} }};
-{% if img.confianza_pct is defined and img.confianza_pct %}
+{% if img.peso_txt is defined and img.peso_txt %}
 \node[anchor=south west,inner sep=6pt,font=\ttfamily\lumiintersemibold\fontsize{20}{20}\selectfont,text=lumifg]
-  at (lumifoto.south west) {{ '{' }}{{ img.confianza_pct }}\%{{ '}' }};
+  at (lumifoto.south west) {{ '{' }}{{ img.peso_txt }}{{ '}' }};
 {% endif %}
 {% if img.coord_txt %}
 \node[anchor=south east,inner sep=6pt,font=\ttfamily\footnotesize,text=lumigris]
   at (lumifoto.south east) {{ '{' }}{{ img.coord_txt | tex }}{{ '}' }};
-{% endif %}
-{% if img.confianza_pct is defined and img.confianza_pct %}
-\fill[lumiborde] (lumifoto.south west) rectangle ($(lumifoto.south east)+(0,2pt)$);
-\fill[lumifg] (lumifoto.south west) rectangle ($(lumifoto.south west)+({{ img.confianza_pct * 1.0 / 100 }}\linewidth,2pt)$);
 {% endif %}
 \end{tikzpicture}
 \vspace{10pt}
@@ -403,14 +388,8 @@ Confianza media: & \ttfamily{{ estadisticas.confianza_media_pct }}\,\% \\
 {% if img.thumb_file %}\includegraphics[width=130pt,height=130pt,keepaspectratio]{ {{- img.thumb_file -}} }{% else %}\textit{\small\color{lumigris}(sin miniatura)}{% endif %}
 \end{minipage}\hfill
 \begin{minipage}[t]{\dimexpr\linewidth-140pt\relax}
-{% if img.confianza_pct is defined and img.confianza_pct %}
-{\fontsize{30}{30}\selectfont\ttfamily\lumiintersemibold\color{lumifg}{{ img.confianza_pct }}\%}\\[3pt]
-{% if tema != "claro" %}
-\begin{tikzpicture}[x=1pt,y=1pt]
-\fill[lumiborde] (0,0) rectangle (140,2);
-\fill[lumifg] (0,0) rectangle ({{ img.confianza_pct * 1.4 }},2);
-\end{tikzpicture}\\[5pt]
-{% endif %}
+{% if img.peso_txt is defined and img.peso_txt %}
+{\fontsize{30}{30}\selectfont\ttfamily\lumiintersemibold\color{lumifg}{{ img.peso_txt }}}\\[5pt]
 {\ttfamily\footnotesize\color{lumigris}{{ img.coord_txt | tex }}\\radio {{ img.radio_txt | tex }}}
 {% else %}
 {\small\color{lumigris}Sin hip\'otesis de geolocalizaci\'on en este informe.}

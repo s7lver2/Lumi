@@ -186,13 +186,6 @@ struct Contexto {
     incluir_estadisticas: bool,
     estadisticas: Option<Estadisticas>,
     imagenes: Vec<ImagenCtx>,
-    /// Un punto por imagen para la «franja de confianza» de la portada
-    /// oscura (§5 del spec) -- solo imágenes con una confianza real o
-    /// `sin_resuelto` entran aquí; una imagen cuyo análisis está pendiente
-    /// no tiene ningún valor que enseñar y se omite (principio "nunca se
-    /// inventa" del proyecto, por encima de la lectura literal de "un punto
-    /// por imagen" del spec). Vacío cuando `incluir_estadisticas` es falso.
-    franja: Vec<PuntoFranjaCtx>,
     /// Notas libres del investigador -- vacío significa que la plantilla no
     /// dibuja la sección entera, no que se dibuje una en blanco.
     notas: String,
@@ -215,25 +208,31 @@ struct ModeloCount {
     n: usize,
 }
 
-/// Un punto de la «franja de confianza» de la portada oscura -- eje 0–100,
-/// `sin_resuelto` en ámbar y a `pct = 0` (decisión de diseño no especificada
-/// literalmente en el spec: un caso sin resolver no tiene una confianza que
-/// situar en el eje, y `0` es la lectura honesta -- "no hubo señal" -- en
-/// vez de omitir el punto o inventar un valor intermedio).
-#[derive(Serialize)]
-struct PuntoFranjaCtx {
-    pct: i64,
-    sin_resuelto: bool,
-}
-
+// La «franja de confianza» de la portada (§5 del spec de 2026-09-10) y el
+// eje 0-100 en el que se apoyaba se retiraron: los dos asumían que
+// `result_confidence` (en realidad `Hipotesis::peso`) es una fracción
+// 0.0-1.0, y `peso` está documentado explícitamente como "no es una
+// probabilidad: es cuánto pesa este grupo frente a los demás del MISMO
+// análisis" (`lumi-proto::worker::Hipotesis`) -- no tiene techo, y nada
+// garantiza que el peso de la imagen A sea comparable con el de la imagen
+// B. Multiplicarlo por 100 y llamarlo "%" producía "1000%" en un informe
+// real (caso reportado 2026-09-14); situarlo en un eje 0-100 compartido
+// entre imágenes habría sido la misma mentira con menos ceros. `ImagenCtx`
+// sigue enseñando el peso de cada imagen tal cual, como "N.N×" -- el mismo
+// tratamiento que ya usa `ResultsDrawer.tsx` en el cliente -- pero un
+// resumen que compare pesos ENTRE imágenes distintas necesita una escala
+// que alguien decida a propósito, no una recuperada de un bug.
 #[derive(Serialize)]
 struct Estadisticas {
     creado_en: String,
     por_modelo: Vec<ModeloCount>,
-    /// Ya redondeada a un entero de porcentaje -- `None` cuando NINGÚN
-    /// análisis de geolocalización dejó una confianza registrada, nunca un
-    /// 0 inventado (principio "nunca se inventa" del proyecto).
-    confianza_media_pct: Option<i64>,
+    /// Peso medio de las hipótesis principales, ya formateado ("4.2×") --
+    /// `None` cuando NINGÚN análisis de geolocalización dejó una confianza
+    /// registrada, nunca un 0 inventado (principio "nunca se inventa" del
+    /// proyecto). Es un promedio de pesos, no una probabilidad media: ver
+    /// el comentario donde vivía `PuntoFranjaCtx` sobre por qué `peso` no
+    /// se convierte en porcentaje.
+    peso_medio_txt: Option<String>,
     agentes_total: usize,
     agentes_respondieron: usize,
     agentes_abstuvieron: usize,
@@ -301,10 +300,13 @@ struct ImagenCtx {
     /// hay ningún bloque de resultado que sustituir, así que tampoco se
     /// imprime el aviso ámbar (no estaría reemplazando nada).
     mostrar_aviso_sin_resuelto: bool,
-    /// Confianza de la hipótesis principal, ya redondeada a entero de
-    /// porcentaje -- el número grande junto a la miniatura. `None` cuando no
-    /// hay hipótesis, la sección está apagada, o `sin_resuelto`.
-    confianza_pct: Option<i64>,
+    /// Peso de la hipótesis principal, ya formateado ("4.2×") -- el número
+    /// grande junto a la miniatura. `None` cuando no hay hipótesis, la
+    /// sección está apagada, o `sin_resuelto`. No es un porcentaje: `peso`
+    /// no es una probabilidad (`lumi_proto::worker::Hipotesis::peso`), y
+    /// mostrarlo como "×" es el mismo tratamiento que ya usa
+    /// `ResultsDrawer.tsx` en el cliente.
+    peso_txt: Option<String>,
     coord_txt: Option<String>,
     radio_txt: Option<String>,
     /// Numéricos, para el localizador TikZ (§7 del spec) -- `coord_txt`
@@ -469,7 +471,7 @@ struct ResumenOscuro {
     motivo_sin_resuelto: Option<String>,
     con_hipotesis: bool,
     con_agente: bool,
-    confianza_pct: Option<i64>,
+    peso_txt: Option<String>,
     coord_txt: Option<String>,
     radio_txt: Option<String>,
     lat: Option<f64>,
@@ -508,7 +510,7 @@ fn resumen_oscuro(analyses: &[Analysis], req: &ExportInformeReq) -> ResumenOscur
     // informe (`hipotesis_geolocalizacion`/`veredictos_agentes`) y quedan en
     // blanco cuando `sin_resuelto` -- ese caso lo cubre el aviso ámbar, no
     // estos campos.
-    let mut confianza_pct = None;
+    let mut peso_txt = None;
     let mut coord_txt = None;
     let mut radio_txt = None;
     let mut lat_out = None;
@@ -518,7 +520,13 @@ fn resumen_oscuro(analyses: &[Analysis], req: &ExportInformeReq) -> ResumenOscur
     if req.hipotesis_geolocalizacion && !sin_resuelto {
         if let Some(a) = geo {
             if let (Some(lat), Some(lng)) = (a.result_lat, a.result_lng) {
-                confianza_pct = a.result_confidence.map(|c| (c * 100.0).round() as i64);
+                // `result_confidence` es `Hipotesis::peso` tal cual llegó de
+                // `agrupar()` -- NO una fracción 0.0-1.0. Multiplicarlo por
+                // 100 y llamarlo "%" es lo que producía "1000%" en un
+                // informe real (caso reportado 2026-09-14, ver el comentario
+                // donde vivía `PuntoFranjaCtx`). Se enseña como "N.N×", el
+                // mismo tratamiento que ya usa `ResultsDrawer.tsx`.
+                peso_txt = a.result_confidence.map(|c| format!("{c:.1}\u{d7}"));
                 coord_txt = Some(format!("{lat:.6}, {lng:.6}"));
                 radio_txt =
                     Some(a.result_radius_m.map(|r| format!("{r:.0} m")).unwrap_or_else(|| "sin radio".into()));
@@ -531,9 +539,12 @@ fn resumen_oscuro(analyses: &[Analysis], req: &ExportInformeReq) -> ResumenOscur
                 if !a.hypotheses.is_empty() {
                     hipotesis_extra.push(cabecera("Alternativas:".into()));
                     for h in &a.hypotheses {
+                        // Mismo motivo que arriba: `h.peso` tampoco es una
+                        // fracción -- era "peso 38%" hoy, "peso 230%" mañana
+                        // con otro caso.
                         hipotesis_extra.push(cuerpo(format!(
-                            "\u{b7} {:.6}, {:.6} \u{b7} radio {:.0} m \u{b7} peso {:.0}%",
-                            h.lat, h.lng, h.radio_m, h.peso * 100.0,
+                            "\u{b7} {:.6}, {:.6} \u{b7} radio {:.0} m \u{b7} peso {:.1}\u{d7}",
+                            h.lat, h.lng, h.radio_m, h.peso,
                         )));
                     }
                 }
@@ -548,7 +559,11 @@ fn resumen_oscuro(analyses: &[Analysis], req: &ExportInformeReq) -> ResumenOscur
                 let dicho =
                     a.agentes.iter().find(|d| Some(d.agente.as_str()) == a.agente.as_deref()).unwrap_or(&a.agentes[0]);
                 agente_lineas.push(cabecera(dicho.nombre.clone()));
-                agente_lineas.push(cuerpo(format!("Veredicto: {} ({:.0}%)", dicho.etiqueta, dicho.confianza * 100.0)));
+                // `confianza` tampoco está acotada -- está documentado en
+                // `lumi_proto::worker::Evento::Agente`: "un motor que
+                // devuelva 1,5 se comporta como uno muy seguro". Mismo "×"
+                // que el resto en vez de un "%" que puede pasar de 100.
+                agente_lineas.push(cuerpo(format!("Veredicto: {} ({:.1}\u{d7})", dicho.etiqueta, dicho.confianza)));
                 if !dicho.detalle.is_empty() {
                     agente_lineas.push(cuerpo(format!("Detalle: {}", dicho.detalle)));
                 }
@@ -562,7 +577,7 @@ fn resumen_oscuro(analyses: &[Analysis], req: &ExportInformeReq) -> ResumenOscur
         motivo_sin_resuelto,
         con_hipotesis,
         con_agente,
-        confianza_pct,
+        peso_txt,
         coord_txt,
         radio_txt,
         lat: lat_out,
@@ -607,13 +622,18 @@ fn calcular_estadisticas(
             }
         }
     }
-    let confianza_media_pct =
-        if confianzas.is_empty() { None } else { Some((confianzas.iter().sum::<f64>() / confianzas.len() as f64 * 100.0).round() as i64) };
+    // Media de `peso` (no de una probabilidad -- ver el comentario donde
+    // vivía `PuntoFranjaCtx`), formateada igual que el resto: "N.N×".
+    let peso_medio_txt = if confianzas.is_empty() {
+        None
+    } else {
+        Some(format!("{:.1}\u{d7}", confianzas.iter().sum::<f64>() / confianzas.len() as f64))
+    };
     let (n_con_hipotesis, n_con_agente, n_sin_resolver, n_errores, n_abstenciones) = resueltos;
     Estadisticas {
         creado_en: fecha_legible(case_created_at),
         por_modelo: por_modelo.into_iter().map(|(modelo, n)| ModeloCount { modelo, n }).collect(),
-        confianza_media_pct,
+        peso_medio_txt,
         agentes_total: respondieron + abstuvieron,
         agentes_respondieron: respondieron,
         agentes_abstuvieron: abstuvieron,
@@ -722,6 +742,23 @@ fn sha256_de_fichero(path: &FsPath) -> Option<String> {
         hasher.update(&buf[..n]);
     }
     Some(format!("{:x}", hasher.finalize()))
+}
+
+/// El sha256 son 64 caracteres hexadecimales sin un solo espacio: para TeX
+/// es UNA palabra, y sin patrones de guionado en español (ver el ponytail
+/// del preámbulo de la plantilla) tampoco hay guionado en inglés que la
+/// parta -- se desbordaba por el margen derecho de la caja "Integridad" en
+/// vez de saltar de línea (caso real reportado 2026-09-14). Intercalar
+/// `\discretionary{}{}{}` cada 8 caracteres le da a TeX puntos de corte
+/// legítimos sin insertar ningún carácter visible (los tres argumentos
+/// vacíos son justamente "sin guion, sin nada" en el punto de corte) --
+/// nunca se toca el hash en sí, solo cómo puede envolver.
+fn sha256_partible(hash: &str) -> String {
+    hash.as_bytes()
+        .chunks(8)
+        .map(|c| std::str::from_utf8(c).unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join("\\discretionary{}{}{}")
 }
 
 /// Los rasgos reales (recuadros OCR, mapa de profundidad) de los agentes que
@@ -909,7 +946,6 @@ fn generar_pdf(
     copiar_fuentes(&job);
 
     let mut imagenes = Vec::with_capacity(filas.len());
-    let mut franja = Vec::with_capacity(filas.len());
     // Agregados para los cuatro números de portada del tema oscuro -- se
     // suman aquí, imagen a imagen, en vez de recorrer `analyses_del_caso`
     // aparte (esa lista es plana y no agrupada por imagen; `filas` sí lo
@@ -928,8 +964,13 @@ fn generar_pdf(
             std::fs::write(job.join(&nombre), bytes).ok()?;
             Some(nombre)
         });
-        let sha256 =
-            if req.integridad_sha256 { sha256_de_fichero(&originales_dir.join(img.id.to_string())) } else { None };
+        // `sha256_partible`, no el hash crudo: es el mismo valor, con puntos
+        // de corte para que TeX pueda envolverlo (ver su comentario).
+        let sha256 = if req.integridad_sha256 {
+            sha256_de_fichero(&originales_dir.join(img.id.to_string())).map(|h| sha256_partible(&h))
+        } else {
+            None
+        };
         let r = resumen_oscuro(analyses, req);
         if r.con_hipotesis {
             n_con_hipotesis += 1;
@@ -949,11 +990,6 @@ fn generar_pdf(
             (Some(lat), Some(lng), Some(radio_km)) => construir_mapa(paises, lat, lng, radio_km),
             _ => None,
         };
-        if let Some(pct) = r.confianza_pct {
-            franja.push(PuntoFranjaCtx { pct, sin_resuelto: false });
-        } else if r.sin_resuelto {
-            franja.push(PuntoFranjaCtx { pct: 0, sin_resuelto: true });
-        }
         imagenes.push(ImagenCtx {
             orden: orden + 1,
             filename: img.filename.clone(),
@@ -964,7 +1000,7 @@ fn generar_pdf(
             sin_resuelto: r.sin_resuelto,
             mostrar_aviso_sin_resuelto: r.sin_resuelto && (req.hipotesis_geolocalizacion || req.veredictos_agentes),
             motivo_sin_resuelto: r.motivo_sin_resuelto,
-            confianza_pct: r.confianza_pct,
+            peso_txt: r.peso_txt,
             coord_txt: r.coord_txt,
             radio_txt: r.radio_txt,
             lat: r.lat,
@@ -1004,7 +1040,6 @@ fn generar_pdf(
         incluir_estadisticas: req.portada_estadisticas,
         estadisticas,
         imagenes,
-        franja: if req.portada_estadisticas { franja } else { Vec::new() },
         notas: req.notas.trim().to_string(),
         tema,
         disposicion,
