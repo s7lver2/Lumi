@@ -1423,7 +1423,58 @@
           "sha256": "fc6e518dc59d7712e455e2fce017b9050d77fbaea009ad81940e05c839b5be57"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.42",
+      "publicado": "2026-09-14T11:41:38Z",
+      "notas": "small fixes and implementations",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.42/app.exe",
+          "bytes": 16111616,
+          "sha256": "dd78753facb056a0b1e0dc60334c9926b942828997f8efbfed1ec6f322c7f854"
+        }
+      ]
+    },
+    {
+      "producto": "indexer",
+      "version": "2.0.42",
+      "publicado": "2026-09-14T11:41:38Z",
+      "notas": "small fixes and implementations",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.42/indexer-app.exe",
+          "bytes": 23519744,
+          "sha256": "09000f57d446707b51b6f7e198108fdf05710b2baf5bd11a00aa654bd55e5012"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.42",
+      "publicado": "2026-09-14T11:41:38Z",
+      "notas": "small fixes and implementations",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.42/lumid",
+          "bytes": 23994800,
+          "sha256": "ba7b98cc69d9b4b1e5a8381ca658e96ecbdc126314a6fc70e73b7c5d9ac27d12"
+        },
+        {
+          "plataforma": "assets",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.42/lumid-assets.tar.gz",
+          "bytes": 1020508,
+          "sha256": "66c037cbb21333c6940f0697efdd19d06c6cf88903824fd41fada399c5c707dd"
+        }
+      ]
     }
   ],
-  "firma": "A26jYEHwH6xT3iLsUuomHtQlKuJ9mDpXK+pCIBsLmdboHur02rshgDB8e9mIR0HJYtZXqE/C5rRlRE56hiC4Bw=="
+  "firma": "xh2GaLzdj/PphYn4+TT/JW9+VQorjC8gFcGXawt4IKOnLwmv/q6/RLGP0pJz1kPoIxf9psHPMapeu63htZj1AQ=="
 }
