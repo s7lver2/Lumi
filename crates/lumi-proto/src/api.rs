@@ -1088,6 +1088,17 @@ pub enum Cambio {
         /// daemon) o cuando el ajuste está apagado del todo.
         eta_s: Option<f64>,
     },
+    /// El dueño del proyecto o un administrador del servidor le ha quitado el
+    /// candado a quien lo tenía, para que otra persona pueda entrar —
+    /// `project_locks` es de una sola plaza (ver `routes::projects::enter`).
+    /// Sin este aviso, la persona expulsada seguía trabajando en un proyecto
+    /// que ya no es "suyo" hasta que algo le fallara sin motivo aparente.
+    Expulsion {
+        #[serde(skip)]
+        user_id: i64,
+        project_id: i64,
+        project_name: String,
+    },
     /// Invitación nueva a un proyecto, por el mismo canal que ya tiene abierto
     /// cualquier sesión conectada (`/v1/queue/events`) — sin esto, enterarse
     /// de una invitación dependía de un sondeo cada 60s en `NotificationsPopover`.
@@ -1117,6 +1128,7 @@ impl Cambio {
         match self {
             Cambio::Estado { user_id, .. }
             | Cambio::Progreso { user_id, .. }
+            | Cambio::Expulsion { user_id, .. }
             | Cambio::Invitacion { user_id, .. }
             | Cambio::Red { user_id, .. } => *user_id,
         }

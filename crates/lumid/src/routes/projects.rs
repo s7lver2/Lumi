@@ -485,6 +485,29 @@ pub async fn leave(State(app): State<App>, Path(id): Path<i64>, headers: HeaderM
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Le quita el candado a quien lo tenga, sin esperar a que lo suelte él
+/// mismo o a que caduque (`STALE_AFTER`, 12h) -- para cuando alguien se
+/// queda dentro del proyecto (con la app abierta, sin conexión, o
+/// simplemente sin acordarse) y otra persona necesita entrar ya. `manage`
+/// en `guard()` deja pasar al dueño del proyecto y a cualquier administrador
+/// del servidor, igual que el resto de acciones destructivas de este
+/// fichero -- no a un miembro cualquiera.
+pub async fn kick(State(app): State<App>, Path(id): Path<i64>, headers: HeaderMap) -> Result<StatusCode, Fail> {
+    guard(&app, &headers, id, true)?;
+    let c = app.store.conn();
+    let holder: i64 = c
+        .query_row("SELECT user_id FROM project_locks WHERE project_id = ?1", [id], |r| r.get(0))
+        .map_err(|_| err(StatusCode::CONFLICT, "no hay nadie dentro de este proyecto ahora mismo"))?;
+    c.execute("DELETE FROM project_locks WHERE project_id = ?1", [id])
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    let project_name: String = c
+        .query_row("SELECT name FROM projects WHERE id = ?1", [id], |r| r.get(0))
+        .unwrap_or_default();
+    tracing::info!("proyecto #{id} ({project_name}): usuario {holder} expulsado del candado");
+    app.queue.difundir(lumi_proto::api::Cambio::Expulsion { user_id: holder, project_id: id, project_name });
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// El dueño quita a quien quiera; cualquiera puede quitarse a sí mismo. El
 /// dueño no puede salirse: no hay a quién dejarle el proyecto porque traspasar
 /// la propiedad está aparcado (ver FUTURO.md). Su salida es borrarlo.

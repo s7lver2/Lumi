@@ -21,7 +21,7 @@ import { comprobarActualizacion, dispararActualizacionSilenciosa, errorActualiza
 import { DebugOrb } from "./dev/DebugOrb";
 import { useServer } from "./lib/store";
 import { useWorkspace } from "./lib/workspace";
-import { api, type Hello, type Me, type Sample, type TaskStatus } from "./lib/api";
+import { api, type Cambio, type Hello, type Me, type Sample, type TaskStatus } from "./lib/api";
 import { announcePresence, fetchLumiAvatarDataUrl, setAuth } from "./lib/bridge";
 import { loadSession, updateServerAvatar, updateSession } from "./lib/session";
 import { ProjectPicker } from "./work/ProjectPicker";
@@ -112,6 +112,24 @@ export default function App() {
   useEffect(() => {
     const un = listen<Sample>("telemetry", (e) => useServer.getState().setSample(e.payload));
     return () => { un.then((f) => f()); };
+  }, []);
+
+  /** El dueño del proyecto (o un admin) te puede quitar el candado mientras
+   *  estás dentro, para dejárselo libre a otra persona -- un proyecto solo
+   *  admite una persona a la vez (`routes::projects::kick`). Si el aviso no
+   *  es de TU proyecto actual, no pasa nada. */
+  const [expulsadoDe, setExpulsadoDe] = useState<string | null>(null);
+  useEffect(() => {
+    const un = listen<Cambio>("queue-change", (e) => {
+      const c = e.payload;
+      if (c.tipo !== "expulsion") return;
+      if (useWorkspace.getState().project?.id !== c.project_id) return;
+      setExpulsadoDe(c.project_name);
+      toProjects();
+      setTimeout(() => setExpulsadoDe(null), 6000);
+    });
+    return () => { void un.then((f) => f()); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Al reabrir la app, retomar donde estabas en vez de exigir la clave de
@@ -333,6 +351,15 @@ export default function App() {
         <ActualizacionBanner estado={actualizacion} onCerrar={() => setActualizacionCerrada(true)} />
       )}
       {mode !== "entry" && enMantenimiento && <MantenimientoBanner mensaje={mensajeMantenimiento} />}
+      {expulsadoDe && (
+        <div className="absolute inset-x-0 top-[42px] z-[70] mx-auto flex w-fit items-center gap-2.5
+            rounded-[11px] border border-white/[.14] bg-[rgba(20,22,26,.97)] px-3 py-2 text-[11.5px]
+            text-fg shadow-lg shadow-black/40 backdrop-blur-xl"
+          style={{ animation: "jg-fade-rise .4s cubic-bezier(.16,1,.3,1) both" }}>
+          Un administrador te ha sacado de «{expulsadoDe}» para dejarlo libre.
+          <button onClick={() => setExpulsadoDe(null)} className="shrink-0 text-subtle hover:text-fg">✕</button>
+        </div>
+      )}
       <ResizeHandles />
       {/* Para app/admin, la desconexión es un banner + bloqueo, no una
           pantalla completa: la sesión de un usuario normal no tiene un
