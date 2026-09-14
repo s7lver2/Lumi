@@ -1236,6 +1236,24 @@ impl Queue {
     /// a su umbral aparece con la etiqueta `abstiene`: en el panel se ve que
     /// corrió y que no vio suficiente, en vez de desaparecer sin explicación.
     fn guardar_agentes(&self, id: i64, dictamen: &[(lumi_index::agentes::Veredicto, String)]) {
+        // Debug de calibración (spec 2026-09-10 §4c): defensa en profundidad
+        // -- `agentar::preguntar` ya solo pide `respuesta_cruda` al
+        // trabajador con el modo activo, pero esto es lo que de verdad
+        // decide si se PERSISTE, para que un trabajador viejo o mal
+        // configurado que la mande de todos modos no la acumule en la base
+        // de instalaciones que nunca activaron calibración.
+        //
+        // ANTES de `store.conn()`, no después: `activo()` llama a
+        // `store.get_meta()`, que vuelve a pedir el mismo `Mutex` -- no es
+        // reentrante, así que pedirlo dos veces desde el mismo hilo con el
+        // primer guard todavía vivo (se usa más abajo, dentro del `for`) se
+        // bloqueaba a sí mismo PARA SIEMPRE. Ese hilo nunca volvía a soltar
+        // el mutex, así que la SIGUIENTE petición cualquiera que tocara la
+        // base (login, `/v1/hello` indirectamente, lo que fuera) se quedaba
+        // esperando el mismo cerrojo y consumía el segundo hilo de tokio —
+        // con los dos atascados, el daemon entero dejaba de responder. Esto
+        // es justo el "se congela después de cada análisis" reportado hoy.
+        let calibracion_activo = crate::routes::features::activo(&self.store, crate::routes::features::CLAVE_CALIBRACION);
         let c = self.store.conn();
         let _ = c.execute("DELETE FROM analysis_agents WHERE analysis_id = ?1", [id]);
         // Mismo aplanado que en `aplicar()`: `v.agente` de una sub-pregunta
@@ -1243,13 +1261,6 @@ impl Queue {
         // sin esto, todo veredicto de un agente fusionado se descartaba en
         // silencio aquí (el `find` de abajo nunca encontraba nada).
         let agentes = lumi_index::agentes::aplanar(&self.agentes.lock().unwrap());
-        // Debug de calibración (spec 2026-09-10 §4c): defensa en profundidad
-        // -- `agentar::preguntar` ya solo pide `respuesta_cruda` al
-        // trabajador con el modo activo, pero esto es lo que de verdad
-        // decide si se PERSISTE, para que un trabajador viejo o mal
-        // configurado que la mande de todos modos no la acumule en la base
-        // de instalaciones que nunca activaron calibración.
-        let calibracion_activo = crate::routes::features::activo(&self.store, crate::routes::features::CLAVE_CALIBRACION);
         for (v, detalle) in dictamen {
             let Some(a) = agentes.iter().find(|a| a.id == v.agente) else { continue };
             let abstiene = v.confianza < a.umbral_confianza;
