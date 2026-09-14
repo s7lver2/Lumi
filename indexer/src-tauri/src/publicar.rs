@@ -508,12 +508,36 @@ async fn subir_asset(
         // no es una rareza. Sin esto, el intento siguiente reintentaba con
         // el mismo nombre, GitHub respondía 422 «already_exists», y ese
         // error —que no es la causa real, es su síntoma— era lo único que
-        // llegaba al operador. Verificado en vivo el 2026-09-14: paso 8/12
-        // de una subida real falló así, con el asset ya presente en el
-        // release desde el intento anterior.
+        // llegaba al operador.
+        //
+        // PERO no basta con reutilizar la URL del asset ya presente: eso fue
+        // el primer intento de arreglo (verificado en vivo el 2026-09-14) y
+        // introdujo un bug peor. Si el asset que ya existe viene de una
+        // llamada a `subir_asset` ANTERIOR y distinta —no de un intento
+        // fantasma DENTRO de esta misma llamada—, sus bytes se cifraron con
+        // OTRO nonce: mismo contenido en claro, ciphertext distinto byte a
+        // byte. `publicar()` ya calculó el `sha256` de LOS BYTES DE ESTA
+        // LLAMADA (`cuerpo`) antes de invocar `subir_asset` y eso es lo que
+        // va a la ficha — reutilizar la URL de un asset con otro cifrado deja
+        // la ficha apuntando a un sha256 que no corresponde a lo que de
+        // verdad hay en GitHub. Eso fue justo el fallo real: «el asset no
+        // coincide con su sha256» al instalar, porque el asset reutilizado no
+        // era el de esta subida.
+        //
+        // La única forma segura de que el nombre quede libre para los bytes
+        // de ESTA llamada es borrar lo que haya y dejar que el intento
+        // siguiente del propio bucle lo recree — nunca dar el nombre ajeno
+        // por bueno. El coste es, como mucho, resubir un asset que en
+        // realidad ya estaba bien (el caso fantasma real); es barato frente
+        // a firmar una ficha que apunta a bytes que no son los suyos.
         if let Some(a) = buscar_asset_remoto(cliente, testigo, repo, release, nombre).await {
-            log::warn!("{nombre} ya existía en el release pese al fallo aparente: se reutiliza");
-            return Ok(a.browser_download_url);
+            log::warn!("{nombre} ya existía en el release tras un fallo aparente: se borra para resubir los bytes de esta subida, no los de quien sabe qué intento");
+            let _ = cliente
+                .delete(format!("https://api.github.com/repos/{repo}/releases/assets/{}", a.id))
+                .bearer_auth(testigo)
+                .header("user-agent", "lumi-indexer")
+                .send()
+                .await;
         }
         tokio::time::sleep(std::time::Duration::from_secs(espera)).await;
         espera *= 3;
