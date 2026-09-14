@@ -38,7 +38,7 @@ pub fn reset_password(servidor: &Servidor, username: &str) -> Result<String> {
 
 pub fn unblock(servidor: &Servidor, username: &str) -> Result<()> {
     let id = buscar_id(servidor, username)?;
-    let req = PatchUserReq { blocked: Some(false), must_change_password: None, limits: Default::default() };
+    let req = PatchUserReq { blocked: Some(false), must_change_password: None, limits: Default::default(), is_admin: None };
     let _: UserDetail = red::patch_json(servidor, &format!("/v1/admin/users/{id}"), &req)?;
     Ok(())
 }
