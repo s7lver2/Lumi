@@ -365,7 +365,12 @@ Peso medio: & \ttfamily{{ estadisticas.peso_medio_txt }} \\
     \fill[lumiaviso] ({{ img.mapa.punto.x }},{{ img.mapa.punto.y }}) circle (1.4pt);
   \end{tikzpicture}\\[4pt]{% endif %}
   \ttfamily{{ img.coord_txt | tex }}\\radio {{ img.radio_txt | tex }}
-  {% if img.hipotesis_extra %}\\[4pt]\normalfont{% for l in img.hipotesis_extra %}{% if l.variante == "cabecera" %}\lumiintermedium {{ l.texto | tex }}\\[2pt]{% else %}{{ l.texto | tex }}\\{% endif %}{% endfor %}{% endif %}
+  {# `\normalfont` es un control WORD: sin el `{}`, "Respaldo..." pegado
+     detrás se lee como parte del propio nombre del comando
+     (`\normalfontRespaldo`, indefinido) en vez de como texto -- el
+     "Undefined control sequence" reportado al previsualizar un informe con
+     respaldo geométrico. #}
+  {% if img.hipotesis_extra %}\\[4pt]\normalfont{}{% for l in img.hipotesis_extra %}{% if l.variante == "cabecera" %}\lumiintermedium {{ l.texto | tex }}\\[2pt]{% else %}{{ l.texto | tex }}\\{% endif %}{% endfor %}{% endif %}
 }
 {% endif %}
 {% if img.agente_lineas %}
@@ -424,7 +429,10 @@ Peso medio: & \ttfamily{{ estadisticas.peso_medio_txt }} \\
     \fill[lumiaviso] ({{ img.mapa.punto.x }},{{ img.mapa.punto.y }}) circle (1.4pt);
   \end{tikzpicture}{% else %}\phantom{x}{% endif %}
   \end{minipage}\hfill
-  \begin{minipage}[t]{\dimexpr\linewidth-100pt\relax}\small
+  {# Mismo motivo que el `\normalfont{}` de más arriba: `\small` es un
+     control WORD y sin el `{}` se come el texto pegado detrás como parte
+     de su propio nombre. #}
+  \begin{minipage}[t]{\dimexpr\linewidth-100pt\relax}\small{}
   {% for l in img.hipotesis_extra %}{% if l.variante == "cabecera" %}\lumiintermedium {{ l.texto | tex }}\\[2pt]{% else %}{{ l.texto | tex }}\\{% endif %}{% endfor %}
   \end{minipage}
 }
@@ -432,7 +440,8 @@ Peso medio: & \ttfamily{{ estadisticas.peso_medio_txt }} \\
 
 {% if img.agente_lineas %}
 \lumibloque{\lumiiconobocadillo}{Agente}{
-  \small{% for l in img.agente_lineas %}{% if l.variante == "cabecera" %}\lumiintermedium {{ l.texto | tex }}\\[2pt]{% else %}{{ l.texto | tex }}\\{% endif %}{% endfor %}
+  {# Mismo motivo que los `\normalfont{}`/`\small{}` de más arriba. #}
+  \small{}{% for l in img.agente_lineas %}{% if l.variante == "cabecera" %}\lumiintermedium {{ l.texto | tex }}\\[2pt]{% else %}{{ l.texto | tex }}\\{% endif %}{% endfor %}
   {% for r in img.rasgos_graficos %}\vspace{6pt}{% if r.tipo == "ocr" and img.thumb_file %}\begin{center}\begin{tikzpicture}
     \node[anchor=south west,inner sep=0] (rasgoimg) {\includegraphics[width=5cm,height=5cm,keepaspectratio]{ {{- img.thumb_file -}} }};
     \begin{scope}[x={(rasgoimg.south east)},y={(rasgoimg.north west)}]
