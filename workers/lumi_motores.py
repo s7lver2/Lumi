@@ -224,15 +224,27 @@ class Vlm(object):
         hasta este campo (no una pregunta sintética nueva) -- se sustituye
         cada candidata en el lugar exacto donde el modelo escribió su
         respuesta, así que esto puntúa de verdad lo que generó, nunca
-        regenera ni repite la llamada cara de generación."""
+        regenera ni repite la llamada cara de generación.
+
+        A diferencia de `responder()` (que promedia la pérdida sobre TODA la
+        secuencia, prompt incluido, y le vale porque su pregunta es corta),
+        aquí el prefijo es el JSON compuesto entero -- promediarlo igual
+        diluía la señal casi hasta lo uniforme (probado: hacía que agentes
+        enteros se abstuvieran siempre, sin distinguir nada). Se enmascara el
+        prefijo (`-100`, que la pérdida de HF ignora) para que solo cuenten
+        los tokens de la propia candidata."""
         m = re.search(r'"' + re.escape(campo) + r'"\s*:\s*"', json_bruto)
         prefijo = texto_prompt + (json_bruto[:m.end()] if m else '{"' + campo + '": "')
+        entrada_prefijo = self.proc(text=[prefijo], images=[img], return_tensors="pt")
+        n_prefijo = entrada_prefijo["input_ids"].shape[1]
         puntos = []
         for etiqueta in etiquetas:
             entrada = self.proc(text=[prefijo + etiqueta], images=[img], return_tensors="pt")
             entrada = {k: v.to(self.dispositivo) for k, v in entrada.items()}
+            labels = entrada["input_ids"].clone()
+            labels[:, :n_prefijo] = -100
             with torch.no_grad():
-                salida = self.red(**entrada, labels=entrada["input_ids"])
+                salida = self.red(**entrada, labels=labels)
             puntos.append(-float(salida.loss))
         probs = torch.softmax(torch.tensor(puntos), dim=0).tolist()
         alternativas = sorted(zip(etiquetas, probs), key=lambda par: -par[1])
