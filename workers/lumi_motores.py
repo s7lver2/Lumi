@@ -30,17 +30,16 @@ import re
 
 from lumi_pesos import _licencia
 
-#: Confianza fija para una sub-respuesta de un agente fusionado (spec
-#: 2026-09-10 §1, `Vlm.responder_fusionado`). No sale de un softmax como
-#: `responder()`: eso exigiría puntuar cada etiqueta de cada sub-pregunta por
-#: separado, justo la N-llamadas que la fusión existe para evitar. Se fija
-#: POR ENCIMA de todos los `umbral_confianza` que hoy usan las sub-preguntas
-#: fusionadas (0.5-0.8, ver `registros/agentes/*.json`) para que la señal que
-#: manda sea "el modelo respetó el conjunto cerrado ofrecido" y no un número
-#: que además tenga que decidir abstención. ponytail: si algún día hace falta
-#: una confianza graduada por sub-pregunta, la vía es puntuar cada una sobre
-#: el mismo texto ya generado (sin repetir la llamada de generación), no
-#: cambiar esta constante.
+#: Confianza para una sub-respuesta fusionada cuya sub-pregunta no trae
+#: ningún conjunto cerrado de etiquetas (`sub_preguntas[].etiquetas` vacío en
+#: el registro) -- sin candidatas que puntuar no hay nada que comparar, así
+#: que no hay softmax posible. Hoy no hay ningún agente así en
+#: `registros/agentes/*.json`; es una red de seguridad, no el camino normal.
+#: El camino normal (con etiquetas) puntúa cada sub-respuesta de verdad, ver
+#: `Vlm._puntuar_subrespuesta` -- este número YA NO se usa para eso desde que
+#: se descubrió que una constante fija le daba la misma confianza (0.9) a un
+#: dato plausible y a uno inventado por el modelo para una pregunta que ni
+#: aplicaba a la foto.
 CONFIANZA_FUSIONADO = 0.9
 
 
@@ -157,9 +156,13 @@ class Vlm(object):
     def responder_fusionado(self, agente, ruta_imagen):
         """Un agente fusionado (`sub_preguntas` no vacío, spec 2026-09-10 §1):
         UNA sola llamada de generación con `agente["pregunta"]` (que ya pide
-        el JSON compuesto, ver `registros/agentes/*.json`), en vez de las N
-        llamadas de puntuación que haría `responder()` una vez por
-        sub-pregunta. Devuelve una lista `(sub_id, etiqueta, confianza,
+        el JSON compuesto, ver `registros/agentes/*.json`) decide el VALOR de
+        cada sub-pregunta -- eso sigue siendo una sola llamada, no las N que
+        haría `responder()`. La CONFIANZA de cada una, en cambio, sí se
+        puntúa por separado (`_puntuar_subrespuesta`, mismo método que
+        `responder()`: verosimilitud de cada etiqueta candidata + softmax)
+        sobre el JSON ya generado -- nunca se repite la generación, solo se
+        vuelve a evaluar. Devuelve una lista `(sub_id, etiqueta, confianza,
         detalle, alternativas, rasgos)` -- vacía la sub-pregunta cuyo valor
         no vino en el JSON o no está en su conjunto cerrado de etiquetas: es
         una abstención, igual que ya lo es un agente suelto por debajo de su
@@ -183,6 +186,7 @@ class Vlm(object):
         generado = self.proc.batch_decode(
             salida[:, entrada["input_ids"].shape[1]:], skip_special_tokens=True)[0]
         datos = _json_de(generado) or {}
+        json_bruto = generado[generado.find("{"):generado.rfind("}") + 1]
 
         fuera = []
         for s in subs:
@@ -195,13 +199,45 @@ class Vlm(object):
                 # El modelo se salió del conjunto cerrado ofrecido: se
                 # abstiene esta sub-pregunta, no se adivina la más parecida.
                 continue
-            fuera.append((s["id"], valor, CONFIANZA_FUSIONADO, "", [], None))
+            if etiquetas:
+                confianza, alternativas = self._puntuar_subrespuesta(texto, img, json_bruto, s["id"], valor, etiquetas)
+            else:
+                confianza, alternativas = CONFIANZA_FUSIONADO, []
+            fuera.append((s["id"], valor, confianza, "", alternativas, None))
         # El texto generado, TAL CUAL, antes de este mismo parseo -- es lo
         # que espera `lumi_agentes.py` para rellenar `respuesta_cruda` (spec
         # 2026-09-10 §4c) cuando `modo_calibracion` está activo. Se devuelve
         # siempre (barato: ya está en memoria) y es la propia llamada de
         # arriba quien decide si se queda o se descarta con el modo apagado.
         return generado, fuera
+
+    def _puntuar_subrespuesta(self, texto_prompt, img, json_bruto, campo, valor, etiquetas):
+        """Confianza real de una sub-respuesta de un agente fusionado --
+        arregla lo que antes era `CONFIANZA_FUSIONADO` (una constante fija
+        que le daba 0.9 a cualquier valor dentro del conjunto cerrado, sin
+        medir si el modelo estaba de verdad seguro o simplemente rellenando
+        una pregunta que ni aplicaba a la foto).
+
+        Mismo método que `Vlm.responder()`: puntuar cada etiqueta candidata
+        por verosimilitud del modelo bajo el mismo contexto y aplicar
+        softmax. El contexto aquí es el prompt + el propio JSON YA GENERADO
+        hasta este campo (no una pregunta sintética nueva) -- se sustituye
+        cada candidata en el lugar exacto donde el modelo escribió su
+        respuesta, así que esto puntúa de verdad lo que generó, nunca
+        regenera ni repite la llamada cara de generación."""
+        m = re.search(r'"' + re.escape(campo) + r'"\s*:\s*"', json_bruto)
+        prefijo = texto_prompt + (json_bruto[:m.end()] if m else '{"' + campo + '": "')
+        puntos = []
+        for etiqueta in etiquetas:
+            entrada = self.proc(text=[prefijo + etiqueta], images=[img], return_tensors="pt")
+            entrada = {k: v.to(self.dispositivo) for k, v in entrada.items()}
+            with torch.no_grad():
+                salida = self.red(**entrada, labels=entrada["input_ids"])
+            puntos.append(-float(salida.loss))
+        probs = torch.softmax(torch.tensor(puntos), dim=0).tolist()
+        alternativas = sorted(zip(etiquetas, probs), key=lambda par: -par[1])
+        confianza = dict(zip(etiquetas, probs)).get(valor, 0.0)
+        return confianza, alternativas
 
 
 class Ocr(object):
