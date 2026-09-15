@@ -189,6 +189,9 @@ export interface SecuritySettings {
   allowlist: string[]; denylist: string[];
   maintenance: boolean; maintenance_message: string;
   maintenance_block_login: boolean; maintenance_services: string[];
+  /** Segundos sin actividad del usuario dentro de un proyecto antes de
+   *  devolverlo a la lista de proyectos. `0` = desactivado. */
+  inactivity_timeout_s: number;
 }
 export interface PoliciesSettings {
   active: boolean;
@@ -276,6 +279,9 @@ export interface Hello {
   fingerprint: string;
   capabilities: Capability[];
   gpus: GpuInfo[];
+  /** Ver `SecuritySettings.inactivity_timeout_s`. Se expone aquí, y no solo
+   *  al panel de admin, porque cualquier sesión necesita aplicarlo. */
+  inactivity_timeout_s: number;
 }
 
 /** `partes`/`comparar` de `lumi-proto::actualizacion`, mismo criterio en TS:

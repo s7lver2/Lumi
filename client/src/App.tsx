@@ -325,6 +325,33 @@ export default function App() {
     setMode("picker");
   }
 
+  // Expulsión por inactividad (ajuste de admin, `hello.inactivity_timeout_s`,
+  // `0` = desactivado): solo cuenta actividad REAL del usuario -- puntero,
+  // teclado, rueda -- nunca la respuesta del servidor (eso ya lo cubre
+  // `KICK_AFTER_MS` de más arriba, con un significado distinto: servidor
+  // caído, no persona ausente). Solo se aplica dentro de un proyecto
+  // (`project`/`case`): entrar y salir del picker o de admin no cuenta como
+  // "ocupando" nada que haga falta liberar.
+  const ultimaActividad = useRef(Date.now());
+  useEffect(() => {
+    const marcar = () => { ultimaActividad.current = Date.now(); };
+    const eventos = ["pointerdown", "pointermove", "keydown", "wheel"] as const;
+    eventos.forEach((ev) => window.addEventListener(ev, marcar, { passive: true }));
+    return () => eventos.forEach((ev) => window.removeEventListener(ev, marcar));
+  }, []);
+  useEffect(() => {
+    const t = setInterval(() => {
+      const timeoutS = useServer.getState().hello?.inactivity_timeout_s ?? 0;
+      if (timeoutS <= 0) return;
+      if (modeRef.current !== "project" && modeRef.current !== "case") return;
+      if (Date.now() - ultimaActividad.current >= timeoutS * 1000) {
+        ultimaActividad.current = Date.now();
+        toProjects();
+      }
+    }, 5000);
+    return () => clearInterval(t);
+  }, []);
+
   const blockedByDisconnect = status !== "ok" &&
     (mode === "picker" || mode === "project" || mode === "case" || mode === "admin");
 

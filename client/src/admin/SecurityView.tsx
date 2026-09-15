@@ -26,14 +26,19 @@ export function SecurityView({ token, ajustes, onCambiar }: {
   token: string; ajustes: SecuritySettings | null; onCambiar: (s: SecuritySettings) => void;
 }) {
   const [mensaje, setMensaje] = useState("");
+  const [minutos, setMinutos] = useState("0");
 
   useEffect(() => {
     if (ajustes) setMensaje(ajustes.maintenance_message);
   }, [ajustes?.maintenance_message]);
 
+  useEffect(() => {
+    if (ajustes) setMinutos(String(Math.round(ajustes.inactivity_timeout_s / 60)));
+  }, [ajustes?.inactivity_timeout_s]);
+
   async function fijar(patch: Partial<Pick<SecuritySettings,
     "zero_trust" | "self_service_ip" | "maintenance" | "maintenance_message"
-    | "maintenance_block_login" | "maintenance_services"
+    | "maintenance_block_login" | "maintenance_services" | "inactivity_timeout_s"
   >>) {
     const r = await api.patch<SecuritySettings>("/v1/admin/security", patch, token);
     onCambiar(r);
@@ -45,6 +50,17 @@ export function SecurityView({ token, ajustes, onCambiar }: {
       ? ajustes.maintenance_services.filter((s) => s !== id)
       : [...ajustes.maintenance_services, id];
     await fijar({ maintenance_services: next });
+  }
+
+  const [errorInactividad, setErrorInactividad] = useState<string | null>(null);
+  async function guardarInactividad() {
+    const n = Number(minutos);
+    if (!Number.isInteger(n) || n < 0 || (n !== 0 && (n < 1 || n > 120))) {
+      setErrorInactividad("tiene que ser 0 (desactivado) o un número entero entre 1 y 120 minutos");
+      return;
+    }
+    setErrorInactividad(null);
+    await fijar({ inactivity_timeout_s: n * 60 });
   }
 
   if (!ajustes) return <Seccion titulo="Seguridad" grupo="Servidor"><p className="text-[11px] text-muted">cargando</p></Seccion>;
@@ -132,6 +148,28 @@ export function SecurityView({ token, ajustes, onCambiar }: {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="mt-4 rounded-card border border-border bg-panel p-[13px_16px]">
+        <p className="text-[12px] text-fg">Expulsar por inactividad</p>
+        <p className="mt-0.5 text-[10px] text-subtle">
+          Sin ningún movimiento del usuario (no del servidor) durante este tiempo dentro de un
+          proyecto, se le devuelve a la lista de proyectos y se libera el candado. No cierra la sesión.
+        </p>
+        <div className="mt-2.5 flex items-center gap-1.5">
+          <input value={minutos} onChange={(e) => setMinutos(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void guardarInactividad(); }}
+            inputMode="numeric"
+            className="w-16 rounded-lg border border-border bg-elevated px-2 py-1 text-right font-mono text-[11px]
+              text-fg outline-none transition-colors duration-300 ease-expo focus:border-white/40" />
+          <span className="text-[10.5px] text-subtle">min · 0 = desactivado</span>
+          <button onClick={() => void guardarInactividad()}
+            disabled={Number(minutos) === Math.round(ajustes.inactivity_timeout_s / 60)}
+            className="jg-press ml-1 rounded-lg border border-white/15 px-2.5 py-1 text-[10.5px] text-fg disabled:opacity-40">
+            Guardar
+          </button>
+        </div>
+        {errorInactividad && <p className="mt-2 text-[10.5px] text-danger-fg">{errorInactividad}</p>}
       </div>
     </Seccion>
   );

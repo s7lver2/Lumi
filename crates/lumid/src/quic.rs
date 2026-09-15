@@ -77,5 +77,6 @@ async fn app_hello(app: &App) -> lumi_proto::api::Hello {
         fingerprint: app.fingerprint.clone(),
         capabilities: lumi_proto::caps::matrix(app.mode, app.gpus.len(), false, &hw),
         gpus: app.gpus.clone(),
+        inactivity_timeout_s: crate::routes::security::inactivity_timeout_s(&app.store),
     }
 }

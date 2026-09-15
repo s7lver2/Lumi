@@ -9,6 +9,16 @@ use axum::extract::{Query, State};
 use axum::{http::HeaderMap, http::StatusCode, Json};
 use lumi_proto::api::{IpReq, PatchSecurityReq, SecuritySettings};
 
+const CLAVE_INACTIVIDAD_TIMEOUT_S: &str = "inactivity_timeout_s";
+
+/// `0` (desactivado) por defecto -- expulsar por inactividad es una política
+/// que un administrador tiene que activar a propósito, no algo que aparezca
+/// solo. Se lee también desde `/v1/hello` (sin auth): el cliente necesita
+/// este valor para aplicarlo él mismo, no solo el panel de admin.
+pub fn inactivity_timeout_s(store: &crate::store::Store) -> u64 {
+    store.get_meta(CLAVE_INACTIVIDAD_TIMEOUT_S).and_then(|v| v.parse().ok()).unwrap_or(0)
+}
+
 pub async fn get_security(State(app): State<App>, headers: HeaderMap) -> Result<Json<SecuritySettings>, StatusCode> {
     require_admin(&app, &bearer(&headers))?;
     Ok(Json(SecuritySettings {
@@ -20,6 +30,7 @@ pub async fn get_security(State(app): State<App>, headers: HeaderMap) -> Result<
         maintenance_message: crate::mantenimiento::mensaje(&app),
         maintenance_block_login: crate::mantenimiento::bloquea_login(&app),
         maintenance_services: crate::mantenimiento::servicios_habilitados(&app),
+        inactivity_timeout_s: inactivity_timeout_s(&app.store),
     }))
 }
 
@@ -57,6 +68,18 @@ pub async fn patch_security(
     if let Some(ids) = &req.maintenance_services {
         crate::mantenimiento::set_servicios(&app, ids).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         tracing::info!("servicios habilitados en mantenimiento cambiados por el administrador {admin}: {ids:?}");
+    }
+    if let Some(v) = req.inactivity_timeout_s {
+        // `0` desactiva -- cualquier otro valor se acota a 1-120 minutos: por
+        // debajo de un minuto expulsaría en mitad de mirar una foto, y no
+        // hay razón para dejar guardar horas bajo el nombre de "inactividad".
+        if v != 0 && !(60..=7200).contains(&v) {
+            return Err((StatusCode::BAD_REQUEST, "debe ser 0 (desactivado) o estar entre 60 y 7200 segundos".to_string()));
+        }
+        app.store
+            .set_meta(CLAVE_INACTIVIDAD_TIMEOUT_S, &v.to_string())
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        tracing::info!("timeout de inactividad fijado a {v}s por el administrador {admin}");
     }
     get_security(State(app), headers).await.map_err(|c| (c, "no se pudo releer los ajustes".to_string()))
 }

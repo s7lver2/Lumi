@@ -32,6 +32,13 @@ pub struct Hello {
     pub fingerprint: String,
     pub capabilities: Vec<Capability>,
     pub gpus: Vec<GpuInfo>,
+    /// Segundos sin actividad del usuario (no del servidor) dentro de un
+    /// proyecto antes de devolverlo a la lista de proyectos. `0` significa
+    /// desactivado. Configurable por un administrador (ver
+    /// `SecuritySettings`); se expone aquí, y no solo en `/v1/admin/security`,
+    /// porque cualquier sesión (no solo un admin) necesita aplicarlo.
+    #[serde(default)]
+    pub inactivity_timeout_s: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -171,6 +178,8 @@ pub struct SecuritySettings {
     /// mantenimiento (p.ej. "mapa", "modelos"). Vacío = todo bloqueado salvo
     /// el núcleo fijo y los administradores.
     pub maintenance_services: Vec<String>,
+    /// Ver `Hello::inactivity_timeout_s`.
+    pub inactivity_timeout_s: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -181,6 +190,7 @@ pub struct PatchSecurityReq {
     pub maintenance_message: Option<String>,
     pub maintenance_block_login: Option<bool>,
     pub maintenance_services: Option<Vec<String>>,
+    pub inactivity_timeout_s: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
