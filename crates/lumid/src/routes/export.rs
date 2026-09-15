@@ -676,7 +676,13 @@ fn escapar_tex(s: &str) -> String {
             _ => out.push(c),
         }
     }
-    out
+    // La plantilla sigue un `{{ ... | tex }}` con un `\\` fijo en muchos
+    // sitios (fin de línea, `\\[4pt]`...). Si el texto original terminaba en
+    // salto(s) de línea, ese `\\` fijo queda pegado a un párrafo vacío --
+    // mismo "There's no line here to end" que las notas del investigador,
+    // pero para cualquier campo libre (motivo, veredicto de agente, EXIF...).
+    // Un salto de línea al final de un campo no aporta nada: se recorta.
+    out.trim_end_matches('\n').to_string()
 }
 
 const PLANTILLA: &str = include_str!("../../templates/informe.tex.tera");
