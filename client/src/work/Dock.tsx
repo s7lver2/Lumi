@@ -34,15 +34,22 @@ export function Dock({
   const orden = useReorder(`case-imgs`, images, "x");
   const { analysis, image, caseName } = summary;
   const hecho = analysis?.state === "hecho";
+  // "Hecho" no implica coordenadas: un análisis de agentes (o de upscale)
+  // termina sin `result_lat`/`result_lng` -- son modos que no geolocalizan.
+  // Suponer que "hecho" siempre trae coordenada reventaba aquí en cuanto
+  // terminaba uno de esos modos (`null.toFixed`), tirando toda la app.
+  const tieneCoordenadas = hecho && analysis!.result_lat != null && analysis!.result_lng != null;
 
   const linea1 = image
-    ? hecho
+    ? tieneCoordenadas
       ? `${image.filename} · ${analysis!.result_lat!.toFixed(6)}, ${analysis!.result_lng!.toFixed(6)}`
       : image.filename
     : caseName;
   const linea2 = hecho
-    ? `${analysis!.model} · confianza ${(analysis!.result_confidence ?? 0).toFixed(2)} · radio ${
-        Math.round(analysis!.result_radius_m ?? 0)} m`
+    ? tieneCoordenadas
+      ? `${analysis!.model} · confianza ${(analysis!.result_confidence ?? 0).toFixed(2)} · radio ${
+          Math.round(analysis!.result_radius_m ?? 0)} m`
+      : `${analysis!.model} · sin geolocalización`
     : analysis?.state === "error"
       ? analysis.error ?? "el análisis falló y no dejó motivo"
       : analysis

@@ -23,7 +23,10 @@ export function AttemptsRail({
   onMenu: (s: MenuState) => void;
 }) {
   const menuDe = (a: Analysis): MenuEntry[] => {
-    const hecho = a.state === "hecho";
+    // Un análisis de agentes (o de upscale) puede terminar "hecho" sin
+    // coordenadas -- esos modos no geolocalizan. Copiarlas sin comprobarlo
+    // reventaba con `null.toFixed` en cuanto se pulsaba el menú.
+    const hecho = a.state === "hecho" && a.result_lat != null && a.result_lng != null;
     // Igual que el DELETE que ya arbitra el backend: lo que está corriendo
     // ahora mismo no se cancela a mitad, todo lo demás (pendiente, hecho,
     // error) sí se puede borrar.
