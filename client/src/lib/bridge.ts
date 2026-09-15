@@ -60,8 +60,10 @@ export async function uploadCaseImageBytes(caseId: number, dataBase64: string, f
  *  trabajo real de la cola existente. Devuelve el `Analysis` (`pendiente`) —
  *  el llamador sigue su estado igual que `AgentResultPopup` sigue el de un
  *  agente, por el mismo evento `queue-change`. */
-export async function upscaleImageBytes(caseId: number, dataBase64: string, fileName: string): Promise<Analysis> {
-  const raw = await invoke<string>("upscale_image_bytes", { caseId, dataBase64, fileName });
+export async function upscaleImageBytes(
+  caseId: number, dataBase64: string, fileName: string, factor: 1 | 2 | 4,
+): Promise<Analysis> {
+  const raw = await invoke<string>("upscale_image_bytes", { caseId, dataBase64, fileName, factor });
   return JSON.parse(raw) as Analysis;
 }
 

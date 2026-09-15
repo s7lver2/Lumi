@@ -242,9 +242,9 @@ async fn upload_case_image_bytes(
 /// para que el popup pueda seguir su estado como cualquier otro análisis.
 #[tauri::command]
 async fn upscale_image_bytes(
-    case_id: i64, data_base64: String, file_name: String, state: tauri::State<'_, Shared>,
+    case_id: i64, data_base64: String, file_name: String, factor: i64, state: tauri::State<'_, Shared>,
 ) -> Result<String, String> {
-    subir_bytes_imagen(&format!("/v1/cases/{case_id}/images/upscale"), &data_base64, &file_name, &state).await
+    subir_bytes_imagen(&format!("/v1/cases/{case_id}/images/upscale?factor={factor}"), &data_base64, &file_name, &state).await
 }
 
 /// "Sobrescribir" desde el panel Media (spec 2026-09-10 §3): reemplaza los

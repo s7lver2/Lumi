@@ -1092,14 +1092,14 @@ impl Queue {
     /// resolución, y sus bytes sustituidos en el sitio cuando termina. Nunca
     /// se guarda una hipótesis: el resultado de este análisis es la imagen
     /// misma, no una coordenada.
-    async fn correr_upscale(&self, dispositivo: String, id: i64, imagen_id: i64, ruta_entrada: String) {
+    async fn correr_upscale(&self, dispositivo: String, id: i64, imagen_id: i64, ruta_entrada: String, factor: i64) {
         let pesos = crate::assets::pesos_dir(&self.store, &self.dir);
         let python = interprete_python(&self.store);
         // Un temporal por trabajo: dos upscales en paralelo en la misma caja
         // no pueden compartir nombre de archivo de salida.
         let salida = std::env::temp_dir().join(format!("lumi-upscale-{id}.png"));
         let resultado = crate::upscale::procesar(
-            std::path::Path::new(&ruta_entrada), &salida, &python, &pesos, &dispositivo,
+            std::path::Path::new(&ruta_entrada), &salida, &python, &pesos, &dispositivo, factor,
         )
         .await;
         self.soltar(&dispositivo, id);
@@ -1541,6 +1541,12 @@ impl Queue {
                     self.fallar(a.analysis_id, "no se encontró la imagen del trabajo de upscale");
                     continue;
                 };
+                let factor: i64 = self
+                    .store
+                    .conn()
+                    .query_row("SELECT upscale_factor FROM analyses WHERE id = ?1", [a.analysis_id], |r| r.get(0))
+                    .unwrap_or(Some(4))
+                    .unwrap_or(4);
                 let ocupado = match self.estado.lock() {
                     Ok(mut e) => match e.trabajadores.get_mut(&a.dispositivo) {
                         Some(w) => {
@@ -1563,7 +1569,7 @@ impl Queue {
                 let cola = self.clone();
                 let dispositivo = a.dispositivo.clone();
                 tokio::spawn(async move {
-                    cola.correr_upscale(dispositivo, a.analysis_id, imagen_id, ruta).await;
+                    cola.correr_upscale(dispositivo, a.analysis_id, imagen_id, ruta, factor).await;
                 });
                 continue;
             }

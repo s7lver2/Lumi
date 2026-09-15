@@ -76,10 +76,24 @@ def _procesar(orden, disp):
         return
     try:
         motor.procesar(orden["ruta_entrada"], orden["ruta_salida"])
+        _reducir_si_hace_falta(orden["ruta_salida"], orden.get("factor", 4))
     except Exception as e:
         escribir({"tipo": "fallo", "id": id_trabajo, "motivo": str(e)})
         return
     escribir({"tipo": "upscale", "id": id_trabajo, "ruta": orden["ruta_salida"]})
+
+
+def _reducir_si_hace_falta(ruta_salida, factor):
+    """El motor siempre reescala x4 de forma nativa -- pedir 1x o 2x reduce
+    ESE resultado (nunca una interpolación del original), para partir
+    siempre del detalle que reconstruyó la IA. Mismo filtro (Lanczos) que ya
+    usa `lumi_verify.py` para sus reescalados."""
+    if factor >= 4:
+        return
+    from PIL import Image
+    img = Image.open(ruta_salida)
+    nuevo = (round(img.width * factor / 4), round(img.height * factor / 4))
+    img.resize(nuevo, Image.LANCZOS).save(ruta_salida)
 
 
 def main():

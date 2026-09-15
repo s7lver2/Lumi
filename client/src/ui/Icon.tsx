@@ -158,6 +158,7 @@ const PATHS: Record<string, React.JSX.Element> = {
   ),
   undo: <path d="M4 10h11a5 5 0 0 1 0 10h-2M4 10l4.5-4.5M4 10l4.5 4.5" />,
   redo: <path d="M20 10H9a5 5 0 0 0 0 10h2M20 10l-4.5-4.5M20 10l-4.5 4.5" />,
+  girar: <><path d="M3 12a9 9 0 1 1 3 6.7" /><path d="M3 12v5h5" /></>,
   sparkle: (
     <>
       <path d="M12 3v4M12 17v4M3 12h4M17 12h4" />
