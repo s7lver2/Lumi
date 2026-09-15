@@ -43,6 +43,12 @@ export function ImageEditorPopup({
   const contenedorRef = useRef<HTMLDivElement>(null);
   const [herramienta, setHerramienta] = useState<Herramienta>("recorte");
   const [radio, setRadio] = useState(24);
+  // 1 = ajuste automático de siempre (`ajustarOverlay`). El contenedor se
+  // vuelve desplazable (`overflow-auto` más abajo) en vez de llevar un pan a
+  // mano: el scroll nativo del navegador ya resuelve mover la vista por una
+  // imagen más grande que el hueco, sin estado ni gestos propios que
+  // mantener.
+  const [zoom, setZoom] = useState(1);
   const [cargando, setCargando] = useState(true);
   const [mejorando, setMejorando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +58,7 @@ export function ImageEditorPopup({
   // popup -- todo lo que llega por eventos de puntero está en coordenadas de
   // pantalla y hay que convertirlo antes de tocar el canvas.
   const escalaRef = useRef(1);
+  const zoomRef = useRef(1);
   const [caja, setCaja] = useState<Caja | null>(null);
   // `null` = recorte libre (el de siempre). Un número fija ancho/alto -- las
   // esquinas dejan de deformar la caja y la mantienen a esa proporción; los
@@ -126,7 +133,8 @@ export function ImageEditorPopup({
     if (!canvas || !overlay || !cont) return;
     const MAX_W = 620;
     const MAX_H = 420;
-    const escala = Math.min(MAX_W / canvas.width, MAX_H / canvas.height, 1);
+    const base = Math.min(MAX_W / canvas.width, MAX_H / canvas.height, 1);
+    const escala = base * zoomRef.current;
     escalaRef.current = escala;
     const w = Math.round(canvas.width * escala);
     const h = Math.round(canvas.height * escala);
@@ -418,6 +426,13 @@ export function ImageEditorPopup({
 
   useEffect(() => { dibujarOverlay(); }, [caja, herramienta]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    zoomRef.current = zoom;
+    ajustarOverlay();
+    dibujarOverlay();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom]);
+
   function aplicarRecorte() {
     const canvas = canvasRef.current;
     if (!canvas || !caja) return;
@@ -565,6 +580,18 @@ export function ImageEditorPopup({
                     </>
                   ))}
                   <div className="ml-auto flex items-center gap-1">
+                    <button onClick={() => setZoom((z) => Math.max(1, +(z - 0.5).toFixed(1)))}
+                      disabled={bloqueado || zoom <= 1} title="Alejar"
+                      className="jg-press rounded-md p-1.5 text-subtle hover:text-fg disabled:opacity-30">
+                      −
+                    </button>
+                    <span className="w-8 text-center font-mono text-[10px] text-subtle">{zoom.toFixed(1)}×</span>
+                    <button onClick={() => setZoom((z) => Math.min(4, +(z + 0.5).toFixed(1)))}
+                      disabled={bloqueado || zoom >= 4} title="Acercar"
+                      className="jg-press rounded-md p-1.5 text-subtle hover:text-fg disabled:opacity-30">
+                      +
+                    </button>
+                    <div className="mx-1 h-5 w-px bg-border" />
                     <button onClick={deshacer} disabled={!puedeDeshacer || bloqueado} title="Deshacer"
                       className="jg-press rounded-md p-1.5 text-subtle hover:text-fg disabled:opacity-30">
                       <Icon name="undo" size={14} />
@@ -619,8 +646,8 @@ export function ImageEditorPopup({
                   )}
                 </div>
 
-                <div ref={contenedorRef} className="mt-3 flex items-center justify-center rounded-xl border
-                  border-border bg-black/30 p-2" style={{ minHeight: 300 }}>
+                <div ref={contenedorRef} className="mt-3 flex items-center justify-center overflow-auto rounded-xl border
+                  border-border bg-black/30 p-2" style={{ minHeight: 300, maxHeight: 420 }}>
                   <div className="relative" style={{ lineHeight: 0 }}>
                     <canvas ref={canvasRef} className="rounded-md" />
                     <canvas ref={overlayRef}
