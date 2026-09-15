@@ -552,7 +552,15 @@ export function ImageEditorPopup({
     snapshot();
   }
 
+  // Un ajuste de tono no confirmado con "Aplicar tono" solo vivía como
+  // filtro CSS de vista previa sobre el `<canvas>` (línea del `style` más
+  // abajo) -- al exportar se leen los píxeles reales con `toBlob`, que
+  // nunca vieron ese filtro, así que "Usar esta versión" sin pulsar antes
+  // "Aplicar tono" descartaba el brillo/contraste en silencio. Se hornea
+  // aquí si queda pendiente, para que exportar nunca pierda un ajuste que
+  // la vista previa ya estaba mostrando.
   function exportarBlob(cb: (blob: Blob) => void) {
+    if (brillo !== 100 || contraste !== 100) aplicarTono();
     canvasRef.current?.toBlob((blob) => { if (blob) cb(blob); }, "image/jpeg", 0.92);
   }
 

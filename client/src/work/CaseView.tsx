@@ -389,7 +389,10 @@ export function CaseView({
 
   const image = list.find((i) => i.id === sel) ?? null;
   const mine = useMemo(
-    () => (sel === null ? [] : analyses.filter((a) => a.image_ids.includes(sel))),
+    // El upscaler es un paso de edición previo a subir, no un intento de
+    // geolocalización -- no debería aparecer en la barra de intentos ni
+    // contar para "cuántos hay" (`railMostrado`, `hasResults`, etc.).
+    () => (sel === null ? [] : analyses.filter((a) => a.image_ids.includes(sel) && a.model !== "upscale")),
     [analyses, sel],
   );
   const shown = useMemo(
