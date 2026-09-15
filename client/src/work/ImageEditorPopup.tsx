@@ -434,6 +434,43 @@ export function ImageEditorPopup({
     snapshot();
   }
 
+  // Rotar intercambia ancho/alto del lienzo -- por eso hace falta un canvas
+  // temporal del tamaño ya girado, igual que ya hace `aplicarRecorte`.
+  function rotar90() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const nuevo = document.createElement("canvas");
+    nuevo.width = canvas.height;
+    nuevo.height = canvas.width;
+    const ctx = nuevo.getContext("2d");
+    if (!ctx) return;
+    ctx.translate(nuevo.width / 2, nuevo.height / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
+    canvas.width = nuevo.width;
+    canvas.height = nuevo.height;
+    canvas.getContext("2d")?.drawImage(nuevo, 0, 0);
+    ajustarOverlay();
+    setCaja(null);
+    snapshot();
+  }
+
+  function voltear(eje: "h" | "v") {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const nuevo = document.createElement("canvas");
+    nuevo.width = canvas.width;
+    nuevo.height = canvas.height;
+    const ctx = nuevo.getContext("2d");
+    if (!ctx) return;
+    if (eje === "h") { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
+    else { ctx.translate(0, canvas.height); ctx.scale(1, -1); }
+    ctx.drawImage(canvas, 0, 0);
+    canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.getContext("2d")?.drawImage(nuevo, 0, 0);
+    snapshot();
+  }
+
   function exportarBlob(cb: (blob: Blob) => void) {
     canvasRef.current?.toBlob((blob) => { if (blob) cb(blob); }, "image/jpeg", 0.92);
   }
@@ -562,6 +599,22 @@ export function ImageEditorPopup({
                       <input type="range" min={6} max={80} value={radio}
                         onChange={(e) => setRadio(e.target.valueAsNumber)}
                         className="w-24 accent-fg" />
+                    </div>
+                  )}
+                  {herramienta === "girar" && (
+                    <div className="flex items-center gap-1.5">
+                      <button onClick={rotar90} disabled={bloqueado}
+                        className="jg-press flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-[10.5px] text-fg">
+                        <Icon name="girar" size={12} /> Rotar 90°
+                      </button>
+                      <button onClick={() => voltear("h")} disabled={bloqueado}
+                        className="jg-press rounded-md border border-border px-2.5 py-1 text-[10.5px] text-fg">
+                        Voltear horizontal
+                      </button>
+                      <button onClick={() => voltear("v")} disabled={bloqueado}
+                        className="jg-press rounded-md border border-border px-2.5 py-1 text-[10.5px] text-fg">
+                        Voltear vertical
+                      </button>
                     </div>
                   )}
                 </div>
