@@ -21,12 +21,12 @@ export function AgentPickerPopup({
   image: Image;
   isAdmin: boolean;
   closing: boolean;
-  onLaunched: (analysis: Analysis) => void;
+  onLaunched: (analyses: Analysis[]) => void;
   onClose: () => void;
   onIrAModelos: () => void;
 }) {
   const [agentes, setAgentes] = useState<AgenteVista[] | null>(null);
-  const [seleccionado, setSeleccionado] = useState<string | null>(null);
+  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const [lanzando, setLanzando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,17 +34,38 @@ export function AgentPickerPopup({
     api.get<AgenteVista[]>("/v1/agentes", token).then(setAgentes).catch((e) => setError(String(e)));
   }, [token]);
 
+  function alternar(id: string) {
+    setSeleccionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  // Uno por uno, no en paralelo: cada agente cuenta como su propia solicitud
+  // en cola (límites diarios/semanales incluidos), y lanzarlos secuencialmente
+  // es lo que hace honesto "añadidos uno por uno a la cola" en vez de una
+  // ráfaga simultánea. Con más de uno seleccionado se les da un `grupo_id`
+  // compartido para que la barra lateral los enseñe como un solo intento --
+  // con exactamente uno, se omite y el comportamiento es idéntico al de
+  // siempre (misma petición, sin campo de más).
   async function lanzar() {
-    if (!seleccionado) return;
+    if (seleccionados.size === 0) return;
     setLanzando(true);
     setError(null);
+    const ids = [...seleccionados];
+    const grupo_id = ids.length > 1 ? crypto.randomUUID() : undefined;
+    const lanzadas: Analysis[] = [];
     try {
-      const a = await api.post<Analysis>(
-        `/v1/cases/${caseId}/analyses`,
-        { image_ids: [image.id], model: "agentes", agente: seleccionado },
-        token,
-      );
-      onLaunched(a);
+      for (const agente of ids) {
+        const a = await api.post<Analysis>(
+          `/v1/cases/${caseId}/analyses`,
+          { image_ids: [image.id], model: "agentes", agente, grupo_id },
+          token,
+        );
+        lanzadas.push(a);
+      }
+      onLaunched(lanzadas);
     } catch (e) {
       setError(String(e));
       setLanzando(false);
@@ -66,7 +87,7 @@ export function AgentPickerPopup({
                   <p className="text-[13px] font-medium text-fg">Elegir agente</p>
                   <BetaPill />
                 </div>
-                <p className="text-[11px] text-muted">Una pregunta cerrada a la imagen</p>
+                <p className="text-[11px] text-muted">Una o varias preguntas cerradas a la imagen</p>
               </div>
               <button onClick={onClose} disabled={lanzando} aria-label="Cerrar"
                 className="jg-press shrink-0 text-subtle hover:text-fg disabled:opacity-40">
@@ -74,7 +95,7 @@ export function AgentPickerPopup({
               </button>
             </div>
 
-            <RejillaAgentes agentes={agentes} seleccionado={seleccionado} onSeleccionar={setSeleccionado}
+            <RejillaAgentes agentes={agentes} seleccionados={seleccionados} onAlternar={alternar}
               isAdmin={isAdmin} onIrAModelos={onIrAModelos} />
 
             {error && (
@@ -84,11 +105,16 @@ export function AgentPickerPopup({
               </div>
             )}
 
-            <div className="mt-4 flex justify-end">
-              <button onClick={() => void lanzar()} disabled={!seleccionado || lanzando}
+            <div className="mt-4 flex items-center justify-end gap-2.5">
+              {seleccionados.size > 1 && (
+                <p className="text-[10.5px] text-subtle">
+                  {seleccionados.size} solicitudes, un solo intento
+                </p>
+              )}
+              <button onClick={() => void lanzar()} disabled={seleccionados.size === 0 || lanzando}
                 className="jg-press rounded-lg bg-accent px-5 py-2 text-[11.5px] font-medium text-black
                   disabled:opacity-40">
-                {lanzando ? "Un momento…" : "Lanzar agente"}
+                {lanzando ? "Un momento…" : seleccionados.size > 1 ? `Lanzar ${seleccionados.size} agentes` : "Lanzar agente"}
               </button>
             </div>
           </FloatingCard>
@@ -130,10 +156,10 @@ export function BetaPill() {
   );
 }
 
-function RejillaAgentes({ agentes, seleccionado, onSeleccionar, isAdmin, onIrAModelos }: {
+function RejillaAgentes({ agentes, seleccionados, onAlternar, isAdmin, onIrAModelos }: {
   agentes: AgenteVista[] | null;
-  seleccionado: string | null;
-  onSeleccionar: (id: string) => void;
+  seleccionados: Set<string>;
+  onAlternar: (id: string) => void;
   isAdmin: boolean;
   onIrAModelos: () => void;
 }) {
@@ -146,10 +172,10 @@ function RejillaAgentes({ agentes, seleccionado, onSeleccionar, isAdmin, onIrAMo
   return (
     <div className="mt-4 grid max-h-[380px] grid-cols-2 gap-2 overflow-y-auto pr-0.5">
       {agentes.map((a) => {
-        const on = a.id === seleccionado;
+        const on = seleccionados.has(a.id);
         return (
           <div key={a.id}
-            onClick={() => a.instalado && onSeleccionar(a.id)}
+            onClick={() => a.instalado && onAlternar(a.id)}
             className={`flex gap-2.5 rounded-xl border p-3 transition-colors duration-300 ease-expo
               ${a.instalado ? "jg-press cursor-pointer" : "cursor-default hover:border-white/20"}
               ${on ? "border-fg bg-white/[.06]" : "border-border bg-panel"}`}>

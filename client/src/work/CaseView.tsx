@@ -196,7 +196,7 @@ export function CaseView({
    *  de pantalla completa): los dos popups de agentes (elegir + resultado)
    *  son ahora hermanos encadenados sobre `CaseView`, igual que `UploadPopup`
    *  ya vive aquí sin necesitar un `mode` propio. */
-  const [agentResult, setAgentResult] = useState<{ image: Image; analysis: Analysis } | null>(null);
+  const [agentResult, setAgentResult] = useState<{ image: Image; analyses: Analysis[] } | null>(null);
   const agentResultPopup = useDismissable(agentResult !== null, 180);
   const exportPop = useDismissable(exportOpen, 180);
 
@@ -567,7 +567,17 @@ export function CaseView({
             busy={busy}
             onAnalyze={() => (sel !== null ? setStaged([sel]) : void pick())}
             onCenter={(lat, lng) => setFly({ lat, lng, zoom: 14 })}
-            onAbrirAgente={() => { if (image && shown) setAgentResult({ image, analysis: shown }); }} />
+            onAbrirAgente={() => {
+              if (!image || !shown) return;
+              // Si este intento es parte de un lanzamiento múltiple
+              // (`grupo_id`), se reabren todos sus análisis juntos -- es el
+              // mismo intento visual que se lanzó de una vez, no solo el que
+              // dio esta fila.
+              const grupo = shown.grupo_id
+                ? analyses.filter((a) => a.grupo_id === shown.grupo_id)
+                : [shown];
+              setAgentResult({ image, analyses: grupo });
+            }} />
           <MediaDrawer token={token} caseId={case_.id} projectId={project.id}
             imagenesDelCaso={list} features={features}
             open={drawerId === "media"} onClose={() => setDrawer(null)}
@@ -666,10 +676,10 @@ export function CaseView({
       {agentPicker.rendered && agentPickerImage && (
         <AgentPickerPopup token={token} caseId={case_.id} image={agentPickerImage} isAdmin={isAdmin}
           closing={agentPicker.closing}
-          onLaunched={(a) => {
+          onLaunched={(analyses) => {
             const img = agentPickerImage;
             setAgentPickerImage(null);
-            setAgentResult({ image: img, analysis: a });
+            if (analyses.length > 0) setAgentResult({ image: img, analyses });
           }}
           onClose={() => setAgentPickerImage(null)}
           onIrAModelos={onIrAModelos} />
@@ -677,7 +687,7 @@ export function CaseView({
 
       {agentResultPopup.rendered && agentResult && (
         <AgentResultPopup token={token} image={agentResult.image} closing={agentResultPopup.closing}
-          analysisInicial={agentResult.analysis}
+          analysesIniciales={agentResult.analyses}
           onElegirOtro={() => { const img = agentResult.image; setAgentResult(null); setAgentPickerImage(img); }}
           onClose={() => setAgentResult(null)} />
       )}

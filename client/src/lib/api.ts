@@ -413,6 +413,10 @@ export interface Analysis {
   id: number; case_id: number; model: string;
   /** El agente pedido, solo con `model === "agentes"`. */
   agente: string | null;
+  /** Mismo valor en cada análisis lanzado junto en una selección múltiple de
+   *  agentes -- el cliente los agrupa como un solo intento en la barra
+   *  lateral. `null` fuera de ese caso. */
+  grupo_id: string | null;
   state: "pendiente" | "en_curso" | "hecho" | "error";
   error: string | null;
   result_lat: number | null; result_lng: number | null;

@@ -22,15 +22,34 @@ export function AttemptsRail({
   onLimpiar: () => void;
   onMenu: (s: MenuState) => void;
 }) {
-  const menuDe = (a: Analysis): MenuEntry[] => {
+  // Varios análisis lanzados de una vez (selección múltiple de agentes,
+  // `AgentPickerPopup`) comparten `grupo_id` y se enseñan como una sola
+  // ficha -- cada uno sigue siendo su propia solicitud en cola (su propio
+  // estado, su propio error), pero visualmente son "un intento". Un análisis
+  // sin `grupo_id` forma un grupo de uno, sin cambiar nada de lo que había.
+  const grupos: { id: number; miembros: Analysis[] }[] = [];
+  const indice = new Map<string, number>();
+  for (const a of analyses) {
+    const clave = a.grupo_id ?? `solo-${a.id}`;
+    const i = indice.get(clave);
+    if (i === undefined) {
+      indice.set(clave, grupos.length);
+      grupos.push({ id: a.id, miembros: [a] });
+    } else {
+      grupos[i].miembros.push(a);
+    }
+  }
+
+  const menuDe = (miembros: Analysis[]): MenuEntry[] => {
+    const a = miembros[0];
     // Un análisis de agentes (o de upscale) puede terminar "hecho" sin
     // coordenadas -- esos modos no geolocalizan. Copiarlas sin comprobarlo
     // reventaba con `null.toFixed` en cuanto se pulsaba el menú.
-    const hecho = a.state === "hecho" && a.result_lat != null && a.result_lng != null;
+    const hecho = miembros.length === 1 && a.state === "hecho" && a.result_lat != null && a.result_lng != null;
     // Igual que el DELETE que ya arbitra el backend: lo que está corriendo
     // ahora mismo no se cancela a mitad, todo lo demás (pendiente, hecho,
     // error) sí se puede borrar.
-    const corriendo = a.state === "en_curso";
+    const corriendo = miembros.some((m) => m.state === "en_curso");
     return [
       { label: "Repetir con otro modelo…", onClick: onAnalyze },
       hecho
@@ -41,7 +60,10 @@ export function AttemptsRail({
           }
         : null,
       null,
-      { label: "Borrar", danger: true, disabled: corriendo, onClick: () => onEliminar(a.id) },
+      {
+        label: miembros.length > 1 ? "Borrar el intento" : "Borrar", danger: true, disabled: corriendo,
+        onClick: () => miembros.forEach((m) => onEliminar(m.id)),
+      },
     ];
   };
 
@@ -56,19 +78,24 @@ export function AttemptsRail({
           </button>
         )}
       </div>
-      {analyses.map((a, i) => {
-        const on = a.id === selected;
-        const icon = a.state === "hecho" ? "check" : a.state === "error" ? "x" : "spinner";
+      {grupos.map(({ id, miembros }, i) => {
+        const a = miembros[0];
+        const on = miembros.some((m) => m.id === selected);
+        const corriendo = miembros.some((m) => m.state === "pendiente" || m.state === "en_curso");
+        const error = miembros.some((m) => m.state === "error");
+        const icon = corriendo ? "spinner" : error ? "x" : "check";
         return (
-          <button key={a.id} onClick={() => onSelect(a.id)}
-            onContextMenu={(e) => menuAt(e, `${i + 1} · ${a.model}`, menuDe(a), onMenu)}
+          <button key={id} onClick={() => onSelect(id)}
+            onContextMenu={(e) => menuAt(e, `${i + 1} · ${a.model}`, menuDe(miembros), onMenu)}
             style={{ animation: `jg-fade-rise 220ms ${Math.min(i, 6) * 30}ms cubic-bezier(.16,1,.3,1) both` }}
             className={`flex flex-col items-center gap-1 rounded-lg border p-[6px_2px] text-center
               transition-[border-color,background-color] duration-300 ease-expo ${
                 on ? "border-white/[.35] bg-white/[.05]" : "border-border hover:border-white/[.18]"}`}>
-            <span className="text-[8px] uppercase tracking-[.06em] text-subtle">{a.model}</span>
+            <span className="text-[8px] uppercase tracking-[.06em] text-subtle">
+              {a.model}{miembros.length > 1 ? ` ×${miembros.length}` : ""}
+            </span>
             <Icon name={icon} size={12}
-              className={a.state === "error" ? "text-danger-fg" : a.state === "hecho" ? "text-fg" : "text-subtle"} />
+              className={error ? "text-danger-fg" : !corriendo ? "text-fg" : "text-subtle"} />
           </button>
         );
       })}

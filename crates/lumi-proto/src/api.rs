@@ -927,6 +927,10 @@ pub struct Analysis {
     /// esta columna existiera.
     #[serde(default)]
     pub agente: Option<String>,
+    /// Ver `AnalysisReq::grupo_id`. `None` fuera de un lanzamiento múltiple
+    /// de agentes, y también en cualquier análisis de antes de esta columna.
+    #[serde(default)]
+    pub grupo_id: Option<String>,
     /// `pendiente` | `en_curso` | `hecho` | `error`. Este subsistema solo
     /// escribe `pendiente`: mover de ahí es trabajo de la cola (subsistema 4).
     pub state: String,
@@ -1002,10 +1006,18 @@ pub struct AnalysisReq {
     pub image_ids: Vec<i64>,
     pub model: String,
     /// Solo relleno cuando `model == "agentes"`: el único agente que se le
-    /// pide a esa imagen. El modo Agentes lanza uno cada vez — la
-    /// multi-selección se descartó explícitamente en el diseño.
+    /// pide a esa imagen -- cada análisis sigue siendo de un agente, nunca
+    /// varios en la misma fila. Elegir varios en el cliente lanza una
+    /// petición por agente (ver `grupo_id`), no una lista aquí.
     #[serde(default)]
     pub agente: Option<String>,
+    /// Opaco para el servidor: solo se guarda y se devuelve tal cual. El
+    /// cliente lo genera al lanzar varios agentes a la vez para una misma
+    /// imagen (mismo valor en cada petición) y lo usa para agruparlos como
+    /// un solo intento en la barra lateral -- cada uno sigue siendo su
+    /// propio análisis en cola, con su propio estado.
+    #[serde(default)]
+    pub grupo_id: Option<String>,
     /// Debug de calibración (spec 2026-09-10 §4d). Ignorados en silencio
     /// (nunca un error) si `modo_calibracion` está apagado en este
     /// servidor -- un cliente viejo o un script que los mande sin querer no

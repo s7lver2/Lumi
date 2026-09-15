@@ -15,7 +15,7 @@ use lumi_proto::api::{Analysis, AnalysisReq};
 
 pub(crate) const COLS: &str = "id, case_id, model, state, error, result_lat, result_lng,
                     result_radius_m, result_confidence, created_at, finished_at, nivel_efectivo,
-                    result_inliers, result_verificador, result_imagen_id, agente";
+                    result_inliers, result_verificador, result_imagen_id, agente, grupo_id";
 
 fn image_ids(c: &rusqlite::Connection, analysis_id: i64) -> Vec<i64> {
     let Ok(mut q) = c.prepare("SELECT image_id FROM analysis_images WHERE analysis_id = ?1") else {
@@ -32,6 +32,7 @@ pub(crate) fn row_to_analysis(r: &rusqlite::Row) -> rusqlite::Result<Analysis> {
         case_id: r.get(1)?,
         model: r.get(2)?,
         agente: r.get(15)?,
+        grupo_id: r.get(16)?,
         state: r.get(3)?,
         error: r.get(4)?,
         result_lat: r.get(5)?,
@@ -276,11 +277,11 @@ pub async fn create(
     if req.image_ids.is_empty() {
         return Err(err(StatusCode::BAD_REQUEST, "hay que elegir al menos una imagen"));
     }
-    // El modo Agentes lanza uno solo, nunca varios a la vez -- multi-
-    // selección se descartó explícitamente en el diseño. Se comprueba aquí,
-    // no solo en el cliente: un `POST` a mano con `agente: null` no debería
-    // colarse hasta la cola para fallar mucho más tarde con un mensaje
-    // genérico.
+    // Cada petición sigue siendo de UN agente -- elegir varios en el
+    // cliente lanza una petición por agente (ver `AnalysisReq::grupo_id`),
+    // nunca una lista aquí. Se comprueba aquí, no solo en el cliente: un
+    // `POST` a mano con `agente: null` no debería colarse hasta la cola
+    // para fallar mucho más tarde con un mensaje genérico.
     if req.model == "agentes" {
         let Some(agente_id) = req.agente.as_deref().filter(|s| !s.is_empty()) else {
             return Err(err(StatusCode::BAD_REQUEST, "hay que elegir un agente"));
@@ -381,11 +382,11 @@ pub async fn create(
     let id = {
         let c = app.store.conn();
         c.execute(
-            "INSERT INTO analyses (case_id, requested_by, model, agente, state, created_at, via_api,
+            "INSERT INTO analyses (case_id, requested_by, model, agente, grupo_id, state, created_at, via_api,
                                     forzar_motor, forzar_dispositivo, imagen_sha256)
-             VALUES (?1, ?2, ?3, ?4, 'pendiente', ?5, ?6, ?7, ?8, ?9)",
+             VALUES (?1, ?2, ?3, ?4, ?5, 'pendiente', ?6, ?7, ?8, ?9, ?10)",
             rusqlite::params![
-                case_id, uid, req.model, req.agente, t, via_api, forzar_motor, forzar_dispositivo, imagen_sha256
+                case_id, uid, req.model, req.agente, req.grupo_id, t, via_api, forzar_motor, forzar_dispositivo, imagen_sha256
             ],
         )
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
@@ -408,6 +409,7 @@ pub async fn create(
         case_id,
         model: req.model,
         agente: req.agente,
+        grupo_id: req.grupo_id,
         state: "pendiente".into(),
         error: None,
         result_lat: None,

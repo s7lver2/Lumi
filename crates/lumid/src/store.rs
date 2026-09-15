@@ -541,6 +541,10 @@ fn migrate(c: &Connection) {
         // en filas de antes de esta columna: un análisis viejo simplemente
         // no ofrece "lo más parecido" al abstenerse.
         ("analysis_agents", "etiqueta_real", "TEXT NOT NULL DEFAULT ''"),
+        // Ver `AnalysisReq::grupo_id` -- opaco, el servidor solo lo guarda y
+        // lo devuelve para que el cliente agrupe varios análisis de agentes
+        // lanzados a la vez como un solo intento.
+        ("analyses", "grupo_id", "TEXT"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }

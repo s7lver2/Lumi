@@ -463,6 +463,7 @@ pub async fn upscale(
         case_id,
         model: "upscale".into(),
         agente: None,
+        grupo_id: None,
         state: "pendiente".into(),
         error: None,
         result_lat: None,

@@ -20,59 +20,69 @@ import { BetaPill, etiquetaCortaDe } from "./AgentPickerPopup";
  *  dentro de él: «Elegir otro agente» cierra este popup y `CaseView` reabre
  *  el de elegir, en vez de que uno monte al otro por dentro. */
 export function AgentResultPopup({
-  token, image, closing, analysisInicial, onElegirOtro, onClose,
+  token, image, closing, analysesIniciales, onElegirOtro, onClose,
 }: {
   token: string | undefined;
   image: Image;
   closing: boolean;
-  analysisInicial: Analysis;
+  /** Normalmente uno solo. Más de uno cuando vienen de una selección
+   *  múltiple de agentes (`AgentPickerPopup`) -- cada uno sigue siendo su
+   *  propio análisis en cola, con su propio estado, mostrados juntos como un
+   *  solo intento. */
+  analysesIniciales: Analysis[];
   onElegirOtro: () => void;
   onClose: () => void;
 }) {
   const [agentes, setAgentes] = useState<AgenteVista[] | null>(null);
-  const [analysis, setAnalysis] = useState<Analysis>(analysisInicial);
+  const [analyses, setAnalyses] = useState<Analysis[]>(analysesIniciales);
   const [rasgosVisibles, setRasgosVisibles] = useState(true);
 
   useEffect(() => {
     api.get<AgenteVista[]>("/v1/agentes", token).then(setAgentes).catch(() => {});
   }, [token]);
 
-  // El análisis puede cambiar de imagen entre una apertura y otra (agente
-  // relanzado desde el picker) sin que el popup se desmonte: `analysisInicial`
-  // solo se lee una vez por montaje.
-  useEffect(() => { setAnalysis(analysisInicial); }, [analysisInicial]);
+  // Los análisis pueden cambiar entre una apertura y otra (agente relanzado
+  // desde el picker) sin que el popup se desmonte: `analysesIniciales` solo
+  // se lee una vez por montaje.
+  useEffect(() => { setAnalyses(analysesIniciales); }, [analysesIniciales]);
+
+  const enCurso = analyses.some((a) => a.state === "pendiente" || a.state === "en_curso");
 
   // Igual que `CaseView`: el servidor avisa por evento en vez de sondear.
+  // Un evento puede llegar para CUALQUIERA de los análisis del grupo, no
+  // solo el primero -- se refresca solo la fila afectada.
   useEffect(() => {
-    if (analysis.state !== "pendiente" && analysis.state !== "en_curso") return;
+    if (!enCurso) return;
     const un = listen<Cambio>("queue-change", (e) => {
       const c = e.payload;
-      if (c.tipo !== "estado" || c.analysis_id !== analysis.id) return;
-      api.get<Analysis>(`/v1/analyses/${analysis.id}`, token).then(setAnalysis).catch(() => {});
+      if (c.tipo !== "estado" || !analyses.some((a) => a.id === c.analysis_id)) return;
+      api.get<Analysis>(`/v1/analyses/${c.analysis_id}`, token)
+        .then((fresca) => setAnalyses((prev) => prev.map((a) => (a.id === fresca.id ? fresca : a))))
+        .catch(() => {});
     });
     return () => { void un.then((f) => f()); };
-  }, [analysis.id, analysis.state, token]);
+  }, [analyses, enCurso, token]);
 
   // Solo para la frase de espera (ver `PantallaResultado`): nunca una barra
   // que avance a un ritmo inventado, un dato real (segundos transcurridos)
   // sirviendo de pista de qué fase es probable, no cuánto falta.
   const [ahora, setAhora] = useState(() => Date.now());
   useEffect(() => {
-    if (analysis.state !== "pendiente" && analysis.state !== "en_curso") return;
+    if (!enCurso) return;
     const t = setInterval(() => setAhora(Date.now()), 1000);
     return () => clearInterval(t);
-  }, [analysis.state]);
-  const elapsedS = analysis.state === "pendiente" || analysis.state === "en_curso"
-    ? Math.max(0, Math.round(ahora / 1000 - analysis.created_at))
+  }, [enCurso]);
+  const elapsedS = enCurso
+    ? Math.max(0, Math.round(ahora / 1000 - Math.min(...analyses.map((a) => a.created_at))))
     : null;
 
-  const agenteActual = agentes?.find((a) => a.id === analysis.agente) ?? null;
+  const unico = analyses.length === 1 ? analyses[0] : null;
+  const agenteActual = agentes?.find((a) => a.id === unico?.agente) ?? null;
   // El análisis sigue corriendo en el servidor (Dock/estados lo siguen
   // reflejando) sea cual sea el estado de este popup, así que cerrarlo o
   // cambiar de agente a media espera no pierde nada -- no hace falta
-  // bloquear los controles mientras `corriendo` es true (antes lo dejaba
+  // bloquear los controles mientras `enCurso` es true (antes lo dejaba
   // inerte hasta ~120s, lo que se sentía roto).
-  const corriendo = analysis.state === "pendiente" || analysis.state === "en_curso";
 
   return (
     <>
@@ -86,7 +96,9 @@ export function AgentResultPopup({
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <p className="truncate text-[13px] font-medium text-fg">{agenteActual?.nombre ?? "Agentes"}</p>
+                  <p className="truncate text-[13px] font-medium text-fg">
+                    {unico ? (agenteActual?.nombre ?? "Agentes") : `${analyses.length} agentes`}
+                  </p>
                   <BetaPill />
                 </div>
                 <button onClick={onElegirOtro}
@@ -95,7 +107,7 @@ export function AgentResultPopup({
                   Elegir otro agente
                 </button>
               </div>
-              {corriendo && (
+              {enCurso && (
                 <span className="shrink-0 font-mono text-[11px] text-subtle">corriendo…</span>
               )}
               <button onClick={onClose} aria-label="Cerrar"
@@ -105,16 +117,73 @@ export function AgentResultPopup({
             </div>
 
             <div className="mt-1">
-              <PantallaResultado image={image} analysis={analysis}
-                agentePedido={analysis.agente} motor={agenteActual?.motor ?? null}
-                elapsedS={elapsedS}
-                rasgosVisibles={rasgosVisibles}
-                onToggleRasgos={() => setRasgosVisibles((v) => !v)} />
+              {unico ? (
+                <PantallaResultado image={image} analysis={unico}
+                  agentePedido={unico.agente} motor={agenteActual?.motor ?? null}
+                  elapsedS={elapsedS}
+                  rasgosVisibles={rasgosVisibles}
+                  onToggleRasgos={() => setRasgosVisibles((v) => !v)} />
+              ) : (
+                <PantallaGrupo analyses={analyses} agentesRegistro={agentes} />
+              )}
             </div>
           </FloatingCard>
         </Pop>
       </Center>
     </>
+  );
+}
+
+/** La vista de una selección múltiple de agentes: una fila por análisis
+ *  pedido, cada una con su propio estado en vivo -- a diferencia de
+ *  `PantallaResultadoFusionado` (sub-preguntas de UN agente, que llegan y
+ *  terminan juntas en una sola llamada), aquí cada fila es su propia
+ *  solicitud en cola y puede seguir corriendo mientras otra ya terminó o
+ *  falló. */
+function PantallaGrupo({ analyses, agentesRegistro }: {
+  analyses: Analysis[];
+  agentesRegistro: AgenteVista[] | null;
+}) {
+  return (
+    <div className="mt-4 flex flex-col gap-2.5">
+      {analyses.map((a, i) => {
+        const reg = agentesRegistro?.find((r) => r.id === a.agente);
+        const corriendo = a.state === "pendiente" || a.state === "en_curso";
+        const fallo = a.state === "error" || (a.state === "hecho" && a.agentes.length === 0);
+        return (
+          <div key={a.id} className="rounded-lg border border-border bg-black/[.1] p-3"
+            style={{ animation: `jg-fade-rise 280ms ease-expo both ${i * 45}ms` }}>
+            <div className="flex items-center gap-2.5">
+              <AgenteIcono agente={a.agente ?? ""} apagado={corriendo || fallo} size={18} />
+              <span className="min-w-0 flex-1 truncate text-[12.5px] text-fg">{reg?.nombre ?? a.agente ?? "agente"}</span>
+              {corriendo && <Icon name="spinner" size={13} className="shrink-0 text-muted" />}
+            </div>
+            {corriendo && <p className="mt-1.5 pl-[26px] text-[10.5px] text-subtle">Mirando la imagen…</p>}
+            {fallo && (
+              <p className="mt-1.5 pl-[26px] text-[10.5px] text-muted">{a.error ?? "no contestó a tiempo"}</p>
+            )}
+            {!corriendo && !fallo && (
+              <div className="mt-1.5 flex flex-col gap-1">
+                {a.agentes.map((d) => {
+                  const abstiene = d.etiqueta === "abstiene";
+                  const mejorEtiqueta = abstiene ? (d.etiqueta_real || d.etiqueta) : d.etiqueta;
+                  return (
+                    <div key={d.agente} className="flex items-center justify-between gap-2 pl-[26px]">
+                      <span className={`truncate text-[11.5px] ${abstiene ? "text-subtle italic" : "text-fg"}`}>
+                        {abstiene
+                          ? (mejorEtiqueta ? `¿${mejorEtiqueta}? (sin confianza suficiente)` : "sin suficiente confianza")
+                          : (d.detalle || d.etiqueta)}
+                      </span>
+                      <span className="shrink-0 font-mono text-[10px] text-subtle">{Math.round(d.confianza * 100)}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
