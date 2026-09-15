@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { PlanetBackground } from "./ui/PlanetBackground";
 import { Wizard } from "./wizard/Wizard";
 import { PairStep } from "./wizard/PairStep";
@@ -267,6 +268,31 @@ export default function App() {
       void api.post(`/v1/projects/${project.id}/leave`, {}, token).catch(() => {});
     }
   }
+
+  // Cerrar la ventana (botón propio, Alt+F4, "Cerrar" de la barra de tareas)
+  // no soltaba el candado del proyecto -- se quedaba "ocupado" hasta que
+  // caducara solo (`STALE_AFTER`, horas). Se intercepta el cierre, se espera
+  // un momento a que `leave` viaje de verdad (no el `catch` mudo de más
+  // arriba, pensado para no bloquear la navegación normal) y solo entonces
+  // se destruye la ventana -- `destroy()` y no `close()`, para no volver a
+  // disparar este mismo evento.
+  useEffect(() => {
+    const win = getCurrentWindow();
+    let cancelado = false;
+    let quitar: (() => void) | undefined;
+    void win.onCloseRequested(async (evento) => {
+      const { project } = useWorkspace.getState();
+      const token = useServer.getState().token;
+      if (!project || !token) return;
+      evento.preventDefault();
+      await Promise.race([
+        api.post(`/v1/projects/${project.id}/leave`, {}, token).catch(() => {}),
+        new Promise((resolve) => setTimeout(resolve, 1500)),
+      ]);
+      if (!cancelado) await win.destroy();
+    }).then((f) => { if (cancelado) f(); else quitar = f; });
+    return () => { cancelado = true; quitar?.(); };
+  }, []);
 
   /** Salir a mano. Es el mismo desmontaje que hace la expulsión por
    *  desconexión, y por eso vive en un solo sitio: dejar el token del puente
