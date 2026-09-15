@@ -43,6 +43,12 @@ export function ImageEditorPopup({
   const contenedorRef = useRef<HTMLDivElement>(null);
   const [herramienta, setHerramienta] = useState<Herramienta>("recorte");
   const [radio, setRadio] = useState(24);
+  // Vista previa en directo vía CSS `filter` sobre el propio <canvas> (no
+  // toca los píxeles todavía); "Aplicar tono" es lo que de verdad redibuja
+  // el lienzo y genera el snapshot -- mismo criterio que "Aplicar recorte":
+  // los sliders son una previsualización, no un compromiso.
+  const [brillo, setBrillo] = useState(100);
+  const [contraste, setContraste] = useState(100);
   // 1 = ajuste automático de siempre (`ajustarOverlay`). El contenedor se
   // vuelve desplazable (`overflow-auto` más abajo) en vez de llevar un pan a
   // mano: el scroll nativo del navegador ya resuelve mover la vista por una
@@ -486,6 +492,27 @@ export function ImageEditorPopup({
     snapshot();
   }
 
+  // Redibuja el canvas con el filtro ya "horneado" en los píxeles -- igual
+  // que el blur, que tampoco deja el filtro puesto sobre el elemento, lo
+  // aplica y lo suelta.
+  function aplicarTono() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const nuevo = document.createElement("canvas");
+    nuevo.width = canvas.width;
+    nuevo.height = canvas.height;
+    const ctx = nuevo.getContext("2d");
+    if (!ctx) return;
+    ctx.filter = `brightness(${brillo}%) contrast(${contraste}%)`;
+    ctx.drawImage(canvas, 0, 0);
+    canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.style.filter = "";
+    canvas.getContext("2d")?.drawImage(nuevo, 0, 0);
+    setBrillo(100);
+    setContraste(100);
+    snapshot();
+  }
+
   function exportarBlob(cb: (blob: Blob) => void) {
     canvasRef.current?.toBlob((blob) => { if (blob) cb(blob); }, "image/jpeg", 0.92);
   }
@@ -644,12 +671,27 @@ export function ImageEditorPopup({
                       </button>
                     </div>
                   )}
+                  {herramienta === "tono" && (
+                    <div className="flex w-full items-center gap-3">
+                      <span className="text-[10px] text-subtle">brillo</span>
+                      <input type="range" min={40} max={160} value={brillo}
+                        onChange={(e) => setBrillo(e.target.valueAsNumber)} className="w-20 accent-fg" />
+                      <span className="text-[10px] text-subtle">contraste</span>
+                      <input type="range" min={40} max={160} value={contraste}
+                        onChange={(e) => setContraste(e.target.valueAsNumber)} className="w-20 accent-fg" />
+                      <button onClick={aplicarTono} disabled={bloqueado}
+                        className="jg-press ml-auto rounded-md border border-white/15 px-3 py-1 text-[10.5px] text-fg">
+                        Aplicar tono
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div ref={contenedorRef} className="mt-3 flex items-center justify-center overflow-auto rounded-xl border
                   border-border bg-black/30 p-2" style={{ minHeight: 300, maxHeight: 420 }}>
                   <div className="relative" style={{ lineHeight: 0 }}>
-                    <canvas ref={canvasRef} className="rounded-md" />
+                    <canvas ref={canvasRef} className="rounded-md"
+                      style={herramienta === "tono" ? { filter: `brightness(${brillo}%) contrast(${contraste}%)` } : undefined} />
                     <canvas ref={overlayRef}
                       className="absolute left-0 top-0 touch-none"
                       style={{ cursor: herramienta === "blur" ? "none" : "default" }}
