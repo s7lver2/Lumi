@@ -5,7 +5,7 @@ import { Center } from "../ui/layout";
 
 const PROFUNDIDAD_HISTORIAL = 20;
 
-type Herramienta = "recorte" | "blur";
+type Herramienta = "recorte" | "girar" | "blur" | "tono";
 
 /** Caja de recorte en espacio de canvas (píxeles reales, no de pantalla). */
 interface Caja { x: number; y: number; w: number; h: number }
@@ -388,25 +388,22 @@ export function ImageEditorPopup({
                 selector de archivos, aunque el camino final sea el mismo --
                 el editor se quedaba en el esqueleto para siempre. */}
             <div className={cargando ? "hidden" : "contents"}>
-                <div className="mt-4 flex items-center gap-2">
-                  <button onClick={() => setHerramienta("recorte")} disabled={bloqueado}
-                    className={`jg-press flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px]
-                      ${herramienta === "recorte" ? "border-fg bg-white/[.06] text-fg" : "border-border text-muted"}`}>
-                    <Icon name="crop" size={13} /> Recorte
-                  </button>
-                  <button onClick={() => setHerramienta("blur")} disabled={bloqueado}
-                    className={`jg-press flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px]
-                      ${herramienta === "blur" ? "border-fg bg-white/[.06] text-fg" : "border-border text-muted"}`}>
-                    <Icon name="blur" size={13} /> Blur
-                  </button>
-                  {herramienta === "blur" && (
-                    <div className="ml-1 flex items-center gap-2">
-                      <span className="text-[10px] text-subtle">radio</span>
-                      <input type="range" min={6} max={80} value={radio}
-                        onChange={(e) => setRadio(e.target.valueAsNumber)}
-                        className="w-24 accent-fg" />
-                    </div>
-                  )}
+                <div className="mt-4 flex items-center gap-1">
+                  {([
+                    ["recorte", "crop", "Recortar"],
+                    ["girar", "girar", "Girar y voltear"],
+                    ["blur", "blur", "Difuminar"],
+                    ["tono", "sparkle", "Brillo y contraste"],
+                  ] as const).map(([id, icono, titulo], i) => (
+                    <>
+                      {i === 2 && <div key="sep" className="mx-1 h-5 w-px bg-border" />}
+                      <button key={id} onClick={() => setHerramienta(id)} disabled={bloqueado} title={titulo}
+                        className={`jg-press grid h-8 w-8 place-items-center rounded-lg border
+                          ${herramienta === id ? "border-fg bg-white/[.06] text-fg" : "border-transparent text-subtle hover:text-fg"}`}>
+                        <Icon name={icono} size={14} />
+                      </button>
+                    </>
+                  ))}
                   <div className="ml-auto flex items-center gap-1">
                     <button onClick={deshacer} disabled={!puedeDeshacer || bloqueado} title="Deshacer"
                       className="jg-press rounded-md p-1.5 text-subtle hover:text-fg disabled:opacity-30">
@@ -417,6 +414,17 @@ export function ImageEditorPopup({
                       <Icon name="redo" size={14} />
                     </button>
                   </div>
+                </div>
+
+                <div className="mt-2 flex min-h-[26px] items-center gap-2">
+                  {herramienta === "blur" && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-subtle">radio</span>
+                      <input type="range" min={6} max={80} value={radio}
+                        onChange={(e) => setRadio(e.target.valueAsNumber)}
+                        className="w-24 accent-fg" />
+                    </div>
+                  )}
                 </div>
 
                 <div ref={contenedorRef} className="mt-3 flex items-center justify-center rounded-xl border
