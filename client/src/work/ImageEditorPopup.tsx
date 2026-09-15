@@ -53,9 +53,30 @@ export function ImageEditorPopup({
   // pantalla y hay que convertirlo antes de tocar el canvas.
   const escalaRef = useRef(1);
   const [caja, setCaja] = useState<Caja | null>(null);
+  // `null` = recorte libre (el de siempre). Un número fija ancho/alto -- las
+  // esquinas dejan de deformar la caja y la mantienen a esa proporción; los
+  // manejadores de borde (un solo eje) se ocultan mientras hay una fijada,
+  // porque estirar un solo lado rompería la proporción que se acaba de pedir.
+  const [aspecto, setAspecto] = useState<number | null>(null);
+
+  function aplicarProporcion(r: number | null) {
+    setAspecto(r);
+    const canvas = canvasRef.current;
+    if (r === null || !caja || !canvas) return;
+    let w = caja.w;
+    let h = w / r;
+    if (h > canvas.height) { h = canvas.height; w = h * r; }
+    if (w > canvas.width) { w = canvas.width; h = w / r; }
+    const cx = caja.x + caja.w / 2;
+    const cy = caja.y + caja.h / 2;
+    const x = Math.max(0, Math.min(canvas.width - w, cx - w / 2));
+    const y = Math.max(0, Math.min(canvas.height - h, cy - h / 2));
+    setCaja({ x, y, w, h });
+  }
   const arrastreRef = useRef<
     | { modo: "mover"; ox: number; oy: number }
-    | { modo: "esquina"; esquina: "nw" | "ne" | "sw" | "se" }
+    | { modo: "esquina"; esquina: "nw" | "ne" | "sw" | "se"; anclaX: number; anclaY: number }
+    | { modo: "borde"; borde: "n" | "s" | "e" | "w" }
     | { modo: "pintar" }
     | null
   >(null);
@@ -187,6 +208,22 @@ export function ImageEditorPopup({
     return null;
   }
 
+  // Los manejadores de borde solo existen en recorte libre: estirar un solo
+  // lado con una proporción fijada rompería justo lo que se acaba de pedir.
+  function bordeEn(p: { x: number; y: number }, c: Caja): "n" | "s" | "e" | "w" | null {
+    if (aspecto !== null) return null;
+    const esc = escalaRef.current || 1;
+    const tol = TAM_ESQUINA / esc;
+    const bordes: [("n" | "s" | "e" | "w"), number, number][] = [
+      ["n", c.x + c.w / 2, c.y], ["s", c.x + c.w / 2, c.y + c.h],
+      ["w", c.x, c.y + c.h / 2], ["e", c.x + c.w, c.y + c.h / 2],
+    ];
+    for (const [nombre, ex, ey] of bordes) {
+      if (Math.abs(p.x - ex) < tol && Math.abs(p.y - ey) < tol) return nombre;
+    }
+    return null;
+  }
+
   function aplicarBlurEn(px: number, py: number) {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -222,8 +259,20 @@ export function ImageEditorPopup({
     if (!caja) return;
     const esquina = esquinaEn(p, caja);
     if (esquina) {
-      arrastreRef.current = { modo: "esquina", esquina };
-    } else if (p.x >= caja.x && p.x <= caja.x + caja.w && p.y >= caja.y && p.y <= caja.y + caja.h) {
+      const opuesta: Record<typeof esquina, [number, number]> = {
+        nw: [caja.x + caja.w, caja.y + caja.h], ne: [caja.x, caja.y + caja.h],
+        sw: [caja.x + caja.w, caja.y], se: [caja.x, caja.y],
+      };
+      const [anclaX, anclaY] = opuesta[esquina];
+      arrastreRef.current = { modo: "esquina", esquina, anclaX, anclaY };
+      return;
+    }
+    const borde = bordeEn(p, caja);
+    if (borde) {
+      arrastreRef.current = { modo: "borde", borde };
+      return;
+    }
+    if (p.x >= caja.x && p.x <= caja.x + caja.w && p.y >= caja.y && p.y <= caja.y + caja.h) {
       arrastreRef.current = { modo: "mover", ox: p.x - caja.x, oy: p.y - caja.y };
     }
   }
@@ -246,17 +295,47 @@ export function ImageEditorPopup({
       const x = Math.max(0, Math.min(canvas.width - caja.w, p.x - a.ox));
       const y = Math.max(0, Math.min(canvas.height - caja.h, p.y - a.oy));
       setCaja({ ...caja, x, y });
-    } else {
+      return;
+    }
+    if (a.modo === "borde") {
       let { x, y, w, h } = caja;
       const x2 = x + w, y2 = y + h;
-      if (a.esquina === "nw") { x = Math.min(p.x, x2 - 10); y = Math.min(p.y, y2 - 10); w = x2 - x; h = y2 - y; }
-      if (a.esquina === "ne") { y = Math.min(p.y, y2 - 10); w = Math.max(10, p.x - x); h = y2 - y; }
-      if (a.esquina === "sw") { x = Math.min(p.x, x2 - 10); w = x2 - x; h = Math.max(10, p.y - y); }
-      if (a.esquina === "se") { w = Math.max(10, p.x - x); h = Math.max(10, p.y - y); }
+      if (a.borde === "n") { y = Math.min(p.y, y2 - 10); h = y2 - y; }
+      if (a.borde === "s") { h = Math.max(10, p.y - y); }
+      if (a.borde === "w") { x = Math.min(p.x, x2 - 10); w = x2 - x; }
+      if (a.borde === "e") { w = Math.max(10, p.x - x); }
       x = Math.max(0, x); y = Math.max(0, y);
       w = Math.min(w, canvas.width - x); h = Math.min(h, canvas.height - y);
       setCaja({ x, y, w, h });
+      return;
     }
+    // a.modo === "esquina"
+    if (aspecto !== null) {
+      const dx = p.x - a.anclaX;
+      const dy = p.y - a.anclaY;
+      let w = Math.max(10, Math.abs(dx));
+      let h = w / aspecto;
+      if (Math.abs(dy) / (h || 1) > Math.abs(dx) / (w || 1)) {
+        h = Math.max(10, Math.abs(dy));
+        w = h * aspecto;
+      }
+      let x = dx >= 0 ? a.anclaX : a.anclaX - w;
+      let y = dy >= 0 ? a.anclaY : a.anclaY - h;
+      x = Math.max(0, Math.min(canvas.width - w, x));
+      y = Math.max(0, Math.min(canvas.height - h, y));
+      w = Math.min(w, canvas.width - x); h = Math.min(h, canvas.height - y);
+      setCaja({ x, y, w, h });
+      return;
+    }
+    let { x, y, w, h } = caja;
+    const x2 = x + w, y2 = y + h;
+    if (a.esquina === "nw") { x = Math.min(p.x, x2 - 10); y = Math.min(p.y, y2 - 10); w = x2 - x; h = y2 - y; }
+    if (a.esquina === "ne") { y = Math.min(p.y, y2 - 10); w = Math.max(10, p.x - x); h = y2 - y; }
+    if (a.esquina === "sw") { x = Math.min(p.x, x2 - 10); w = x2 - x; h = Math.max(10, p.y - y); }
+    if (a.esquina === "se") { w = Math.max(10, p.x - x); h = Math.max(10, p.y - y); }
+    x = Math.max(0, x); y = Math.max(0, y);
+    w = Math.min(w, canvas.width - x); h = Math.min(h, canvas.height - y);
+    setCaja({ x, y, w, h });
   }
 
   function onPointerUp() {
@@ -271,18 +350,62 @@ export function ImageEditorPopup({
     if (!ctx) return;
     ctx.clearRect(0, 0, overlay.width, overlay.height);
     if (herramienta === "recorte" && caja) {
+      const esc = escalaRef.current || 1;
       ctx.fillStyle = "rgba(0,0,0,.55)";
       ctx.fillRect(0, 0, overlay.width, overlay.height);
       ctx.clearRect(caja.x, caja.y, caja.w, caja.h);
       ctx.strokeStyle = "#fff";
-      ctx.lineWidth = 2 / (escalaRef.current || 1);
+      ctx.lineWidth = 2 / esc;
       ctx.strokeRect(caja.x, caja.y, caja.w, caja.h);
-      const r = 5 / (escalaRef.current || 1);
-      ctx.fillStyle = "#fff";
-      for (const [ex, ey] of [[caja.x, caja.y], [caja.x + caja.w, caja.y], [caja.x, caja.y + caja.h], [caja.x + caja.w, caja.y + caja.h]]) {
+
+      // Rejilla de tercios: ayuda de composición estándar, siempre visible
+      // mientras se recorta.
+      ctx.strokeStyle = "rgba(255,255,255,.35)";
+      ctx.lineWidth = 1 / esc;
+      for (const f of [1 / 3, 2 / 3]) {
         ctx.beginPath();
-        ctx.arc(ex, ey, r, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(caja.x + caja.w * f, caja.y);
+        ctx.lineTo(caja.x + caja.w * f, caja.y + caja.h);
+        ctx.moveTo(caja.x, caja.y + caja.h * f);
+        ctx.lineTo(caja.x + caja.w, caja.y + caja.h * f);
+        ctx.stroke();
+      }
+
+      // Manejadores de esquina: cuadrados de 14px de pantalla (antes puntos
+      // de 5px), con halo cuando se está arrastrando justo ese -- "cogido"
+      // de verdad, no solo un cursor que cambia.
+      const lado = 14 / esc;
+      const agarrando = arrastreRef.current?.modo === "esquina" ? arrastreRef.current.esquina : null;
+      const esquinas: [string, number, number][] = [
+        ["nw", caja.x, caja.y], ["ne", caja.x + caja.w, caja.y],
+        ["sw", caja.x, caja.y + caja.h], ["se", caja.x + caja.w, caja.y + caja.h],
+      ];
+      for (const [nombre, ex, ey] of esquinas) {
+        const activa = nombre === agarrando;
+        const l = activa ? lado * 1.15 : lado;
+        if (activa) {
+          ctx.fillStyle = "rgba(255,255,255,.18)";
+          ctx.beginPath();
+          ctx.arc(ex, ey, l, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(ex - l / 2, ey - l / 2, l, l);
+      }
+
+      // Manejadores de borde (un eje), solo en recorte libre.
+      if (aspecto === null) {
+        const anchoBorde = 14 / esc, altoBorde = 8 / esc;
+        const bordes: [number, number, number, number][] = [
+          [caja.x + caja.w / 2, caja.y, anchoBorde, altoBorde],
+          [caja.x + caja.w / 2, caja.y + caja.h, anchoBorde, altoBorde],
+          [caja.x, caja.y + caja.h / 2, altoBorde, anchoBorde],
+          [caja.x + caja.w, caja.y + caja.h / 2, altoBorde, anchoBorde],
+        ];
+        ctx.fillStyle = "rgba(255,255,255,.85)";
+        for (const [ex, ey, w, h] of bordes) {
+          ctx.fillRect(ex - w / 2, ey - h / 2, w, h);
+        }
       }
     } else if (herramienta === "blur" && cursor) {
       ctx.strokeStyle = "rgba(255,255,255,.85)";
@@ -417,6 +540,22 @@ export function ImageEditorPopup({
                 </div>
 
                 <div className="mt-2 flex min-h-[26px] items-center gap-2">
+                  {herramienta === "recorte" && (
+                    <div className="flex w-full items-center gap-1.5">
+                      {([["Libre", null], ["1:1", 1], ["4:3", 4 / 3], ["16:9", 16 / 9]] as const).map(([etq, r]) => (
+                        <button key={etq} onClick={() => aplicarProporcion(r)}
+                          className={`jg-press rounded-md border px-2 py-1 text-[10px]
+                            ${aspecto === r ? "border-fg text-fg" : "border-border text-subtle"}`}>
+                          {etq}
+                        </button>
+                      ))}
+                      {caja && (
+                        <span className="ml-auto font-mono text-[10px] text-subtle">
+                          {Math.round(caja.w)} × {Math.round(caja.h)} px
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {herramienta === "blur" && (
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-subtle">radio</span>
