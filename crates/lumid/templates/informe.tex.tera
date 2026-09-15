@@ -462,7 +462,7 @@ Peso medio: & \ttfamily{{ estadisticas.peso_medio_txt }} \\
 \vspace{10pt}
 {\lumiintersemibold\large Notas del investigador}\\[6pt]
 \lumifilete\\[8pt]
-{{ notas | tex }}\\
+{{ notas | tex }}
 {% endif %}
 
 % ------------------------------------------------------------------ Firma --
