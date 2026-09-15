@@ -210,10 +210,14 @@ export function ImageEditorPopup({
     return { x: (e.clientX - rect.left) / escala, y: (e.clientY - rect.top) / escala };
   }
 
-  const TAM_ESQUINA = 14;
+  // El área de agarre es más grande que el cuadrado de 14px que se dibuja
+  // (ver `dibujarOverlay`) -- clavar el dedo o el cursor justo encima de un
+  // handle es más difícil de lo que parece en pantalla; el punto de agarre
+  // real crece sin que el handle visual también lo haga.
+  const TOLERANCIA_AGARRE = 20;
   function esquinaEn(p: { x: number; y: number }, c: Caja): "nw" | "ne" | "sw" | "se" | null {
     const esc = escalaRef.current || 1;
-    const tol = TAM_ESQUINA / esc;
+    const tol = TOLERANCIA_AGARRE / esc;
     const esquinas: [("nw" | "ne" | "sw" | "se"), number, number][] = [
       ["nw", c.x, c.y], ["ne", c.x + c.w, c.y], ["sw", c.x, c.y + c.h], ["se", c.x + c.w, c.y + c.h],
     ];
@@ -228,7 +232,7 @@ export function ImageEditorPopup({
   function bordeEn(p: { x: number; y: number }, c: Caja): "n" | "s" | "e" | "w" | null {
     if (aspecto !== null) return null;
     const esc = escalaRef.current || 1;
-    const tol = TAM_ESQUINA / esc;
+    const tol = TOLERANCIA_AGARRE / esc;
     const bordes: [("n" | "s" | "e" | "w"), number, number][] = [
       ["n", c.x + c.w / 2, c.y], ["s", c.x + c.w / 2, c.y + c.h],
       ["w", c.x, c.y + c.h / 2], ["e", c.x + c.w, c.y + c.h / 2],
@@ -237,6 +241,24 @@ export function ImageEditorPopup({
       if (Math.abs(p.x - ex) < tol && Math.abs(p.y - ey) < tol) return nombre;
     }
     return null;
+  }
+
+  // Cursor nativo del sistema por encima de cada zona de agarre -- antes el
+  // cursor se quedaba en la flecha por defecto sobre toda la caja de
+  // recorte, sin ninguna pista de qué se puede hacer antes de arrastrar.
+  function cursorDeEsquina(esquina: "nw" | "ne" | "sw" | "se"): string {
+    return esquina === "nw" || esquina === "se" ? "nwse-resize" : "nesw-resize";
+  }
+  function cursorDeBorde(borde: "n" | "s" | "e" | "w"): string {
+    return borde === "n" || borde === "s" ? "ns-resize" : "ew-resize";
+  }
+  function cursorDeRecorte(p: { x: number; y: number }, c: Caja): string {
+    const esquina = esquinaEn(p, c);
+    if (esquina) return cursorDeEsquina(esquina);
+    const borde = bordeEn(p, c);
+    if (borde) return cursorDeBorde(borde);
+    if (p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h) return "move";
+    return "default";
   }
 
   function aplicarBlurEn(px: number, py: number) {
@@ -280,22 +302,28 @@ export function ImageEditorPopup({
       };
       const [anclaX, anclaY] = opuesta[esquina];
       arrastreRef.current = { modo: "esquina", esquina, anclaX, anclaY };
+      if (overlayRef.current) overlayRef.current.style.cursor = cursorDeEsquina(esquina);
       return;
     }
     const borde = bordeEn(p, caja);
     if (borde) {
       arrastreRef.current = { modo: "borde", borde };
+      if (overlayRef.current) overlayRef.current.style.cursor = cursorDeBorde(borde);
       return;
     }
     if (p.x >= caja.x && p.x <= caja.x + caja.w && p.y >= caja.y && p.y <= caja.y + caja.h) {
       arrastreRef.current = { modo: "mover", ox: p.x - caja.x, oy: p.y - caja.y };
+      if (overlayRef.current) overlayRef.current.style.cursor = "move";
     }
   }
 
   function onPointerMove(e: React.PointerEvent) {
     const a = arrastreRef.current;
     if (!a) {
-      if (herramienta === "blur") dibujarOverlay(puntoCanvas(e));
+      if (herramienta === "blur") { dibujarOverlay(puntoCanvas(e)); return; }
+      if (herramienta === "recorte" && caja && overlayRef.current) {
+        overlayRef.current.style.cursor = cursorDeRecorte(puntoCanvas(e), caja);
+      }
       return;
     }
     const p = puntoCanvas(e);
@@ -432,6 +460,16 @@ export function ImageEditorPopup({
   }
 
   useEffect(() => { dibujarOverlay(); }, [caja, herramienta]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fuera de recorte no hay agarres que calcular en cada movimiento de
+  // ratón (eso lo hace `onPointerMove`/`onPointerDown` mientras la
+  // herramienta activa es "recorte"), así que sin este efecto el cursor se
+  // podía quedar "atascado" en un nwse-resize al cambiar de herramienta.
+  useEffect(() => {
+    if (overlayRef.current && herramienta !== "recorte") {
+      overlayRef.current.style.cursor = herramienta === "blur" ? "none" : "default";
+    }
+  }, [herramienta]);
 
   useEffect(() => {
     zoomRef.current = zoom;
