@@ -7,9 +7,10 @@ use crate::routes::auth::{bearer, require_session};
 use crate::routes::cases::guard_case;
 use crate::routes::projects::{err, Fail};
 use crate::App;
-use axum::extract::{Multipart, Path, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::{http::HeaderMap, http::StatusCode, Json};
 use lumi_proto::api::{Image, ProjectImage, ReuseReq, Usage};
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
 /// Lado mayor de la miniatura. 320 px basta para la tira a densidad doble.
@@ -370,12 +371,23 @@ pub async fn upload(
 /// el sitio cuando el trabajo termina (`sobrescribir_bytes`, llamada desde
 /// `queue::Queue::correr_upscale`) -- no queda una imagen "original" y otra
 /// "mejorada" por separado.
+#[derive(Deserialize)]
+pub struct UpscaleQuery {
+    /// `1`, `2` o `4`. Cualquier otro valor (incluido "ausente") cae a 4,
+    /// que es el único comportamiento que existía antes de esto.
+    #[serde(default = "factor_por_defecto")]
+    factor: i64,
+}
+fn factor_por_defecto() -> i64 { 4 }
+
 pub async fn upscale(
     State(app): State<App>,
     Path(case_id): Path<i64>,
+    Query(q): Query<UpscaleQuery>,
     headers: HeaderMap,
     mut mp: Multipart,
 ) -> Result<Json<lumi_proto::api::Analysis>, Fail> {
+    let factor = match q.factor { 1 | 2 | 4 => q.factor, _ => 4 };
     if app.store.get_meta(crate::routes::features::CLAVE_UPSCALER).as_deref() != Some("1") {
         return Err(err(StatusCode::FORBIDDEN, "el upscaler no está activado en este servidor"));
     }
@@ -424,9 +436,9 @@ pub async fn upscale(
         let image_id = c.last_insert_rowid();
 
         c.execute(
-            "INSERT INTO analyses (case_id, requested_by, model, agente, state, created_at, via_api)
-             VALUES (?1, ?2, 'upscale', NULL, 'pendiente', ?3, 0)",
-            rusqlite::params![case_id, uid, t],
+            "INSERT INTO analyses (case_id, requested_by, model, agente, state, created_at, via_api, upscale_factor)
+             VALUES (?1, ?2, 'upscale', NULL, 'pendiente', ?3, 0, ?4)",
+            rusqlite::params![case_id, uid, t, factor],
         )
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
         let analysis_id = c.last_insert_rowid();

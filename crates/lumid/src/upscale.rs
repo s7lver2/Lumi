@@ -35,8 +35,9 @@ pub async fn procesar(
     python: &Path,
     pesos: &Path,
     dispositivo: &str,
+    factor: i64,
 ) -> anyhow::Result<()> {
-    let tarea = correr(ruta_entrada, ruta_salida, python, pesos, dispositivo);
+    let tarea = correr(ruta_entrada, ruta_salida, python, pesos, dispositivo, factor);
     match tokio::time::timeout(LIMITE, tarea).await {
         Ok(r) => r,
         Err(_) => anyhow::bail!("el upscaler tardó más de {}s", LIMITE.as_secs()),
@@ -44,7 +45,7 @@ pub async fn procesar(
 }
 
 async fn correr(
-    ruta_entrada: &Path, ruta_salida: &Path, python: &Path, pesos: &Path, dispositivo: &str,
+    ruta_entrada: &Path, ruta_salida: &Path, python: &Path, pesos: &Path, dispositivo: &str, factor: i64,
 ) -> anyhow::Result<()> {
     let mut hijo = tokio::process::Command::new(python)
         .arg(crate::assets::ruta("workers/lumi_upscale.py"))
@@ -61,6 +62,7 @@ async fn correr(
         "id": 0,
         "ruta_entrada": ruta_entrada.display().to_string(),
         "ruta_salida": ruta_salida.display().to_string(),
+        "factor": factor,
     });
     if let Some(mut stdin) = hijo.stdin.take() {
         stdin.write_all(format!("{orden}\n").as_bytes()).await?;

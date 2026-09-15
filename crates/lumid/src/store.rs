@@ -525,6 +525,14 @@ fn migrate(c: &Connection) {
         // este análisis". `NULL` en un análisis de antes de esta columna:
         // ausencia legítima, nunca se reconstruye a posteriori.
         ("analyses", "imagen_sha256", "TEXT"),
+        // Resoluciones objetivo del reescalado de IA (spec 2026-09-15):
+        // cuánto multiplicar el tamaño original. El modelo solo sabe
+        // reescalar nativamente a x4 (`workers::lumi_upscale`); 1 y 2 se
+        // consiguen reduciendo ESE resultado, nunca interpolando el
+        // original. `NULL` en una fila que no es de tipo "upscale", o en
+        // cualquier fila de antes de esta columna -- ahí se asume 4 (el
+        // único comportamiento que existía).
+        ("analyses", "upscale_factor", "INTEGER"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }
