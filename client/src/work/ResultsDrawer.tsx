@@ -173,28 +173,32 @@ function VistaDetalle({ h, image, onCenter, onVolver }: {
  *  una columna con todos los `detalle` concatenados al final. Los
  *  abstenidos NO desaparecen: se ven apagados, diciendo que no hubo señal
  *  suficiente. */
-function AgentesPanel({ agentes }: { agentes: DichoDeAgente[] }) {
+function AgentesPanel({ agentes, onAbrir }: { agentes: DichoDeAgente[]; onAbrir: () => void }) {
   if (agentes.length === 0) return null;
   return (
     <div className="flex flex-col gap-2">
       <p className="text-[9px] uppercase tracking-[.11em] text-subtle">Lo que dice la imagen</p>
       {agentes.map((d) => {
         const calla = d.etiqueta === "abstiene";
+        const mejorEtiqueta = calla ? (d.etiqueta_real || d.etiqueta) : d.etiqueta;
         return (
-          <div key={d.agente}
-            className={`flex items-center gap-3 rounded-lg bg-white/[.03] p-2.5 ${calla ? "opacity-50" : ""}`}>
-            <AgenteIcono agente={d.agente} etiqueta={d.etiqueta} apagado={calla} />
+          <button key={d.agente} type="button" onClick={onAbrir}
+            className={`jg-press flex w-full items-center gap-3 rounded-lg bg-white/[.03] p-2.5 text-left
+              hover:bg-white/[.05] ${calla ? "opacity-50" : ""}`}>
+            <AgenteIcono agente={d.agente} etiqueta={calla ? undefined : d.etiqueta} apagado={calla} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-[10.5px] text-fg">{d.nombre}</span>
-                {!calla && <span className="font-mono text-[9px] tabular-nums text-subtle">{d.confianza.toFixed(2)}</span>}
+                <span className="font-mono text-[9px] tabular-nums text-subtle">{d.confianza.toFixed(2)}</span>
               </div>
-              <div className="mt-0.5 text-[12px] text-fg">{calla ? "sin señal suficiente" : d.etiqueta}</div>
+              <div className="mt-0.5 text-[12px] text-fg">
+                {calla ? (mejorEtiqueta ? `¿${mejorEtiqueta}?` : "sin señal suficiente") : d.etiqueta}
+              </div>
               {!calla && d.detalle && (
                 <p className="mt-0.5 text-[9.5px] leading-snug text-subtle">{d.detalle}</p>
               )}
             </div>
-          </div>
+          </button>
         );
       })}
     </div>
@@ -213,7 +217,7 @@ function AgentesPanel({ agentes }: { agentes: DichoDeAgente[] }) {
  *  selección de un intento viejo no debería aterrizar en el detalle del
  *  intento anterior. */
 export function ResultsDrawer({
-  open, image, analysis, busy, onAnalyze, onCenter,
+  open, image, analysis, busy, onAnalyze, onCenter, onAbrirAgente,
 }: {
   open: boolean;
   image: Image | null;
@@ -221,6 +225,7 @@ export function ResultsDrawer({
   busy: boolean;
   onAnalyze: () => void;
   onCenter: (lat: number, lng: number) => void;
+  onAbrirAgente: () => void;
 }) {
   const exif = image?.exif_lat != null && image.exif_lng != null;
   const [vista, setVista] = useState<"comparar" | "detalle">("comparar");
@@ -274,7 +279,7 @@ export function ResultsDrawer({
         </>
       )}
 
-      {analysis && <AgentesPanel agentes={analysis.agentes} />}
+      {analysis && <AgentesPanel agentes={analysis.agentes} onAbrir={onAbrirAgente} />}
       {analysis?.state === "hecho" && analysis.agentes.length === 0 && (
         <p className="text-[10px] leading-relaxed text-subtle">
           {/* Antes decía "sus modelos no están instalados en este servidor"

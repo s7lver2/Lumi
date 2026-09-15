@@ -391,6 +391,10 @@ export interface DichoDeAgente {
   confianza: number;
   tipo: "filtra" | "describe";
   detalle: string;
+  /** La etiqueta que el motor realmente eligió, aunque no llegara al umbral
+   *  y `etiqueta` valga `"abstiene"` -- para mostrar "lo más parecido".
+   *  Igual a `etiqueta` cuando no se abstiene; vacía en análisis viejos. */
+  etiqueta_real: string;
   /** La distribución completa, ordenada, cuando el motor la calcula de
    *  verdad. Vacía si no — nunca rellenada a mano para completar la lista. */
   alternativas: [string, number][];

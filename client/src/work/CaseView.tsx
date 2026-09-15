@@ -566,7 +566,8 @@ export function CaseView({
           <ResultsDrawer open={drawerId === "results"} image={image} analysis={shown}
             busy={busy}
             onAnalyze={() => (sel !== null ? setStaged([sel]) : void pick())}
-            onCenter={(lat, lng) => setFly({ lat, lng, zoom: 14 })} />
+            onCenter={(lat, lng) => setFly({ lat, lng, zoom: 14 })}
+            onAbrirAgente={() => { if (image && shown) setAgentResult({ image, analysis: shown }); }} />
           <MediaDrawer token={token} caseId={case_.id} projectId={project.id}
             imagenesDelCaso={list} features={features}
             open={drawerId === "media"} onClose={() => setDrawer(null)}

@@ -247,6 +247,9 @@ CREATE TABLE IF NOT EXISTS analysis_agents (
     confianza   REAL NOT NULL,
     tipo        TEXT NOT NULL,
     detalle     TEXT NOT NULL DEFAULT '',
+    -- La etiqueta real elegida por el motor, aunque `etiqueta` valga
+    -- `abstiene` porque no llegó al umbral. Ver `DichoDeAgente.etiqueta_real`.
+    etiqueta_real TEXT NOT NULL DEFAULT '',
     -- JSON de `Vec<(String, f64)>` y de `Option<Rasgos>` tal cual los trajo
     -- `Msg::Agente` -- se guardan serializados y no en columnas propias
     -- porque su forma varía por motor (una lista corta o un PNG en base64) y
@@ -533,6 +536,11 @@ fn migrate(c: &Connection) {
         // cualquier fila de antes de esta columna -- ahí se asume 4 (el
         // único comportamiento que existía).
         ("analyses", "upscale_factor", "INTEGER"),
+        // La etiqueta real que eligió el motor aunque se abstuviera --
+        // `etiqueta` ya vale `abstiene` en ese caso y perdía el dato. Vacía
+        // en filas de antes de esta columna: un análisis viejo simplemente
+        // no ofrece "lo más parecido" al abstenerse.
+        ("analysis_agents", "etiqueta_real", "TEXT NOT NULL DEFAULT ''"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }

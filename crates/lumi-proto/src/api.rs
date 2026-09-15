@@ -967,6 +967,12 @@ pub struct DichoDeAgente {
     pub tipo: String,
     #[serde(default)]
     pub detalle: String,
+    /// La etiqueta que el motor realmente eligió, aunque no llegara al
+    /// umbral y `etiqueta` valga `abstiene` -- sin esto, un agente que se
+    /// abstiene no tiene forma de mostrar "lo más parecido" porque el valor
+    /// real se perdía al guardar. Igual a `etiqueta` cuando no se abstiene.
+    #[serde(default)]
+    pub etiqueta_real: String,
     /// Ver `crate::worker::Msg::Agente::alternativas`. Vacío si el motor no
     /// calcula una distribución genuina — nunca rellenado a mano.
     #[serde(default)]

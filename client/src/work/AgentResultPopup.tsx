@@ -67,13 +67,16 @@ export function AgentResultPopup({
     : null;
 
   const agenteActual = agentes?.find((a) => a.id === analysis.agente) ?? null;
-  // Mismo criterio que `busy` en `UploadPopup`: no se deja cerrar a media
-  // espera, para no perder de vista si el análisis terminó o no.
+  // El análisis sigue corriendo en el servidor (Dock/estados lo siguen
+  // reflejando) sea cual sea el estado de este popup, así que cerrarlo o
+  // cambiar de agente a media espera no pierde nada -- no hace falta
+  // bloquear los controles mientras `corriendo` es true (antes lo dejaba
+  // inerte hasta ~120s, lo que se sentía roto).
   const corriendo = analysis.state === "pendiente" || analysis.state === "en_curso";
 
   return (
     <>
-      <Backdrop closing={closing} onClick={corriendo ? undefined : onClose} />
+      <Backdrop closing={closing} onClick={onClose} />
       <Center className="z-[55]">
         <Pop closing={closing} className="w-[760px] max-w-[calc(100vw-48px)]">
           <FloatingCard className="p-[17px]">
@@ -86,17 +89,17 @@ export function AgentResultPopup({
                   <p className="truncate text-[13px] font-medium text-fg">{agenteActual?.nombre ?? "Agentes"}</p>
                   <BetaPill />
                 </div>
-                <button onClick={onElegirOtro} disabled={corriendo}
+                <button onClick={onElegirOtro}
                   className="jg-press text-[11px] text-muted underline decoration-dotted underline-offset-2
-                    hover:text-fg disabled:opacity-40 disabled:no-underline">
+                    hover:text-fg">
                   Elegir otro agente
                 </button>
               </div>
               {corriendo && (
                 <span className="shrink-0 font-mono text-[11px] text-subtle">corriendo…</span>
               )}
-              <button onClick={onClose} disabled={corriendo} aria-label="Cerrar"
-                className="jg-press shrink-0 text-subtle hover:text-fg disabled:opacity-40">
+              <button onClick={onClose} aria-label="Cerrar"
+                className="jg-press shrink-0 text-subtle hover:text-fg">
                 <Icon name="x" size={13} />
               </button>
             </div>
@@ -205,9 +208,13 @@ function PantallaResultado({ image, analysis, agentePedido, motor, elapsedS, ras
   const abstiene = dicho.etiqueta === "abstiene";
   const rasgos = dicho.rasgos;
   const conRasgos = rasgos !== null && rasgosVisibles;
+  // `etiqueta_real` es lo que el motor eligió de verdad incluso al
+  // abstenerse -- sin ella no habría nada que mostrar como "lo más parecido"
+  // más que el propio literal "abstiene".
+  const mejorEtiqueta = abstiene ? (dicho.etiqueta_real || dicho.etiqueta) : dicho.etiqueta;
   const filas: [string, number][] = dicho.alternativas.length > 0
     ? dicho.alternativas
-    : [[dicho.etiqueta, dicho.confianza]];
+    : [[mejorEtiqueta, dicho.confianza]];
   const maxPeso = Math.max(...filas.map(([, p]) => p), 1e-9);
 
   return (
@@ -257,14 +264,34 @@ function PantallaResultado({ image, analysis, agentePedido, motor, elapsedS, ras
         </div>
 
         {abstiene ? (
-          <div className="flex items-start gap-2.5 rounded-xl border border-border bg-black/[.1] p-3.5"
-            style={{ animation: "jg-fade-rise 280ms ease-expo both 90ms" }}>
-            <Icon name="alert" size={14} className="mt-px shrink-0 text-warning-fg" />
-            <p className="text-[12px] leading-relaxed text-muted">
-              No se pudo determinar <b className="text-warning-fg">{dicho.nombre.toLowerCase()}</b> con
-              suficiente confianza.
-            </p>
-          </div>
+          <>
+            <div className="flex items-start gap-2.5 rounded-xl border border-border bg-black/[.1] p-3.5"
+              style={{ animation: "jg-fade-rise 280ms ease-expo both 90ms" }}>
+              <Icon name="alert" size={14} className="mt-px shrink-0 text-warning-fg" />
+              <p className="text-[12px] leading-relaxed text-muted">
+                No se pudo determinar <b className="text-warning-fg">{dicho.nombre.toLowerCase()}</b> con
+                suficiente confianza.
+              </p>
+            </div>
+            {mejorEtiqueta && (
+              <div className="flex flex-col gap-2">
+                <p className="text-[9px] uppercase tracking-[.08em] text-subtle">Lo más cercano</p>
+                {filas.map(([etq, p], i) => (
+                  <div key={etq} className="flex flex-col gap-1"
+                    style={{ animation: `jg-fade-rise 280ms ease-expo both ${140 + i * 45}ms` }}>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className={`text-[12.5px] ${i === 0 ? "font-medium text-fg" : "text-muted"}`}>{etq}</span>
+                      <span className="font-mono text-[10.5px] text-subtle">{Math.round(p * 100)}%</span>
+                    </div>
+                    <div className="h-[3px] overflow-hidden rounded-full bg-elevated">
+                      <div className={`h-full rounded-full transition-[width] duration-500 ease-expo ${i === 0 ? "bg-warning-fg" : "bg-subtle"}`}
+                        style={{ width: `${Math.max(6, (p / maxPeso) * 100)}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         ) : (
           <>
             <div style={{ animation: "jg-fade-rise 280ms ease-expo both 90ms" }}>
@@ -359,6 +386,7 @@ function PantallaResultadoFusionado({ image, motor, subRespuestas }: {
           {subRespuestas.map((d, i) => {
             const subId = d.agente.split(".").pop() ?? d.agente;
             const abstiene = d.etiqueta === "abstiene";
+            const mejorEtiqueta = abstiene ? (d.etiqueta_real || d.etiqueta) : d.etiqueta;
             return (
               <div key={d.agente} className="flex items-center gap-2.5 rounded-md border border-border
                   bg-black/[.15] p-2.5"
@@ -367,12 +395,12 @@ function PantallaResultadoFusionado({ image, motor, subRespuestas }: {
                 <div className="min-w-0 flex-1">
                   <div className="text-[9px] uppercase tracking-[.06em] text-subtle">{etiquetaCortaDe(subId)}</div>
                   <div className={`mt-0.5 truncate text-[12.5px] ${abstiene ? "text-subtle italic" : "text-fg"}`}>
-                    {abstiene ? "sin suficiente confianza" : (d.detalle || d.etiqueta)}
+                    {abstiene
+                      ? (mejorEtiqueta ? `¿${mejorEtiqueta}? (sin confianza suficiente)` : "sin suficiente confianza")
+                      : (d.detalle || d.etiqueta)}
                   </div>
                 </div>
-                {!abstiene && (
-                  <span className="shrink-0 font-mono text-[10px] text-subtle">{Math.round(d.confianza * 100)}%</span>
-                )}
+                <span className="shrink-0 font-mono text-[10px] text-subtle">{Math.round(d.confianza * 100)}%</span>
               </div>
             );
           })}

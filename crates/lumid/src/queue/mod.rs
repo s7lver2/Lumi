@@ -1284,8 +1284,8 @@ impl Queue {
             let respuesta_cruda = if calibracion_activo { v.respuesta_cruda.clone() } else { None };
             let _ = c.execute(
                 "INSERT OR REPLACE INTO analysis_agents
-                    (analysis_id, agente, nombre, etiqueta, confianza, tipo, detalle, alternativas, rasgos, respuesta_cruda)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                    (analysis_id, agente, nombre, etiqueta, confianza, tipo, detalle, etiqueta_real, alternativas, rasgos, respuesta_cruda)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 rusqlite::params![
                     id,
                     &a.id,
@@ -1294,6 +1294,7 @@ impl Queue {
                     v.confianza,
                     &a.tipo,
                     detalle,
+                    v.etiqueta.as_str(),
                     alternativas,
                     rasgos,
                     respuesta_cruda,
