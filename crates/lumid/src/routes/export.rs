@@ -664,7 +664,15 @@ fn escapar_tex(s: &str) -> String {
             '_' => out.push_str("\\_"),
             '~' => out.push_str("\\~{}"),
             '%' => out.push_str("\\%"),
-            '\n' => out.push_str("\\\\\n"),
+            // Un salto de línea se deja tal cual, NUNCA como `\\` -- eso es lo
+            // que causaba "no se pudo generar el informe" (LaTeX: "There's no
+            // line here to end") en cuanto las notas del investigador traían
+            // una línea en blanco: dos saltos seguidos escapaban a `\\` `\\`
+            // pegados, dos fines de línea sin nada entre medias. Un salto
+            // suelto en el fuente de LaTeX ya es un espacio; uno doble (línea
+            // en blanco) ya es un párrafo nuevo -- exactamente lo que un
+            // cuadro de texto libre necesita, sin inventar sintaxis propia.
+            '\n' => out.push('\n'),
             _ => out.push(c),
         }
     }
@@ -1066,3 +1074,4 @@ impl Drop for TmpDirGuard {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
+
