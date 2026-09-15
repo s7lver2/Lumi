@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, type AgenteVista, type Analysis, type Cambio, type DichoDeAgente, type Image } from "../lib/api";
 import { lumiUrl } from "../lib/bridge";
+import { ofrecerInstalarModelo } from "../lib/toasts";
 import { Backdrop, FloatingCard, Pop } from "../ui/FloatingCard";
 import { Icon } from "../ui/Icon";
 import { Center } from "../ui/layout";
@@ -45,6 +46,19 @@ export function AgentResultPopup({
   // desde el picker) sin que el popup se desmonte: `analysesIniciales` solo
   // se lee una vez por montaje.
   useEffect(() => { setAnalyses(analysesIniciales); }, [analysesIniciales]);
+
+  // Un análisis en error por "falta instalar X" ofrece el toast en cuanto se
+  // ve -- el `ref` evita repetirlo en cada re-render mientras el popup sigue
+  // abierto con el mismo análisis ya fallado.
+  const ofrecidosRef = useRef(new Set<number>());
+  useEffect(() => {
+    for (const a of analyses) {
+      if (a.state === "error" && a.falta_modelo && !ofrecidosRef.current.has(a.id)) {
+        ofrecidosRef.current.add(a.id);
+        ofrecerInstalarModelo(a.falta_modelo, a.error ?? "falta un modelo");
+      }
+    }
+  }, [analyses]);
 
   const enCurso = analyses.some((a) => a.state === "pendiente" || a.state === "en_curso");
 

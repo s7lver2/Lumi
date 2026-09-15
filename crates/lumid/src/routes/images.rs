@@ -465,6 +465,7 @@ pub async fn upscale(
         agente: None,
         grupo_id: None,
         state: "pendiente".into(),
+        falta_modelo: None,
         error: None,
         result_lat: None,
         result_lng: None,

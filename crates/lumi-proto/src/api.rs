@@ -935,6 +935,11 @@ pub struct Analysis {
     /// escribe `pendiente`: mover de ahí es trabajo de la cola (subsistema 4).
     pub state: String,
     pub error: Option<String>,
+    /// El id de motor que hace falta instalar cuando `error` viene de ahí --
+    /// ver `Msg::Fallo::falta_modelo`. `None` para cualquier otro fallo, y
+    /// también para cualquier análisis que no esté en `error`.
+    #[serde(default)]
+    pub falta_modelo: Option<String>,
     pub result_lat: Option<f64>,
     pub result_lng: Option<f64>,
     pub result_radius_m: Option<f64>,

@@ -15,7 +15,7 @@ use lumi_proto::api::{Analysis, AnalysisReq};
 
 pub(crate) const COLS: &str = "id, case_id, model, state, error, result_lat, result_lng,
                     result_radius_m, result_confidence, created_at, finished_at, nivel_efectivo,
-                    result_inliers, result_verificador, result_imagen_id, agente, grupo_id";
+                    result_inliers, result_verificador, result_imagen_id, agente, grupo_id, falta_modelo";
 
 fn image_ids(c: &rusqlite::Connection, analysis_id: i64) -> Vec<i64> {
     let Ok(mut q) = c.prepare("SELECT image_id FROM analysis_images WHERE analysis_id = ?1") else {
@@ -35,6 +35,7 @@ pub(crate) fn row_to_analysis(r: &rusqlite::Row) -> rusqlite::Result<Analysis> {
         grupo_id: r.get(16)?,
         state: r.get(3)?,
         error: r.get(4)?,
+        falta_modelo: r.get(17)?,
         result_lat: r.get(5)?,
         result_lng: r.get(6)?,
         result_radius_m: r.get(7)?,
@@ -411,6 +412,7 @@ pub async fn create(
         agente: req.agente,
         grupo_id: req.grupo_id,
         state: "pendiente".into(),
+        falta_modelo: None,
         error: None,
         result_lat: None,
         result_lng: None,

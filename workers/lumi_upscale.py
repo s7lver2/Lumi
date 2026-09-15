@@ -72,7 +72,9 @@ def _procesar(orden, disp):
     id_trabajo = orden["id"]
     motor = _motor(disp)
     if motor is None:
-        escribir({"tipo": "fallo", "id": id_trabajo, "motivo": "el motor upscalador no está disponible en este servidor"})
+        escribir({"tipo": "fallo", "id": id_trabajo,
+                  "motivo": "el motor upscalador no está disponible en este servidor",
+                  "falta_modelo": "upscalador"})
         return
     try:
         motor.procesar(orden["ruta_entrada"], orden["ruta_salida"])

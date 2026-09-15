@@ -26,9 +26,31 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 /// que perder si se corta -- si se agota el tiempo, el trabajo entero falla.
 pub const LIMITE: Duration = Duration::from_secs(180);
 
+/// El motivo legible de un fallo (va a `analyses.error`) más, cuando aplica,
+/// el id de motor que hay que instalar (`analyses.falta_modelo`) -- ver
+/// `Msg::Fallo::falta_modelo`. Implementa `Error` solo para poder seguir
+/// usando `?` con los `io::Error` de lanzar/hablar con el proceso hijo.
+#[derive(Debug)]
+pub struct Fallo {
+    pub motivo: String,
+    pub falta_modelo: Option<String>,
+}
+impl std::fmt::Display for Fallo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.motivo)
+    }
+}
+impl std::error::Error for Fallo {}
+impl From<std::io::Error> for Fallo {
+    fn from(e: std::io::Error) -> Self {
+        Self { motivo: e.to_string(), falta_modelo: None }
+    }
+}
+
 /// Pide al trabajador que escale `ruta_entrada` y escriba el resultado en
 /// `ruta_salida`. `Ok(())` significa que `ruta_salida` ya existe y tiene el
-/// resultado; cualquier `Err` es el motivo legible que va a `analyses.error`.
+/// resultado; cualquier `Err` es el motivo legible que va a `analyses.error`,
+/// más el id de motor a instalar cuando el fallo viene de ahí.
 pub async fn procesar(
     ruta_entrada: &Path,
     ruta_salida: &Path,
@@ -36,17 +58,17 @@ pub async fn procesar(
     pesos: &Path,
     dispositivo: &str,
     factor: i64,
-) -> anyhow::Result<()> {
+) -> Result<(), Fallo> {
     let tarea = correr(ruta_entrada, ruta_salida, python, pesos, dispositivo, factor);
     match tokio::time::timeout(LIMITE, tarea).await {
         Ok(r) => r,
-        Err(_) => anyhow::bail!("el upscaler tardó más de {}s", LIMITE.as_secs()),
+        Err(_) => Err(Fallo { motivo: format!("el upscaler tardó más de {}s", LIMITE.as_secs()), falta_modelo: None }),
     }
 }
 
 async fn correr(
     ruta_entrada: &Path, ruta_salida: &Path, python: &Path, pesos: &Path, dispositivo: &str, factor: i64,
-) -> anyhow::Result<()> {
+) -> Result<(), Fallo> {
     let mut hijo = tokio::process::Command::new(python)
         .arg(crate::assets::ruta("workers/lumi_upscale.py"))
         .env("LUMI_PESOS", pesos)
@@ -78,14 +100,16 @@ async fn correr(
         })
     });
 
-    let mut resultado: Option<anyhow::Result<()>> = None;
+    let mut resultado: Option<Result<(), Fallo>> = None;
     if let Some(stdout) = hijo.stdout.take() {
         let mut lineas = BufReader::new(stdout).lines();
         while let Some(linea) = lineas.next_line().await? {
             let Ok(msg) = serde_json::from_str::<lumi_proto::worker::Msg>(&linea) else { continue };
             match msg {
                 lumi_proto::worker::Msg::Upscale { .. } => resultado = Some(Ok(())),
-                lumi_proto::worker::Msg::Fallo { motivo, .. } => resultado = Some(Err(anyhow::anyhow!(motivo))),
+                lumi_proto::worker::Msg::Fallo { motivo, falta_modelo, .. } => {
+                    resultado = Some(Err(Fallo { motivo, falta_modelo }));
+                }
                 _ => {}
             }
         }
@@ -94,5 +118,5 @@ async fn correr(
     if let Some(t) = stderr_task {
         let _ = t.await;
     }
-    resultado.unwrap_or_else(|| anyhow::bail!("el upscaler no contestó"))
+    resultado.unwrap_or(Err(Fallo { motivo: "el upscaler no contestó".into(), falta_modelo: None }))
 }

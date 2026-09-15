@@ -541,6 +541,10 @@ fn migrate(c: &Connection) {
         // en filas de antes de esta columna: un análisis viejo simplemente
         // no ofrece "lo más parecido" al abstenerse.
         ("analysis_agents", "etiqueta_real", "TEXT NOT NULL DEFAULT ''"),
+        // El id de motor (`registros/motores/*.json`) que hace falta
+        // instalar cuando un análisis termina en error por eso -- ver
+        // `Msg::Fallo::falta_modelo`. `NULL` para cualquier otro fallo.
+        ("analyses", "falta_modelo", "TEXT"),
         // Ver `AnalysisReq::grupo_id` -- opaco, el servidor solo lo guarda y
         // lo devuelve para que el cliente agrupe varios análisis de agentes
         // lanzados a la vez como un solo intento.

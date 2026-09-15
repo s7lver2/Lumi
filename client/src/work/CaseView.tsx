@@ -9,6 +9,7 @@ import {
 import { ImageEditorPopup } from "./ImageEditorPopup";
 import { KNOWN_MODELS } from "../lib/models";
 import { useServer } from "../lib/store";
+import { FaltaModeloError } from "../lib/toasts";
 import { useDismissable } from "../lib/useDismissable";
 import { ContextMenu, type MenuState } from "../ui/ContextMenu";
 import { Icon } from "../ui/Icon";
@@ -179,7 +180,10 @@ export function CaseView({
       await new Promise((r) => setTimeout(r, 1200));
       estado = await api.get<Analysis>(`/v1/analyses/${analisis.id}`, token);
     }
-    if (estado.state !== "hecho") throw new Error(estado.error ?? "el upscaler no terminó");
+    if (estado.state !== "hecho") {
+      if (estado.falta_modelo) throw new FaltaModeloError(estado.falta_modelo, estado.error ?? "falta un modelo");
+      throw new Error(estado.error ?? "el upscaler no terminó");
+    }
     const imagenId = estado.result_imagen_id ?? estado.image_ids[0];
     const res = await fetch(lumiUrl(`/v1/images/${imagenId}`));
     if (!res.ok) throw new Error("no se pudo leer el resultado del upscaler");

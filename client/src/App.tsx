@@ -17,6 +17,7 @@ import { AdminPanel } from "./admin/AdminPanel";
 import { AjustesView } from "./settings/AjustesView";
 import { ConnectionBanner } from "./ui/ConnectionBanner";
 import { MantenimientoBanner } from "./ui/MantenimientoBanner";
+import { ToastHost } from "./ui/ToastHost";
 import { ActualizacionBanner } from "./ui/ActualizacionBanner";
 import { comprobarActualizacion, dispararActualizacionSilenciosa, errorActualizacionPendiente, sinAutoactualizarEsteArranque, type EstadoActualizacion } from "./lib/actualizaciones";
 import { DebugOrb } from "./dev/DebugOrb";
@@ -404,6 +405,7 @@ export default function App() {
         <ActualizacionBanner estado={actualizacion} onCerrar={() => setActualizacionCerrada(true)} />
       )}
       {mode !== "entry" && enMantenimiento && <MantenimientoBanner mensaje={mensajeMantenimiento} />}
+      <ToastHost />
       {expulsadoDe && (
         <div className="absolute inset-x-0 top-[42px] z-[70] mx-auto flex w-fit items-center gap-2.5
             rounded-[11px] border border-white/[.14] bg-[rgba(20,22,26,.97)] px-3 py-2 text-[11.5px]

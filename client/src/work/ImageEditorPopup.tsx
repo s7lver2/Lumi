@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { FaltaModeloError, ofrecerInstalarModelo } from "../lib/toasts";
 import { Backdrop, FloatingCard, Pop } from "../ui/FloatingCard";
 import { Icon } from "../ui/Icon";
 import { Center } from "../ui/layout";
@@ -581,6 +582,7 @@ export function ImageEditorPopup({
         });
       });
     } catch (e) {
+      if (e instanceof FaltaModeloError) ofrecerInstalarModelo(e.modeloId, e.message);
       setError(String(e));
     } finally {
       setMejorando(false);

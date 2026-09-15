@@ -999,7 +999,7 @@ impl Queue {
                 self.soltar(&dispositivo, id);
                 self.anunciar(id, "hecho");
             }
-            Evento::Fallo { dispositivo, id, motivo } => {
+            Evento::Fallo { dispositivo, id, motivo, falta_modelo } => {
                 if !self.es_suyo(&dispositivo, id) {
                     return;
                 }
@@ -1011,7 +1011,7 @@ impl Queue {
                 // arrancar nunca — el mismo camino que ya seguían
                 // `Vectores`/`Resultado`.
                 self.soltar(&dispositivo, id);
-                self.fallar(id, &motivo);
+                self.fallar_con_modelo(id, &motivo, falta_modelo.as_deref());
             }
             Evento::Muerto { dispositivo } => self.enterrar(&dispositivo),
         }
@@ -1121,7 +1121,7 @@ impl Queue {
                     Err(e) => self.fallar(id, &format!("no se pudo leer el resultado del upscaler: {e}")),
                 }
             }
-            Err(e) => self.fallar(id, &e.to_string()),
+            Err(e) => self.fallar_con_modelo(id, &e.motivo, e.falta_modelo.as_deref()),
         }
     }
 
@@ -1304,9 +1304,17 @@ impl Queue {
     }
 
     fn fallar(&self, id: i64, motivo: &str) {
+        self.fallar_con_modelo(id, motivo, None);
+    }
+
+    /// Como `fallar`, pero cuando el motivo de fondo es "hace falta instalar
+    /// un motor concreto" -- guarda ese id aparte de `error` (texto libre en
+    /// español) para que el cliente pueda ofrecer "instalar ahora" sin tener
+    /// que adivinarlo de la prosa. Ver `Msg::Fallo::falta_modelo`.
+    fn fallar_con_modelo(&self, id: i64, motivo: &str, falta_modelo: Option<&str>) {
         let _ = self.store.conn().execute(
-            "UPDATE analyses SET state = 'error', error = ?2, finished_at = ?3 WHERE id = ?1",
-            rusqlite::params![id, motivo, ahora()],
+            "UPDATE analyses SET state = 'error', error = ?2, falta_modelo = ?3, finished_at = ?4 WHERE id = ?1",
+            rusqlite::params![id, motivo, falta_modelo, ahora()],
         );
         self.anunciar(id, "error");
     }

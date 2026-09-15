@@ -419,6 +419,9 @@ export interface Analysis {
   grupo_id: string | null;
   state: "pendiente" | "en_curso" | "hecho" | "error";
   error: string | null;
+  /** El id de motor (`registros/motores/*.json`) que hace falta instalar
+   *  cuando `error` viene de ahí. `null` para cualquier otro fallo. */
+  falta_modelo: string | null;
   result_lat: number | null; result_lng: number | null;
   result_radius_m: number | null; result_confidence: number | null;
   /** Respaldo geométrico de la PRINCIPAL, mismo criterio que

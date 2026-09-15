@@ -191,7 +191,18 @@ pub enum Msg {
     },
     /// El motor contestó «no puedo». Es un RESULTADO, no una avería: no se
     /// reintenta, porque reintentarlo solo quema GPU.
-    Fallo { id: i64, motivo: String },
+    Fallo {
+        id: i64,
+        motivo: String,
+        /// El id de motor (`registros/motores/*.json`) que hace falta
+        /// instalar, cuando el motivo de fondo es justo ese -- `None` para
+        /// cualquier otro fallo (timeout, imagen inválida...). Permite al
+        /// cliente ofrecer "instalar ahora" sin tener que adivinar a partir
+        /// del texto libre de `motivo`, que es prosa en español pensada
+        /// para una persona, no para un `if`.
+        #[serde(default)]
+        falta_modelo: Option<String>,
+    },
     /// El upscaler (spec 2026-09-10 §2) terminó de escribir el resultado en
     /// `ruta` — igual que `Vectores`/`Verificado`, la imagen viaja por RUTA
     /// (`workers/lumi_upscale.py` la escribe a disco) y no por bytes en la
@@ -301,7 +312,7 @@ mod tests {
         assert!(con_alt_buena.validar().is_ok());
 
         // Y un fallo del motor pasa la validación: es un resultado legítimo.
-        let f = Msg::Fallo { id: 1, motivo: "sin puntos de referencia".into() };
+        let f = Msg::Fallo { id: 1, motivo: "sin puntos de referencia".into(), falta_modelo: None };
         assert!(f.validar().is_ok());
 
         // El trabajo se serializa con su `tipo` puesto.

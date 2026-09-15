@@ -34,7 +34,7 @@ pub enum Evento {
         confianza: f64,
         alternativas: Vec<lumi_proto::worker::Hipotesis>,
     },
-    Fallo { dispositivo: String, id: i64, motivo: String },
+    Fallo { dispositivo: String, id: i64, motivo: String, falta_modelo: Option<String> },
     /// Su `stdout` se cerró: el proceso terminó, con o sin gracia.
     Muerto { dispositivo: String },
 }
@@ -54,7 +54,7 @@ impl Evento {
             Msg::Resultado { id, lat, lng, radio_m, confianza, alternativas } => {
                 Evento::Resultado { dispositivo: d, id, lat, lng, radio_m, confianza, alternativas }
             }
-            Msg::Fallo { id, motivo } => Evento::Fallo { dispositivo: d, id, motivo },
+            Msg::Fallo { id, motivo, falta_modelo } => Evento::Fallo { dispositivo: d, id, motivo, falta_modelo },
             // ponytail: `Verificado` es del trabajador de verificación
             // geométrica (`workers/lumi_verify.py`), que `crate::verificar`
             // habla por su propia tubería y no por este canal de embebido. Si
@@ -64,6 +64,7 @@ impl Evento {
                 dispositivo: d,
                 id,
                 motivo: "un trabajador de embebido mandó un veredicto de verificación".into(),
+                falta_modelo: None,
             },
             // ponytail: mismo caso que `Verificado` — `Msg::Agente` es del
             // trabajador de agentes (`workers/lumi_agentes.py`), que
@@ -73,6 +74,7 @@ impl Evento {
                 dispositivo: d,
                 id,
                 motivo: "un trabajador de embebido mandó un veredicto de agente".into(),
+                falta_modelo: None,
             },
             // ponytail: mismo caso — `Msg::Fin` es la marca de cierre de
             // trabajo de `crate::persistente` (verificación/agentes
@@ -82,6 +84,7 @@ impl Evento {
                 dispositivo: d,
                 id,
                 motivo: "un trabajador de embebido mandó una marca de fin de trabajo".into(),
+                falta_modelo: None,
             },
             // ponytail: mismo caso — `Msg::Upscale` es del trabajador del
             // upscaler (`workers/lumi_upscale.py`, spec 2026-09-10 §2), que
@@ -93,6 +96,7 @@ impl Evento {
                 dispositivo: d,
                 id,
                 motivo: "un trabajador de embebido mandó un resultado de upscale".into(),
+                falta_modelo: None,
             },
         }
     }
@@ -219,6 +223,7 @@ pub fn spawn(
                                 motivo: format!(
                                     "el motor devolvió una coordenada imposible: {motivo}"
                                 ),
+                                falta_modelo: None,
                             });
                         }
                         continue;
