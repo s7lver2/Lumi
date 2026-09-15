@@ -33,7 +33,7 @@ export function ImageEditorPopup({
   /** `null` con `upscaler_activo` apagado: el botón directamente no existe,
    *  no un botón deshabilitado con una explicación (spec: "no hay nada
    *  capado que explicar"). */
-  upscaler: { onUpscale: (blob: Blob) => Promise<Blob> } | null;
+  upscaler: { onUpscale: (blob: Blob, factor: 1 | 2 | 4) => Promise<Blob> } | null;
   onExportar: (blob: Blob) => void;
   onOmitir: () => void;
   onCerrar: () => void;
@@ -57,6 +57,7 @@ export function ImageEditorPopup({
   const [zoom, setZoom] = useState(1);
   const [cargando, setCargando] = useState(true);
   const [mejorando, setMejorando] = useState(false);
+  const [factorUpscale, setFactorUpscale] = useState<1 | 2 | 4>(4);
   const [error, setError] = useState<string | null>(null);
 
   // Escala pantalla→canvas: el `<canvas>` interno vive a resolución nativa,
@@ -525,7 +526,7 @@ export function ImageEditorPopup({
       await new Promise<void>((resolve, reject) => {
         exportarBlob(async (blob) => {
           try {
-            const mejorado = await upscaler.onUpscale(blob);
+            const mejorado = await upscaler.onUpscale(blob, factorUpscale);
             const url = URL.createObjectURL(mejorado);
             cargarDataUrlEnCanvas(url, () => { URL.revokeObjectURL(url); snapshot(); resolve(); });
           } catch (e) {
@@ -698,6 +699,14 @@ export function ImageEditorPopup({
                       onPointerDown={bloqueado ? undefined : onPointerDown}
                       onPointerMove={bloqueado ? undefined : onPointerMove}
                       onPointerUp={bloqueado ? undefined : onPointerUp} />
+                    {mejorando && (
+                      <div className="absolute inset-0 grid grid-cols-10 grid-rows-7">
+                        {Array.from({ length: 70 }).map((_, i) => (
+                          <div key={i} className="border border-white/50"
+                            style={{ animation: `jg-alert-pulse 1.8s ease-in-out ${(i % 10) * 0.08 + Math.floor(i / 10) * 0.05}s infinite` }} />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -725,12 +734,25 @@ export function ImageEditorPopup({
                       Omitir
                     </button>
                     {upscaler && (
-                      <button onClick={() => void mejorarCalidad()} disabled={bloqueado}
-                        className="jg-press flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-2
-                          text-[11.5px] text-fg disabled:opacity-40">
-                        <Icon name="sparkle" size={13} />
-                        {mejorando ? "Mejorando…" : "Mejorar calidad"}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {!mejorando && (
+                          <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
+                            {([1, 2, 4] as const).map((f) => (
+                              <button key={f} onClick={() => setFactorUpscale(f)}
+                                className={`rounded px-2 py-1 text-[10px] ${
+                                  factorUpscale === f ? "bg-white/[.08] text-fg" : "text-subtle"}`}>
+                                {f}×
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <button onClick={() => void mejorarCalidad()} disabled={bloqueado}
+                          className="jg-press flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-2
+                            text-[11.5px] text-fg disabled:opacity-40">
+                          <Icon name="sparkle" size={13} />
+                          {mejorando ? "Mejorando…" : "Mejorar calidad"}
+                        </button>
+                      </div>
                     )}
                   </div>
                   <button onClick={() => exportarBlob(onExportar)} disabled={bloqueado}

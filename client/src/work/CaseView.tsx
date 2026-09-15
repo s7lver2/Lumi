@@ -169,9 +169,11 @@ export function CaseView({
    *  en el lienzo en ese momento. Documentado como simplificación conocida:
    *  la vía correcta para evitar la copia extra es un endpoint que edite en
    *  el sitio, fuera de alcance de esta entrega. */
-  async function mejorarCalidad(blob: Blob): Promise<Blob> {
+  async function mejorarCalidad(blob: Blob, factor: 1 | 2 | 4): Promise<Blob> {
     const base64 = await blobToBase64(blob);
-    const analisis = await upscaleImageBytes(case_.id, base64, editorPath ? nombreDeRuta(editorPath) : "editada.jpg");
+    const analisis = await upscaleImageBytes(
+      case_.id, base64, editorPath ? nombreDeRuta(editorPath) : "editada.jpg", factor,
+    );
     let estado = analisis;
     while (estado.state === "pendiente" || estado.state === "en_curso") {
       await new Promise((r) => setTimeout(r, 1200));
