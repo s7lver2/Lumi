@@ -1,6 +1,13 @@
+# Tabla vacía a propósito, mismo criterio que `indexer/src-tauri/Cargo.toml`:
+# sin ella, un `[workspace]` ancestro (uno propio del checkout, o -- el caso
+# real que esto arregló -- uno viejo y ajeno más arriba en el árbol de
+# directorios, en Linux/WSL) reclama este paquete como miembro suyo en vez
+# de tratarlo como el proyecto Cargo aparte que es (lo gestiona `tauri`).
+[workspace]
+
 [package]
 name = "app"
-version = "2.0.43"
+version = "2.0.44"
 description = "A Tauri App"
 authors = ["you"]
 license = "AGPL-3.0-or-later"
