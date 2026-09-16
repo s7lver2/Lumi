@@ -1418,6 +1418,25 @@ impl Queue {
         });
     }
 
+    /// Cuánta gente tiene delante cada pendiente elegible, por el mismo canal
+    /// que las fases (mismo interruptor: es tráfico SSE de más que nadie que
+    /// no mire la cola tiene por qué pagar). Un pendiente que no puede correr
+    /// ahora mismo (dueño bloqueado, sin cupo) no sale de `plan::posicion` y
+    /// no recibe aviso -- no hay "posición" que enseñarle todavía.
+    fn notificar_posiciones(&self, candidatos: &[Candidato], duenos: &HashMap<i64, Dueno>) {
+        if !crate::routes::features::activo(&self.store, crate::routes::features::CLAVE_PROGRESO_DETALLADO) {
+            return;
+        }
+        for c in candidatos {
+            let Some(posicion) = plan::posicion(candidatos, duenos, c.analysis_id) else { continue };
+            let _ = self.difusion.send(Cambio::Cola {
+                user_id: c.user_id,
+                analysis_id: c.analysis_id,
+                posicion,
+            });
+        }
+    }
+
     /// Media móvil exponencial (peso 0.3 a la muestra nueva): reacciona a un
     /// servidor que se ha vuelto más lento o más rápido en unos pocos
     /// análisis, sin que uno solo atípico (una carga en frío, una red lenta)
@@ -1431,6 +1450,17 @@ impl Queue {
     }
 
     fn repartir_ahora(self: &Arc<Self>) {
+        let candidatos = self.candidatos();
+        if candidatos.is_empty() {
+            return;
+        }
+        let duenos = self.duenos(&candidatos);
+
+        // Se avisa de la posición ANTES del corte por trabajadores libres:
+        // con todos ocupados no hay nada que asignar, pero quien espera sigue
+        // queriendo saber cuánta gente tiene delante.
+        self.notificar_posiciones(&candidatos, &duenos);
+
         let libres: Vec<Libre> = match self.estado.lock() {
             Ok(e) => e
                 .trabajadores
@@ -1443,12 +1473,6 @@ impl Queue {
         if libres.is_empty() {
             return;
         }
-
-        let candidatos = self.candidatos();
-        if candidatos.is_empty() {
-            return;
-        }
-        let duenos = self.duenos(&candidatos);
 
         for a in plan::repartir(&candidatos, &duenos, &libres) {
             let Some(imagenes) = self.rutas(a.analysis_id) else { continue };

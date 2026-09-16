@@ -1132,6 +1132,16 @@ pub enum Cambio {
         project_id: i64,
         project_name: String,
     },
+    /// Cuánta gente hay por delante de un pendiente todavía sin correr, en el
+    /// mismo orden que decide `queue::plan::repartir`. Se manda de nuevo en
+    /// cada tic de reparto mientras siga pendiente, así que un valor viejo se
+    /// pisa solo sin que nadie tenga que borrarlo.
+    Cola {
+        #[serde(skip)]
+        user_id: i64,
+        analysis_id: i64,
+        posicion: usize,
+    },
     /// Invitación nueva a un proyecto, por el mismo canal que ya tiene abierto
     /// cualquier sesión conectada (`/v1/queue/events`) — sin esto, enterarse
     /// de una invitación dependía de un sondeo cada 60s en `NotificationsPopover`.
@@ -1162,6 +1172,7 @@ impl Cambio {
             Cambio::Estado { user_id, .. }
             | Cambio::Progreso { user_id, .. }
             | Cambio::Expulsion { user_id, .. }
+            | Cambio::Cola { user_id, .. }
             | Cambio::Invitacion { user_id, .. }
             | Cambio::Red { user_id, .. } => *user_id,
         }

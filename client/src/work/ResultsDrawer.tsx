@@ -31,6 +31,42 @@ function principalComoHipotesis(a: Analysis): Hipotesis | null {
   };
 }
 
+const ETIQUETA_FASE: Record<string, string> = {
+  embebiendo: "Calculando el vector de la imagen…",
+  recuperando: "Buscando candidatos en el índice…",
+  verificando: "Verificando geometría y preguntando a los agentes…",
+};
+
+/** Fase, ETA y posición en cola (spec de feedback de progreso: "fases del
+ *  pipeline", "tiempo estimado" y "cuánta gente hay por delante"), en el
+ *  cajón y no flotando sobre el mapa — es la misma información, pero ahí se
+ *  perdía en cuanto el cajón de resultados tapaba el globo. `posicion` es
+ *  0-based (0 = el siguiente); `etaS` puede llegar como `null` mientras el
+ *  servidor todavía no tiene ninguna muestra con la que estimar. */
+function FaseProgreso({ progreso }: {
+  progreso: { fase?: string; etaS?: number | null; posicion?: number };
+}) {
+  const etiqueta = progreso.fase ? (ETIQUETA_FASE[progreso.fase] ?? "Procesando…") : null;
+  const eta = progreso.etaS == null
+    ? null
+    : progreso.etaS < 60 ? `~${Math.max(1, Math.round(progreso.etaS))}s` : `~${Math.round(progreso.etaS / 60)}min`;
+  return (
+    <div className="flex flex-col gap-1 text-[11.5px] text-muted">
+      <p>{etiqueta ?? "esperando al motor"}</p>
+      {progreso.fase && (
+        <p className="font-mono text-[10px] text-subtle">
+          {eta ? `${eta} restante` : "aún sin estimación de tiempo"}
+        </p>
+      )}
+      {progreso.posicion != null && (
+        <p className="text-[10px] text-subtle">
+          {progreso.posicion === 0 ? "el siguiente en correr" : `${progreso.posicion} por delante`}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** Insignia de verificación: SIEMPRE en `fg`/blanco, nunca verde — DESIGN.md
  *  lo prohíbe ("Completado se representa en blanco"). */
 function InsigniaVerificacion({ h }: { h: Hipotesis }) {
@@ -217,12 +253,16 @@ function AgentesPanel({ agentes, onAbrir }: { agentes: DichoDeAgente[]; onAbrir:
  *  selección de un intento viejo no debería aterrizar en el detalle del
  *  intento anterior. */
 export function ResultsDrawer({
-  open, image, analysis, busy, onAnalyze, onCenter, onAbrirAgente,
+  open, image, analysis, busy, progreso, onAnalyze, onCenter, onAbrirAgente,
 }: {
   open: boolean;
   image: Image | null;
   analysis: Analysis | null;
   busy: boolean;
+  /** Fase/ETA/posición del análisis mostrado, si sigue en marcha y el owner
+   *  tiene `progreso_detallado_activo`. `null` = no hay nada que enseñar
+   *  (apagado, o todavía no ha llegado ningún evento para este análisis). */
+  progreso: { fase?: string; etaS?: number | null; posicion?: number } | null;
   onAnalyze: () => void;
   onCenter: (lat: number, lng: number) => void;
   onAbrirAgente: () => void;
@@ -254,9 +294,13 @@ export function ResultsDrawer({
       )}
 
       {analysis && analysis.state !== "hecho" && (
-        <p className="text-[11.5px] text-muted">
-          {analysis.state === "error" ? analysis.error ?? "falló sin dejar motivo" : "esperando al motor"}
-        </p>
+        analysis.state === "error" ? (
+          <p className="text-[11.5px] text-muted">{analysis.error ?? "falló sin dejar motivo"}</p>
+        ) : progreso ? (
+          <FaseProgreso progreso={progreso} />
+        ) : (
+          <p className="text-[11.5px] text-muted">esperando al motor</p>
+        )
       )}
 
       {analysis?.nivel_efectivo && analysis.nivel_efectivo !== analysis.model && (

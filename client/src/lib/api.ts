@@ -555,6 +555,7 @@ export type Cambio =
   | { tipo: "estado"; analysis_id: number; case_id: number; estado: Analysis["state"] }
   | { tipo: "progreso"; analysis_id: number; fase: string; pct: number; eta_s: number | null }
   | { tipo: "expulsion"; project_id: number; project_name: string }
+  | { tipo: "cola"; analysis_id: number; posicion: number }
   | { tipo: "invitacion"; project_id: number; project_name: string; invited_by: string }
   | { tipo: "red"; nuevo_addr: string };
 
