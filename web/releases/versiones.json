@@ -1510,7 +1510,79 @@
           "sha256": "b43200e80d6e81d6ff8b5989b32a45b50738cab40235136c4ef4b3dea210060c"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.44",
+      "publicado": "2026-09-16T15:46:43Z",
+      "notas": "added support for linux",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.44/app.exe",
+          "bytes": 16182272,
+          "sha256": "e11eb93b9a78276d7f37ccf4bc4493732ea2658991eb167bd65307ad2b42ba44"
+        },
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.44/Lumi-linux-x86_64.AppImage",
+          "bytes": 82283000,
+          "sha256": "a3db7f9703d89207de1d661d8956822e24991e0b808b5cb9e3ed1e8f8e370b3c"
+        }
+      ]
+    },
+    {
+      "producto": "indexer",
+      "version": "2.0.44",
+      "publicado": "2026-09-16T15:46:43Z",
+      "notas": "added support for linux",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.44/indexer-app.exe",
+          "bytes": 23519744,
+          "sha256": "e1bb6869356cbd8d9471e7b38079991c7702d645e64529e920aa4ecfe9ffafa6"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.44",
+      "publicado": "2026-09-16T15:46:43Z",
+      "notas": "added support for linux",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.44/lumid",
+          "bytes": 24072112,
+          "sha256": "6950aa2fc56e01eac9073c17639b1ca7143831fbec92c23b9c543c96c8a81b3b"
+        },
+        {
+          "plataforma": "assets",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.44/lumid-assets.tar.gz",
+          "bytes": 1029798,
+          "sha256": "709d26765480dd0f3102006babb8779f43165323f7864cbabf975c071310ec94"
+        }
+      ]
+    },
+    {
+      "producto": "instalador",
+      "version": "2.0.44",
+      "publicado": "2026-09-16T15:46:43Z",
+      "notas": "added support for linux",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.44/installer.exe",
+          "bytes": 12871680,
+          "sha256": "69a51cb7e07bd440308f09465f4804e315a35cd6b3b30c7b7ce46bfed8013556"
+        }
+      ]
     }
   ],
-  "firma": "L+PITgr6TmUfm7XEsziZVjZaXZgvol3i0nn4iJnly3zdlwQBypyHkAisbkJHdptCcnsTgedTLnfFFl0AuuqBBg=="
+  "firma": "x1NIYCBeYJ0t+mIQ0fGrvOZWoKrlzeFNgOnIL70+SRex4T8a4q31vxGrifRDQ2M8BaJYqOZJ1s4TJq7+tATSCA=="
 }
