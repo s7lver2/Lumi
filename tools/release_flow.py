@@ -183,6 +183,62 @@ def _construir_wsl_lumid(root: Path) -> Path:
     return destino
 
 
+def _construir_wsl_cliente(root: Path) -> Path:
+    """El AppImage de Linux del cliente -- mismo principio que
+    `_construir_wsl_lumid` (compilar en WSL con el bump de versión ya
+    escrito, copiar el artefacto de vuelta), pero el cliente necesita además
+    el frontend (`npm install`/`npm run build`, que `tauri build` dispara
+    solo) y produce un `.AppImage`, no un binario suelto. Ver
+    docs/superpowers/specs/2026-09-16-soporte-linux-cliente-design.md.
+
+    `env PATH=...` con un `$PATH` mínimo: el `$PATH` heredado de un WSL con
+    interoperabilidad de Windows activada arrastra rutas de Windows (p. ej.
+    `/mnt/c/WINDOWS/system32/config/systemprofile/...`), y `linuxdeploy`
+    (la herramienta que arma el AppImage) revienta con un
+    `boost::filesystem::filesystem_error` de permiso denegado al toparse con
+    una de esas rutas al escanear el `$PATH` -- un artefacto del entorno de
+    build, nada que le pase a quien instale el AppImage ya construido."""
+    spinner = Spinner("Compilando el cliente (Linux/AppImage) en WSL…")
+    spinner.start()
+    ruta_win_cargo = f"{_ruta_montada_en_wsl(root)}/client/src-tauri/Cargo.toml"
+    ruta_win_tauri_conf = f"{_ruta_montada_en_wsl(root)}/client/src-tauri/tauri.conf.json"
+    path_limpio = (
+        "$HOME/.cargo/bin:$HOME/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:"
+        "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    )
+    r = subprocess.run(
+        ["wsl.exe", "--", "bash", "-lc",
+         f"cd {WSL_RUTA_LUMI} && git pull && "
+         f"cp '{ruta_win_cargo}' client/src-tauri/Cargo.toml && "
+         f"cp '{ruta_win_tauri_conf}' client/src-tauri/tauri.conf.json && "
+         f"cd client && npm install --no-audit --no-fund && "
+         f"env PATH=\"{path_limpio}\" npm run tauri build -- --bundles appimage"],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        spinner.stop(ok=False, msg="falló la compilación del cliente (Linux) en WSL")
+        print(r.stdout, file=sys.stderr)
+        print(r.stderr, file=sys.stderr)
+        raise SystemExit(1)
+    spinner.stop(ok=True)
+
+    destino_dir = root / ".release-tmp"
+    destino_dir.mkdir(exist_ok=True)
+    destino = destino_dir / "Lumi-linux-x86_64.AppImage"
+    destino_wsl = f"{_ruta_montada_en_wsl(root)}/.release-tmp/Lumi-linux-x86_64.AppImage"
+    r = subprocess.run(
+        ["wsl.exe", "--", "bash", "-lc",
+         f"cp {WSL_RUTA_LUMI}/client/src-tauri/target/release/bundle/appimage/*.AppImage '{destino_wsl}'"],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0 or not destino.exists():
+        fail("no se pudo copiar el AppImage del cliente desde WSL")
+        print(r.stdout, file=sys.stderr)
+        print(r.stderr, file=sys.stderr)
+        raise SystemExit(1)
+    return destino
+
+
 def _empaquetar_assets(root: Path) -> Path:
     """`registros/` y `workers/` como un solo asset descargable — lo que
     `actualizacion::aplicar` (lumid) resincroniza junto con el binario en
@@ -218,6 +274,10 @@ def construir(root: Path, productos: list[str]) -> dict[str, Path]:
         _forzar_reembebido_icono(root, "client")
         run([npm, "run", "tauri", "build"], cwd=str(root / "client"), label="cliente")
         artefactos["cliente"] = root / RUTA_BINARIO["cliente"]
+        # Segundo artefacto de la MISMA publicación (mismo principio que
+        # lumid-assets más abajo): el AppImage de Linux, ver
+        # `_construir_wsl_cliente`.
+        artefactos["cliente-linux"] = _construir_wsl_cliente(root)
     if "indexer" in productos:
         _forzar_reembebido_icono(root, "indexer")
         run([npm, "run", "tauri", "build"], cwd=str(root / "indexer"), label="indexer")
@@ -274,6 +334,8 @@ def subir_github(version: str, productos: list[str], artefactos: dict[str, Path]
         assets.append(str(artefactos["installer"]))
     if "lumid-assets" in artefactos:
         assets.append(str(artefactos["lumid-assets"]))
+    if "cliente-linux" in artefactos:
+        assets.append(str(artefactos["cliente-linux"]))
     run(
         ["gh", "release", "create", tag, *assets,
          "--repo", REPO_GITHUB, "--title", tag, "--notes", notas or "(sin notas)"],
@@ -285,6 +347,8 @@ def subir_github(version: str, productos: list[str], artefactos: dict[str, Path]
     }
     if "lumid-assets" in artefactos:
         urls["lumid-assets"] = f"https://github.com/{REPO_GITHUB}/releases/download/{tag}/{artefactos['lumid-assets'].name}"
+    if "cliente-linux" in artefactos:
+        urls["cliente-linux"] = f"https://github.com/{REPO_GITHUB}/releases/download/{tag}/{artefactos['cliente-linux'].name}"
     return urls
 
 
@@ -312,6 +376,14 @@ def armar_borrador(
                 "plataforma": "assets",
                 "archivo": str(artefactos["lumid-assets"]),
                 "url": urls["lumid-assets"],
+            })
+        # Mismo principio: el AppImage de Linux del cliente es un segundo
+        # artefacto de esta misma publicación, no un producto propio.
+        if p == "cliente" and "cliente-linux" in artefactos:
+            artefactos_p.append({
+                "plataforma": "linux-x86_64",
+                "archivo": str(artefactos["cliente-linux"]),
+                "url": urls["cliente-linux"],
             })
         publicaciones.append({
             "producto": PRODUCTO_MANIFIESTO[p],

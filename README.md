@@ -297,6 +297,42 @@ antes de pegarla. Debe rechazar la conexión con *"la huella del certificado no 
 el botón «Siguiente» debe seguir deshabilitado. Si en cambio conecta, el anclaje de huella no
 está funcionando.
 
+### Ventana nativa completa (Linux/Pop!_OS)
+
+Ver [docs/superpowers/specs/2026-09-16-soporte-linux-cliente-design.md](docs/superpowers/specs/2026-09-16-soporte-linux-cliente-design.md)
+para el diseño completo (empaquetado `.deb`/AppImage, auto-actualización). Prerrequisitos de
+sistema para Tauri v2 en Ubuntu/Pop!_OS 24.04 (nombres de paquete de otras versiones pueden
+variar, sobre todo `libwebkit2gtk` — 24.04 usa `-4.1`, 22.04 usa `-4.0`):
+
+```bash
+sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libssl-dev \
+  libayatana-appindicator3-dev patchelf build-essential xdg-utils
+```
+
+```bash
+cd client
+npm install
+npm run tauri build -- --bundles deb,appimage
+```
+
+Deja los artefactos en `client/src-tauri/target/release/bundle/{deb,appimage}/`.
+
+**Si compilas dentro de WSL** (como este proyecto ya hace para `lumid`), dos cosas que solo
+salen ahí, no en un Pop!_OS real:
+
+- **Falta FUSE**: empaquetar el AppImage usa `linuxdeploy`, que es él mismo un AppImage y
+  necesita FUSE para montarse. WSL no lo trae por defecto:
+  `sudo apt-get install -y libfuse2t64` (o `libfuse2` en distros más viejas).
+- **El `$PATH` hereda rutas de Windows**: con la interoperabilidad de WSL activada (el
+  defecto), `$PATH` arrastra entradas como
+  `/mnt/c/WINDOWS/system32/config/systemprofile/AppData/Local/Microsoft/WindowsApps`, y
+  `linuxdeploy` revienta con un `boost::filesystem::filesystem_error` de permiso denegado al
+  toparse con una de esas rutas. Se esquiva con un `$PATH` limpio para ese comando:
+  ```bash
+  env PATH="$HOME/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    npm run tauri build -- --bundles appimage
+  ```
+
 ## Desinstalar
 
 ```bash
