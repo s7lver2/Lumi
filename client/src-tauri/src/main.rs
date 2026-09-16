@@ -5,6 +5,9 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[cfg(target_os = "linux")]
+mod autoactualizar_linux;
+
 use lumi_proto::key::PairKey;
 use std::sync::{Arc, Mutex};
 
@@ -375,7 +378,7 @@ enum EstadoActualizacion {
     Error { motivo: String },
 }
 
-async fn manifiesto_verificado() -> Result<lumi_proto::actualizacion::Manifiesto, String> {
+pub(crate) async fn manifiesto_verificado() -> Result<lumi_proto::actualizacion::Manifiesto, String> {
     let manifiesto: lumi_proto::actualizacion::Manifiesto = reqwest::Client::new()
         .get(VERSIONES_URL)
         .send()
@@ -391,6 +394,19 @@ async fn manifiesto_verificado() -> Result<lumi_proto::actualizacion::Manifiesto
 /// `Err` significa "no se pudo comprobar" (sin red, manifiesto sin firmar o
 /// con firma inválida) — el lado TS decide no pintar nada ante un error,
 /// nunca una alarma. `Ok(None)` significa "se comprobó y no hay nada nuevo".
+/// El artefacto que este binario puede instalar solo. `"desconocida"` en
+/// cualquier otro SO no calza contra ningún `Artefacto.plataforma` del
+/// manifiesto -- el cliente simplemente no ve actualizaciones ahí, en vez
+/// de fallar (mismo criterio que ya cubre una plataforma sin artefacto
+/// publicado).
+const PLATAFORMA_ACTUAL: &str = if cfg!(target_os = "windows") {
+    "windows-x86_64"
+} else if cfg!(target_os = "linux") {
+    "linux-x86_64"
+} else {
+    "desconocida"
+};
+
 #[tauri::command]
 async fn comprobar_actualizacion() -> Result<Option<EstadoActualizacion>, String> {
     let manifiesto = manifiesto_verificado().await?;
@@ -402,14 +418,14 @@ async fn comprobar_actualizacion() -> Result<Option<EstadoActualizacion>, String
     let Some(publi) = manifiesto.mas_nueva(
         lumi_proto::actualizacion::Producto::Cliente,
         version_actual,
-        "windows-x86_64",
+        PLATAFORMA_ACTUAL,
     ) else {
         return Ok(None);
     };
     let url = publi
         .artefactos
         .iter()
-        .find(|a| a.plataforma == "windows-x86_64")
+        .find(|a| a.plataforma == PLATAFORMA_ACTUAL)
         .map(|a| a.url.clone())
         .unwrap_or_default();
     Ok(Some(EstadoActualizacion::Disponible {
@@ -499,6 +515,7 @@ fn error_actualizacion_pendiente() -> Option<String> {
 /// de por qué. Para probar este camino de verdad hace falta correr desde
 /// una instalación hecha con `installer.exe` (el que se sube a GitHub
 /// Releases), no desde `cargo run`.
+#[cfg(not(target_os = "linux"))]
 fn ruta_instalador(carpeta: &std::path::Path) -> Result<std::path::PathBuf, String> {
     let instalador = carpeta.join("installer.exe");
     if !instalador.exists() {
@@ -517,8 +534,13 @@ fn ruta_instalador(carpeta: &std::path::Path) -> Result<std::path::PathBuf, Stri
 /// mismo binario que la instalación interactiva, sin ventana en este
 /// camino. Vive junto al propio ejecutable — el instalador ya lo dejó ahí
 /// en la instalación inicial (ver installer/src-tauri/src/comandos.rs).
+///
+/// Linux no tiene instalador propio (spec
+/// docs/superpowers/specs/2026-09-16-soporte-linux-cliente-design.md): el
+/// AppImage se descarga y se reemplaza a sí mismo, ver `autoactualizar_linux`.
+#[cfg(not(target_os = "linux"))]
 #[tauri::command]
-fn disparar_actualizacion_silenciosa(app: tauri::AppHandle, version_nueva: String) -> Result<(), String> {
+async fn disparar_actualizacion_silenciosa(app: tauri::AppHandle, version_nueva: String) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let carpeta = exe.parent().ok_or("sin carpeta padre")?;
     let instalador = ruta_instalador(carpeta)?;
@@ -538,12 +560,20 @@ fn disparar_actualizacion_silenciosa(app: tauri::AppHandle, version_nueva: Strin
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+#[tauri::command]
+async fn disparar_actualizacion_silenciosa(app: tauri::AppHandle, version_nueva: String) -> Result<(), String> {
+    let _ = version_nueva; // informativo; se vuelve a resolver la versión real contra el manifiesto
+    autoactualizar_linux::aplicar_mas_nueva(app, env!("CARGO_PKG_VERSION")).await
+}
+
 /// Mismo camino que `disparar_actualizacion_silenciosa`, pero para igualar
 /// una versión concreta (downgrade, o la versión de un servidor que no es
 /// la última publicada) en vez de "la más nueva". Ver
 /// docs/superpowers/specs/2026-08-26-compatibilidad-de-version-design.md.
+#[cfg(not(target_os = "linux"))]
 #[tauri::command]
-fn disparar_actualizacion_a_version(app: tauri::AppHandle, version_objetivo: String) -> Result<(), String> {
+async fn disparar_actualizacion_a_version(app: tauri::AppHandle, version_objetivo: String) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let carpeta = exe.parent().ok_or("sin carpeta padre")?;
     let instalador = ruta_instalador(carpeta)?;
@@ -559,6 +589,12 @@ fn disparar_actualizacion_a_version(app: tauri::AppHandle, version_objetivo: Str
 
     app.exit(0);
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+async fn disparar_actualizacion_a_version(app: tauri::AppHandle, version_objetivo: String) -> Result<(), String> {
+    autoactualizar_linux::aplicar_version_objetivo(app, &version_objetivo).await
 }
 
 fn client_for(fingerprint: &str) -> Result<reqwest::Client, String> {
@@ -1040,6 +1076,15 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
+        .setup(|_app| {
+            // Registra el AppImage en el menú de aplicaciones si hace falta
+            // (no hace nada si no se está corriendo como AppImage, o si ya
+            // está integrado) -- ver docs/superpowers/specs/
+            // 2026-09-16-soporte-linux-cliente-design.md §5.
+            #[cfg(target_os = "linux")]
+            autoactualizar_linux::integrar_escritorio();
+            Ok(())
+        })
         .manage(Shared::default())
         // Bytes del daemon al webview sin que el webview vea el certificado.
         // En Windows el webview lo pide como http://lumi.localhost/<ruta>; en

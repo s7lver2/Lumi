@@ -12,8 +12,20 @@ fn carpeta_datos() -> PathBuf {
     if let Ok(v) = std::env::var("LUMI_INSTALADOR_DATOS") {
         return PathBuf::from(v);
     }
-    let base = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| ".".into());
-    PathBuf::from(base).join("Lumi")
+    if let Ok(base) = std::env::var("LOCALAPPDATA") {
+        return PathBuf::from(base).join("Lumi");
+    }
+    // Sin `LOCALAPPDATA` (Linux/macOS): antes caía a `.`, el directorio de
+    // trabajo actual -- un AppImage o un proceso lanzado desde cualquier
+    // sitio no tiene por qué tener uno estable ni escribible, así que la
+    // marca de error se perdía o fallaba en silencio. XDG_DATA_HOME (o su
+    // valor por defecto, `~/.local/share`) es la ruta de datos de usuario
+    // estándar en Linux, con o sin sesión gráfica.
+    if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
+        return PathBuf::from(xdg).join("lumi");
+    }
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+    PathBuf::from(home).join(".local/share/lumi")
 }
 
 fn ruta_log() -> PathBuf {
