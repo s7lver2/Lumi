@@ -14,6 +14,50 @@
   .sin-perspectiva-origen { perspective-origin: 50% 42%; }
 }
 
+/* Prosa de /docs (spec 2026-09-18): el markdown crudo de un .mdx —párrafos,
+   listas, código en línea— no pasa por ningún componente propio y por tanto
+   no lleva className; mdx-components.tsx solo mapea h2/h3 porque necesitan
+   id para el permalink y el índice. Sin esto, un <p> caía en el tamaño por
+   defecto del navegador (16px, sin margen entre párrafos, negrita a 700),
+   completamente ajeno al resto del sitio. El selector `:not([class])`
+   deja intactos los párrafos de los componentes propios (Detalle, Ficha,
+   los esquemas), que ya traen su propio tamaño. El énfasis se marca solo
+   por color, sin negrita — mismo peso que el resto del sistema (DESIGN.md:
+   nada en este sitio es font-bold, todo es "medium" o normal). */
+#contenido-docs p:not([class]) {
+  margin-top: 18px;
+  font-size: 13.5px;
+  line-height: 1.72;
+  color: var(--muted);
+}
+#contenido-docs p:not([class]):first-child { margin-top: 0; }
+#contenido-docs strong:not([class]),
+#contenido-docs b:not([class]) {
+  font-weight: 400;
+  color: var(--fg);
+}
+#contenido-docs ul:not([class]),
+#contenido-docs ol:not([class]) {
+  margin-top: 14px;
+  padding-left: 20px;
+  font-size: 13.5px;
+  line-height: 1.72;
+  color: var(--muted);
+}
+#contenido-docs ul:not([class]) { list-style: disc; }
+#contenido-docs ol:not([class]) { list-style: decimal; }
+#contenido-docs li:not([class]) + li:not([class]) { margin-top: 6px; }
+#contenido-docs li:not([class])::marker { color: var(--subtle); }
+#contenido-docs code:not([class]) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--fg);
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
 /* Baliza del mapa de cobertura: un parpadeo apenas perceptible, no una luz
    de emergencia — la opacidad nunca cae de todo, solo respira. */
 @keyframes jg-baliza-pulse { 0%,100% { opacity:.85 } 50% { opacity:.4 } }
