@@ -1,16 +1,22 @@
-//! Las cuatro herramientas de debug de calibración (spec 2026-09-10 §4),
-//! todas detrás de `modo_calibracion` (`routes::features`): con el
-//! interruptor apagado, cada ruta de aquí contesta 403 con el mismo motivo,
-//! tanto para leer como para escribir -- no es una función capada con
-//! explicación en la UI, es tooling que este servidor no ha montado, y eso
-//! se cumple también en la API y no solo escondiendo el botón.
+//! Las herramientas de debug de calibración (spec 2026-09-10 §4a), detrás de
+//! `modo_calibracion` (`routes::features`): con el interruptor apagado, cada
+//! ruta de aquí contesta 403 con el mismo motivo, tanto para leer como para
+//! escribir -- no es una función capada con explicación en la UI, es tooling
+//! que este servidor no ha montado, y eso se cumple también en la API y no
+//! solo escondiendo el botón.
 //!
-//! 4a (umbrales de verificación) y 4b (prompts de agentes) comparten el
-//! mismo mecanismo: un override en `Store` (clave meta), con fallback al
-//! JSON del registro. El override es por-servidor, nunca se escribe de
-//! vuelta al fichero ni se propaga a otra instalación (ver el comentario de
-//! `verificar::construir_afinados`, que es quien de verdad LEE el override
-//! de umbrales en el camino caliente).
+//! Umbrales de verificación: un override en `Store` (clave meta), con
+//! fallback al JSON del registro. El override es por-servidor, nunca se
+//! escribe de vuelta al fichero ni se propaga a otra instalación (ver el
+//! comentario de `verificar::construir_afinados`, que es quien de verdad LEE
+//! el override de umbrales en el camino caliente).
+//!
+//! El editor de prompts de agentes (4b) que vivía aquí se retira en el
+//! rediseño de 2026-09-17: nadie leía el override que guardaba (ni la cola,
+//! que relee las fichas del disco, ni `workers/lumi_agentes.py`, que lee
+//! `registros/agentes/` directamente) -- calibrar un agente ahora es editar
+//! su JSON en el registro y reiniciar `lumid`, spec §9 ("las fichas siguen
+//! siendo datos... esta vez de verdad").
 
 use crate::routes::auth::{bearer, require_admin};
 use crate::routes::projects::{err, Fail};
@@ -129,91 +135,3 @@ pub async fn patch_umbral(
     get_umbral(State(app), Path(id), headers).await
 }
 
-// --- 4b: prompts de agentes editables -------------------------------------
-
-fn clave_agente(id: &str) -> String {
-    format!("agente_override:{id}")
-}
-
-#[derive(serde::Serialize)]
-pub struct AgenteVistaCalibracion {
-    pub agente: lumi_index::agentes::Agente,
-    pub overridden: bool,
-}
-
-/// El agente EFECTIVO ahora mismo: el override guardado en `Store`, si
-/// existe y sigue deserializando contra el struct actual, si no el del
-/// registro cargado en memoria (`app.queue.agentes`).
-fn agente_efectivo(app: &App, id: &str) -> Option<(lumi_index::agentes::Agente, bool)> {
-    let de_registro = app.queue.agentes.lock().unwrap().iter().find(|a| a.id == id).cloned()?;
-    match app.store.get_meta(&clave_agente(id)) {
-        Some(json) => match serde_json::from_str::<lumi_index::agentes::Agente>(&json) {
-            Ok(a) => Some((a, true)),
-            // Un override que ya no deserializa (struct cambiado entre
-            // versiones) no debe tumbar el análisis: se cae al del registro,
-            // igual que "el que no sabe no castiga" en `agentes::aplicar`.
-            Err(_) => Some((de_registro, false)),
-        },
-        None => Some((de_registro, false)),
-    }
-}
-
-pub async fn get_agente(
-    State(app): State<App>,
-    Path(id): Path<String>,
-    headers: HeaderMap,
-) -> Result<Json<AgenteVistaCalibracion>, Fail> {
-    require_admin(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".into()))?;
-    requiere_calibracion(&app)?;
-    let (agente, overridden) =
-        agente_efectivo(&app, &id).ok_or_else(|| err(StatusCode::NOT_FOUND, "ese agente no existe en el registro"))?;
-    Ok(Json(AgenteVistaCalibracion { agente, overridden }))
-}
-
-#[derive(serde::Deserialize)]
-pub struct PatchAgenteReq {
-    /// El `Agente` completo tal y como debe quedar -- no un parche parcial:
-    /// así la validación (deserializar contra el struct de Rust) cubre el
-    /// documento entero de una vez, y no hay forma de guardar una
-    /// combinación de campos que nunca hubiera compuesto un JSON válido por
-    /// su cuenta. `None` borra el override.
-    pub agente: Option<lumi_index::agentes::Agente>,
-}
-
-pub async fn patch_agente(
-    State(app): State<App>,
-    Path(id): Path<String>,
-    headers: HeaderMap,
-    Json(req): Json<PatchAgenteReq>,
-) -> Result<Json<AgenteVistaCalibracion>, Fail> {
-    let admin = require_admin(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".into()))?;
-    requiere_calibracion(&app)?;
-    if app.queue.agentes.lock().unwrap().iter().all(|a| a.id != id) {
-        return Err(err(StatusCode::NOT_FOUND, "ese agente no existe en el registro"));
-    }
-    match req.agente {
-        Some(a) => {
-            if a.id != id {
-                return Err(err(StatusCode::BAD_REQUEST, "el «id» del cuerpo no coincide con el de la URL"));
-            }
-            // La validación es el propio `Json(req)` de axum (ya deserializó
-            // contra `Agente`) MÁS este re-serializado: si algún día
-            // `Agente` gana un campo con un `Deserialize` permisivo que deja
-            // pasar basura silenciosamente, guardar el JSON ya canónico
-            // (recompuesto por Rust, no el que mandó el cliente) es lo que
-            // impide que ese JSON crudo llegue nunca a `lumi_agentes.py`.
-            let canonico = serde_json::to_string(&a).map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
-            app.store
-                .set_meta(&clave_agente(&id), &canonico)
-                .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
-            tracing::info!("prompt del agente «{id}» sobrescrito por el administrador {admin}");
-        }
-        None => {
-            app.store
-                .delete_meta(&clave_agente(&id))
-                .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
-            tracing::info!("override del agente «{id}» borrado por el administrador {admin}");
-        }
-    }
-    get_agente(State(app), Path(id), headers).await
-}

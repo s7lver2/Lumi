@@ -14,23 +14,18 @@ type Fail = (StatusCode, String);
 pub struct AgenteVista {
     pub id: String,
     pub nombre: String,
-    pub motor: String,
-    pub pregunta: String,
-    pub etiquetas: Vec<String>,
-    pub umbral_confianza: f64,
-    /// `false` cuando el motor que este agente necesita (`vlm`, `ocr` o
-    /// `profundidad`) no tiene sus pesos instalados en este servidor — la
-    /// tarjeta se enseña bloqueada, no se retira de la lista.
+    /// Nombre a resolver contra el set de SVG dibujados a mano de
+    /// `AgenteIcono.tsx`.
+    pub icono: String,
+    pub modo: String,
+    /// `false` cuando el motor que este agente necesita (siempre `vlm` hoy)
+    /// no tiene sus pesos instalados en este servidor — la tarjeta se enseña
+    /// bloqueada, no se retira de la lista.
     pub instalado: bool,
     /// El nombre del motor que hace falta descargar. `None` cuando
     /// `instalado` es `true`, o cuando el registro de motores no trae ningún
     /// motor de esa clase (no se puede pedir descargar lo que no existe).
     pub requiere: Option<String>,
-    /// Los ids de sus sub-preguntas, si es un agente fusionado (vacío en
-    /// los seis que no lo son). El picker los enseña como una lista corta
-    /// bajo el nombre en vez de la única línea de `pregunta`, que en un
-    /// fusionado es el JSON compuesto entero y no algo legible en una tarjeta.
-    pub sub_preguntas: Vec<String>,
 }
 
 pub async fn listar(
@@ -45,6 +40,10 @@ pub async fn listar(
 
     let fuera = agentes
         .into_iter()
+        // Un agente que el banco de pruebas marcó "activo": false sigue en
+        // el registro (se sigue evaluando) pero no se le ofrece al
+        // investigador -- ver tools/evaluar_agentes.py.
+        .filter(|a| a.activo)
         .map(|a| {
             // Un solo agente a la vez: reutiliza la misma cuenta agente→motor
             // que ya usa el panel de administración (`motores_de_agentes`),
@@ -52,19 +51,15 @@ pub async fn listar(
             let necesarios = lumi_index::agentes::motores_de_agentes(
                 std::slice::from_ref(&a.id), std::slice::from_ref(&a), &motores,
             );
-            let motor = motores.iter().find(|m| m.clase == a.motor);
+            let motor = motores.iter().find(|m| m.clase == "vlm");
             let instalado = necesarios.iter().all(|id| instalados.contains(id));
-            let sub_preguntas = a.sub_preguntas.iter().map(|s| s.id.clone()).collect();
             AgenteVista {
                 id: a.id,
                 nombre: a.nombre,
-                motor: a.motor,
-                pregunta: a.pregunta,
-                etiquetas: a.etiquetas,
-                umbral_confianza: a.umbral_confianza,
+                icono: a.icono,
+                modo: a.modo,
                 instalado,
                 requiere: if instalado { None } else { motor.map(|m| m.nombre.clone()) },
-                sub_preguntas,
             }
         })
         .collect();

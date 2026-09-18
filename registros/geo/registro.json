@@ -8,15 +8,6 @@
       "licencia_url": "https://www.naturalearthdata.com/about/terms-of-use/",
       "licencia_texto": "",
       "puerta": null
-    },
-    {
-      "id": "koppen",
-      "nombre": "Köppen-Geiger 0,5°",
-      "licencia": "CC BY 4.0",
-      "fichero_url": "",
-      "licencia_url": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
-      "licencia_texto": "",
-      "puerta": null
     }
   ]
 }

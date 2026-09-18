@@ -244,16 +244,24 @@ CREATE TABLE IF NOT EXISTS analysis_agents (
     agente      TEXT NOT NULL,
     nombre      TEXT NOT NULL,
     etiqueta    TEXT NOT NULL,
-    confianza   REAL NOT NULL,
-    tipo        TEXT NOT NULL,
+    -- NULL en modo transcripción -- no hay conjunto cerrado sobre el que
+    -- normalizar (spec 2026-09-17 §5), nunca un número inventado.
+    confianza   REAL,
     detalle     TEXT NOT NULL DEFAULT '',
     -- La etiqueta real elegida por el motor, aunque `etiqueta` valga
     -- `abstiene` porque no llegó al umbral. Ver `DichoDeAgente.etiqueta_real`.
     etiqueta_real TEXT NOT NULL DEFAULT '',
-    -- JSON de `Vec<(String, f64)>` y de `Option<Rasgos>` tal cual los trajo
-    -- `Msg::Agente` -- se guardan serializados y no en columnas propias
-    -- porque su forma varía por motor (una lista corta o un PNG en base64) y
-    -- aquí no hace falta consultarlos por campo, solo devolverlos enteros.
+    -- JSON de `Vec<(String, f64)>` tal cual lo trajo `Msg::Agente` -- se
+    -- guarda serializado y no en columnas propias porque no hace falta
+    -- consultarlo por campo, solo devolverlo entero al cliente.
+    alternativas TEXT,
+    -- Cuánto sube la imagen la evidencia de la opción ganadora frente a no
+    -- verla (spec 2026-09-17 §4) -- una lectura aparte de `confianza`. NULL
+    -- en modo transcripción.
+    apoyo_visual REAL,
+    -- Debug de calibración: el texto/JSON crudo que devolvió el motor, solo
+    -- relleno con `modo_calibracion` activo en el momento del análisis.
+    respuesta_cruda TEXT,
     PRIMARY KEY (analysis_id, agente)
 );
 CREATE TABLE IF NOT EXISTS model_licenses (
@@ -423,8 +431,11 @@ impl Store {
 /// ponytail: no hay tabla de versiones ni motor de migraciones. `ALTER TABLE
 /// ADD COLUMN` falla con "duplicate column name" si ya existe, y ese fallo es
 /// exactamente la señal de "ya está aplicada". El techo es el día en que haga
-/// falta transformar datos y no solo añadir columnas; ahí sí toca versionar.
+/// falta transformar datos y no solo añadir columnas; ahí sí toca versionar --
+/// es justo lo que hace `migracion_agentes_2026_09_17` de aquí abajo, la
+/// primera vez que hace falta versionar de verdad.
 fn migrate(c: &Connection) {
+    migracion_agentes_2026_09_17(c);
     for (table, col, decl) in [
         ("users", "display_name", "TEXT"),
         ("users", "blocked", "INTEGER NOT NULL DEFAULT 0"),
@@ -504,13 +515,10 @@ fn migrate(c: &Connection) {
         ("analysis_hypotheses", "imagen_id", "INTEGER"),
         // Panel de agentes: qué agente se pidió (solo con model == "agentes")
         // y lo que ese agente trajo de más allá de la etiqueta ganadora.
+        // alternativas/apoyo_visual/respuesta_cruda ya viven en el
+        // CREATE TABLE de analysis_agents (recreada por la migración de
+        // 2026-09-17 de más abajo); no hace falta un ALTER TABLE aparte.
         ("analyses", "agente", "TEXT"),
-        ("analysis_agents", "alternativas", "TEXT"),
-        ("analysis_agents", "rasgos", "TEXT"),
-        // Debug de calibración (spec 2026-09-10 §4c): el texto/JSON crudo
-        // que devolvió el motor, solo relleno con `modo_calibracion` activo
-        // en el momento del análisis -- `NULL` en cualquier otra fila.
-        ("analysis_agents", "respuesta_cruda", "TEXT"),
         // Panel Media (spec 2026-09-10 §3): carpeta virtual de una imagen.
         // `NULL` = "Sin carpeta", el estado de toda imagen de antes de esto.
         ("images", "folder_id", "INTEGER REFERENCES media_folders(id) ON DELETE SET NULL"),
@@ -558,6 +566,49 @@ fn migrate(c: &Connection) {
     let _ = c.execute_batch(
         "CREATE UNIQUE INDEX IF NOT EXISTS sessions_public ON sessions(public_id);",
     );
+}
+
+/// Migración de un solo uso (spec 2026-09-17 §8). `confianza` pasa de
+/// `NOT NULL` a admitir `NULL` (modo transcripción no tiene confianza) y la
+/// columna `tipo`/`rasgos` desaparecen -- un `ALTER TABLE ADD COLUMN` no
+/// puede relajar un `NOT NULL` existente ni quitar una columna en SQLite, así
+/// que la tabla se recrea entera. Los análisis de agentes existentes están
+/// producidos por el diseño anterior (confianza plana, ids con punto de la
+/// fusión) y no hay forma de reinterpretarlos con el formato nuevo -- se
+/// descartan, después de la copia de seguridad que `actualizacion::aplicar`
+/// ya hace por versión durante la propia actualización. Guardado en `meta`
+/// para que no se repita en cada arranque siguiente.
+fn migracion_agentes_2026_09_17(c: &Connection) {
+    let ya_aplicada = c
+        .query_row("SELECT v FROM meta WHERE k = 'migracion_agentes_2026_09_17'", [], |r| {
+            r.get::<_, String>(0)
+        })
+        .is_ok();
+    if ya_aplicada {
+        return;
+    }
+    let _ = c.execute_batch(
+        "DROP TABLE IF EXISTS analysis_agents;
+         CREATE TABLE analysis_agents (
+             analysis_id INTEGER NOT NULL,
+             agente      TEXT NOT NULL,
+             nombre      TEXT NOT NULL,
+             etiqueta    TEXT NOT NULL,
+             confianza   REAL,
+             detalle     TEXT NOT NULL DEFAULT '',
+             etiqueta_real TEXT NOT NULL DEFAULT '',
+             alternativas TEXT,
+             apoyo_visual REAL,
+             respuesta_cruda TEXT,
+             PRIMARY KEY (analysis_id, agente)
+         );",
+    );
+    // Cualquier análisis de tipo "agentes" es irrecuperable con el formato
+    // nuevo (ids con punto, sin apoyo_visual) -- se vacía junto con la tabla
+    // de veredictos que ya se acaba de recrear vacía.
+    let _ = c.execute("DELETE FROM analyses WHERE model = 'agentes'", []);
+    let _ = c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES ('migracion_agentes_2026_09_17', '1')", []);
+    tracing::info!("migración 2026-09-17: análisis de agentes vaciados (diseño anterior, sin veredicto reinterpretable)");
 }
 
 #[cfg(test)]

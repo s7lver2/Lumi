@@ -1,0 +1,16 @@
+{
+  "id": "matricula",
+  "nombre": "Formato de matrícula",
+  "icono": "matricula",
+  "modo": "eleccion",
+  "pregunta": "Looking at the license plates of any vehicles in this photo, their format is",
+  "umbral": 0.6,
+  "peso": 0.5,
+  "activo": true,
+  "opciones": [
+    { "id": "banda-azul-ue", "verbalizador": " EU style with a blue band on the left.", "visible": "Banda azul UE", "paises": ["ESP", "PRT", "FRA", "ITA", "DEU", "AUT", "BEL", "NLD", "LUX", "IRL", "DNK", "SWE", "FIN", "EST", "LVA", "LTU", "POL", "CZE", "SVK", "HUN", "SVN", "HRV", "ROU", "BGR", "GRC", "CYP", "MLT"] },
+    { "id": "amarilla-britanica", "verbalizador": " British or Dutch style, yellow on the rear.", "visible": "Amarilla (GB/NL)", "paises": ["GBR", "NLD"] },
+    { "id": "americana", "verbalizador": " North American square format.", "visible": "Cuadrada americana", "paises": ["USA", "CAN", "MEX"] },
+    { "id": "indeterminado", "verbalizador": " cannot be determined from this image.", "visible": "No se puede determinar", "paises": [] }
+  ]
+}

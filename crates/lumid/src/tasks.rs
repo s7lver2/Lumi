@@ -41,9 +41,8 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec
         // durante pruebas) volvía a descargar ~2 GB aunque nada hubiera
         // cambiado. pip ya cachea localmente, pero recrear el venv desde
         // cero seguía siendo trabajo y tiempo de sobra.
-        // Las rutas del venv, de `models_dir` y del registro de paddleocr
-        // van como argumentos posicionales ($1, $2 y $3), no interpoladas en
-        // el texto del script:
+        // Las rutas del venv y de `models_dir` van como argumentos
+        // posicionales ($1 y $2), no interpoladas en el texto del script:
         // `format!` metiendo una ruta directamente en
         // un `sh -c` es la forma clásica de inyección de shell si esa ruta
         // llegara alguna vez a depender de algo que no sea el propio
@@ -56,11 +55,10 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec
             "/bin/sh".into(),
             vec![
                 "-c".into(),
-                // Seis comprobaciones independientes, no una: cada paquete
+                // Cinco comprobaciones independientes, no una: cada paquete
                 // (`romatch` para tiny-roma/roma, `safetensors` para MegaLoc,
-                // `lightglue` para lightglue-aliked, `transformers` para los
-                // motores vlm/profundidad de los agentes, `paddleocr` para
-                // su motor ocr) es una incorporación posterior a
+                // `lightglue` para lightglue-aliked, `transformers` para el
+                // motor vlm de los agentes) es una incorporación posterior a
                 // torch/torchvision, y un servidor que ya tenía el runtime
                 // instalado antes de que existiera un paquete nuevo se queda
                 // con el "nada que hacer" de siempre — con una sola
@@ -149,54 +147,11 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec
                    echo 'accelerate ya instalado, nada que hacer'; \
                  else \
                    UV_HTTP_TIMEOUT=60 \"$UV\" pip install --python \"$1/bin/python3\" accelerate; \
-                 fi; \
-                 # `paddleocr` sin `paddle` no arranca: es su motor de
-                 # inferencia real, un paquete aparte que `pip install
-                 # paddleocr` NO arrastra solo. Sin este segundo paquete el
-                 # agente de OCR moria en la primera linea de su
-                 # constructor, silencioso detras del timeout de 120s de
-                 # `lumid::agentar` -- \"0 agentes\" sin ninguna pista. Las
-                 # dos versiones van fijadas y no a lo ultimo: la serie 3.x
-                 # rehizo esta API entera (otro nombre de idioma, otros
-                 # parametros, otro metodo de inferencia) y ademas trae un
-                 # fallo propio en su runtime CPU -- `lumi_motores.py::Ocr`
-                 # sigue escrito contra la 2.x a proposito.
-                 if \"$1/bin/python3\" -c 'import paddleocr, paddle' 2>/dev/null; then \
-                   echo 'paddleocr ya instalado, nada que hacer'; \
-                 else \
-                   UV_HTTP_TIMEOUT=60 \"$UV\" pip install --python \"$1/bin/python3\" \
-                   'paddleocr==2.9.1' 'paddlepaddle==2.6.2'; \
-                 fi; \
-                 # PaddleOCR trae sus propios pesos SOLA la primera vez que se
-                 # instancia (`gestion_propia` en su registro, sin
-                 # `fichero_url` propio) -- si eso se deja para la primera
-                 # llamada real, esa llamada corre bajo el timeout de 120s de
-                 # `lumid::agentar` (`LIMITE`), que no distingue \"se estaba
-                 # descargando\" de \"no hay agentes\": un fallo de red o de
-                 # idioma ahi se veia en el cliente como un misterioso \"los
-                 # agentes no llegaron a correr\", sin log utilizable. Se
-                 # fuerza aqui, con la generosidad de tiempo de esta tarea de
-                 # instalacion -- mismo criterio que `lumi_bajar.py` para el
-                 # resto de items `gestion_propia`, solo que ese script lo
-                 # dispara \"Descargar modelos\" y no todo el mundo pasa por
-                 # ahi tras un \"Instalar runtime\" limpio.
-                 if [ -f \"$2/paddleocr/LICENCIA.txt\" ]; then \
-                   echo 'paddleocr: pesos ya con licencia escrita, nada que hacer'; \
-                 else \
-                   mkdir -p \"$2/paddleocr\"; \
-                   \"$1/bin/python3\" -c 'import json,sys
-d = json.load(open(sys.argv[1]))
-open(sys.argv[2], \"w\").write(d.get(\"licencia_texto\", \"\"))' \"$3\" \"$2/paddleocr/LICENCIA.txt\"; \
-                   echo 'paddleocr: forzando la descarga de sus pesos (puede tardar)…'; \
-                   \"$1/bin/python3\" -c 'from paddleocr import PaddleOCR
-PaddleOCR(use_angle_cls=True, lang=\"latin\", show_log=False, use_gpu=False)' \
-                   || { echo 'FATAL paddleocr no pudo descargar/cargar sus pesos'; exit 1; }; \
                  fi"
                     .into(),
                 "sh".into(),
                 venv.display().to_string(),
                 base.display().to_string(),
-                crate::assets::ruta("registros/motores/paddleocr.json").display().to_string(),
             ],
         ),
         TaskKind::Database => (

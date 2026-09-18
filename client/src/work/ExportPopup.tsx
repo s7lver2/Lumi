@@ -95,7 +95,7 @@ function BocetoInforme({ paso, opts }: { paso: PasoId; opts: ExportInformeOpts }
 
 type ClaveContenido =
   | "portada_estadisticas" | "exif_por_imagen" | "hipotesis_geolocalizacion"
-  | "veredictos_agentes" | "integridad_sha256" | "rasgos_como_imagen";
+  | "veredictos_agentes" | "integridad_sha256";
 
 const CAMPOS_CONTENIDO: { key: ClaveContenido; icono: IconName; label: string; hint: string }[] = [
   { key: "portada_estadisticas", icono: "pulse", label: "Portada con estadísticas", hint: "Resumen del caso y gráfico por modelo" },
@@ -103,7 +103,6 @@ const CAMPOS_CONTENIDO: { key: ClaveContenido; icono: IconName; label: string; h
   { key: "hipotesis_geolocalizacion", icono: "globe", label: "Hipótesis de geolocalización", hint: "Coordenada principal, radio, alternativas" },
   { key: "veredictos_agentes", icono: "users", label: "Veredictos de agentes", hint: "Etiqueta, confianza y detalle de cada agente" },
   { key: "integridad_sha256", icono: "shield", label: "Integridad de archivo", hint: "Hash sha256 del original de cada foto, para cadena de custodia" },
-  { key: "rasgos_como_imagen", icono: "boxes", label: "Rasgos como imagen", hint: "Recuadros OCR o mapa de profundidad, dibujados en vez de solo texto" },
 ];
 
 /** Exportar, como popup -- asistente de 3 pasos (Aspecto/Contenido/Firma) en
@@ -131,7 +130,6 @@ export function ExportPopup({
     veredictos_agentes: true,
     firmado_por: firmadoPorDefecto,
     integridad_sha256: true,
-    rasgos_como_imagen: true,
     imagenes_incluidas: null,
     notas: "",
     tema: "oscuro",

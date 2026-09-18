@@ -142,28 +142,27 @@ pub(crate) fn hypotheses_por_caso(
     mapa
 }
 
-/// `alternativas`/`rasgos` viajan como JSON en la fila (ver `store::migrate`);
-/// se de-serializan aquí y no en el llamador, así que un `NULL` de un
-/// análisis viejo (columna recién migrada) o un JSON corrupto se convierten
-/// en «vacío»/`None` en un solo sitio, en vez de un `Result` que cada
-/// llamador tendría que decidir cómo tragarse.
+/// `alternativas` viaja como JSON en la fila (ver `store::migrate`); se
+/// de-serializa aquí y no en el llamador, así que un `NULL` o un JSON
+/// corrupto se convierten en «vacío» en un solo sitio, en vez de un
+/// `Result` que cada llamador tendría que decidir cómo tragarse.
 #[allow(clippy::too_many_arguments)]
 fn agente_de_fila(
-    agente: String, nombre: String, etiqueta: String, confianza: f64, tipo: String, detalle: String,
-    etiqueta_real: String, alternativas: Option<String>, rasgos: Option<String>, respuesta_cruda: Option<String>,
+    agente: String, nombre: String, etiqueta: String, confianza: Option<f64>, detalle: String,
+    etiqueta_real: String, alternativas: Option<String>, apoyo_visual: Option<f64>,
+    respuesta_cruda: Option<String>,
 ) -> lumi_proto::api::DichoDeAgente {
     lumi_proto::api::DichoDeAgente {
         agente,
         nombre,
         etiqueta,
         confianza,
-        tipo,
         detalle,
         etiqueta_real,
         alternativas: alternativas
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default(),
-        rasgos: rasgos.and_then(|s| serde_json::from_str(&s).ok()),
+        apoyo_visual,
         respuesta_cruda,
     }
 }
@@ -172,8 +171,8 @@ pub(crate) fn agentes_por_caso(
     c: &rusqlite::Connection, case_id: i64,
 ) -> std::collections::HashMap<i64, Vec<lumi_proto::api::DichoDeAgente>> {
     let Ok(mut q) = c.prepare(
-        "SELECT ag.analysis_id, ag.agente, ag.nombre, ag.etiqueta, ag.confianza, ag.tipo, ag.detalle,
-                ag.etiqueta_real, ag.alternativas, ag.rasgos, ag.respuesta_cruda
+        "SELECT ag.analysis_id, ag.agente, ag.nombre, ag.etiqueta, ag.confianza, ag.detalle,
+                ag.etiqueta_real, ag.alternativas, ag.apoyo_visual, ag.respuesta_cruda
            FROM analysis_agents ag JOIN analyses a ON a.id = ag.analysis_id
           WHERE a.case_id = ?1
           ORDER BY ag.analysis_id, ag.agente",
@@ -184,7 +183,7 @@ pub(crate) fn agentes_por_caso(
         Ok((
             r.get::<_, i64>(0)?,
             agente_de_fila(
-                r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?,
+                r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?,
             ),
         ))
     }) else {
@@ -199,14 +198,14 @@ pub(crate) fn agentes_por_caso(
 
 fn agentes(c: &rusqlite::Connection, analysis_id: i64) -> Vec<lumi_proto::api::DichoDeAgente> {
     let Ok(mut q) = c.prepare(
-        "SELECT agente, nombre, etiqueta, confianza, tipo, detalle, etiqueta_real, alternativas, rasgos, respuesta_cruda
+        "SELECT agente, nombre, etiqueta, confianza, detalle, etiqueta_real, alternativas, apoyo_visual, respuesta_cruda
            FROM analysis_agents WHERE analysis_id = ?1 ORDER BY agente",
     ) else {
         return Vec::new();
     };
     let Ok(filas) = q.query_map([analysis_id], |r| {
         Ok(agente_de_fila(
-            r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?,
+            r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?,
         ))
     }) else {
         return Vec::new();

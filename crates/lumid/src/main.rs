@@ -306,10 +306,6 @@ async fn main() -> anyhow::Result<()> {
             get(routes::calibracion::get_umbral).patch(routes::calibracion::patch_umbral),
         )
         .route(
-            "/v1/admin/agentes/:id",
-            get(routes::calibracion::get_agente).patch(routes::calibracion::patch_agente),
-        )
-        .route(
             "/v1/cases/:id/media/folders",
             get(routes::media::listar_carpetas).post(routes::media::crear_carpeta),
         )

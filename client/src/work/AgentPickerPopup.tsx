@@ -124,26 +124,6 @@ export function AgentPickerPopup({
   );
 }
 
-/** Etiqueta corta para una sub-pregunta, tanto en la rejilla del picker
- *  ("clima · tiempo · estación · vegetación" bajo el nombre de la tarjeta)
- *  como agrupando el resultado (`AgentResultPopup`). Un id sin entrada aquí
- *  se enseña tal cual — nunca se inventa una palabra para uno que no está en
- *  esta lista, solo se acorta el que sí. */
-const ETIQUETAS_CORTAS: Record<string, string> = {
-  "clima-aparente": "clima",
-  "meteorologia": "tiempo",
-  "estacion": "estación",
-  "vegetacion": "vegetación",
-  "lado-conduccion": "conducción",
-  "senalizacion": "señales",
-  "matricula": "matrícula",
-  "idioma": "idioma",
-  "toponimos": "texto",
-};
-export function etiquetaCortaDe(subId: string): string {
-  return ETIQUETAS_CORTAS[subId] ?? subId;
-}
-
 /** Pill de fase — el feature ya existe, esto no es un "próximamente". Mismo
  *  patrón visual que `AgentesVisual.tsx` (`web/`, marketing) para su badge de
  *  fase, adaptado a "beta" en vez de una fecha. */
@@ -180,22 +160,13 @@ function RejillaAgentes({ agentes, seleccionados, onAlternar, isAdmin, onIrAMode
               ${a.instalado ? "jg-press cursor-pointer" : "cursor-default hover:border-white/20"}
               ${on ? "border-fg bg-white/[.06]" : "border-border bg-panel"}`}>
             <div className="shrink-0 pt-0.5">
-              <AgenteIcono agente={a.id} apagado={!a.instalado} size={18} />
+              <AgenteIcono icono={a.icono} apagado={!a.instalado} size={18} />
             </div>
             <div className="min-w-0 flex-1">
               <div className={`text-[12.5px] font-medium ${a.instalado ? "text-fg" : "text-muted"}`}>{a.nombre}</div>
-              {a.sub_preguntas.length > 0 ? (
-                // Agente fusionado (spec 2026-09-10 §1): la pregunta de
-                // nivel superior es el JSON compuesto entero, ilegible en
-                // una tarjeta — se enseñan sus sub-preguntas en su lugar.
-                <p className={`mt-0.5 truncate text-[10.5px] ${a.instalado ? "text-muted" : "text-subtle"}`}>
-                  {a.sub_preguntas.map(etiquetaCortaDe).join(" · ")}
-                </p>
-              ) : (
-                <p className={`mt-0.5 truncate text-[10.5px] ${a.instalado ? "text-muted" : "text-subtle"}`}>
-                  {a.pregunta || "Mira la imagen sin preguntar."}
-                </p>
-              )}
+              <p className={`mt-0.5 text-[10.5px] ${a.instalado ? "text-muted" : "text-subtle"}`}>
+                {a.modo === "transcripcion" ? "Lee texto de la imagen" : "Pregunta cerrada a la imagen"}
+              </p>
               {!a.instalado && (
                 <div className="mt-1.5 flex items-center gap-2">
                   <span className="font-mono text-[9.5px] text-subtle">requiere {a.requiere ?? "un motor"}</span>
