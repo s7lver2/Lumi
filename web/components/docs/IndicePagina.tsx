@@ -18,7 +18,16 @@ export function IndicePagina() {
     const nodos = Array.from(
       document.querySelectorAll<HTMLElement>("#contenido-docs h2, #contenido-docs h3")
     );
-    setItems(nodos.map((n) => ({ id: n.id, texto: n.textContent ?? "", nivel: n.tagName === "H2" ? 2 : 3 })));
+    setItems(
+      nodos.map((n) => ({
+        id: n.id,
+        // Solo el texto del título real: el "#" de permalink vive en un
+        // <span aria-hidden> hermano dentro del mismo <a> y no debe colarse
+        // aquí (ver EncabezadoDocs).
+        texto: n.querySelector<HTMLElement>("[data-titulo-encabezado]")?.textContent ?? n.textContent ?? "",
+        nivel: n.tagName === "H2" ? 2 : 3,
+      }))
+    );
     if (nodos.length === 0) return;
 
     const observador = new IntersectionObserver(

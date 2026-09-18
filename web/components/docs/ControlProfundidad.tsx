@@ -11,7 +11,7 @@ export function ControlProfundidad() {
     <button
       type="button"
       onClick={() => disparar(!valor)}
-      className="jg-micro rounded-[8px] border border-border px-[10px] py-[5px] text-[11px] text-subtle hover:border-[#33363b] hover:text-muted"
+      className="jg-micro shrink-0 whitespace-nowrap rounded-[8px] border border-border px-[10px] py-[5px] text-[11px] text-subtle hover:border-[#33363b] hover:text-muted"
     >
       {valor ? "Cerrar todo" : "Leer en profundidad"}
     </button>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { arbolDocs } from "../../lib/arbolDocs";
+import { GlifoRama } from "../../components/docs/GlifoRama";
 
 export const metadata = {
   title: "Documentación · Lumi Station",
@@ -36,11 +37,18 @@ export default function PortadaDocs() {
             <Link
               key={rama.id}
               href={href}
-              className={`jg-micro rounded-card border border-border bg-panel px-[18px] py-4 hover:border-[#33363b] ${
+              className={`jg-micro relative overflow-hidden rounded-card border border-border bg-panel px-[18px] py-4 hover:border-[#33363b] ${
                 i === 0 ? "min-[640px]:col-span-2" : ""
               }`}
             >
-              <div className="text-[14px] text-fg">{rama.titulo}</div>
+              <GlifoRama
+                glifo={rama.glifo}
+                className="pointer-events-none absolute -right-3 -top-3 h-[88px] w-[88px] text-fg opacity-[.05]"
+              />
+              <div className="flex items-center gap-2 text-[14px] text-fg">
+                <GlifoRama glifo={rama.glifo} className="h-[13px] w-[13px] text-subtle" />
+                {rama.titulo}
+              </div>
               <div className="mt-[7px] text-[12px] leading-relaxed text-subtle">{DESCRIPCIONES[rama.id]}</div>
               <div className="mt-3 font-mono text-[10px] uppercase tracking-[.07em] text-subtle">
                 {escritas === total ? `${total} páginas` : `${total} páginas · pendiente`}

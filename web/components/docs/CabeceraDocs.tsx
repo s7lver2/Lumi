@@ -1,4 +1,5 @@
 import { ramaDeRuta, paginaDeRuta } from "../../lib/arbolDocs";
+import { GlifoRama } from "./GlifoRama";
 
 type Props = {
   /** Ruta completa, ej. "/docs/como-funciona/el-viaje-de-una-foto". */
@@ -17,7 +18,13 @@ export function CabeceraDocs({ ruta, frase, tipo }: Props) {
   const pagina = paginaDeRuta(ramaId, paginaRuta);
 
   return (
-    <header>
+    <header className="relative">
+      {rama && (
+        <GlifoRama
+          glifo={rama.glifo}
+          className="pointer-events-none absolute -right-2 -top-6 h-[104px] w-[104px] text-fg opacity-[.05]"
+        />
+      )}
       <div className="font-mono text-[10px] uppercase tracking-[.11em] text-subtle">
         {rama?.titulo}
         {tipo ? ` · ${tipo}` : ""}

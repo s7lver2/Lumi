@@ -45,11 +45,13 @@ function Contenido({ rutaActual }: { rutaActual: string }) {
             const activa = href === rutaActual;
             if (pagina.pendiente) {
               return (
-                <span key={pagina.ruta} className="block px-4 py-[5px] text-[12.5px] leading-snug text-subtle">
+                <span
+                  key={pagina.ruta}
+                  title="Pendiente de escribir"
+                  className="flex items-baseline gap-[7px] px-4 py-[5px] text-[12.5px] leading-snug text-subtle opacity-60"
+                >
+                  <span className="h-[4px] w-[4px] shrink-0 translate-y-[-1px] rounded-full border border-subtle" aria-hidden />
                   {pagina.titulo}
-                  <em className="relative -top-px ml-1.5 rounded-[4px] border border-border px-1 text-[9px] not-italic uppercase tracking-[.09em] text-subtle">
-                    pendiente
-                  </em>
                 </span>
               );
             }
