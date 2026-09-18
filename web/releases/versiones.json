@@ -1582,7 +1582,64 @@
           "sha256": "69a51cb7e07bd440308f09465f4804e315a35cd6b3b30c7b7ce46bfed8013556"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.45",
+      "publicado": "2026-09-18T19:51:46Z",
+      "notas": "rework to the agent system",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.45/app.exe",
+          "bytes": 16182784,
+          "sha256": "69802c4884b85b577cb0dead9f3a48485462728afa1534e80099806f82616b42"
+        },
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.45/Lumi-linux-x86_64.AppImage",
+          "bytes": 82283000,
+          "sha256": "258ed989d5d30c4abe8bbe80a26a6c5393b9d4fba15266a424204219caa5c47f"
+        }
+      ]
+    },
+    {
+      "producto": "indexer",
+      "version": "2.0.45",
+      "publicado": "2026-09-18T19:51:46Z",
+      "notas": "rework to the agent system",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.45/indexer-app.exe",
+          "bytes": 23525376,
+          "sha256": "3fd31cd336ef969428dd9c8d35d0c497cdf2411d8fec542956e2befd80df88ab"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.45",
+      "publicado": "2026-09-18T19:51:46Z",
+      "notas": "rework to the agent system",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.45/lumid",
+          "bytes": 24073600,
+          "sha256": "4913c3f7834d84ae80ef2f5481f7b3635ac500279830c978e90383b4924435ba"
+        },
+        {
+          "plataforma": "assets",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.45/lumid-assets.tar.gz",
+          "bytes": 1023250,
+          "sha256": "27c9ef6a1b5717c2674a5c7ffa5d15342f2642157049fce0ca30bcc4c4dff1f1"
+        }
+      ]
     }
   ],
-  "firma": "x1NIYCBeYJ0t+mIQ0fGrvOZWoKrlzeFNgOnIL70+SRex4T8a4q31vxGrifRDQ2M8BaJYqOZJ1s4TJq7+tATSCA=="
+  "firma": "7pjKQpEgbkYbSKEA5Pu2cniaTg4pdkhsCmMvinkgd2i4j3rAlDOSIM98uOAdfjPQZ9yYI2InKFWOEJQM6E+oAA=="
 }
