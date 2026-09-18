@@ -1,0 +1,65 @@
+export const frase = "Mini, Pro y Vision no son tres productos distintos: es la misma tubería, con más piezas encendidas cuantas más quieras pagar en tiempo de GPU. Ningún nivel usa un modelo distinto de recuperación — usa MÁS modelos a la vez, y lo mismo con los verificadores.";
+export const procedencia = [
+  "registros/niveles/mini.json",
+  "registros/niveles/pro.json",
+  "registros/niveles/vision.json",
+];
+
+import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
+import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
+import { Detalle } from "../../../../components/docs/Detalle";
+import { Tec } from "../../../../components/docs/Tec";
+import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
+
+<div className="flex items-start justify-between gap-4">
+  <CabeceraDocs ruta="/docs/como-funciona/mini-pro-y-vision" frase={frase} />
+  <ControlProfundidad />
+</div>
+
+Los modelos concretos de cada categoría están en sus propias páginas —{" "}
+<Tec id="modelos-de-recuperacion">modelos de recuperación</Tec> y{" "}
+<Tec id="verificadores-geometricos">verificadores geométricos</Tec>—. Esta página junta lo que esas
+dos páginas no pueden mostrar por separado: qué enciende cada nivel, todo junto, y a qué coste.
+
+| | Mini | Pro | Vision |
+|---|---|---|---|
+| Recuperación | 1 modelo (CosPlace) | 4 modelos a la vez | 8 modelos a la vez |
+| Verificación geométrica | 1 verificador (tiny-RoMa) | 2 verificadores | 4 verificadores |
+| VRAM mínima / recomendada | 8 GB / 16 GB | 8 GB / 20 GB | mayor que Pro (sin medir aún) |
+| Pensado para | coste bajo, un caso concreto | el caso general | casos difíciles, donde falla Pro |
+
+<Detalle titulo="Por qué 'más modelos a la vez' y no 'un modelo mejor'">
+  Cada modelo de recuperación comete errores distintos en escenas distintas — uno falla por
+  iluminación, otro por ángulo de cámara — y lo mismo pasa entre un verificador denso y uno
+  disperso. Consultar varios a la vez y dejar que sus candidatos compitan es más caro en GPU, pero
+  más robusto que apostarlo todo a un solo modelo por muy bueno que sea en promedio. Subir de nivel
+  no cambia DE QUÉ está hecho Lumi, cambia CUÁNTO de ello se ejecuta por foto.
+</Detalle>
+
+## Mini
+
+Un modelo de recuperación (CosPlace, el más barato en dimensión del catálogo) y un verificador
+(tiny-RoMa, la versión reducida del verificador denso). Pensado para un caso concreto de coste bajo,
+no para cubrir cualquier foto igual de bien que Pro.
+
+## Pro
+
+Cuatro modelos de recuperación (Lumi Preview, Lumi 2, EigenPlaces, DINO-Mix) y dos verificadores
+(RoMa completo, con su backbone DINOv2, y LightGlue + ALIKED). Es el nivel general: cubre bien la
+mayoría de fotos sin el coste de Vision.
+
+## Vision
+
+Todo lo de Pro, más SALAD, CliqueMining y AnyLoc en recuperación, y RoMa v2 y EfficientLoFTR en
+verificación — ocho modelos y cuatro verificadores compitiendo sobre la misma foto. Pensado para los
+casos donde Pro no basta, no como sustituto por defecto de Pro.
+
+<Detalle titulo="Lo que esta página no dice todavía">
+  Los agentes (qué se ve en la foto — idioma, matrícula, señalética) también varían por nivel, pero
+  el registro que debería decir cuáles corren en cada uno (`registros/niveles/*.json`) quedó
+  desactualizado por el rediseño de agentes (5c): todavía lista identificadores de agentes que ya no
+  existen. Hasta que se corrija, esta página no reparte agentes por nivel para no publicar un dato
+  que sabemos que está mal.
+</Detalle>
+
+<PiePaginaDocs ruta="/docs/como-funciona/mini-pro-y-vision" />

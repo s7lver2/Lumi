@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { arbolDocs } from "../../lib/arbolDocs";
 import { GlifoRama } from "./GlifoRama";
+import { InsigniaGeneracion } from "./InsigniaGeneracion";
 
 function IconoBuscar() {
   return (
@@ -96,6 +97,7 @@ function Contenido({ rutaActual }: { rutaActual: string }) {
                     >
                       <span className="h-[4px] w-[4px] shrink-0 translate-y-[-1px] rounded-full border border-subtle" aria-hidden />
                       {pagina.titulo}
+                      {pagina.generacion && <InsigniaGeneracion version={pagina.generacion} compacta />}
                     </span>
                   );
                 }
@@ -103,11 +105,12 @@ function Contenido({ rutaActual }: { rutaActual: string }) {
                   <Link
                     key={pagina.ruta}
                     href={href}
-                    className={`jg-micro block border-l-2 px-4 py-[5px] text-[12.5px] leading-snug ${
+                    className={`jg-micro flex items-center border-l-2 px-4 py-[5px] text-[12.5px] leading-snug ${
                       activa ? "border-fg bg-white/[.035] text-fg" : "border-transparent text-muted hover:text-fg"
                     }`}
                   >
                     {pagina.titulo}
+                    {pagina.generacion && <InsigniaGeneracion version={pagina.generacion} compacta />}
                   </Link>
                 );
               })}

@@ -1,4 +1,5 @@
 import createMDX from "@next/mdx";
+import remarkGfm from "remark-gfm";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -13,6 +14,12 @@ const nextConfig = {
   },
 };
 
-const withMDX = createMDX({});
+// remark-gfm: sin él el MDX solo entiende CommonMark puro y una tabla
+// como "| Nivel | Modelos |" se renderiza como texto plano con barras,
+// no como una <table> — se necesita en cuanto una página usa una tabla
+// (mini-pro-y-vision, y las tres de tecnologías con su "dónde se usa").
+const withMDX = createMDX({
+  options: { remarkPlugins: [remarkGfm] },
+});
 
 export default withMDX(nextConfig);

@@ -17,6 +17,7 @@ import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
 import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
 import { Detalle } from "../../../../components/docs/Detalle";
 import { Ficha } from "../../../../components/docs/Ficha";
+import { Modelo } from "../../../../components/docs/Modelo";
 import { Tec } from "../../../../components/docs/Tec";
 import { EsquemaEspacioVectores } from "../../../../components/docs/esquemas/EsquemaEspacioVectores";
 import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
@@ -82,14 +83,19 @@ Solo entra en juego en Vision. Su método de entrenamiento agrupa ejemplos difí
 entre sí ("cliques") a propósito durante el entrenamiento, en vez de muestrearlos al azar — mejor en
 escenas ambiguas, a cambio de una licencia GPL-3.0 más restrictiva que la del resto del catálogo.
 
-## Lumi 2 y Lumi Preview
+## Lumi Preview
+
+Activa en Pro y Vision. Es la primera generación de modelo propio — su ficha completa y de dónde
+viene vive en <Modelo id="lumi-preview">la página de Lumi Preview</Modelo>, junto al resto de la
+identidad propia de Lumi.
+
+## Lumi 2
 
 <Ficha id="lumi-2" ruta="registros/modelos/lumi-2.json" />
-<Ficha id="lumi-preview" ruta="registros/modelos/lumi-preview.json" />
 
-Los dos modelos propios, activos en Pro y Vision. Lumi 2 es la mayor dimensión del par (12 288);
-Lumi Preview la más contenida de los dos (8448) — ambos se consultan a la vez, no uno en sustitución
-del otro, igual que EigenPlaces y DINO-Mix.
+La segunda generación de modelo propio, también activa en Pro y Vision. La mayor dimensión de todo
+el catálogo (12 288) — se consulta a la vez que Lumi Preview, no en su sustitución, igual que
+EigenPlaces y DINO-Mix entre sí.
 
 ## Dónde se usa cada uno
 

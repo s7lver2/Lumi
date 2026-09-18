@@ -1,0 +1,32 @@
+export const frase = "La primera generación de modelo de recuperación propio de Lumi: convierte una foto en un vector de 8448 dimensiones, entrenado para que la distancia en ese espacio se parezca a la distancia geográfica real.";
+export const procedencia = ["registros/modelos/lumi-preview.json", "registros/niveles/pro.json", "registros/niveles/vision.json"];
+
+import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
+import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
+import { Ficha } from "../../../../components/docs/Ficha";
+import { InsigniaGeneracion } from "../../../../components/docs/InsigniaGeneracion";
+import { Tec } from "../../../../components/docs/Tec";
+import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
+
+<div className="flex items-start justify-between gap-4">
+  <div>
+    <CabeceraDocs ruta="/docs/modelos/lumi-preview" frase={frase} />
+    <InsigniaGeneracion version="v1" />
+  </div>
+  <ControlProfundidad />
+</div>
+
+<Ficha id="lumi-preview" ruta="registros/modelos/lumi-preview.json" />
+
+Es, junto con Lumi 2, uno de los dos modelos de <Tec id="modelos-de-recuperacion">recuperación</Tec>
+entrenados por el propio proyecto — no adoptados de un paper de terceros como SALAD o EigenPlaces.
+Preview fue el primero: 8448 dimensiones, el mismo tamaño que SALAD, pensado para consultarse junto
+a Lumi 2 en Pro y Vision, no en su sustitución.
+
+## Qué viene después
+
+Lumi 3 todavía no existe — ni como registro ni como arquitectura decidida. Esta página, y la
+insignia `v1` de arriba, seguirán señalando a Lumi Preview como el origen de la línea el día que
+haya una v3 que contar.
+
+<PiePaginaDocs ruta="/docs/modelos/lumi-preview" />

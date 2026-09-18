@@ -1,5 +1,5 @@
 type Props = {
-  glifo: "camino" | "engranaje" | "llave" | "mapa" | "caja";
+  glifo: "camino" | "engranaje" | "llave" | "mapa" | "caja" | "capas";
   className?: string;
 };
 
@@ -51,6 +51,16 @@ export function GlifoRama({ glifo, className }: Props) {
         <svg {...comun}>
           <path d="M4 8l8-4 8 4-8 4-8-4z" />
           <path d="M4 8v8l8 4 8-4V8M12 12v8" />
+        </svg>
+      );
+    case "capas":
+      // Tres generaciones apiladas, la de más arriba (la última) despegada
+      // del resto — no un simple montón, una línea temporal vista de lado.
+      return (
+        <svg {...comun}>
+          <path d="M4 17l8 4 8-4" />
+          <path d="M4 12l8 4 8-4" />
+          <path d="M12 3L4 7l8 4 8-4-8-4z" />
         </svg>
       );
   }

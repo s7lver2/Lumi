@@ -4,13 +4,18 @@ export type PaginaArbol = {
    *  `/docs/<rama.id>/<pagina.ruta>`. */
   ruta: string;
   pendiente: boolean;
+  /** Solo para la rama "modelos": qué generación propia de Lumi es esta
+   *  página (Lumi Preview = v1, Lumi 2 = v2...). Se pinta como insignia
+   *  tanto en el árbol lateral como en la propia página — un solo dato,
+   *  no dos copias que puedan desincronizarse. */
+  generacion?: "v1" | "v2" | "v3" | "?";
 };
 
 export type RamaArbol = {
   id: string;
   titulo: string;
   /** Nombre del glifo de trazo dibujado a mano en `GlifoRama.tsx`. */
-  glifo: "camino" | "engranaje" | "llave" | "mapa" | "caja";
+  glifo: "camino" | "engranaje" | "llave" | "mapa" | "caja" | "capas";
   paginas: PaginaArbol[];
 };
 
@@ -21,6 +26,7 @@ export const arbolDocs: RamaArbol[] = [
     glifo: "camino",
     paginas: [
       { titulo: "De qué va todo esto", ruta: "de-que-va-todo-esto", pendiente: true },
+      { titulo: "Mini, Pro y Vision", ruta: "mini-pro-y-vision", pendiente: false },
       { titulo: "El viaje de una foto", ruta: "el-viaje-de-una-foto", pendiente: false },
       { titulo: "El índice y la cobertura", ruta: "indice-y-cobertura", pendiente: true },
       { titulo: "Recuperación: los candidatos", ruta: "recuperacion", pendiente: false },
@@ -29,6 +35,23 @@ export const arbolDocs: RamaArbol[] = [
       { titulo: "El veredicto y su confianza", ruta: "veredicto", pendiente: false },
       { titulo: "La cola y el reparto de GPU", ruta: "cola-y-gpu", pendiente: true },
       { titulo: "Confianza y transporte", ruta: "confianza-y-transporte", pendiente: true },
+    ],
+  },
+  {
+    id: "modelos",
+    titulo: "Modelos",
+    glifo: "capas",
+    paginas: [
+      // No es un catálogo de terceros como "las tecnologías" — es la
+      // identidad propia de Lumi: la primera generación de modelo
+      // (Preview, v1) y los tres niveles del producto que la sustituyeron
+      // como forma de "versión". Lumi 3 todavía no existe ni tiene forma
+      // decidida — de ahí la insignia "?" en vez de comprometerse a "v3".
+      { titulo: "Lumi Preview", ruta: "lumi-preview", pendiente: false, generacion: "v1" },
+      { titulo: "Lumi Mini", ruta: "lumi-mini", pendiente: true },
+      { titulo: "Lumi Pro", ruta: "lumi-pro", pendiente: true },
+      { titulo: "Lumi Vision", ruta: "lumi-vision", pendiente: true },
+      { titulo: "Lumi 3", ruta: "lumi-3", pendiente: true, generacion: "?" },
     ],
   },
   {

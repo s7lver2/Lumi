@@ -86,9 +86,9 @@ function extraerEncabezados(texto) {
   return encabezados;
 }
 
-function extraerTecIds(texto) {
+function extraerIdsDeComponente(texto, componente) {
   const ids = [];
-  const re = /<Tec id="([^"]+)"/g;
+  const re = new RegExp(`<${componente} id="([^"]+)"`, "g");
   let m;
   while ((m = re.exec(texto))) ids.push(m[1]);
   return ids;
@@ -134,11 +134,12 @@ function main() {
     }
   }
 
-  // 2. Recopilar todos los ids de Tec citados, para validarlos contra las
-  //    rutas reales de la rama "tecnologias".
+  // 2. Recopilar los ids de <Tec>/<Modelo> citados, para validarlos contra
+  //    las rutas reales de sus ramas respectivas ("tecnologias"/"modelos").
   const idsTecnologiasValidos = new Set(
     (arbol.find((r) => r.id === "tecnologias")?.paginas ?? []).map((p) => p.ruta)
   );
+  const idsModelosValidos = new Set((arbol.find((r) => r.id === "modelos")?.paginas ?? []).map((p) => p.ruta));
 
   const paginas = [];
   for (const rutaMdx of ficherosMdx) {
@@ -153,9 +154,14 @@ function main() {
       errores.push(`${path.relative(REPO_DIR, rutaMdx)} no exporta "frase" (obligatoria, spec §2)`);
     }
 
-    for (const id of extraerTecIds(texto)) {
+    for (const id of extraerIdsDeComponente(texto, "Tec")) {
       if (!idsTecnologiasValidos.has(id)) {
         errores.push(`${path.relative(REPO_DIR, rutaMdx)} referencia <Tec id="${id}"> pero no existe esa ruta en la rama tecnologias`);
+      }
+    }
+    for (const id of extraerIdsDeComponente(texto, "Modelo")) {
+      if (!idsModelosValidos.has(id)) {
+        errores.push(`${path.relative(REPO_DIR, rutaMdx)} referencia <Modelo id="${id}"> pero no existe esa ruta en la rama modelos`);
       }
     }
 
