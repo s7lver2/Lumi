@@ -1,0 +1,47 @@
+export const frase = "Un candidato que salió del índice todavía no ha demostrado nada: la verificación le pide que encaje geométricamente con tu foto, píxel a píxel, y lo que no encaja se cae aquí.";
+export const procedencia = ["crates/lumid/src/verificar.rs", "registros/verificadores/roma.json"];
+
+import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
+import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
+import { Detalle } from "../../../../components/docs/Detalle";
+import { Tec } from "../../../../components/docs/Tec";
+import { EsquemaEmparejamiento } from "../../../../components/docs/esquemas/EsquemaEmparejamiento";
+import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
+
+<div className="flex items-start justify-between gap-4">
+  <CabeceraDocs ruta="/docs/como-funciona/verificacion" frase={frase} />
+  <ControlProfundidad />
+</div>
+
+<EsquemaEmparejamiento etiqueta="esquema · mueve el umbral y mira qué sobrevive" />
+
+La recuperación es barata y aproximada; la verificación es cara y exacta. Por cada candidato,
+Lumi intenta encontrar una correspondencia geométrica coherente entre tu foto y la del candidato —
+si existe una transformación de cámara plausible que explique dónde cae cada punto de una imagen en
+la otra, es evidencia real de que ambas muestran la misma escena. Si no existe, el candidato se
+descarta, por muy bien situado que estuviera en el ranking de recuperación.
+
+<Detalle titulo="Los números exactos">
+  El verificador por defecto es <Tec id="roma">RoMa</Tec>, que exige un mínimo de correspondencias de
+  alta confianza (`umbral_inliers`, definido en `registros/verificadores/roma.json`) para aceptar un
+  candidato. Un umbral más alto rechaza más falsos positivos pero también más verdaderos positivos en
+  escenas difíciles — el ajuste vive en el propio registro, no en el código.
+</Detalle>
+
+<Detalle titulo="Qué hace esto en el código">
+  `crates/lumid/src/verificar.rs` invoca al verificador configurado para el nivel activo (Mini no
+  verifica; Pro y Vision sí) sobre cada candidato agrupado que llega de recuperación, y anota en la
+  hipótesis tanto el número de correspondencias como su distribución espacial.
+</Detalle>
+
+## Denso frente a por puntos
+
+<Tec id="roma">RoMa</Tec> es un verificador **denso**: no busca primero un puñado de puntos
+interesantes para luego emparejarlos, sino que estima una correspondencia para toda la imagen y
+adjunta a cada punto su propia certeza. En una fachada lisa, sin esquinas que detectar, un método por
+puntos no encuentra dónde agarrarse; un verificador denso sigue teniendo respuesta y la marca como
+poco fiable, que es información útil en vez de silencio. Lumi Vision hace competir varios
+verificadores de ambos tipos sobre el mismo par de fotos precisamente para cubrir los casos donde uno
+falla y el otro no.
+
+<PiePaginaDocs ruta="/docs/como-funciona/verificacion" />
