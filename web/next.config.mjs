@@ -1,5 +1,8 @@
+import createMDX from "@next/mdx";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  pageExtensions: ["ts", "tsx", "mdx"],
   // ponytail: una carpeta de ruta llamada literalmente "index" choca con la
   // clave interna que Next.js usa para la página raíz y rompe el build
   // (`Expected clientReferenceManifest to be defined`, confirmado en
@@ -10,4 +13,6 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+const withMDX = createMDX({});
+
+export default withMDX(nextConfig);
