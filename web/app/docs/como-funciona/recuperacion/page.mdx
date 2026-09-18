@@ -1,0 +1,50 @@
+export const frase = "Doscientos candidatos no son doscientas fotos parecidas: son doscientos vectores que cayeron cerca del tuyo en un espacio que el modelo de recuperación aprendió a organizar por lugar, no por aspecto.";
+export const procedencia = [
+  "crates/lumid/src/recuperar.rs",
+  "crates/lumid/src/qdrant.rs",
+  "crates/lumi-index/src/agrupar.rs",
+];
+
+import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
+import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
+import { Detalle } from "../../../../components/docs/Detalle";
+import { Simbolo } from "../../../../components/docs/Simbolo";
+import { Tec } from "../../../../components/docs/Tec";
+import { EsquemaEspacioVectores } from "../../../../components/docs/esquemas/EsquemaEspacioVectores";
+import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
+
+<div className="flex items-start justify-between gap-4">
+  <CabeceraDocs ruta="/docs/como-funciona/recuperacion" frase={frase} />
+  <ControlProfundidad />
+</div>
+
+<EsquemaEspacioVectores />
+
+La recuperación es la primera criba: convierte "busca esta foto en todo el planeta" en "busca esta
+foto entre doscientos candidatos plausibles", y lo hace sin mirar contenido — solo distancia en un
+espacio vectorial. El modelo por defecto es <Tec id="salad">SALAD</Tec>, entrenado específicamente
+para que esa distancia se parezca a la distancia geográfica real, no al parecido visual.
+
+<Detalle titulo="Los números exactos">
+  Qdrant mantiene un índice HNSW por `(modelo, versión)`: la consulta pide `limit=200` con
+  `hnsw_ef=128`, un compromiso entre recuperar casi siempre el vecino verdadero y no visitar más
+  nodos del grafo de los necesarios. El resultado se agrupa por vecindad de tesela z14 en{" "}
+  <Simbolo ruta="crates/lumi-index/src/agrupar.rs">lumi_index::agrupar</Simbolo> antes de pasar a
+  verificación, así que un tramo de calle con muchas fotos cuenta como una sola hipótesis.
+</Detalle>
+
+<Detalle titulo="Por qué no se descarga solo">
+  Los vectores que Qdrant compara no salen de ningún sitio automáticamente: los produce el Indexer al
+  sellar un `.lumidx`, con el mismo modelo y versión que el servidor tiene activo. Un servidor sin
+  ningún índice instalado para una zona simplemente no tiene candidatos que ofrecer ahí — no es un
+  error, es cobertura.
+</Detalle>
+
+## Qué diferencia a un modelo de recuperación de otro
+
+No todos entrenan igual: <Tec id="roma">RoMa</Tec> hace algo distinto más adelante (comparar dos
+fotos concretas), pero los modelos de esta etapa comprimen una foto entera en un único vector
+pensado para compararse contra millones de otros en microsegundos. Esa compresión es la que hace
+posible buscar en un continente entero sin verificar geométricamente cada candidato uno a uno.
+
+<PiePaginaDocs ruta="/docs/como-funciona/recuperacion" />

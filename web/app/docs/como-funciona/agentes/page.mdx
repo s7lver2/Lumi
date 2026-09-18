@@ -1,0 +1,46 @@
+export const frase = "Un agente no mira coordenadas: mira la foto y responde una pregunta concreta — qué idioma hay en ese rótulo, de qué lado circulan los coches — y esa respuesta penaliza o refuerza cada hipótesis geográfica.";
+export const procedencia = ["crates/lumid/src/agentar.rs", "registros/agentes/indicios-viales.json"];
+
+import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
+import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
+import { Detalle } from "../../../../components/docs/Detalle";
+import { Simbolo } from "../../../../components/docs/Simbolo";
+import { EsquemaAgente } from "../../../../components/docs/esquemas/EsquemaAgente";
+import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
+
+<div className="flex items-start justify-between gap-4">
+  <CabeceraDocs ruta="/docs/como-funciona/agentes" frase={frase} />
+  <ControlProfundidad />
+</div>
+
+<EsquemaAgente />
+
+Cada agente es una pregunta fija hecha a un modelo de visión-lenguaje sobre la foto de entrada, con
+un conjunto cerrado de respuestas posibles — sus **verbalizadores** — y una probabilidad por cada
+uno, calculada con un softmax sobre las puntuaciones del modelo. Un agente de idioma no dice "esto es
+Francia"; dice "62% francés, 21% italiano, 11% español, 6% alemán", y esa distribución es lo que
+llega a la etapa siguiente.
+
+<Detalle titulo="Los números exactos">
+  Los agentes activos dependen del nivel: Mini no ejecuta ninguno, Pro y Vision ejecutan el conjunto
+  completo declarado en <Simbolo ruta="registros/niveles/pro.json">registros/niveles/pro.json</Simbolo> —
+  idioma y señalética, condiciones ambientales, hora y sombras, tipo de escena, dimensiones de la vía,
+  entre otros. Cada uno es su propio registro bajo `registros/agentes/`.
+</Detalle>
+
+<Detalle titulo="Qué hace esto en el código">
+  <Simbolo ruta="crates/lumid/src/agentar.rs">crates/lumid/src/agentar.rs</Simbolo> ejecuta cada
+  agente activo sobre la imagen de entrada y devuelve su distribución de verbalizadores; esa
+  distribución no descarta ninguna hipótesis por sí sola, solo aporta un factor que la siguiente
+  etapa combina con las demás — ver «El veredicto y su confianza».
+</Detalle>
+
+## Por qué verbalizadores y no una respuesta libre
+
+Pedirle a un modelo de lenguaje una respuesta libre ("¿qué idioma ves?") da una cadena de texto que
+hay que volver a interpretar, con todo el margen de error que eso añade. Fijar de antemano el
+conjunto de respuestas posibles y leer la probabilidad que el propio modelo les asigna es más
+barato, más determinista, y compone limpiamente con el resto del sistema: una probabilidad es un
+número que otra etapa puede multiplicar.
+
+<PiePaginaDocs ruta="/docs/como-funciona/agentes" />

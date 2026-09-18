@@ -1,0 +1,72 @@
+export const frase = "Le das una foto y te dice dónde se tomó. Entre esas dos cosas hay cinco etapas, y ninguna de ellas adivina: cada una descarta o reordena lo que le llega de la anterior.";
+export const procedencia = [
+  "crates/lumid/src/recuperar.rs",
+  "crates/lumi-index/src/agrupar.rs",
+  "crates/lumid/src/verificar.rs",
+  "crates/lumid/src/agentar.rs",
+];
+
+import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
+import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
+import { Detalle } from "../../../../components/docs/Detalle";
+import { Simbolo } from "../../../../components/docs/Simbolo";
+import { Tec } from "../../../../components/docs/Tec";
+import { EsquemaViaje } from "../../../../components/docs/esquemas/EsquemaViaje";
+import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
+import { campoRegistro } from "../../../../lib/registros";
+
+<div className="flex items-start justify-between gap-4">
+  <CabeceraDocs ruta="/docs/como-funciona/el-viaje-de-una-foto" frase={frase} />
+  <ControlProfundidad />
+</div>
+
+<EsquemaViaje
+  rutaActual="/docs/como-funciona/el-viaje-de-una-foto"
+  dimensionesTexto={`${campoRegistro("lumi-preview", "dims")}–${campoRegistro("lumi-2", "dims")}`}
+/>
+
+Cada etapa del esquema se abre al pulsarla. La primera es la que más gente entiende mal: el índice
+**no busca fotos parecidas a la tuya**, busca vectores próximos al tuyo, y dos fotos de la misma
+esquina tomadas con diez años de diferencia están mucho más cerca en ese espacio que dos fotos
+visualmente similares de ciudades distintas. Esa propiedad no la da Qdrant, la da el modelo que
+produjo el vector — por defecto <Tec id="salad">SALAD</Tec>.
+
+Los doscientos candidatos que salen de ahí son una **hipótesis barata**. La siguiente etapa los pone
+a prueba con geometría de verdad: <Tec id="roma">RoMa</Tec> intenta emparejar píxel a píxel tu foto
+con cada candidato y mide si la correspondencia resultante es consistente con dos cámaras mirando la
+misma escena. Un candidato que solo se parecía en el color se cae aquí.
+
+<Detalle titulo="Los números exactos">
+  El daemon pide a Qdrant `limit=200` con `hnsw_ef=128` y agrupa el resultado por vecindad de tesela
+  z14 antes de verificar, de modo que veinte fotos de la misma manzana cuentan como una sola
+  hipótesis y no como veinte. El agrupado vive en <Simbolo ruta="crates/lumi-index/src/agrupar.rs">lumi_index::agrupar</Simbolo>;
+  la atribución de cada hipótesis a su índice y a su autor vive en{" "}
+  <Simbolo ruta="crates/lumid/src/recuperar.rs">lumid::recuperar</Simbolo>, en Rust y no en el worker
+  de Python, porque la procedencia está en SQLite y el worker no la ve.
+</Detalle>
+
+<Detalle titulo="Qué hace esto en el código">
+  <Simbolo ruta="crates/lumid/src/recuperar.rs">crates/lumid/src/recuperar.rs</Simbolo> orquesta las
+  cinco etapas para un análisis: pide el vector al worker, consulta Qdrant, agrupa con{" "}
+  <Simbolo ruta="crates/lumi-index/src/agrupar.rs">lumi_index::agrupar</Simbolo>, llama a{" "}
+  <Simbolo ruta="crates/lumid/src/verificar.rs">crates/lumid/src/verificar.rs</Simbolo> para la
+  geometría y a <Simbolo ruta="crates/lumid/src/agentar.rs">crates/lumid/src/agentar.rs</Simbolo>{" "}
+  para los agentes, y deja el resultado en la tabla de análisis de SQLite.
+</Detalle>
+
+## Por qué son cinco y no una
+
+Un solo modelo que mirara la foto y dijera una coordenada sería más simple y mucho peor. Las cinco
+etapas existen porque cada una falla de una forma distinta, y una que falla tapa el fallo de otra: el
+índice puede traer un candidato equivocado, pero la verificación geométrica lo descarta; la
+verificación puede confundirse en una escena repetitiva, pero un agente que lee el idioma de un
+rótulo la corrige. Ninguna etapa tiene que ser perfecta porque ninguna decide sola.
+
+## Qué pasa cuando no hay índice
+
+Si el servidor todavía no tiene ningún `.lumidx` instalado para la zona de la foto, la etapa del
+índice no falla: simplemente no aporta candidatos, y el análisis se resuelve solo con lo que los
+agentes puedan inferir del contenido de la imagen — con mucha menos confianza, marcada como tal en el
+veredicto.
+
+<PiePaginaDocs ruta="/docs/como-funciona/el-viaje-de-una-foto" />

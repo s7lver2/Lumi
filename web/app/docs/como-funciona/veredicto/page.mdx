@@ -1,0 +1,39 @@
+export const frase = "La confianza final no es un solo número calculado una vez: es la confianza geométrica de la verificación, penalizada — nunca anulada — por cada agente que contradice esa hipótesis.";
+export const procedencia = ["crates/lumid/src/agentar.rs", "crates/lumid/src/recuperar.rs"];
+
+import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
+import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
+import { Detalle } from "../../../../components/docs/Detalle";
+import { EsquemaConfianza } from "../../../../components/docs/esquemas/EsquemaConfianza";
+import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
+
+<div className="flex items-start justify-between gap-4">
+  <CabeceraDocs ruta="/docs/como-funciona/veredicto" frase={frase} />
+  <ControlProfundidad />
+</div>
+
+<EsquemaConfianza />
+
+Cada hipótesis que sobrevive a la verificación geométrica llega con una confianza base, derivada de
+cuántas correspondencias encontró el verificador y de lo consistentes que son entre sí. Los agentes
+no vuelven a calcular esa confianza desde cero: la **multiplican** por un factor que depende de
+cuánto contradicen lo que ven en la foto. Un agente que detecta francés en la señalética no elimina
+las hipótesis en Italia — las hace menos probables, con un piso que nunca llega a cero, porque un
+agente puede equivocarse y una hipótesis geométricamente fuerte no debería desaparecer por un solo
+indicio dudoso.
+
+<Detalle titulo="Los números exactos">
+  El piso de penalización existe precisamente para eso: ningún agente, por muy seguro que esté, puede
+  hacer que una hipótesis llegue a confianza cero. Lo que sí puede es reordenar el ranking de
+  hipótesis que se le muestra al investigador, que es donde vive la decisión real.
+</Detalle>
+
+## Por qué no descartar nunca
+
+Descartar de forma dura sería más simple de implementar, pero convertiría cada error de un agente en
+un error irrecuperable del sistema entero. Penalizar y dejar que la evidencia geométrica siga
+pesando es más lento de razonar pero mucho más robusto: el investigador que revisa el veredicto
+siempre puede ver la hipótesis "improbable pero no descartada" si el resto de la evidencia apunta
+ahí.
+
+<PiePaginaDocs ruta="/docs/como-funciona/veredicto" />

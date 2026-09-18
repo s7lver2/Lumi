@@ -1,0 +1,51 @@
+export const frase = "Coge dos fotos y dice, para cada punto de una, dónde cae ese mismo punto en la otra. Si no existe una respuesta coherente, las dos fotos no son del mismo sitio — y eso es exactamente lo que Lumi necesita saber.";
+export const procedencia = ["registros/verificadores/roma.json", "crates/lumid/src/verificar.rs"];
+
+import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
+import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
+import { Detalle } from "../../../../components/docs/Detalle";
+import { Ficha } from "../../../../components/docs/Ficha";
+import { Simbolo } from "../../../../components/docs/Simbolo";
+import { Tec } from "../../../../components/docs/Tec";
+import { EsquemaEmparejamiento } from "../../../../components/docs/esquemas/EsquemaEmparejamiento";
+import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
+import { campoRegistro } from "../../../../lib/registros";
+
+<div className="flex items-start justify-between gap-4">
+  <CabeceraDocs ruta="/docs/tecnologias/roma" frase={frase} tipo={String(campoRegistro("roma", "tipo")) + " · verificador"} />
+  <ControlProfundidad />
+</div>
+
+<Ficha id="roma" ruta="registros/verificadores/roma.json" />
+
+<EsquemaEmparejamiento etiqueta="esquema interactivo · mueve el umbral y mira qué sobrevive" />
+
+Lo que hace especial a RoMa frente a <Tec id="lightglue-aliked">LightGlue + ALIKED</Tec> es que es
+**denso**: no busca primero un puñado de puntos interesantes para luego emparejarlos, sino que
+estima una correspondencia para toda la imagen y adjunta a cada punto su propia certeza. En una
+fachada lisa, sin esquinas que detectar, un método por puntos no encuentra dónde agarrarse; RoMa
+sigue teniendo respuesta y la marca como poco fiable, que es información útil en vez de silencio.
+
+<Detalle titulo="Los números exactos">
+  RoMa necesita, además de sus propios pesos (`roma_outdoor.pth`), el backbone completo de{" "}
+  <Tec id="dinov2">DINOv2</Tec> ViT-L/14 como segundo fichero — la propia librería `romatch` lo
+  descargaría sola vía `torch.hub` si no se le pasa resuelto, pero este proyecto no deja que ninguna
+  librería descargue nada sin huella y licencia verificados, así que ese segundo fichero tiene su
+  propia entrada de registro (
+  <Simbolo ruta="registros/verificadores/dinov2-vitl14.json">dinov2-vitl14.json</Simbolo>) e
+  instalación independiente.
+</Detalle>
+
+<Detalle titulo="Por qué no se descarga solo">
+  `roma_outdoor` también exige `torch.set_float32_matmul_precision("highest")` antes de invocarse o
+  falla con un `RuntimeError` de PyTorch — ese ajuste se aplica una vez al construir el verificador,
+  no en cada llamada.
+</Detalle>
+
+## Dónde se usa en Lumi
+
+Es el verificador por defecto de Lumi Pro y uno de los que compiten en Lumi Vision. En Mini no
+aparece: su coste por par no compensa cuando solo hay un verificador y el objetivo es mantener el
+coste bajo.
+
+<PiePaginaDocs ruta="/docs/tecnologias/roma" />
