@@ -172,7 +172,6 @@ export interface ExportInformeOpts {
   veredictos_agentes: boolean;
   firmado_por: string;
   integridad_sha256: boolean;
-  rasgos_como_imagen: boolean;
   /** `null`/ausente = todas las imágenes del caso -- mismo criterio que el
    *  resto del backend para no romper compatibilidad con llamadas viejas. */
   imagenes_incluidas: number[] | null;

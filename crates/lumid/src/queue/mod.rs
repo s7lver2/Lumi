@@ -848,15 +848,9 @@ impl Queue {
                             })
                             .collect();
                         drop(geo);
-                        // Aplanado: un veredicto fusionado trae
-                        // `agente = "<fusionado>.<sub>"`, que no coincide con
-                        // ningún `id` de nivel superior del registro —
-                        // `aplanar()` expone cada sub-pregunta como un
-                        // `Agente` virtual con ese mismo id compuesto, así
-                        // `aplicar()` no necesita saber que la fusión existe.
-                        let planos = lumi_index::agentes::aplanar(&self.agentes.lock().unwrap());
+                        let agentes = self.agentes.lock().unwrap().clone();
                         let veredicto_final = lumi_index::agentes::aplicar(
-                            &planos, &veredictos, &para_aplicar,
+                            &agentes, &veredictos, &para_aplicar,
                         );
                         let motivo_de: std::collections::HashMap<(i64, i64), String> = usar
                             .iter()
@@ -1268,35 +1262,33 @@ impl Queue {
         let calibracion_activo = crate::routes::features::activo(&self.store, crate::routes::features::CLAVE_CALIBRACION);
         let c = self.store.conn();
         let _ = c.execute("DELETE FROM analysis_agents WHERE analysis_id = ?1", [id]);
-        // Mismo aplanado que en `aplicar()`: `v.agente` de una sub-pregunta
-        // es "<fusionado>.<sub>", que no está en `self.agentes` tal cual —
-        // sin esto, todo veredicto de un agente fusionado se descartaba en
-        // silencio aquí (el `find` de abajo nunca encontraba nada).
-        let agentes = lumi_index::agentes::aplanar(&self.agentes.lock().unwrap());
+        let agentes = self.agentes.lock().unwrap().clone();
         for (v, detalle) in dictamen {
             let Some(a) = agentes.iter().find(|a| a.id == v.agente) else { continue };
-            let abstiene = v.confianza < a.umbral_confianza;
-            // JSON y no columnas propias: la forma varía por motor (una
-            // lista corta de pares, o un PNG en base64) y aquí no hace falta
-            // consultar por campo, solo devolverlo entero al cliente.
+            // Solo `modo: eleccion` tiene umbral que comparar -- en
+            // `modo: transcripcion` `v.confianza` ya es `None` (spec
+            // 2026-09-17 §5) y nunca se abstiene: el texto se guarda tal
+            // cual, sin confianza que evaluar.
+            let abstiene = v.confianza.is_some_and(|conf| conf < a.umbral);
+            // JSON y no columnas propias: la forma varía (lista corta de
+            // pares) y aquí no hace falta consultar por campo, solo
+            // devolverlo entero al cliente.
             let alternativas = serde_json::to_string(&v.alternativas).unwrap_or_default();
-            let rasgos = v.rasgos.as_ref().and_then(|r| serde_json::to_string(r).ok());
             let respuesta_cruda = if calibracion_activo { v.respuesta_cruda.clone() } else { None };
             let _ = c.execute(
                 "INSERT OR REPLACE INTO analysis_agents
-                    (analysis_id, agente, nombre, etiqueta, confianza, tipo, detalle, etiqueta_real, alternativas, rasgos, respuesta_cruda)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    (analysis_id, agente, nombre, etiqueta, confianza, detalle, etiqueta_real, alternativas, apoyo_visual, respuesta_cruda)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 rusqlite::params![
                     id,
                     &a.id,
                     &a.nombre,
                     if abstiene { "abstiene" } else { v.etiqueta.as_str() },
                     v.confianza,
-                    &a.tipo,
                     detalle,
                     v.etiqueta.as_str(),
                     alternativas,
-                    rasgos,
+                    v.apoyo_visual,
                     respuesta_cruda,
                 ],
             );

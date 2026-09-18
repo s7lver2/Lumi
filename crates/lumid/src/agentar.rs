@@ -177,10 +177,10 @@ async fn correr_persistente(
         .into_iter()
         .filter_map(|msg| {
             if let lumi_proto::worker::Msg::Agente {
-                agente, etiqueta, confianza, detalle, alternativas, rasgos, respuesta_cruda, ..
+                agente, etiqueta, confianza, detalle, alternativas, apoyo_visual, respuesta_cruda, ..
             } = msg
             {
-                Some((Veredicto { agente, etiqueta, confianza, alternativas, rasgos, respuesta_cruda }, detalle))
+                Some((Veredicto { agente, etiqueta, confianza, alternativas, apoyo_visual, respuesta_cruda }, detalle))
             } else {
                 None
             }
@@ -249,10 +249,10 @@ async fn correr(
                 continue;
             };
             if let lumi_proto::worker::Msg::Agente {
-                agente, etiqueta, confianza, detalle, alternativas, rasgos, respuesta_cruda, ..
+                agente, etiqueta, confianza, detalle, alternativas, apoyo_visual, respuesta_cruda, ..
             } = msg
             {
-                fuera.push((Veredicto { agente, etiqueta, confianza, alternativas, rasgos, respuesta_cruda }, detalle));
+                fuera.push((Veredicto { agente, etiqueta, confianza, alternativas, apoyo_visual, respuesta_cruda }, detalle));
             }
         }
     }

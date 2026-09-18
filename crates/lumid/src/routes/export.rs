@@ -21,7 +21,6 @@ use axum::extract::{Path, State};
 use axum::{http::HeaderMap, http::StatusCode, Json};
 use lumi_index::geo::{dentro, Pais, Paises};
 use lumi_proto::api::{Analysis, ExportInformeReq, Image};
-use lumi_proto::worker::Rasgos;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::io::Read;
@@ -276,10 +275,6 @@ struct ImagenCtx {
     /// archivo no se pudo leer del disco (nunca un hash inventado).
     sha256: Option<String>,
     exif_lineas: Vec<Linea>,
-    /// Rasgos reales de agentes (recuadros OCR, mapa de profundidad) para
-    /// dibujar como gráfico -- vacío cuando `rasgos_como_imagen` está
-    /// apagado o ningún agente de esta imagen trajo rasgos de verdad.
-    rasgos_graficos: Vec<RasgoImgCtx>,
 
     // ---- Campos exclusivos del tema oscuro (ver `resumen_oscuro`) ----
     /// `true` cuando el análisis de geolocalización o el de agentes de esta
@@ -357,31 +352,6 @@ struct Punto {
 /// (origen arriba-izquierda, `y` creciendo hacia abajo), la misma que usa
 /// PaddleOCR/PIL. La conversión se hace aquí, no en la plantilla, para que
 /// Tera no tenga que saber de convenciones de coordenadas.
-#[derive(Serialize)]
-struct CajaCtx {
-    x1: f64,
-    y1: f64,
-    x2: f64,
-    y2: f64,
-    etiqueta: String,
-}
-
-/// Lo que la plantilla dibuja por cada rasgo real de un agente sobre una
-/// imagen. `tipo` decide qué rama de la plantilla se usa.
-#[derive(Serialize)]
-#[serde(tag = "tipo", rename_all = "lowercase")]
-enum RasgoImgCtx {
-    Ocr {
-        agente: String,
-        cajas: Vec<CajaCtx>,
-    },
-    Profundidad {
-        agente: String,
-        /// Nombre de fichero relativo, ya escrito junto al `.tex`.
-        archivo: String,
-    },
-}
-
 fn cabecera(texto: String) -> Linea {
     Linea { texto, variante: "cabecera" }
 }
@@ -559,11 +529,16 @@ fn resumen_oscuro(analyses: &[Analysis], req: &ExportInformeReq) -> ResumenOscur
                 let dicho =
                     a.agentes.iter().find(|d| Some(d.agente.as_str()) == a.agente.as_deref()).unwrap_or(&a.agentes[0]);
                 agente_lineas.push(cabecera(dicho.nombre.clone()));
-                // `confianza` tampoco está acotada -- está documentado en
-                // `lumi_proto::worker::Evento::Agente`: "un motor que
-                // devuelva 1,5 se comporta como uno muy seguro". Mismo "×"
-                // que el resto en vez de un "%" que puede pasar de 100.
-                agente_lineas.push(cuerpo(format!("Veredicto: {} ({:.1}\u{d7})", dicho.etiqueta, dicho.confianza)));
+                // `confianza` es `None` en modo transcripción (spec
+                // 2026-09-17 §5, sin número inventado) -- se omite la cifra
+                // en vez de imprimir un "None". Tampoco está acotada cuando
+                // sí existe: un motor que devuelva 1,5 se comporta como uno
+                // muy seguro. Mismo "×" que el resto en vez de un "%" que
+                // puede pasar de 100.
+                agente_lineas.push(cuerpo(match dicho.confianza {
+                    Some(c) => format!("Veredicto: {} ({:.1}\u{d7})", dicho.etiqueta, c),
+                    None => format!("Veredicto: {}", dicho.etiqueta),
+                }));
                 if !dicho.detalle.is_empty() {
                     agente_lineas.push(cuerpo(format!("Detalle: {}", dicho.detalle)));
                 }
@@ -775,56 +750,6 @@ fn sha256_partible(hash: &str) -> String {
         .join("\\discretionary{}{}{}")
 }
 
-/// Los rasgos reales (recuadros OCR, mapa de profundidad) de los agentes que
-/// corrieron sobre esta imagen y que la configuración deja pasar -- mismo
-/// filtro (`veredictos_agentes`) que usa `resumen_oscuro` para el resto del
-/// veredicto, porque un rasgo es parte de ese veredicto, no una sección
-/// aparte. Escribe los PNG de profundidad que haga falta junto al `.tex`, en
-/// `job`.
-fn rasgos_graficos_de(analyses: &[Analysis], req: &ExportInformeReq, job: &FsPath, img_id: i64) -> Vec<RasgoImgCtx> {
-    if !req.rasgos_como_imagen || !req.veredictos_agentes {
-        return Vec::new();
-    }
-    let mut out = Vec::new();
-    for a in analyses {
-        if a.model != "agentes" {
-            continue;
-        }
-        for (i, dicho) in a.agentes.iter().enumerate() {
-            match &dicho.rasgos {
-                Some(Rasgos::Ocr { cajas }) if !cajas.is_empty() => {
-                    // `CajaOcr` viene en convención de imagen (origen
-                    // arriba-izquierda, `y` hacia abajo) -- TikZ dibuja con
-                    // origen abajo-izquierda, así que `y` se invierte aquí,
-                    // una vez, en vez de complicar la plantilla.
-                    let cajas_ctx = cajas
-                        .iter()
-                        .map(|c| CajaCtx {
-                            x1: c.x.clamp(0.0, 1.0),
-                            y1: (1.0 - c.y - c.h).clamp(0.0, 1.0),
-                            x2: (c.x + c.w).clamp(0.0, 1.0),
-                            y2: (1.0 - c.y).clamp(0.0, 1.0),
-                            etiqueta: c.etiqueta.clone(),
-                        })
-                        .collect();
-                    out.push(RasgoImgCtx::Ocr { agente: dicho.nombre.clone(), cajas: cajas_ctx });
-                }
-                Some(Rasgos::Profundidad { png_base64 }) if !png_base64.is_empty() => {
-                    use base64::{engine::general_purpose::STANDARD, Engine};
-                    if let Ok(bytes) = STANDARD.decode(png_base64) {
-                        let nombre = format!("profundidad_{img_id}_{}_{i}.png", a.id);
-                        if std::fs::write(job.join(&nombre), &bytes).is_ok() {
-                            out.push(RasgoImgCtx::Profundidad { agente: dicho.nombre.clone(), archivo: nombre });
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-    out
-}
-
 /// Ficheros que la plantilla carga con `fontspec` -- copiados al directorio
 /// del job igual que las miniaturas, ver `registros/fuentes/LEEME.md`. Un
 /// fichero que falte simplemente no se copia; `\IfFileExists` en la
@@ -865,8 +790,7 @@ fn pais_conteniendo(paises: &Paises, lat: f64, lng: f64) -> Option<&Pais> {
 /// Proyecta el contorno del país que contiene `(lat, lng)`, el punto y el
 /// círculo de radio (`radio_km`) al espacio de dibujo del localizador --
 /// ver §7 del spec y el comentario de `MapaCtx`. Se hace en Rust, no en la
-/// plantilla, mismo criterio que ya sigue `rasgos_graficos_de` con las cajas
-/// OCR: Tera no tiene que saber de convenciones de coordenadas.
+/// plantilla: Tera no tiene que saber de convenciones de coordenadas.
 ///
 /// `None` sin agitar ninguna alarma cuando: no hay `paises.json` cargado, la
 /// coordenada no cae dentro de ningún país (mar), o el país resuelto es
@@ -1010,7 +934,6 @@ fn generar_pdf(
             thumb_file,
             sha256,
             exif_lineas: if req.exif_por_imagen { lineas_exif(img) } else { Vec::new() },
-            rasgos_graficos: rasgos_graficos_de(analyses, req, &job, img.id),
             sin_resuelto: r.sin_resuelto,
             mostrar_aviso_sin_resuelto: r.sin_resuelto && (req.hipotesis_geolocalizacion || req.veredictos_agentes),
             motivo_sin_resuelto: r.motivo_sin_resuelto,
