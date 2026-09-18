@@ -87,7 +87,10 @@ fn resolver_items(app: &App, ids: &[String]) -> Vec<ItemDescarga> {
                 gestion_propia: mo.gestion_propia, hf_repo: mo.hf_repo.clone(),
             });
         } else if let Some(g) = recursos_geo.iter().find(|g| &g.id == id) {
-            let nombre = if g.id == "paises" { "paises.json" } else { "koppen.bin" };
+            // Único recurso geo que queda desde que koppen.bin salió del
+            // registro (spec 2026-09-17 §1: sin agente que consuma
+            // clima_koppen, sale el único usuario del dataset Köppen).
+            let nombre = "paises.json";
             fuera.push(ItemDescarga {
                 id: g.id.clone(), fichero_url: g.fichero_url.clone(),
                 destino: crate::assets::ruta("registros/geo").join(nombre).to_string_lossy().into_owned(),
