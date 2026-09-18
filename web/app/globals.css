@@ -134,6 +134,14 @@
 @keyframes jg-barra-llena { from { width: 0%; } to { width: var(--fin); } }
 .jg-barra-llena { animation: jg-barra-llena .7s cubic-bezier(.16,1,.3,1) both; }
 
+/* El pulso que recorre las cinco etapas del viaje de una foto (esquema
+   EsquemaViaje) — puramente decorativo, spec §4: "el pulso las recorre;
+   ninguna transmite información solo con movimiento", así que congelado
+   por prefers-reduced-motion (regla global de arriba) el esquema se sigue
+   leyendo entero. */
+@keyframes jg-viaje-pulso { from { left: 2px; opacity: 0; } 20% { opacity: 1; } 80% { opacity: 1; } to { left: 28px; opacity: 0; } }
+.jg-viaje-pulso { animation: jg-viaje-pulso 1.1s cubic-bezier(.16,1,.3,1) infinite; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration:.001ms !important; transition-duration:.001ms !important; }
   /* La regla de arriba congelaría la marquesina a mitad de fotograma con un
