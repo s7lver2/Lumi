@@ -347,11 +347,6 @@ struct Punto {
     y: f64,
 }
 
-/// Un recuadro OCR ya convertido a coordenadas TikZ (origen abajo-izquierda,
-/// `y` creciendo hacia arriba) -- `CajaOcr` viene en convención de imagen
-/// (origen arriba-izquierda, `y` creciendo hacia abajo), la misma que usa
-/// PaddleOCR/PIL. La conversión se hace aquí, no en la plantilla, para que
-/// Tera no tenga que saber de convenciones de coordenadas.
 fn cabecera(texto: String) -> Linea {
     Linea { texto, variante: "cabecera" }
 }
