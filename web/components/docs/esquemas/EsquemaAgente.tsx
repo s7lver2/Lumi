@@ -6,35 +6,52 @@ import { Esquema } from "../Esquema";
 type Ejemplo = {
   id: string;
   etiqueta: string;
+  /** Misma foto que usa la landing en `AgentesVisual.tsx` — no una nueva:
+   *  así el ejemplo es una foto real ya publicada en el sitio, no una
+   *  escena inventada sin nada que enseñar. */
+  imagen: string;
+  alt: string;
+  aspecto: number;
   pregunta: string;
   barras: { verbalizador: string; probabilidad: number }[];
 };
 
 const EJEMPLOS: Ejemplo[] = [
   {
-    id: "calle-francesa",
-    etiqueta: "calle con rótulos",
-    pregunta: '¿Qué idioma es más probable en esta foto?',
+    id: "escritura",
+    etiqueta: "escritura",
+    imagen: "/agentes/idioma-shinjuku.webp",
+    alt: "Cruce de Kabukicho, Shinjuku, con rótulos en japonés",
+    aspecto: 1600 / 1067,
+    pregunta: "The writing on the signs in this photo is most likely",
     barras: [
-      { verbalizador: "francés", probabilidad: 0.62 },
-      { verbalizador: "italiano", probabilidad: 0.21 },
-      { verbalizador: "español", probabilidad: 0.11 },
-      { verbalizador: "alemán", probabilidad: 0.06 },
+      { verbalizador: " japonés (katakana)", probabilidad: 0.88 },
+      { verbalizador: " japonés (kanji)", probabilidad: 0.07 },
+      { verbalizador: " coreano (hangul)", probabilidad: 0.03 },
+      { verbalizador: " chino simplificado", probabilidad: 0.02 },
     ],
   },
   {
-    id: "carretera-desierto",
-    etiqueta: "carretera despejada",
-    pregunta: "¿Qué tipo de vegetación domina la escena?",
+    id: "matricula",
+    etiqueta: "matrícula",
+    imagen: "/agentes/matricula-coche.webp",
+    alt: "Opel Corsa-e naranja con matrícula de banda azul europea",
+    aspecto: 1600 / 1067,
+    pregunta: "The registration plate on this vehicle most likely belongs to",
     barras: [
-      { verbalizador: "arbustiva árida", probabilidad: 0.71 },
-      { verbalizador: "bosque templado", probabilidad: 0.15 },
-      { verbalizador: "tropical", probabilidad: 0.09 },
-      { verbalizador: "ninguna visible", probabilidad: 0.05 },
+      { verbalizador: " Alemania", probabilidad: 0.89 },
+      { verbalizador: " Países Bajos", probabilidad: 0.06 },
+      { verbalizador: " Bélgica", probabilidad: 0.05 },
     ],
   },
 ];
 
+/** El interior de un agente, con una foto real en vez de una escena
+ *  inventada sin imagen (spec 2026-09-17 §2): la pregunta se le hace al VLM
+ *  en inglés —el verbalizador real, no una traducción de exposición— y la
+ *  barra es la confianza que sale del softmax sobre esos verbalizadores,
+ *  no un número puesto a mano. Las dos fotos y sus hipótesis son las
+ *  mismas que usa la landing en `AgentesVisual.tsx`. */
 export function EsquemaAgente() {
   const [activo, setActivo] = useState(0);
   const ejemplo = EJEMPLOS[activo];
@@ -55,22 +72,32 @@ export function EsquemaAgente() {
           </button>
         ))}
       </div>
-      <p className="mt-3 text-[12.5px] text-muted">{ejemplo.pregunta}</p>
-      <div className="mt-3 flex flex-col gap-[9px]">
-        {ejemplo.barras.map((b) => (
-          <div key={b.verbalizador} className="flex items-center gap-3">
-            <span className="w-[120px] shrink-0 text-[11px] text-subtle">{b.verbalizador}</span>
-            <div className="h-[7px] flex-1 overflow-hidden rounded-[4px] bg-elevated">
-              <div
-                className="h-full rounded-[4px] bg-fg transition-[width] duration-300 ease-out"
-                style={{ width: `${b.probabilidad * 100}%` }}
-              />
-            </div>
-            <span className="w-[42px] shrink-0 text-right font-mono text-[11px] text-fg">
-              {(b.probabilidad * 100).toFixed(0)}%
-            </span>
+      <div className="mt-[14px] flex flex-col gap-4 sm:flex-row sm:items-start">
+        <img
+          src={ejemplo.imagen}
+          alt={ejemplo.alt}
+          style={{ aspectRatio: ejemplo.aspecto }}
+          className="w-full shrink-0 rounded-[8px] border border-border object-cover sm:w-[168px]"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="font-mono text-[11px] leading-snug text-muted">&ldquo;{ejemplo.pregunta}&rdquo;</p>
+          <div className="mt-3 flex flex-col gap-[9px]">
+            {ejemplo.barras.map((b) => (
+              <div key={b.verbalizador} className="flex items-center gap-3">
+                <span className="w-[142px] shrink-0 truncate text-[11px] text-subtle">{b.verbalizador.trim()}</span>
+                <div className="h-[7px] flex-1 overflow-hidden rounded-[4px] bg-elevated">
+                  <div
+                    className="h-full rounded-[4px] bg-fg transition-[width] duration-300 ease-out"
+                    style={{ width: `${b.probabilidad * 100}%` }}
+                  />
+                </div>
+                <span className="w-[36px] shrink-0 text-right font-mono text-[11px] text-fg">
+                  {(b.probabilidad * 100).toFixed(0)}%
+                </span>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
       </div>
     </Esquema>
   );
