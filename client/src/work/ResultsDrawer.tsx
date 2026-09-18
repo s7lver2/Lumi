@@ -221,11 +221,19 @@ function AgentesPanel({ agentes, onAbrir }: { agentes: DichoDeAgente[]; onAbrir:
           <button key={d.agente} type="button" onClick={onAbrir}
             className={`jg-press flex w-full items-center gap-3 rounded-lg bg-white/[.03] p-2.5 text-left
               hover:bg-white/[.05] ${calla ? "opacity-50" : ""}`}>
-            <AgenteIcono agente={d.agente} etiqueta={calla ? undefined : d.etiqueta} apagado={calla} />
+            {/* Sin el registro de fichas cargado aquí (panel puramente de
+                presentación, sin `token`/`api`), se usa el propio id del
+                agente como nombre de icono -- coincide con el campo `icono`
+                de la ficha en siete de los ocho agentes del catálogo; solo
+                "lado-conduccion" (icono real "volante") cae al bocadillo
+                genérico, degradación menor y no una etiqueta incorrecta. */}
+            <AgenteIcono icono={d.agente} etiqueta={calla ? undefined : d.etiqueta} apagado={calla} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-[10.5px] text-fg">{d.nombre}</span>
-                <span className="font-mono text-[9px] tabular-nums text-subtle">{d.confianza.toFixed(2)}</span>
+                <span className="font-mono text-[9px] tabular-nums text-subtle">
+                  {d.confianza !== null ? d.confianza.toFixed(2) : "texto"}
+                </span>
               </div>
               <div className="mt-0.5 text-[12px] text-fg">
                 {calla ? (mejorEtiqueta ? `¿${mejorEtiqueta}?` : "sin señal suficiente") : d.etiqueta}
