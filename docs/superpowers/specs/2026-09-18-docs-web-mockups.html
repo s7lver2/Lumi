@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Lumi · web /docs</title>
+<style>
+:root{
+  --bg:#0e0f11; --surface:#15171a; --panel:#1a1b1e; --elevated:#202226;
+  --border:#26282c; --muted:#9a9a95; --subtle:#6a6c70; --fg:#e8e8e6;
+  --accent:#f2f3f5; --warning:#ef9f27; --warning-fg:#efb968;
+  --danger:#a33; --danger-fg:#e88f8f; --draw:#378add; --draw-fg:#85b7eb;
+  --expo:cubic-bezier(.16,1,.3,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#08090a;color:var(--fg);font-family:Inter,system-ui,'Segoe UI',sans-serif;
+  -webkit-font-smoothing:antialiased;padding:34px 26px 90px}
+.mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+h1{font-size:17px;font-weight:500;letter-spacing:-.01em}
+h2{font-size:12px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--subtle);margin:58px 0 -8px}
+.lede{color:var(--muted);font-size:12px;margin-top:6px;max-width:840px;line-height:1.65}
+.lede b{font-weight:400;color:var(--fg)}
+
+.shot{margin-top:32px}
+.shot > .cap{display:flex;align-items:baseline;gap:10px;margin-bottom:9px}
+.shot > .cap b{font-size:12.5px;font-weight:500;white-space:nowrap}
+.shot > .cap span{font-size:11px;color:var(--subtle);max-width:880px;line-height:1.55}
+.frame{width:1280px;height:800px;background:var(--bg);border:1px solid #202226;
+  border-radius:10px;overflow:hidden;position:relative;
+  box-shadow:0 24px 60px rgba(0,0,0,.55);transform-origin:top left}
+.frame.movil{width:390px;height:800px}
+@media (max-width:1360px){.frame{transform:scale(.78)}.shot .frame{margin-bottom:-176px}}
+
+/* ---------- nav superior (el real del sitio, simplificado) ---------- */
+.nav{height:56px;display:flex;align-items:center;gap:20px;padding:0 24px;
+  border-bottom:1px solid var(--border);background:rgba(14,15,17,.85);position:relative}
+.nav .marca{font-size:13px;font-weight:500;letter-spacing:-.01em;display:flex;gap:7px;align-items:center}
+.nav .marca i{font-style:normal;color:var(--accent)}
+.nav .sep{width:1px;height:16px;background:var(--border)}
+.nav a{font-size:13px;color:var(--muted);text-decoration:none}
+.nav a.on{color:var(--fg)}
+.nav .sp{flex:1}
+.nav .ver{font-size:11px;color:var(--subtle)}
+.nav .desc{background:var(--accent);color:#000;font-size:13px;font-weight:500;
+  border-radius:12px;padding:6px 14px}
+
+/* ---------- chasis de docs ---------- */
+.docs{display:flex;height:744px}
+.arbol{width:250px;flex:0 0 250px;border-right:1px solid var(--border);
+  padding:22px 0 30px;overflow:auto;background:var(--bg)}
+.arbol .buscar{margin:0 16px 18px;display:flex;align-items:center;gap:8px;
+  border:1px solid var(--border);border-radius:8px;padding:7px 10px;background:var(--panel)}
+.arbol .buscar span{font-size:11.5px;color:var(--subtle)}
+.arbol .buscar .k{margin-left:auto;font-size:9.5px;color:var(--subtle);
+  border:1px solid var(--border);border-radius:4px;padding:1px 5px}
+.rama{margin:0 0 20px}
+.rama > .t{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--subtle);
+  padding:0 16px;margin-bottom:7px}
+.rama a{display:block;font-size:12.5px;color:var(--muted);text-decoration:none;
+  padding:5px 16px 5px 16px;border-left:2px solid transparent;line-height:1.35}
+.rama a:hover{color:var(--fg)}
+.rama a.on{color:var(--fg);border-left-color:var(--fg);background:rgba(255,255,255,.035)}
+.rama a.pend{color:var(--subtle)}
+.rama a.pend em{font-style:normal;font-size:9px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--subtle);border:1px solid var(--border);border-radius:4px;padding:0 4px;margin-left:6px;
+  position:relative;top:-1px}
+
+.lector{flex:1;overflow:auto;padding:44px 0 90px;display:flex;justify-content:center}
+.col{width:640px;max-width:640px}
+.toc{width:210px;flex:0 0 210px;padding:52px 22px 0 0;overflow:auto}
+.toc .t{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--subtle);margin-bottom:10px}
+.toc a{display:block;font-size:11.5px;color:var(--subtle);text-decoration:none;
+  padding:4px 0 4px 11px;border-left:1px solid var(--border);line-height:1.4}
+.toc a.on{color:var(--fg);border-left-color:var(--fg)}
+.toc a.sub{padding-left:22px}
+
+/* ---------- tipografía de la página de docs ---------- */
+.miga{font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--subtle);margin-bottom:14px}
+.tit{font-size:27px;font-weight:500;letter-spacing:-.02em;line-height:1.2}
+.frase{font-size:15px;color:var(--muted);line-height:1.6;margin-top:14px}
+.p{font-size:13.5px;color:var(--muted);line-height:1.72;margin-top:18px}
+.p b{font-weight:400;color:var(--fg)}
+.h2{font-size:15px;font-weight:500;margin-top:44px;letter-spacing:-.01em}
+.tec{color:var(--fg);text-decoration:none;border-bottom:1px dotted var(--subtle);padding-bottom:1px}
+
+.detalle{margin-top:22px;border:1px solid var(--border);border-radius:12px;background:var(--panel)}
+.detalle > .cab{display:flex;align-items:center;gap:9px;padding:11px 14px;cursor:default}
+.detalle > .cab .fl{width:8px;height:8px;border-right:1.3px solid var(--subtle);
+  border-bottom:1.3px solid var(--subtle);transform:rotate(-45deg);margin-left:1px}
+.detalle > .cab .fl.ab{transform:rotate(45deg)}
+.detalle > .cab b{font-size:11.5px;font-weight:400;color:var(--muted)}
+.detalle > .cu{padding:0 14px 14px;border-top:1px solid var(--border);margin-top:0}
+.detalle > .cu .p{margin-top:13px;font-size:12.5px}
+
+.codigo{margin-top:18px;border:1px solid var(--border);border-radius:8px;background:#0b0c0e;
+  position:relative;overflow:hidden}
+.codigo .bar{display:flex;align-items:center;padding:7px 11px;border-bottom:1px solid var(--border)}
+.codigo .bar span{font-size:10px;color:var(--subtle)}
+.codigo .bar .cp{margin-left:auto;font-size:10px;color:var(--subtle);
+  border:1px solid var(--border);border-radius:5px;padding:2px 7px}
+.codigo pre{padding:12px 13px;font-size:11.5px;line-height:1.75;color:var(--muted);overflow:auto}
+.codigo pre i{font-style:normal;color:var(--subtle)}
+.codigo pre u{text-decoration:none;color:var(--fg)}
+
+/* ---------- esquema: el viaje de una foto ---------- */
+.esq{margin-top:28px;border:1px solid var(--border);border-radius:12px;background:var(--panel);
+  padding:22px 20px 18px}
+.esq .et{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--subtle)}
+.via{display:flex;align-items:stretch;gap:0;margin-top:18px}
+.eta{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;gap:9px}
+.eta .caja{width:100%;border:1px solid var(--border);border-radius:9px;background:var(--elevated);
+  height:62px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  transition:.2s var(--expo)}
+.eta.act .caja{border-color:rgba(255,255,255,.34)}
+.eta .caja .n{font-size:11.5px;color:var(--fg);text-align:center;line-height:1.3}
+.eta .caja .s{font-size:9.5px;color:var(--subtle)}
+.eta .pie{font-size:10px;color:var(--subtle)}
+.con{flex:0 0 34px;display:flex;align-items:center;justify-content:center;padding-bottom:20px;position:relative}
+.con .ln{width:100%;height:1px;background:var(--border)}
+.con .pulso{position:absolute;width:5px;height:5px;border-radius:50%;background:var(--fg);
+  top:calc(50% - 10px);left:0;animation:viaje 1.1s var(--expo) infinite}
+@keyframes viaje{from{left:2px;opacity:0}20%{opacity:1}80%{opacity:1}to{left:28px;opacity:0}}
+.esq .amp{margin-top:16px;border-top:1px solid var(--border);padding-top:14px}
+.esq .amp .p{margin-top:0;font-size:12.5px}
+.esq .amp .cifra{margin-top:11px;display:flex;gap:26px}
+.esq .amp .cifra div .v{font-size:15px;color:var(--fg)}
+.esq .amp .cifra div .k{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--subtle);margin-top:3px}
+
+/* ---------- ficha de registro ---------- */
+.ficha{margin-top:26px;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.ficha .cab{display:flex;align-items:center;gap:9px;padding:9px 14px;background:var(--elevated);
+  border-bottom:1px solid var(--border)}
+.ficha .cab .t{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--subtle)}
+.ficha .cab .f{margin-left:auto;font-size:10px;color:var(--subtle)}
+.ficha .rej{display:grid;grid-template-columns:1fr 1fr;background:var(--panel)}
+.ficha .ce{padding:11px 14px;border-bottom:1px solid var(--border)}
+.ficha .ce:nth-child(odd){border-right:1px solid var(--border)}
+.ficha .ce:nth-last-child(-n+2){border-bottom:0}
+.ficha .ce .k{font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:var(--subtle)}
+.ficha .ce .v{font-size:12px;color:var(--fg);margin-top:4px;word-break:break-all;line-height:1.45}
+.ficha .ce .v.dim{color:var(--muted)}
+
+/* ---------- esquema interactivo: emparejamiento denso ---------- */
+.par{margin-top:26px;border:1px solid var(--border);border-radius:12px;background:var(--panel);padding:20px}
+.par .et{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--subtle)}
+.par .lz{margin-top:14px;border:1px solid var(--border);border-radius:9px;overflow:hidden;background:#0b0c0e}
+.par .ctl{margin-top:14px;display:flex;align-items:center;gap:14px}
+.par .ctl .lb{font-size:10.5px;color:var(--subtle);white-space:nowrap}
+.par .pista{flex:1;height:2px;background:var(--border);border-radius:2px;position:relative}
+.par .pista .rel{position:absolute;inset:0 auto 0 0;width:46%;background:var(--fg);border-radius:2px}
+.par .pista .tir{position:absolute;left:46%;top:-5px;width:12px;height:12px;border-radius:50%;
+  background:var(--fg);transform:translateX(-50%)}
+.par .ctl .val{font-size:11.5px;color:var(--fg);white-space:nowrap}
+.par .leyenda{margin-top:12px;display:flex;gap:18px}
+.par .leyenda div{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--subtle)}
+.par .leyenda i{width:14px;height:2px;border-radius:2px;display:block;font-style:normal}
+
+/* ---------- buscador ---------- */
+.velo{position:absolute;inset:0;background:rgba(6,7,9,.72);backdrop-filter:blur(3px);z-index:40}
+.paleta{position:absolute;top:96px;left:50%;transform:translateX(-50%);width:600px;z-index:41;
+  border:1px solid rgba(255,255,255,.13);border-radius:12px;background:rgba(16,19,25,.94);
+  box-shadow:0 28px 70px rgba(0,0,0,.6);overflow:hidden;backdrop-filter:blur(20px)}
+.paleta .ent{display:flex;align-items:center;gap:11px;padding:14px 16px;border-bottom:1px solid var(--border)}
+.paleta .ent .q{font-size:14px;color:var(--fg)}
+.paleta .ent .cur{width:1px;height:15px;background:var(--fg);animation:parp 1s steps(1) infinite}
+@keyframes parp{50%{opacity:0}}
+.paleta .gr{padding:8px 0}
+.paleta .gr .t{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--subtle);padding:6px 16px}
+.paleta .it{padding:8px 16px;display:flex;align-items:baseline;gap:10px}
+.paleta .it.on{background:rgba(255,255,255,.055)}
+.paleta .it .n{font-size:12.5px;color:var(--fg);white-space:nowrap}
+.paleta .it .r{font-size:10.5px;color:var(--subtle);margin-left:auto}
+.paleta .it .d{font-size:11px;color:var(--subtle);flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.paleta .it .d mark{background:transparent;color:var(--fg)}
+
+/* ---------- portada ---------- */
+.port{padding:64px 0 0;display:flex;justify-content:center}
+.port .w{width:840px}
+.port .tt{font-size:34px;font-weight:500;letter-spacing:-.025em;line-height:1.1}
+.port .sb{font-size:14.5px;color:var(--muted);margin-top:14px;line-height:1.65;max-width:600px}
+.port .rej{margin-top:44px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.port .c{border:1px solid var(--border);border-radius:12px;background:var(--panel);padding:18px 18px 16px;
+  transition:.18s var(--expo)}
+.port .c:hover{border-color:#33363b}
+.port .c .n{font-size:14px;color:var(--fg)}
+.port .c .d{font-size:12px;color:var(--subtle);margin-top:7px;line-height:1.55}
+.port .c .m{font-size:10px;color:var(--subtle);margin-top:12px;letter-spacing:.07em;text-transform:uppercase}
+.port .c.ancha{grid-column:1/-1}
+
+/* ---------- móvil ---------- */
+.mnav{height:52px;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--border)}
+.mnav .marca{font-size:13px;font-weight:500;display:flex;gap:6px;align-items:center}
+.mnav .marca i{font-style:normal;color:var(--accent)}
+.mnav .sp{flex:1}
+.mnav .hb{width:16px;display:flex;flex-direction:column;gap:3.5px}
+.mnav .hb span{height:1.3px;background:var(--fg);border-radius:1px}
+.mruta{display:flex;align-items:center;gap:8px;padding:11px 16px;border-bottom:1px solid var(--border);
+  background:var(--panel)}
+.mruta .fl{width:7px;height:7px;border-right:1.3px solid var(--subtle);border-bottom:1.3px solid var(--subtle);
+  transform:rotate(45deg)}
+.mruta span{font-size:11.5px;color:var(--muted)}
+.mcuerpo{padding:26px 18px 40px;overflow:auto;height:calc(800px - 52px - 42px)}
+.mcuerpo .tit{font-size:22px}
+.mcuerpo .frase{font-size:14px}
+.mcuerpo .p{font-size:13px}
+.mcuerpo .via{flex-direction:column;gap:0}
+.mcuerpo .con{flex:0 0 26px;width:100%;padding-bottom:0}
+.mcuerpo .con .ln{width:1px;height:100%;margin:0 auto}
+.mcuerpo .con .pulso{animation:viajev 1.1s var(--expo) infinite;left:calc(50% - 2.5px);top:0}
+@keyframes viajev{from{top:2px;opacity:0}20%{opacity:1}80%{opacity:1}to{top:22px;opacity:0}}
+.mcuerpo .eta .caja{height:54px}
+</style>
+</head>
+<body>
+
+<h1>Lumi · web <span class="mono">/docs</span></h1>
+<p class="lede">Mockups del chasis de documentación descrito en el spec. Tokens reales de DESIGN.md
+(tema oscuro único, sin verde, mono para todo dato de máquina, iconos SVG a mano). El pulso que
+recorre el viaje de una foto corre de verdad en este fichero; el deslizador de umbral del
+emparejamiento denso está dibujado en su posición de reposo.</p>
+
+<h2>1 · Portada de /docs</h2>
+<div class="shot">
+  <div class="cap"><b>/docs</b><span>Cinco ramas, no un índice de cuarenta enlaces. Las que aún no
+  están escritas se dicen, no se esconden.</span></div>
+  <div class="frame">
+    <div class="nav">
+      <div class="marca"><i>&#10022;</i> Lumi Station</div>
+      <div class="sep"></div>
+      <a href="#">Modelos</a><a href="#">Capacidades</a><a href="#">Indexado</a>
+      <a href="#" class="on">Docs</a><a href="#">Sobre mí</a>
+      <div class="sp"></div>
+      <span class="ver mono">v2.0.44 · publicada</span>
+      <span class="desc">Descargar cliente</span>
+    </div>
+    <div class="port">
+      <div class="w">
+        <div class="tt">Documentación</div>
+        <div class="sb">Cómo se despliega Lumi, cómo funciona por dentro y qué hace exactamente
+          cada pieza. Escrita para leerse entera o para consultar un dato suelto.</div>
+        <div class="rej">
+          <div class="c ancha">
+            <div class="n">Cómo funciona</div>
+            <div class="d">El viaje completo de una foto: del píxel al vector, del vector a
+              doscientos candidatos, de los candidatos a un veredicto con una confianza que
+              significa algo. Con esquemas que se pueden tocar.</div>
+            <div class="m mono">9 páginas</div>
+          </div>
+          <div class="c">
+            <div class="n">Las tecnologías</div>
+            <div class="d">Una página por técnica —RoMa, SALAD, Qwen3-VL, Qdrant— con qué problema
+              resuelve, cómo lo resuelve y por qué está aquí y no otra.</div>
+            <div class="m mono">19 páginas</div>
+          </div>
+          <div class="c">
+            <div class="n">Empezar</div>
+            <div class="d">Instalar <span class="mono">lumid</span> en tu máquina, emparejar el
+              cliente, actualizar y qué mirar cuando algo no arranca.</div>
+            <div class="m mono">6 páginas · pendiente</div>
+          </div>
+          <div class="c">
+            <div class="n">Indexar territorio</div>
+            <div class="d">El Indexer: orígenes de red, presupuesto, sellado de un
+              <span class="mono">.lumidx</span> y publicación.</div>
+            <div class="m mono">7 páginas · pendiente</div>
+          </div>
+          <div class="c">
+            <div class="n">El repo por dentro</div>
+            <div class="d">Layout del workspace, qué hace cada crate, el contrato Rust↔Python y
+              cómo compilar cada mitad.</div>
+            <div class="m mono">5 páginas · pendiente</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>2 · Página de «Cómo funciona»</h2>
+<div class="shot">
+  <div class="cap"><b>/docs/como-funciona/el-viaje-de-una-foto</b><span>Título, una frase en
+  lenguaje llano, el esquema, y solo después la profundidad. Los números exactos viven plegados,
+  para que quien lee por encima no tropiece con ellos.</span></div>
+  <div class="frame">
+    <div class="nav">
+      <div class="marca"><i>&#10022;</i> Lumi Station</div>
+      <div class="sep"></div>
+      <a href="#">Modelos</a><a href="#">Capacidades</a><a href="#">Indexado</a>
+      <a href="#" class="on">Docs</a><a href="#">Sobre mí</a>
+      <div class="sp"></div>
+      <span class="ver mono">v2.0.44 · publicada</span>
+      <span class="desc">Descargar cliente</span>
+    </div>
+    <div class="docs">
+      <div class="arbol">
+        <div class="buscar">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6a6c70"
+            stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7"/><path d="M20 20l-4.2-4.2"/></svg>
+          <span>Buscar</span><span class="k mono">⌘K</span>
+        </div>
+        <div class="rama"><div class="t">Cómo funciona</div>
+          <a href="#">De qué va todo esto</a>
+          <a href="#" class="on">El viaje de una foto</a>
+          <a href="#">El índice y la cobertura</a>
+          <a href="#">Recuperación: los candidatos</a>
+          <a href="#">Verificación: la geometría</a>
+          <a href="#">Agentes: lo que se ve en la foto</a>
+          <a href="#">El veredicto y su confianza</a>
+          <a href="#">La cola y el reparto de GPU</a>
+          <a href="#">Confianza y transporte</a>
+        </div>
+        <div class="rama"><div class="t">Las tecnologías</div>
+          <a href="#">Cómo leer estas páginas</a>
+          <a href="#">RoMa</a><a href="#">LightGlue + ALIKED</a><a href="#">DINOv2</a>
+          <a href="#">SALAD</a><a href="#">EigenPlaces</a><a href="#">Qwen3-VL</a>
+          <a href="#">Qdrant y HNSW</a><a href="#">Tauri</a>
+          <span style="display:block;font-size:11px;color:#6a6c70;padding:5px 16px">+ 11 más</span>
+        </div>
+        <div class="rama"><div class="t">Empezar</div>
+          <a href="#" class="pend">Instalar lumid <em>pendiente</em></a>
+          <a href="#" class="pend">Emparejar el cliente <em>pendiente</em></a>
+          <a href="#" class="pend">Actualizar <em>pendiente</em></a>
+        </div>
+        <div class="rama"><div class="t">Indexar territorio</div>
+          <a href="#" class="pend">Qué es un .lumidx <em>pendiente</em></a>
+          <a href="#" class="pend">Orígenes de red <em>pendiente</em></a>
+        </div>
+        <div class="rama"><div class="t">El repo por dentro</div>
+          <a href="#" class="pend">El workspace <em>pendiente</em></a>
+          <a href="#" class="pend">Rust ↔ Python <em>pendiente</em></a>
+        </div>
+      </div>
+
+      <div class="lector">
+        <div class="col">
+          <div class="miga mono">Cómo funciona</div>
+          <div class="tit">El viaje de una foto</div>
+          <div class="frase">Le das una foto y te dice dónde se tomó. Entre esas dos cosas hay
+            cinco etapas, y ninguna de ellas adivina: cada una descarta o reordena lo que le llega
+            de la anterior.</div>
+
+          <div class="esq">
+            <div class="et mono">esquema · el pulso recorre las cinco etapas</div>
+            <div class="via">
+              <div class="eta"><div class="caja"><div class="n">La foto</div><div class="s mono">→ vector</div></div><div class="pie mono">1</div></div>
+              <div class="con"><div class="ln"></div><div class="pulso"></div></div>
+              <div class="eta act"><div class="caja"><div class="n">El índice</div><div class="s mono">200 candidatos</div></div><div class="pie mono">2</div></div>
+              <div class="con"><div class="ln"></div><div class="pulso"></div></div>
+              <div class="eta"><div class="caja"><div class="n">Verificar</div><div class="s mono">geometría</div></div><div class="pie mono">3</div></div>
+              <div class="con"><div class="ln"></div><div class="pulso"></div></div>
+              <div class="eta"><div class="caja"><div class="n">Agentes</div><div class="s mono">qué se ve</div></div><div class="pie mono">4</div></div>
+              <div class="con"><div class="ln"></div><div class="pulso"></div></div>
+              <div class="eta"><div class="caja"><div class="n">Veredicto</div><div class="s mono">hipótesis</div></div><div class="pie mono">5</div></div>
+            </div>
+            <div class="amp">
+              <div class="p"><b>Etapa 2 · El índice.</b> El vector de tu foto se compara contra
+                millones de vectores de calles ya indexadas. No se comparan uno a uno: Qdrant
+                mantiene un grafo navegable que llega a los vecinos más próximos visitando una
+                fracción diminuta del total.</div>
+              <div class="cifra">
+                <div><div class="v mono">8448–12288</div><div class="k">dimensiones</div></div>
+                <div><div class="v mono">200</div><div class="k">candidatos</div></div>
+                <div><div class="v mono">z14</div><div class="k">tesela</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="p">Cada etapa del esquema se abre al pulsarla. La de arriba está abierta
+            porque es la que más gente entiende mal: el índice <b>no busca fotos parecidas a la
+            tuya</b>, busca vectores próximos al tuyo, y dos fotos de la misma esquina tomadas con
+            diez años de diferencia están mucho más cerca en ese espacio que dos fotos visualmente
+            similares de ciudades distintas. Esa propiedad no la da Qdrant, la da el modelo que
+            produjo el vector — por defecto <a class="tec" href="#">SALAD</a>.</div>
+
+          <div class="p">Los doscientos candidatos que salen de ahí son una <b>hipótesis barata</b>.
+            La etapa 3 los pone a prueba con geometría de verdad: <a class="tec" href="#">RoMa</a>
+            intenta emparejar píxel a píxel tu foto con cada candidato y mide si la correspondencia
+            resultante es consistente con dos cámaras mirando la misma escena. Un candidato que
+            solo se parecía en el color se cae aquí.</div>
+
+          <div class="detalle">
+            <div class="cab"><span class="fl ab"></span><b>Los números exactos</b></div>
+            <div class="cu">
+              <div class="p">El daemon pide a Qdrant <span class="mono">limit=200</span> con
+                <span class="mono">hnsw_ef=128</span> y agrupa el resultado por vecindad de tesela
+                z14 antes de verificar, de modo que veinte fotos de la misma manzana cuentan como
+                una sola hipótesis y no como veinte. El agrupado vive en
+                <span class="mono">lumi_index::agrupar</span>; la atribución de cada hipótesis a su
+                índice y a su autor vive en <span class="mono">lumid::recuperar</span>, en Rust y no
+                en el worker de Python, porque la procedencia está en SQLite y el worker no la ve.</div>
+            </div>
+          </div>
+
+          <div class="detalle">
+            <div class="cab"><span class="fl"></span><b>Qué hace esto en el código</b></div>
+          </div>
+
+          <div class="h2">Por qué son cinco y no una</div>
+          <div class="p">Un solo modelo que mirara la foto y dijera una coordenada sería más simple
+            y mucho peor. Las cinco etapas existen porque cada una falla de una forma distinta, y
+            una que falla tapa el fallo de otra…</div>
+
+          <div class="codigo">
+            <div class="bar"><span class="mono">enviar una foto a analizar</span><span class="cp mono">copiar</span></div>
+            <pre class="mono"><i># una foto entra por la API y sale un id de análisis</i>
+curl -sk --cacert lumi.pem <u>https://tu-servidor:7717/v1/analisis</u> \
+  -H <u>"authorization: Bearer $TOKEN"</u> \
+  -F <u>imagen=@calle.jpg</u></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="toc">
+        <div class="t">En esta página</div>
+        <a href="#" class="on">El viaje de una foto</a>
+        <a href="#" class="sub">Etapa 1 · La foto</a>
+        <a href="#" class="sub">Etapa 2 · El índice</a>
+        <a href="#" class="sub">Etapa 3 · Verificar</a>
+        <a href="#" class="sub">Etapa 4 · Agentes</a>
+        <a href="#" class="sub">Etapa 5 · Veredicto</a>
+        <a href="#">Por qué son cinco y no una</a>
+        <a href="#">Qué pasa cuando no hay índice</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>3 · Página de tecnología</h2>
+<div class="shot">
+  <div class="cap"><b>/docs/tecnologias/roma</b><span>Dos mitades: la ficha sale del registro
+  (<span class="mono">registros/verificadores/roma.json</span>) y no se escribe a mano, así que no
+  puede quedar desfasada; la explicación y el esquema interactivo sí.</span></div>
+  <div class="frame">
+    <div class="nav">
+      <div class="marca"><i>&#10022;</i> Lumi Station</div>
+      <div class="sep"></div>
+      <a href="#">Modelos</a><a href="#">Capacidades</a><a href="#">Indexado</a>
+      <a href="#" class="on">Docs</a><a href="#">Sobre mí</a>
+      <div class="sp"></div>
+      <span class="ver mono">v2.0.44 · publicada</span>
+      <span class="desc">Descargar cliente</span>
+    </div>
+    <div class="docs">
+      <div class="arbol">
+        <div class="buscar">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6a6c70"
+            stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7"/><path d="M20 20l-4.2-4.2"/></svg>
+          <span>Buscar</span><span class="k mono">⌘K</span>
+        </div>
+        <div class="rama"><div class="t">Las tecnologías</div>
+          <a href="#">Cómo leer estas páginas</a>
+          <a href="#" class="on">RoMa</a>
+          <a href="#">RoMa v2</a>
+          <a href="#">tiny-RoMa</a>
+          <a href="#">EfficientLoFTR</a>
+          <a href="#">LightGlue + ALIKED</a>
+          <a href="#">DINOv2</a>
+          <a href="#">SALAD</a>
+          <a href="#">AnyLoc</a>
+          <a href="#">EigenPlaces</a>
+          <a href="#">CosPlace</a>
+          <a href="#">DINO-Mix</a>
+          <a href="#">CliqueMining</a>
+          <a href="#">Qwen3-VL</a>
+          <a href="#">Depth-Anything v2</a>
+          <a href="#">Real-ESRGAN</a>
+          <a href="#">Qdrant y HNSW</a>
+          <a href="#">SQLite y Redis</a>
+          <a href="#">Tauri</a>
+          <a href="#">Ed25519 y el emparejado</a>
+        </div>
+      </div>
+
+      <div class="lector">
+        <div class="col">
+          <div class="miga mono">Las tecnologías · verificador denso</div>
+          <div class="tit">RoMa</div>
+          <div class="frase">Coge dos fotos y dice, para cada punto de una, dónde cae ese mismo
+            punto en la otra. Si no existe una respuesta coherente, las dos fotos no son del mismo
+            sitio — y eso es exactamente lo que Lumi necesita saber.</div>
+
+          <div class="ficha">
+            <div class="cab"><span class="t">Del registro</span>
+              <span class="f mono">registros/verificadores/roma.json</span></div>
+            <div class="rej">
+              <div class="ce"><div class="k">Tipo</div><div class="v">denso</div></div>
+              <div class="ce"><div class="k">Licencia</div><div class="v">MIT + Apache-2.0 (DINOv2)</div></div>
+              <div class="ce"><div class="k">Pesos</div><div class="v mono dim">roma_outdoor.pth</div></div>
+              <div class="ce"><div class="k">Huella SHA-256</div><div class="v mono dim">c7a45c80d41ad788a63c641d1b686d7cb3f297f40097c6f4e75039889e5cc8ba</div></div>
+              <div class="ce"><div class="k">Segundo fichero</div><div class="v">backbone DINOv2 ViT-L/14</div></div>
+              <div class="ce"><div class="k">Estado</div><div class="v">activo · verificador por defecto en Pro y Vision</div></div>
+            </div>
+          </div>
+
+          <div class="par">
+            <div class="et mono">esquema interactivo · mueve el umbral y mira qué sobrevive</div>
+            <div class="lz">
+              <svg width="100%" height="188" viewBox="0 0 600 188">
+                <rect width="600" height="188" fill="#0b0c0e"/>
+                <g stroke="#26282c" stroke-width="1" fill="none">
+                  <rect x="18" y="20" width="258" height="148" rx="6"/>
+                  <rect x="324" y="20" width="258" height="148" rx="6"/>
+                </g>
+                <g stroke="#3a3d42" stroke-width="1.4" fill="none">
+                  <path d="M40 150 L120 66 L200 150"/><path d="M60 150 L60 104 L104 104 L104 150"/>
+                  <path d="M214 150 L214 88 L258 88 L258 150"/><path d="M18 150 L276 150"/>
+                  <path d="M352 150 L428 60 L508 150"/><path d="M370 150 L370 100 L412 100 L412 150"/>
+                  <path d="M520 150 L520 84 L564 84 L564 150"/><path d="M324 150 L582 150"/>
+                </g>
+                <g stroke="#e8e8e6" stroke-width="1" opacity=".72">
+                  <path d="M120 66 L428 60"/><path d="M60 104 L370 100"/>
+                  <path d="M104 104 L412 100"/><path d="M200 150 L508 150"/>
+                  <path d="M214 88 L520 84"/>
+                </g>
+                <g stroke="#6a6c70" stroke-width="1" opacity=".3" stroke-dasharray="3 3">
+                  <path d="M40 150 L352 150"/><path d="M258 88 L564 84"/>
+                </g>
+                <g fill="#e8e8e6">
+                  <circle cx="120" cy="66" r="2.6"/><circle cx="60" cy="104" r="2.6"/>
+                  <circle cx="104" cy="104" r="2.6"/><circle cx="200" cy="150" r="2.6"/>
+                  <circle cx="214" cy="88" r="2.6"/>
+                  <circle cx="428" cy="60" r="2.6"/><circle cx="370" cy="100" r="2.6"/>
+                  <circle cx="412" cy="100" r="2.6"/><circle cx="508" cy="150" r="2.6"/>
+                  <circle cx="520" cy="84" r="2.6"/>
+                </g>
+                <text x="18" y="13" fill="#6a6c70" font-size="9"
+                  font-family="ui-monospace,Menlo,monospace">tu foto</text>
+                <text x="324" y="13" fill="#6a6c70" font-size="9"
+                  font-family="ui-monospace,Menlo,monospace">candidato · z14 120203233</text>
+              </svg>
+            </div>
+            <div class="ctl">
+              <span class="lb">Umbral de certeza</span>
+              <div class="pista"><div class="rel"></div><div class="tir"></div></div>
+              <span class="val mono">0,46 · 5 de 7</span>
+            </div>
+            <div class="leyenda">
+              <div><i style="background:#e8e8e6"></i>correspondencia por encima del umbral</div>
+              <div><i style="background:#6a6c70;opacity:.5"></i>descartada</div>
+            </div>
+          </div>
+
+          <div class="p">Lo que hace especial a RoMa frente a
+            <a class="tec" href="#">LightGlue + ALIKED</a> es que es <b>denso</b>: no busca primero
+            un puñado de puntos interesantes para luego emparejarlos, sino que estima una
+            correspondencia para toda la imagen y adjunta a cada punto su propia certeza. En una
+            fachada lisa, sin esquinas que detectar, un método por puntos no encuentra dónde
+            agarrarse; RoMa sigue teniendo respuesta y la marca como poco fiable, que es
+            información útil en vez de silencio.</div>
+
+          <div class="detalle">
+            <div class="cab"><span class="fl"></span><b>Los números exactos</b></div>
+          </div>
+          <div class="detalle">
+            <div class="cab"><span class="fl"></span><b>Por qué no se descarga solo</b></div>
+          </div>
+
+          <div class="h2">Dónde se usa en Lumi</div>
+          <div class="p">Es el verificador por defecto de <a class="tec" href="#">Lumi Pro</a> y uno
+            de los que compiten en <a class="tec" href="#">Lumi Vision</a>. En Mini no aparece: su
+            coste por par no compensa cuando solo hay un verificador…</div>
+        </div>
+      </div>
+
+      <div class="toc">
+        <div class="t">En esta página</div>
+        <a href="#" class="on">RoMa</a>
+        <a href="#" class="sub">Del registro</a>
+        <a href="#" class="sub">Qué es una correspondencia densa</a>
+        <a href="#">Dónde se usa en Lumi</a>
+        <a href="#">Alternativas y por qué no</a>
+        <a href="#">Licencia y procedencia</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>4 · Buscador</h2>
+<div class="shot">
+  <div class="cap"><b>⌘K</b><span>Índice JSON generado en el build a partir de los .mdx. Filtro en
+  cliente, sin servicio externo. Agrupa por rama para que se vea de qué parte del sitio viene cada
+  resultado.</span></div>
+  <div class="frame">
+    <div class="nav">
+      <div class="marca"><i>&#10022;</i> Lumi Station</div>
+      <div class="sep"></div>
+      <a href="#">Modelos</a><a href="#">Capacidades</a><a href="#">Indexado</a>
+      <a href="#" class="on">Docs</a><a href="#">Sobre mí</a>
+      <div class="sp"></div>
+      <span class="ver mono">v2.0.44 · publicada</span>
+      <span class="desc">Descargar cliente</span>
+    </div>
+    <div class="docs">
+      <div class="arbol">
+        <div class="buscar"><span>Buscar</span><span class="k mono">⌘K</span></div>
+        <div class="rama"><div class="t">Cómo funciona</div>
+          <a href="#">De qué va todo esto</a><a href="#" class="on">El viaje de una foto</a>
+          <a href="#">El índice y la cobertura</a><a href="#">Recuperación: los candidatos</a>
+        </div>
+      </div>
+      <div class="lector"><div class="col">
+        <div class="miga mono">Cómo funciona</div>
+        <div class="tit">El viaje de una foto</div>
+        <div class="frase">Le das una foto y te dice dónde se tomó.</div>
+      </div></div>
+      <div class="toc"><div class="t">En esta página</div><a href="#" class="on">El viaje de una foto</a></div>
+    </div>
+    <div class="velo"></div>
+    <div class="paleta">
+      <div class="ent">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6a6c70"
+          stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7"/><path d="M20 20l-4.2-4.2"/></svg>
+        <span class="q">verific</span><span class="cur"></span>
+      </div>
+      <div class="gr">
+        <div class="t">Cómo funciona</div>
+        <div class="it on"><span class="n">Verificación: la geometría</span>
+          <span class="d">…los candidatos se ponen a prueba emparejando píxeles…</span>
+          <span class="r mono">↵</span></div>
+        <div class="it"><span class="n">El viaje de una foto</span>
+          <span class="d">Etapa 3 · <mark>Verific</mark>ar</span></div>
+      </div>
+      <div class="gr">
+        <div class="t">Las tecnologías</div>
+        <div class="it"><span class="n">RoMa</span>
+          <span class="d"><mark>verific</mark>ador denso · activo</span></div>
+        <div class="it"><span class="n">LightGlue + ALIKED</span>
+          <span class="d"><mark>verific</mark>ador por puntos · activo</span></div>
+        <div class="it"><span class="n">EfficientLoFTR</span>
+          <span class="d"><mark>verific</mark>ador denso · alternativa no activa</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>5 · Móvil</h2>
+<div class="shot">
+  <div class="cap"><b>390 px</b><span>El árbol pasa a desplegable y el índice derecho desaparece.
+  El esquema del viaje gira a vertical en vez de encogerse hasta ser ilegible.</span></div>
+  <div class="frame movil">
+    <div class="mnav">
+      <div class="marca"><i>&#10022;</i> Lumi Station</div>
+      <div class="sp"></div>
+      <div class="hb"><span></span><span></span><span></span></div>
+    </div>
+    <div class="mruta"><span class="fl"></span><span>Cómo funciona · El viaje de una foto</span></div>
+    <div class="mcuerpo">
+      <div class="miga mono">Cómo funciona</div>
+      <div class="tit">El viaje de una foto</div>
+      <div class="frase">Le das una foto y te dice dónde se tomó. Entre esas dos cosas hay cinco
+        etapas, y ninguna de ellas adivina.</div>
+      <div class="esq" style="padding:16px 14px 14px">
+        <div class="et mono">esquema</div>
+        <div class="via">
+          <div class="eta"><div class="caja"><div class="n">La foto</div><div class="s mono">→ vector</div></div></div>
+          <div class="con"><div class="ln"></div><div class="pulso"></div></div>
+          <div class="eta act"><div class="caja"><div class="n">El índice</div><div class="s mono">200 candidatos</div></div></div>
+          <div class="con"><div class="ln"></div><div class="pulso"></div></div>
+          <div class="eta"><div class="caja"><div class="n">Verificar</div><div class="s mono">geometría</div></div></div>
+          <div class="con"><div class="ln"></div><div class="pulso"></div></div>
+          <div class="eta"><div class="caja"><div class="n">Agentes</div><div class="s mono">qué se ve</div></div></div>
+          <div class="con"><div class="ln"></div><div class="pulso"></div></div>
+          <div class="eta"><div class="caja"><div class="n">Veredicto</div><div class="s mono">hipótesis</div></div></div>
+        </div>
+      </div>
+      <div class="p">Cada etapa se abre al pulsarla. El índice <b>no busca fotos parecidas a la
+        tuya</b>, busca vectores próximos al tuyo…</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
