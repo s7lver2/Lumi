@@ -2,28 +2,26 @@ import { Icon } from "../ui/Icon";
 
 /** Icono propio por agente — no una plantilla repetida con el icono
  *  cambiado (DESIGN.md prohíbe rejillas de tarjetas idénticas). Compartido
- *  entre el panel de resultados (`ResultsDrawer`) y el selector del modo
- *  Agentes (`AgentesView`): es el mismo agente, la misma cara en las dos
- *  pantallas.
+ *  entre el popup de resultado y el selector del modo Agentes.
  *
- *  El de `hora-sombras` es el único cuyo dibujo depende del dato real: la
- *  aguja rota al ángulo estimado a partir de la hora que dice `etiqueta`
- *  ("~13:00" → 13h) — solo tiene sentido con un veredicto ya resuelto, así
- *  que en el selector (sin `etiqueta` todavía) se queda quieta al mediodía.
- *  El resto son formas fijas, sin dato detrás. */
-export function AgenteIcono({ agente, etiqueta, apagado, size = 26 }: {
-  agente: string; etiqueta?: string; apagado: boolean; size?: number;
+ *  Se resuelve por el campo `icono` de la ficha (`registros/agentes/*.json`),
+ *  nunca por el `id` del agente -- añadir un agente nuevo no debería tocar
+ *  este fichero salvo que quiera un dibujo que no exista todavía (spec
+ *  2026-09-17 §7).
+ *
+ *  `hora-solar` es el único cuyo dibujo depende del dato real: la aguja rota
+ *  al ángulo estimado a partir de la hora que dice `etiqueta` ("mediodia" →
+ *  12h). El resto son formas fijas, sin dato detrás. */
+export function AgenteIcono({ icono, etiqueta, apagado, size = 26 }: {
+  icono: string; etiqueta?: string; apagado: boolean; size?: number;
 }) {
   const color = apagado ? "#6a6c70" : "#e8e8e6";
-  // Un veredicto de agente fusionado llega como "<fusionado>.<sub>" (p.ej.
-  // "condiciones-ambientales.clima-aparente") — la sub-pregunta es la que
-  // tiene un icono propio y significativo, así que se usa esa mitad para
-  // decidir el dibujo. Un id sin punto (agente suelto, o la propia tarjeta
-  // fusionada en el picker) se queda tal cual.
-  agente = agente.includes(".") ? agente.split(".").pop()! : agente;
-  if (agente === "hora-sombras") {
-    const m = etiqueta ? /(\d{1,2})(?::\d{2})?/.exec(etiqueta) : null;
-    const hora = m ? Number(m[1]) : 12;
+
+  if (icono === "hora-solar") {
+    const HORAS: Record<string, number> = {
+      amanecer: 7, "media-manana": 10, mediodia: 12, "media-tarde": 15, atardecer: 18, noche: 22,
+    };
+    const hora = etiqueta && etiqueta in HORAS ? HORAS[etiqueta] : 12;
     // Mediodía (12h) = aguja recta hacia arriba (0°); cada hora de
     // diferencia gira 15° (360°/24h) hacia el lado que corresponda.
     const grados = (hora - 12) * 15;
@@ -37,16 +35,26 @@ export function AgenteIcono({ agente, etiqueta, apagado, size = 26 }: {
       </svg>
     );
   }
-  // Tarjetas del picker de las tres fichas fusionadas (spec 2026-09-10 §1):
-  // el icono es el de la primera de sus sub-preguntas, no uno nuevo — es la
-  // misma cara que ya tenía esa pregunta cuando era un agente suelto.
-  if (agente === "condiciones-ambientales" || agente === "clima-aparente") {
-    return <Icon name="cloud" size={size} className={apagado ? "text-subtle" : "text-fg"} />;
+  if (icono === "volante") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.7}
+        strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+        <circle cx="12" cy="12" r="8" />
+        <circle cx="12" cy="12" r="2" />
+        <path d="M12 6v4M8.5 15.5 10.5 13M15.5 15.5 13.5 13" />
+      </svg>
+    );
   }
-  if (agente === "indicios-viales" || agente === "lado-conduccion") {
-    return <Icon name="via" size={size} className={apagado ? "text-subtle" : "text-fg"} />;
+  if (icono === "escritura") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.7}
+        strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+        <path d="M4 19V8l4-4h8l4 4v11" />
+        <path d="M8 19v-6h8v6M9 9h6" />
+      </svg>
+    );
   }
-  if (agente === "meteorologia") {
+  if (icono === "meteorologia") {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.7}
         strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
@@ -55,16 +63,7 @@ export function AgenteIcono({ agente, etiqueta, apagado, size = 26 }: {
       </svg>
     );
   }
-  if (agente === "estacion") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.7}
-        strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-        <path d="M12 3c5 2 7 6 7 10a7 7 0 0 1-14 0c0-4 2-8 7-10Z" />
-        <path d="M12 21V9" />
-      </svg>
-    );
-  }
-  if (agente === "vegetacion") {
+  if (icono === "vegetacion") {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.7}
         strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
@@ -72,26 +71,7 @@ export function AgenteIcono({ agente, etiqueta, apagado, size = 26 }: {
       </svg>
     );
   }
-  if (agente === "escena") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.7}
-        strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-        <path d="M3 21V9.5l5-4 5 4V21" />
-        <path d="M13 21v-7h4v7" />
-        <path d="M17 21v-4.5h4V21" />
-      </svg>
-    );
-  }
-  if (agente === "dimensiones") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.7}
-        strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-        <rect x="4" y="4" width="16" height="16" rx="2" />
-        <path d="M4 15l4-4 4 3 5-6" />
-      </svg>
-    );
-  }
-  if (agente === "matricula") {
+  if (icono === "matricula") {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.7}
         strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
@@ -100,7 +80,7 @@ export function AgenteIcono({ agente, etiqueta, apagado, size = 26 }: {
       </svg>
     );
   }
-  if (agente === "senalizacion") {
+  if (icono === "senalizacion") {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.7}
         strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
@@ -110,7 +90,7 @@ export function AgenteIcono({ agente, etiqueta, apagado, size = 26 }: {
       </svg>
     );
   }
-  if (agente === "texto-en-escena" || agente === "toponimos") {
+  if (icono === "toponimos") {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.7}
         strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
@@ -120,6 +100,7 @@ export function AgenteIcono({ agente, etiqueta, apagado, size = 26 }: {
       </svg>
     );
   }
-  // "idioma" y cualquier agente futuro sin icono propio: bocadillo genérico.
+  // Icono futuro sin dibujo propio todavía: bocadillo genérico, nunca un
+  // hueco en blanco.
   return <Icon name="bocadillo" size={size} className={apagado ? "text-subtle" : "text-fg"} />;
 }
