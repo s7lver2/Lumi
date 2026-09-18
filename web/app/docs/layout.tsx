@@ -1,4 +1,5 @@
 import { ArbolLateralConectado } from "../../components/docs/ArbolLateralConectado";
+import { Buscador } from "../../components/docs/Buscador";
 import { ContextoProfundidadProveedor } from "../../components/docs/ContextoProfundidad";
 import { IndicePagina } from "../../components/docs/IndicePagina";
 
@@ -12,6 +13,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
         </div>
       </main>
       <IndicePagina />
+      <Buscador />
     </div>
   );
 }
