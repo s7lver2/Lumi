@@ -226,15 +226,24 @@ function main() {
   }
   writeFileSync(path.join(LIB_DIR, "registrosDocs.generated.json"), JSON.stringify(salida, null, 2));
 
+  // indiceDocs.json también se escribe siempre, por la misma razón que
+  // registrosDocs.generated.json de arriba: EnlacePrevio/Tec/PiePaginaDocs/
+  // Buscador lo importan de forma estática, así que tiene que existir en
+  // disco (aunque incompleto, con las páginas que sí se pudieron leer) para
+  // que TypeScript resuelva esos imports mientras el árbol todavía declara
+  // rutas no-pendientes sin su .mdx. El build sigue fallando igual después
+  // — `next dev`/`next build` no arrancan si predev/prebuild sale con
+  // código 1 — así que esto no relaja la validación, solo evita que un
+  // fichero ausente rompa `tsc --noEmit` durante tareas intermedias. // ponytail
+  writeFileSync(path.join(LIB_DIR, "indiceDocs.json"), JSON.stringify({ paginas }, null, 2));
+
+  console.log(`indice-docs: ${paginas.length} página(s) indexada(s), ${Object.keys(salida).length} registro(s) copiado(s).`);
+
   if (errores.length > 0) {
     console.error("indice-docs: build inválido —");
     for (const e of errores) console.error(`  - ${e}`);
     process.exit(1);
   }
-
-  writeFileSync(path.join(LIB_DIR, "indiceDocs.json"), JSON.stringify({ paginas }, null, 2));
-
-  console.log(`indice-docs: ${paginas.length} página(s) indexada(s), ${Object.keys(salida).length} registro(s) copiado(s).`);
 }
 
 main();
