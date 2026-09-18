@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Esquema } from "../Esquema";
+import { useConteo } from "../useConteo";
 
 type Ejemplo = {
   id: string;
@@ -46,6 +47,23 @@ const EJEMPLOS: Ejemplo[] = [
   },
 ];
 
+function Barra({ verbalizador, probabilidad, retraso, clave }: { verbalizador: string; probabilidad: number; retraso: number; clave: string }) {
+  const mostrado = useConteo(probabilidad * 100);
+  return (
+    <div className="flex items-center gap-3">
+      <span className="w-[142px] shrink-0 truncate text-[11px] text-subtle">{verbalizador.trim()}</span>
+      <div className="h-[7px] flex-1 overflow-hidden rounded-[4px] bg-elevated">
+        <div
+          key={clave}
+          className="jg-barra-llena h-full rounded-[4px] bg-fg"
+          style={{ "--fin": `${probabilidad * 100}%`, animationDelay: `${retraso}s` } as React.CSSProperties}
+        />
+      </div>
+      <span className="w-[36px] shrink-0 text-right font-mono text-[11px] text-fg">{mostrado.toFixed(0)}%</span>
+    </div>
+  );
+}
+
 /** El interior de un agente, con una foto real en vez de una escena
  *  inventada sin imagen (spec 2026-09-17 §2): la pregunta se le hace al VLM
  *  en inglés —el verbalizador real, no una traducción de exposición— y la
@@ -54,48 +72,58 @@ const EJEMPLOS: Ejemplo[] = [
  *  mismas que usa la landing en `AgentesVisual.tsx`. */
 export function EsquemaAgente() {
   const [activo, setActivo] = useState(0);
+  const botones = useRef<(HTMLButtonElement | null)[]>([]);
+  const [indicador, setIndicador] = useState<{ left: number; width: number } | null>(null);
   const ejemplo = EJEMPLOS[activo];
+
+  function mover(i: number) {
+    setActivo(i);
+    const el = botones.current[i];
+    if (el) setIndicador({ left: el.offsetLeft, width: el.offsetWidth });
+  }
 
   return (
     <Esquema etiqueta="esquema · cambia la imagen de ejemplo">
-      <div className="flex gap-2">
+      <div className="relative flex gap-2">
+        {indicador && (
+          <div
+            className="absolute top-0 h-full rounded-[8px] border border-white/[.34] transition-[left,width] duration-300 ease-out"
+            style={{ left: indicador.left, width: indicador.width }}
+            aria-hidden
+          />
+        )}
         {EJEMPLOS.map((e, i) => (
           <button
             key={e.id}
+            ref={(el) => {
+              botones.current[i] = el;
+              if (el && !indicador && i === activo) setIndicador({ left: el.offsetLeft, width: el.offsetWidth });
+            }}
             type="button"
-            onClick={() => setActivo(i)}
-            className={`jg-micro rounded-[8px] border px-3 py-[6px] text-[11.5px] ${
-              i === activo ? "border-white/[.34] text-fg" : "border-border text-subtle"
+            onClick={() => mover(i)}
+            className={`jg-micro relative z-10 rounded-[8px] border px-3 py-[6px] text-[11.5px] transition-colors ${
+              i === activo ? "border-transparent text-fg" : "border-border text-subtle hover:text-muted"
             }`}
           >
             {e.etiqueta}
           </button>
         ))}
       </div>
-      <div className="mt-[14px] flex flex-col gap-4 sm:flex-row sm:items-start">
-        <img
-          src={ejemplo.imagen}
-          alt={ejemplo.alt}
-          style={{ aspectRatio: ejemplo.aspecto }}
-          className="w-full shrink-0 rounded-[8px] border border-border object-cover sm:w-[168px]"
-        />
-        <div className="min-w-0 flex-1">
-          <p className="font-mono text-[11px] leading-snug text-muted">&ldquo;{ejemplo.pregunta}&rdquo;</p>
-          <div className="mt-3 flex flex-col gap-[9px]">
-            {ejemplo.barras.map((b) => (
-              <div key={b.verbalizador} className="flex items-center gap-3">
-                <span className="w-[142px] shrink-0 truncate text-[11px] text-subtle">{b.verbalizador.trim()}</span>
-                <div className="h-[7px] flex-1 overflow-hidden rounded-[4px] bg-elevated">
-                  <div
-                    className="h-full rounded-[4px] bg-fg transition-[width] duration-300 ease-out"
-                    style={{ width: `${b.probabilidad * 100}%` }}
-                  />
-                </div>
-                <span className="w-[36px] shrink-0 text-right font-mono text-[11px] text-fg">
-                  {(b.probabilidad * 100).toFixed(0)}%
-                </span>
-              </div>
-            ))}
+      <div className="relative mt-[14px] min-h-[104px] overflow-hidden">
+        <div key={ejemplo.id} className="jg-agente-entra flex flex-col gap-4 sm:flex-row sm:items-start">
+          <img
+            src={ejemplo.imagen}
+            alt={ejemplo.alt}
+            style={{ aspectRatio: ejemplo.aspecto }}
+            className="w-full shrink-0 rounded-[8px] border border-border object-cover transition-transform duration-500 hover:scale-[1.03] sm:w-[168px]"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="font-mono text-[11px] leading-snug text-muted">&ldquo;{ejemplo.pregunta}&rdquo;</p>
+            <div className="mt-3 flex flex-col gap-[9px]">
+              {ejemplo.barras.map((b, i) => (
+                <Barra key={b.verbalizador} clave={`${ejemplo.id}-${b.verbalizador}`} verbalizador={b.verbalizador} probabilidad={b.probabilidad} retraso={i * 0.07} />
+              ))}
+            </div>
           </div>
         </div>
       </div>

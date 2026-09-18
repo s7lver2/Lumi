@@ -186,6 +186,22 @@
 @keyframes jg-viaje-pulso { from { left: 2px; opacity: 0; } 20% { opacity: 1; } 80% { opacity: 1; } to { left: 28px; opacity: 0; } }
 .jg-viaje-pulso { animation: jg-viaje-pulso 1.1s cubic-bezier(.16,1,.3,1) infinite; }
 
+/* Cambiar de foto de ejemplo en EsquemaAgente: la nueva foto y sus barras
+   entran como un caso recién llegado, no como un corte seco. */
+@keyframes jg-agente-entra { from { opacity: 0; transform: translateY(6px) scale(.99); } to { opacity: 1; transform: none; } }
+.jg-agente-entra { animation: jg-agente-entra .4s cubic-bezier(.16,1,.3,1) both; }
+
+/* Una correspondencia que cruza el umbral no solo cambia de opacidad: da
+   un pequeño salto, como si acabara de "engancharse" — EsquemaEmparejamiento. */
+@keyframes jg-engancha { 0% { transform: scale(1); } 40% { transform: scale(1.6); } 100% { transform: scale(1); } }
+.jg-engancha { animation: jg-engancha .35s cubic-bezier(.34,1.56,.64,1) both; }
+
+/* Línea de "tu foto → vecino" con corriente propia — no una línea muerta,
+   algo que fluye desde la consulta hacia el vecino, en bucle suave.
+   EsquemaEspacioVectores. */
+@keyframes jg-vecino-fluye { from { stroke-dashoffset: 12; } to { stroke-dashoffset: 0; } }
+.jg-vecino-fluye { animation: jg-vecino-fluye .9s linear infinite; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration:.001ms !important; transition-duration:.001ms !important; }
   /* La regla de arriba congelaría la marquesina a mitad de fotograma con un
