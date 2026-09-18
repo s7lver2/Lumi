@@ -382,31 +382,27 @@ export interface Hipotesis {
    *  tocó, no que la aprobaran. */
   motivo_agente: string | null;
 }
-/** Un recuadro OCR real, en fracción 0-1 del ancho/alto de la imagen. */
-export interface CajaOcr { x: number; y: number; w: number; h: number; etiqueta: string }
-/** Lo único que un agente puede señalar sobre la imagen misma. `null` cuando
- *  el motor no tiene nada real que mostrar — nunca se rellena a mano, y el
- *  VLM nunca lo trae (sin interpretabilidad de atención implementada). */
-export type Rasgos =
-  | { tipo: "ocr"; cajas: CajaOcr[] }
-  | { tipo: "profundidad"; png_base64: string };
 /** Un veredicto de agente tal como se guardó. `etiqueta` vale `"abstiene"`
  *  cuando el agente corrió y no vio señal suficiente. */
 export interface DichoDeAgente {
   agente: string; nombre: string; etiqueta: string;
-  confianza: number;
-  tipo: "filtra" | "describe";
+  /** `null` en modo transcripción -- no hay conjunto cerrado sobre el que
+   *  normalizar (spec 2026-09-17 §5), nunca un número inventado. */
+  confianza: number | null;
   detalle: string;
   /** La etiqueta que el motor realmente eligió, aunque no llegara al umbral
    *  y `etiqueta` valga `"abstiene"` -- para mostrar "lo más parecido".
    *  Igual a `etiqueta` cuando no se abstiene; vacía en análisis viejos. */
   etiqueta_real: string;
   /** La distribución completa, ordenada, cuando el motor la calcula de
-   *  verdad. Vacía si no — nunca rellenada a mano para completar la lista. */
+   *  verdad. Vacía en modo transcripción. */
   alternativas: [string, number][];
-  rasgos: Rasgos | null;
+  /** Cuánto sube la imagen la evidencia de la opción ganadora frente a no
+   *  verla (spec 2026-09-17 §4) -- una lectura aparte de `confianza`, no la
+   *  misma cifra con otro nombre. `null` en modo transcripción. */
+  apoyo_visual: number | null;
   /** El texto/JSON exacto que devolvió el motor, solo con `modo_calibracion`
-   *  activo en el momento del análisis (spec 2026-09-10 §4c). */
+   *  activo en el momento del análisis. */
   respuesta_cruda: string | null;
 }
 export interface Analysis {
@@ -443,15 +439,14 @@ export interface Analysis {
  *  ver `GET /v1/agentes` (`crates/lumid/src/routes/agentes.rs`). */
 export interface AgenteVista {
   id: string; nombre: string;
-  motor: "vlm" | "ocr" | "profundidad";
-  pregunta: string; etiquetas: string[]; umbral_confianza: number;
+  /** Nombre a resolver contra el set de SVG dibujados a mano de
+   *  `AgenteIcono.tsx`. */
+  icono: string;
+  modo: "eleccion" | "transcripcion";
   instalado: boolean;
   /** El nombre del motor que hace falta descargar. `null` cuando `instalado`
-   *  es `true`, o cuando el registro no trae ningún motor de esa clase. */
+   *  es `true`. */
   requiere: string | null;
-  /** Ids de sus sub-preguntas si es un agente fusionado (spec 2026-09-10
-   *  §1). Vacío en los que no lo son. */
-  sub_preguntas: string[];
 }
 /** Un verificador del registro, para el picker de calibración -- ver
  *  `GET /v1/admin/verificadores` (`crates/lumid/src/routes/calibracion.rs`). */
