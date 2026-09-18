@@ -184,15 +184,13 @@ function main() {
     });
   }
 
-  if (errores.length > 0) {
-    console.error("indice-docs: build inválido —");
-    for (const e of errores) console.error(`  - ${e}`);
-    process.exit(1);
-  }
-
-  writeFileSync(path.join(LIB_DIR, "indiceDocs.json"), JSON.stringify({ paginas }, null, 2));
-
-  // --- registrosDocs.generated.json ---
+  // registrosDocs.generated.json se escribe siempre, aunque falle la
+  // validación de páginas de abajo: no depende de qué .mdx existan, y
+  // web/lib/registros.ts lo importa de forma estática — si esta escritura
+  // quedara detrás del `process.exit(1)` de la validación, el import
+  // rompería la compilación de TypeScript en cualquier tarea que use
+  // <Dato>/<Ficha> mientras las seis páginas de la fase 1 no existan
+  // todas (no ocurre hasta la Tarea 10). // ponytail
   const registrosDir = path.join(REPO_DIR, "registros");
   const categorias = ["modelos", "verificadores", "motores"];
   const salida = {};
@@ -227,6 +225,14 @@ function main() {
     }
   }
   writeFileSync(path.join(LIB_DIR, "registrosDocs.generated.json"), JSON.stringify(salida, null, 2));
+
+  if (errores.length > 0) {
+    console.error("indice-docs: build inválido —");
+    for (const e of errores) console.error(`  - ${e}`);
+    process.exit(1);
+  }
+
+  writeFileSync(path.join(LIB_DIR, "indiceDocs.json"), JSON.stringify({ paginas }, null, 2));
 
   console.log(`indice-docs: ${paginas.length} página(s) indexada(s), ${Object.keys(salida).length} registro(s) copiado(s).`);
 }
