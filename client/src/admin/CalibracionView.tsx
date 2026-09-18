@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import {
-  api, type AgenteVista, type FeatureFlags, type PatchRendimientoReq, type RendimientoSettings, type VerificadorVista,
+  api, type FeatureFlags, type PatchRendimientoReq, type RendimientoSettings, type VerificadorVista,
 } from "../lib/api";
-import { Icon } from "../ui/Icon";
 import { Seccion } from "./AdminPanel";
 
 /** Mismo `role="switch"` que ya usan `ExportPopup`/otros -- no hay un
@@ -81,13 +80,12 @@ export function CalibracionView({ token }: { token: string }) {
       {flags.modo_calibracion ? (
         <div className="mt-5 flex flex-col gap-5">
           <UmbralesEditor token={token} />
-          <PromptsEditor token={token} />
           <div className="rounded-xl border border-border bg-panel p-3.5">
             <p className="text-[11.5px] text-fg">Respuesta cruda del modelo</p>
             <p className="mt-1 text-[10.5px] leading-relaxed text-muted">
-              Con este modo activo, cada veredicto nuevo de un agente VLM fusionado guarda el JSON exacto que
-              devolvió el motor antes de interpretarlo. Se enseña en el propio popup de resultado del agente,
-              en una sección colapsada "Ver crudo" bajo el card.
+              Con este modo activo, cada veredicto nuevo de un agente en modo elección guarda la distribución
+              completa que calculó el motor antes de decidir. Se enseña en el propio popup de resultado del
+              agente, en una sección colapsada "Ver crudo" bajo el card.
             </p>
           </div>
           <div className="rounded-xl border border-border bg-panel p-3.5">
@@ -287,109 +285,3 @@ function UmbralesEditor({ token }: { token: string }) {
   );
 }
 
-function PromptsEditor({ token }: { token: string }) {
-  const [lista, setLista] = useState<AgenteVista[]>([]);
-  const [id, setId] = useState("");
-  const [json, setJson] = useState("");
-  const [overridden, setOverridden] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  // Misma fuente que ya usa el picker de agentes del modo Agentes -- sin
-  // duplicar el registro en dos sitios, y con el mismo nombre visible que
-  // ve el investigador, no el id crudo.
-  useEffect(() => {
-    api.get<AgenteVista[]>("/v1/agentes", token)
-      .then((l) => { setLista(l); if (l.length > 0) setId(l[0].id); })
-      .catch((e) => setError(String(e)));
-  }, [token]);
-
-  useEffect(() => { if (id) void buscar(); }, [id]);
-
-  async function buscar() {
-    setError(null);
-    try {
-      const v = await api.get<{ agente: unknown; overridden: boolean }>(
-        `/v1/admin/agentes/${encodeURIComponent(id)}`, token,
-      );
-      setJson(JSON.stringify(v.agente, null, 2));
-      setOverridden(v.overridden);
-    } catch (e) {
-      setError(String(e));
-    }
-  }
-
-  async function guardar(borrar: boolean) {
-    setBusy(true); setError(null);
-    try {
-      let agente: unknown = null;
-      if (!borrar) {
-        try {
-          agente = JSON.parse(json);
-        } catch {
-          setError("ese JSON no es válido");
-          setBusy(false);
-          return;
-        }
-      }
-      const v = await api.patch<{ agente: unknown; overridden: boolean }>(
-        `/v1/admin/agentes/${encodeURIComponent(id)}`, { agente }, token,
-      );
-      setJson(JSON.stringify(v.agente, null, 2));
-      setOverridden(v.overridden);
-    } catch (e) {
-      // El 400 de validación (struct Rust) llega aquí tal cual -- nunca se
-      // guarda un prompt roto, el mensaje real del servidor es la pista.
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="rounded-xl border border-border bg-panel p-3.5">
-      <p className="text-[11.5px] text-fg">Prompts de agentes</p>
-      <p className="mt-1 text-[10.5px] leading-relaxed text-muted">
-        El JSON completo del agente (incluye sus <code className="font-mono text-subtle">sub_preguntas</code>{" "}
-        si es uno fusionado). Se valida contra el struct de Rust antes de guardarse -- uno que no deserialice
-        se rechaza con 400 y nunca llega a persistirse.
-      </p>
-      <div className="mt-2.5">
-        <select value={id} onChange={(e) => setId(e.target.value)} className={SELECT}>
-          {lista.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.nombre}{a.sub_preguntas.length > 0 ? " (fusionado)" : ""}{!a.instalado ? " · motor sin instalar" : ""}
-            </option>
-          ))}
-        </select>
-      </div>
-      {json && (
-        <>
-          <textarea value={json} onChange={(e) => setJson(e.target.value)} rows={10} spellCheck={false}
-            className="mt-2.5 w-full resize-y rounded-lg border border-border bg-elevated px-2.5 py-2
-              font-mono text-[10.5px] leading-relaxed text-fg outline-none focus:border-white/40" />
-          <div className="mt-2 flex items-center gap-2">
-            <button onClick={() => void guardar(false)} disabled={busy}
-              className="jg-press rounded-lg bg-accent px-3 py-1.5 text-[11px] font-medium text-black disabled:opacity-40">
-              Guardar
-            </button>
-            {overridden && (
-              <button onClick={() => void guardar(true)} disabled={busy}
-                className="jg-press rounded-lg border border-white/15 px-3 py-1.5 text-[11px] text-subtle">
-                Volver al registro
-              </button>
-            )}
-            <span className="ml-auto font-mono text-[10px] text-subtle">
-              {overridden ? "override guardado" : "valor del registro"}
-            </span>
-          </div>
-        </>
-      )}
-      {error && (
-        <p className="mt-1.5 flex items-start gap-1.5 text-[10.5px] text-danger-fg">
-          <Icon name="alert" size={11} className="mt-px shrink-0" /> {error}
-        </p>
-      )}
-    </div>
-  );
-}
