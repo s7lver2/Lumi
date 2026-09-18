@@ -210,17 +210,26 @@ function main() {
         )
         .map((n) => n.nombre);
       const ficheroUrl = datos.fichero_url ?? datos.pesos_url ?? null;
+      // Los "motores" (VLM, upscalador) no aparecen en ningún
+      // registros/niveles/*.json: ese fichero solo registra qué modelo de
+      // recuperación, qué verificador y qué AGENTES corren en cada nivel —
+      // no qué motor invoca cada agente. Sin este caso especial, todo motor
+      // saldría marcado "alternativa no activa" aunque esté en uso real
+      // (Qwen3-VL lo invocan todos los agentes de todos los niveles),
+      // porque activoEnNiveles siempre daría una lista vacía para esta
+      // categoría — no porque nadie lo use.
+      const alternativaNoActiva = categoria === "motores" ? false : activoEnNiveles.length === 0;
       salida[datos.id] = {
         id: datos.id,
         nombre: datos.nombre,
         categoria,
-        tipo: datos.tipo,
+        tipo: datos.tipo ?? datos.clase,
         licencia: datos.licencia,
         dims: datos.dims,
         ficheroPesos: ficheroUrl ? ficheroUrl.split("/").pop() : undefined,
         sha256: datos.sha256,
         activoEnNiveles,
-        alternativaNoActiva: activoEnNiveles.length === 0,
+        alternativaNoActiva,
       };
     }
   }

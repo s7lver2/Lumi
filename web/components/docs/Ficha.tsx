@@ -2,7 +2,11 @@ import { registroCompleto } from "../../lib/registros";
 
 export function Ficha({ id, ruta }: { id: string; ruta: string }) {
   const r = registroCompleto(id);
-  const estado = r.alternativaNoActiva ? "alternativa no activa" : `activo · ${r.activoEnNiveles.join(", ")}`;
+  const estado = r.alternativaNoActiva
+    ? "alternativa no activa"
+    : r.activoEnNiveles.length > 0
+      ? `activo · ${r.activoEnNiveles.join(", ")}`
+      : "activo";
 
   const filas: { k: string; v: string; mono?: boolean }[] = [];
   if (r.tipo) filas.push({ k: "Tipo", v: r.tipo });

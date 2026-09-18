@@ -1,0 +1,109 @@
+export const frase = "Convierten una foto entera en un vector pensado para compararse contra millones de otros en microsegundos — no todos miden lo mismo: unos agrupan por parecido visual, otros por parecido de lugar, que es justo la propiedad que hace posible buscar en un continente.";
+export const procedencia = [
+  "registros/modelos/salad.json",
+  "registros/modelos/anyloc.json",
+  "registros/modelos/eigenplaces.json",
+  "registros/modelos/cosplace.json",
+  "registros/modelos/dino-mix.json",
+  "registros/modelos/cliquemining.json",
+  "registros/modelos/lumi-2.json",
+  "registros/modelos/lumi-preview.json",
+  "registros/niveles/mini.json",
+  "registros/niveles/pro.json",
+  "registros/niveles/vision.json",
+];
+
+import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
+import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
+import { Detalle } from "../../../../components/docs/Detalle";
+import { Ficha } from "../../../../components/docs/Ficha";
+import { Tec } from "../../../../components/docs/Tec";
+import { EsquemaEspacioVectores } from "../../../../components/docs/esquemas/EsquemaEspacioVectores";
+import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
+
+<div className="flex items-start justify-between gap-4">
+  <CabeceraDocs ruta="/docs/tecnologias/modelos-de-recuperacion" frase={frase} tipo="registros/modelos" />
+  <ControlProfundidad />
+</div>
+
+<EsquemaEspacioVectores />
+
+Todos entrenan sobre el mismo tipo de dato — pares de fotos de la misma ubicación tomadas en
+momentos distintos — pero no todos coinciden en cuántas dimensiones necesita ese espacio ni en qué
+arquitectura lo produce. Más dimensiones no es automáticamente mejor: es más caro de indexar y de
+buscar, así que el nivel que puede permitírselo (Vision) usa varios a la vez y el que no (Mini) usa
+el más barato de todos.
+
+## SALAD
+
+<Ficha id="salad" ruta="registros/modelos/salad.json" />
+
+Uno de los modelos que compiten en <a href="#donde-se-usa-cada-uno">Lumi Vision</a>. Entrena
+específicamente para que la distancia en su espacio se parezca a la distancia geográfica real, no
+al parecido visual — es la propiedad que hace que dos fotos de la misma esquina, tomadas con años
+de diferencia, queden cerca en ese espacio aunque a simple vista casi no se parezcan.
+
+## AnyLoc
+
+<Ficha id="anyloc" ruta="registros/modelos/anyloc.json" />
+
+El de mayor dimensión de todo el catálogo (49 152). Construido sobre un vocabulario visual —no
+sobre una red entrenada de punta a punta para este problema como el resto—, lo que lo hace más caro
+de indexar pero también menos dependiente de que la escena se parezca a lo que vio en entrenamiento.
+
+## EigenPlaces
+
+<Ficha id="eigenplaces" ruta="registros/modelos/eigenplaces.json" />
+
+Activo por defecto en Pro y Vision. Entrena viendo la misma ubicación desde ángulos de cámara muy
+distintos a propósito, para que el vector no dependa de desde dónde se tomó la foto tanto como de
+dónde se tomó.
+
+## CosPlace
+
+<Ficha id="cosplace" ruta="registros/modelos/cosplace.json" />
+
+El modelo de recuperación de Mini — el más barato de dimensión (512) del catálogo activo, elegido
+precisamente porque Mini es el nivel de coste bajo: menos dimensiones, índice más pequeño, búsqueda
+más rápida.
+
+## DINO-Mix
+
+<Ficha id="dino-mix" ruta="registros/modelos/dino-mix.json" />
+
+Activo en Pro y Vision junto a EigenPlaces — dos modelos con arquitecturas distintas votando sobre
+el mismo conjunto de candidatos, no uno sustituyendo al otro.
+
+## CliqueMining
+
+<Ficha id="cliquemining" ruta="registros/modelos/cliquemining.json" />
+
+Solo entra en juego en Vision. Su método de entrenamiento agrupa ejemplos difíciles de distinguir
+entre sí ("cliques") a propósito durante el entrenamiento, en vez de muestrearlos al azar — mejor en
+escenas ambiguas, a cambio de una licencia GPL-3.0 más restrictiva que la del resto del catálogo.
+
+## Lumi 2 y Lumi Preview
+
+<Ficha id="lumi-2" ruta="registros/modelos/lumi-2.json" />
+<Ficha id="lumi-preview" ruta="registros/modelos/lumi-preview.json" />
+
+Los dos modelos propios, activos en Pro y Vision. Lumi 2 es la mayor dimensión del par (12 288);
+Lumi Preview la más contenida de los dos (8448) — ambos se consultan a la vez, no uno en sustitución
+del otro, igual que EigenPlaces y DINO-Mix.
+
+## Dónde se usa cada uno
+
+| Nivel | Modelos activos |
+|---|---|
+| Mini | CosPlace |
+| Pro | Lumi Preview · Lumi 2 · EigenPlaces · DINO-Mix |
+| Vision | Todo lo de Pro, y además SALAD · CliqueMining · AnyLoc |
+
+<Detalle titulo="Por qué varios a la vez y no el mejor de todos">
+  Cada modelo comete errores distintos en escenas distintas — uno puede fallar por iluminación,
+  otro por ángulo de cámara. Consultar varios y dejar que la <Tec id="verificadores-geometricos">
+  verificación geométrica</Tec> arbitre entre sus candidatos cuesta más cómputo, pero es más robusto
+  que apostarlo todo a un solo espacio vectorial.
+</Detalle>
+
+<PiePaginaDocs ruta="/docs/tecnologias/modelos-de-recuperacion" />

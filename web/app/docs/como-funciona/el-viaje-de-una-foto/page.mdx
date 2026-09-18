@@ -29,10 +29,10 @@ Cada etapa del esquema se abre al pulsarla. La primera es la que más gente enti
 **no busca fotos parecidas a la tuya**, busca vectores próximos al tuyo, y dos fotos de la misma
 esquina tomadas con diez años de diferencia están mucho más cerca en ese espacio que dos fotos
 visualmente similares de ciudades distintas. Esa propiedad no la da Qdrant, la da el modelo que
-produjo el vector — por defecto <Tec id="salad">SALAD</Tec>.
+produjo el vector — por defecto <Tec id="modelos-de-recuperacion">SALAD</Tec>.
 
 Los doscientos candidatos que salen de ahí son una **hipótesis barata**. La siguiente etapa los pone
-a prueba con geometría de verdad: <Tec id="roma">RoMa</Tec> intenta emparejar píxel a píxel tu foto
+a prueba con geometría de verdad: <Tec id="verificadores-geometricos">RoMa</Tec> intenta emparejar píxel a píxel tu foto
 con cada candidato y mide si la correspondencia resultante es consistente con dos cámaras mirando la
 misma escena. Un candidato que solo se parecía en el color se cae aquí.
 

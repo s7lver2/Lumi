@@ -22,7 +22,7 @@ import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
 
 La recuperación es la primera criba: convierte "busca esta foto en todo el planeta" en "busca esta
 foto entre doscientos candidatos plausibles", y lo hace sin mirar contenido — solo distancia en un
-espacio vectorial. El modelo por defecto es <Tec id="salad">SALAD</Tec>, entrenado específicamente
+espacio vectorial. El modelo por defecto es <Tec id="modelos-de-recuperacion">SALAD</Tec>, entrenado específicamente
 para que esa distancia se parezca a la distancia geográfica real, no al parecido visual.
 
 <Detalle titulo="Los números exactos">
@@ -42,7 +42,7 @@ para que esa distancia se parezca a la distancia geográfica real, no al parecid
 
 ## Qué diferencia a un modelo de recuperación de otro
 
-No todos entrenan igual: <Tec id="roma">RoMa</Tec> hace algo distinto más adelante (comparar dos
+No todos entrenan igual: <Tec id="verificadores-geometricos">RoMa</Tec> hace algo distinto más adelante (comparar dos
 fotos concretas), pero los modelos de esta etapa comprimen una foto entera en un único vector
 pensado para compararse contra millones de otros en microsegundos. Esa compresión es la que hace
 posible buscar en un continente entero sin verificar geométricamente cada candidato uno a uno.

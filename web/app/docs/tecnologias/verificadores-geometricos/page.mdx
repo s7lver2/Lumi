@@ -1,0 +1,122 @@
+export const frase = "Coger dos fotos y decir, para cada punto de una, dónde cae ese mismo punto en la otra. Si no existe una respuesta geométrica coherente, las dos fotos no son del mismo sitio — y eso es justo lo que Lumi necesita saber después de que la recuperación proponga un candidato barato.";
+export const procedencia = [
+  "registros/verificadores/roma.json",
+  "registros/verificadores/roma-v2.json",
+  "registros/verificadores/tiny-roma.json",
+  "registros/verificadores/efficient-loftr.json",
+  "registros/verificadores/lightglue-aliked.json",
+  "registros/verificadores/aliked-n16.json",
+  "registros/verificadores/dinov2-vitl14.json",
+  "registros/niveles/mini.json",
+  "registros/niveles/pro.json",
+  "registros/niveles/vision.json",
+  "crates/lumid/src/verificar.rs",
+];
+
+import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
+import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
+import { Detalle } from "../../../../components/docs/Detalle";
+import { Ficha } from "../../../../components/docs/Ficha";
+import { Simbolo } from "../../../../components/docs/Simbolo";
+import { Tec } from "../../../../components/docs/Tec";
+import { EsquemaEmparejamiento } from "../../../../components/docs/esquemas/EsquemaEmparejamiento";
+import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
+
+<div className="flex items-start justify-between gap-4">
+  <CabeceraDocs ruta="/docs/tecnologias/verificadores-geometricos" frase={frase} tipo="registros/verificadores" />
+  <ControlProfundidad />
+</div>
+
+<EsquemaEmparejamiento etiqueta="esquema interactivo · mueve el umbral y mira qué sobrevive" />
+
+Todos los verificadores de esta página resuelven el mismo problema — correspondencia geométrica
+entre dos fotos — de dos maneras distintas. Los **densos** (RoMa, RoMa v2, tiny-RoMa,
+EfficientLoFTR) estiman una correspondencia para toda la imagen y adjuntan a cada punto su propia
+certeza: en una fachada lisa, sin esquinas que detectar, siguen teniendo respuesta y la marcan como
+poco fiable, que es información útil en vez de silencio. Los **dispersos** (LightGlue + ALIKED)
+buscan primero un puñado de puntos interesantes y solo después los emparejan: más baratos, pero
+ciegos donde no hay esquinas.
+
+## RoMa
+
+<Ficha id="roma" ruta="registros/verificadores/roma.json" />
+
+El verificador denso por defecto. Exige un mínimo de correspondencias de alta confianza
+(`umbral_inliers`, definido en el propio registro) para aceptar un candidato — un umbral más alto
+rechaza más falsos positivos pero también más verdaderos positivos en escenas difíciles.
+
+<Detalle titulo="Por qué necesita un segundo fichero de pesos">
+  RoMa necesita, además de sus propios pesos (`roma_outdoor.pth`), el backbone completo de DINOv2
+  ViT-L/14 como segundo fichero — la propia librería `romatch` lo descargaría sola vía `torch.hub`
+  si no se le pasa resuelto, pero este proyecto no deja que ninguna librería descargue nada sin
+  huella y licencia verificados, así que ese segundo fichero tiene su propia entrada de registro
+  (ver <a href="#dinov2-vit-l-14">DINOv2 ViT-L/14</a> más abajo). También exige
+  `torch.set_float32_matmul_precision("highest")` antes de invocarse o falla con un `RuntimeError`
+  de PyTorch — ese ajuste se aplica una vez al construir el verificador, no en cada llamada.
+</Detalle>
+
+## RoMa v2
+
+<Ficha id="roma-v2" ruta="registros/verificadores/roma-v2.json" />
+
+La siguiente generación del mismo enfoque denso, con un backbone DINOv3 en vez de DINOv2. No
+sustituye a RoMa: compite con él en Lumi Vision, donde
+varios verificadores geométricos evalúan el mismo par de fotos precisamente para cubrir los casos
+donde uno falla y el otro no.
+
+<Detalle titulo="Una licencia con condición adicional">
+  DINOv3 no es de uso libre como DINOv2: la licencia de Meta obliga a mostrar «Built with DINOv3» y
+  a entregar el acuerdo de licencia junto con los pesos si se redistribuyen. Eso no cambia cómo
+  funciona el verificador, pero sí qué hay que acompañar si el modelo se redistribuye fuera del
+  propio servidor.
+</Detalle>
+
+## tiny-RoMa
+
+<Ficha id="tiny-roma" ruta="registros/verificadores/tiny-roma.json" />
+
+Una versión reducida del mismo verificador denso, pensada para correr donde RoMa completo no cabe.
+Es el único verificador geométrico de Lumi Mini — el nivel
+de coste bajo verifica igual, solo que con un modelo más barato en vez de saltarse el paso.
+
+## EfficientLoFTR
+
+<Ficha id="efficient-loftr" ruta="registros/verificadores/efficient-loftr.json" />
+
+Semi-denso: un punto intermedio entre RoMa (denso completo) y LightGlue (disperso). Solo entra en
+juego en Lumi Vision, como un tercer punto de vista
+geométrico más en la competencia entre verificadores.
+
+## LightGlue + ALIKED
+
+<Ficha id="lightglue-aliked" ruta="registros/verificadores/lightglue-aliked.json" />
+
+El verificador **disperso**: ALIKED-N16 extrae primero un conjunto reducido de puntos de interés, y
+LightGlue los empareja entre las dos fotos. Más barato por par que cualquiera de los densos de
+arriba — por eso es el segundo verificador que entra en juego en Pro y Vision, no un sustituto de
+RoMa sino un punto de vista distinto sobre el mismo par.
+
+<Detalle titulo="El extractor no es opcional">
+  ALIKED-N16 no es una alternativa a LightGlue, es su entrada: LightGlue empareja *descriptores* de
+  puntos, no píxeles crudos, así que necesita a ALIKED (o un extractor equivalente) delante siempre.
+  Por eso viaja como <Simbolo ruta="registros/verificadores/aliked-n16.json">un componente propio en
+  el registro</Simbolo> en vez de venir empaquetado dentro de la entrada de LightGlue.
+</Detalle>
+
+## DINOv2 ViT-L/14
+
+<Ficha id="dinov2-vitl14" ruta="registros/verificadores/dinov2-vitl14.json" />
+
+No es un verificador: es el backbone que RoMa necesita para funcionar (arriba). Vive como registro
+aparte porque es un fichero de pesos independiente con su propia licencia y huella — no porque haga
+nada por sí solo dentro de la verificación.
+
+## Dónde se usa cada uno
+
+| Nivel | Verificadores activos |
+|---|---|
+| Mini | tiny-RoMa |
+| Pro | RoMa (+ DINOv2 ViT-L/14) · LightGlue + ALIKED |
+| Vision | Todo lo de Pro, y además RoMa v2 · EfficientLoFTR, compitiendo sobre el mismo par |
+
+<PiePaginaDocs ruta="/docs/tecnologias/verificadores-geometricos" />

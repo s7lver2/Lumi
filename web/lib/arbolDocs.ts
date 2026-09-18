@@ -36,24 +36,17 @@ export const arbolDocs: RamaArbol[] = [
     titulo: "Las tecnologías",
     glifo: "engranaje",
     paginas: [
-      { titulo: "Cómo leer estas páginas", ruta: "como-leer-estas-paginas", pendiente: true },
-      { titulo: "RoMa", ruta: "roma", pendiente: false },
-      { titulo: "RoMa v2", ruta: "roma-v2", pendiente: true },
-      { titulo: "tiny-RoMa", ruta: "tiny-roma", pendiente: true },
-      { titulo: "EfficientLoFTR", ruta: "efficient-loftr", pendiente: true },
-      { titulo: "LightGlue + ALIKED", ruta: "lightglue-aliked", pendiente: true },
-      { titulo: "DINOv2", ruta: "dinov2", pendiente: true },
-      { titulo: "SALAD", ruta: "salad", pendiente: true },
-      { titulo: "AnyLoc", ruta: "anyloc", pendiente: true },
-      { titulo: "EigenPlaces", ruta: "eigenplaces", pendiente: true },
-      { titulo: "CosPlace", ruta: "cosplace", pendiente: true },
-      { titulo: "DINO-Mix", ruta: "dino-mix", pendiente: true },
-      { titulo: "CliqueMining", ruta: "cliquemining", pendiente: true },
-      { titulo: "Lumi-2 y Lumi-preview", ruta: "lumi-2-y-lumi-preview", pendiente: true },
-      { titulo: "Qwen3-VL", ruta: "qwen3-vl", pendiente: true },
-      { titulo: "Depth-Anything v2", ruta: "depth-anything-v2", pendiente: true },
-      { titulo: "PaddleOCR", ruta: "paddleocr", pendiente: true },
-      { titulo: "Real-ESRGAN", ruta: "real-esrgan", pendiente: true },
+      // Una página por CATEGORÍA del registro, no por fichero — con veinte
+      // modelos individuales el árbol se volvía ilegible y la mayoría de
+      // páginas habrían sido un párrafo casi vacío. Las tres rutas se
+      // corresponden 1:1 con las tres carpetas reales de `registros/`
+      // (verificadores, motores, modelos) que ya escanea
+      // `scripts/indice-docs.mjs`. `depth-anything-v2` y `paddleocr`
+      // desaparecieron del catálogo porque sus registros ya no existen:
+      // el rediseño de agentes (5c) eliminó el camino de OCR por separado.
+      { titulo: "Verificadores geométricos", ruta: "verificadores-geometricos", pendiente: false },
+      { titulo: "Motores", ruta: "motores", pendiente: false },
+      { titulo: "Modelos de recuperación", ruta: "modelos-de-recuperacion", pendiente: false },
       { titulo: "Qdrant y HNSW", ruta: "qdrant-y-hnsw", pendiente: true },
       { titulo: "SQLite y Redis", ruta: "sqlite-y-redis", pendiente: true },
       { titulo: "Tauri", ruta: "tauri", pendiente: true },

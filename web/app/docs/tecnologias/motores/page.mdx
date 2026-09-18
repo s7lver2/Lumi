@@ -1,0 +1,60 @@
+export const frase = "Los motores son los modelos que miran una foto y describen o mejoran algo concreto — no la buscan (eso es recuperación) ni la comparan contra otra (eso es verificación). Hoy hay dos: uno que lee la escena para los agentes, y otro que la agranda antes de analizarla.";
+export const procedencia = [
+  "registros/motores/qwen3-vl.json",
+  "registros/motores/real-esrgan.json",
+  "workers/lumi_motores.py",
+  "workers/lumi_upscale.py",
+  "crates/lumid/src/queue/mod.rs",
+];
+
+import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
+import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
+import { Detalle } from "../../../../components/docs/Detalle";
+import { Ficha } from "../../../../components/docs/Ficha";
+import { Simbolo } from "../../../../components/docs/Simbolo";
+import { Tec } from "../../../../components/docs/Tec";
+import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
+
+<div className="flex items-start justify-between gap-4">
+  <CabeceraDocs ruta="/docs/tecnologias/motores" frase={frase} tipo="registros/motores" />
+  <ControlProfundidad />
+</div>
+
+## Qwen3-VL-8B-Instruct (4-bit)
+
+<Ficha id="qwen3-vl-8b" ruta="registros/motores/qwen3-vl.json" />
+
+El modelo de visión-lenguaje que responde la pregunta de cada agente (ver{" "}
+<a href="/docs/como-funciona/agentes">Agentes: lo que se ve en la foto</a>). No es un solo fichero
+de pesos: es un repositorio entero de HuggingFace Transformers (config, tokenizador, fragmentos
+`.safetensors`), instalado con `snapshot_download`, no con una descarga suelta — por eso este
+registro trae `hf_repo` en vez de `fichero_url`, y la integridad de cada fichero la verifica el
+propio hub por ETags, no un sha256 propio de este proyecto.
+
+<Detalle titulo="Por qué en 4 bits">
+  El 8B en 4 bits ocupa unos 5,5 GB de VRAM frente a los ~8 GB del 4B en fp16 — cabe con más margen
+  en los 12 GB de una RTX 4070 SUPER, y el 8B es, con diferencia, el más descargado de la familia
+  Qwen3-VL. El campo `"cuantizacion": "4bit"` del registro le dice a `Vlm.__init__` (en{" "}
+  <Simbolo ruta="workers/lumi_motores.py">workers/lumi_motores.py</Simbolo>) que cargue con
+  `BitsAndBytesConfig(load_in_4bit=True)` en vez de fp16.
+</Detalle>
+
+## Real-ESRGAN x4
+
+<Ficha id="real-esrgan" ruta="registros/motores/real-esrgan.json" />
+
+Un upscalador, no un modelo de visión-lenguaje: reescala una imagen antes de que el resto del
+pipeline la toque, para que una foto pequeña o comprimida no llegue con menos detalle del que un
+verificador o un agente necesitan. Se invoca desde la cola —{" "}
+<Simbolo ruta="crates/lumid/src/queue/mod.rs">correr_upscale</Simbolo> — con un factor concreto (1×,
+2×, 4×), no siempre a máxima resolución: reescalar cuesta tiempo de GPU, y una foto que ya llega
+nítida no necesita el 4× completo.
+
+## Dónde se usa cada uno
+
+Qwen3-VL es el único motor de agentes hoy — no compite con ninguna alternativa, así que no aparece
+"activo en tal nivel" como un modelo de recuperación o un verificador: lo invoca cualquier agente,
+en cualquier nivel que tenga agentes activados. Real-ESRGAN se invoca bajo demanda, desde el editor
+de imagen del cliente, independientemente del nivel.
+
+<PiePaginaDocs ruta="/docs/tecnologias/motores" />

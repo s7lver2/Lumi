@@ -23,7 +23,7 @@ la otra, es evidencia real de que ambas muestran la misma escena. Si no existe, 
 descarta, por muy bien situado que estuviera en el ranking de recuperación.
 
 <Detalle titulo="Los números exactos">
-  El verificador por defecto es <Tec id="roma">RoMa</Tec>, que exige un mínimo de correspondencias de
+  El verificador por defecto es <Tec id="verificadores-geometricos">RoMa</Tec>, que exige un mínimo de correspondencias de
   alta confianza (`umbral_inliers`, definido en{" "}
   <Simbolo ruta="registros/verificadores/roma.json">registros/verificadores/roma.json</Simbolo>) para
   aceptar un candidato. Un umbral más alto rechaza más falsos positivos pero también más verdaderos
@@ -39,7 +39,7 @@ descarta, por muy bien situado que estuviera en el ranking de recuperación.
 
 ## Denso frente a por puntos
 
-<Tec id="roma">RoMa</Tec> es un verificador **denso**: no busca primero un puñado de puntos
+<Tec id="verificadores-geometricos">RoMa</Tec> es un verificador **denso**: no busca primero un puñado de puntos
 interesantes para luego emparejarlos, sino que estima una correspondencia para toda la imagen y
 adjunta a cada punto su propia certeza. En una fachada lisa, sin esquinas que detectar, un método por
 puntos no encuentra dónde agarrarse; un verificador denso sigue teniendo respuesta y la marca como
