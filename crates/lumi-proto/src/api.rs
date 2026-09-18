@@ -981,9 +981,10 @@ pub struct DichoDeAgente {
     pub agente: String,
     pub nombre: String,
     pub etiqueta: String,
-    pub confianza: f64,
-    /// `filtra` o `describe`.
-    pub tipo: String,
+    /// `None` en modo transcripción -- no hay conjunto cerrado sobre el que
+    /// normalizar (spec 2026-09-17 §5), nunca un número inventado.
+    #[serde(default)]
+    pub confianza: Option<f64>,
     #[serde(default)]
     pub detalle: String,
     /// La etiqueta que el motor realmente eligió, aunque no llegara al
@@ -996,12 +997,13 @@ pub struct DichoDeAgente {
     /// calcula una distribución genuina — nunca rellenado a mano.
     #[serde(default)]
     pub alternativas: Vec<(String, f64)>,
-    /// Ver `crate::worker::Msg::Agente::rasgos`.
+    /// Ver `crate::worker::Msg::Agente::apoyo_visual` (spec 2026-09-17 §4) --
+    /// cuánto sube la imagen la evidencia de la opción ganadora frente a no
+    /// verla, una lectura aparte de `confianza`. `None` en modo transcripción.
     #[serde(default)]
-    pub rasgos: Option<crate::worker::Rasgos>,
-    /// Ver `lumi_index::agentes::Veredicto::respuesta_cruda` (spec
-    /// 2026-09-10 §4c). `None` salvo que `modo_calibracion` estuviera
-    /// activo en el momento del análisis.
+    pub apoyo_visual: Option<f64>,
+    /// Ver `lumi_index::agentes::Veredicto::respuesta_cruda`. `None` salvo
+    /// que `modo_calibracion` estuviera activo en el momento del análisis.
     #[serde(default)]
     pub respuesta_cruda: Option<String>,
 }
@@ -1381,12 +1383,6 @@ pub struct ExportInformeReq {
     /// decoración, y quien la quite lo hace a sabiendas.
     #[serde(default = "si")]
     pub integridad_sha256: bool,
-    /// Cuando un veredicto de agente trae `DichoDeAgente.rasgos` de verdad
-    /// (recuadros OCR o mapa de profundidad), incluirlo como gráfico
-    /// embebido en vez de solo la línea de texto. Sin rasgos reales que
-    /// mostrar, no cambia nada -- nunca se inventa un gráfico placeholder.
-    #[serde(default = "si")]
-    pub rasgos_como_imagen: bool,
     /// `None` = todas las imágenes del caso, el comportamiento de siempre --
     /// así una llamada vieja que no manda este campo no cambia de
     /// comportamiento. `Some([])` es un informe sin ninguna imagen, una
@@ -1430,7 +1426,6 @@ impl Default for ExportInformeReq {
             veredictos_agentes: true,
             firmado_por: String::new(),
             integridad_sha256: true,
-            rasgos_como_imagen: true,
             imagenes_incluidas: None,
             notas: String::new(),
             tema: tema_oscuro(),
