@@ -1,0 +1,18 @@
+{
+  "id": "vegetacion",
+  "nombre": "Bioma por la vegetación",
+  "icono": "vegetacion",
+  "modo": "eleccion",
+  "pregunta": "Looking at the dominant vegetation visible in this photo, it looks like",
+  "umbral": 0.55,
+  "peso": 0.3,
+  "activo": true,
+  "opciones": [
+    { "id": "palmeras", "verbalizador": " palm trees, tropical or subtropical vegetation.", "visible": "Palmeras", "paises": [] },
+    { "id": "coniferas", "verbalizador": " coniferous forest.", "visible": "Coníferas", "paises": [] },
+    { "id": "sabana", "verbalizador": " savanna, dry grassland with scattered trees.", "visible": "Sabana", "paises": [] },
+    { "id": "selva", "verbalizador": " dense tropical rainforest.", "visible": "Selva", "paises": [] },
+    { "id": "sin-vegetacion", "verbalizador": " no significant vegetation, bare or urban ground.", "visible": "Sin vegetación", "paises": [] },
+    { "id": "indeterminado", "verbalizador": " cannot be determined from this image.", "visible": "No se puede determinar", "paises": [] }
+  ]
+}
