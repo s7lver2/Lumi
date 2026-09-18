@@ -257,7 +257,7 @@ impl Servicios {
             self.lanzar(
                 "qdrant",
                 Self::en_wsl(&format!(
-                    "mkdir -p \"$HOME/.lumi-indexer/qdrant\" && \
+                    "mkdir -p \"$HOME/.lumi-indexer/qdrant\" && cd \"$HOME/.lumi-indexer\" && \
                      QDRANT__STORAGE__STORAGE_PATH=\"$HOME/.lumi-indexer/qdrant\" \
                      QDRANT__SERVICE__HOST=127.0.0.1 \
                      QDRANT__SERVICE__HTTP_PORT={QDRANT_PUERTO} \
