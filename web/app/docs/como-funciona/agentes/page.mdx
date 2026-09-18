@@ -4,6 +4,7 @@ export const procedencia = ["crates/lumid/src/agentar.rs", "registros/agentes/in
 import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
 import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
 import { Detalle } from "../../../../components/docs/Detalle";
+import { Simbolo } from "../../../../components/docs/Simbolo";
 import { EsquemaAgente } from "../../../../components/docs/esquemas/EsquemaAgente";
 import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
 
@@ -22,15 +23,16 @@ llega a la etapa siguiente.
 
 <Detalle titulo="Los números exactos">
   Los agentes activos dependen del nivel: Mini no ejecuta ninguno, Pro y Vision ejecutan el conjunto
-  completo declarado en `registros/niveles/pro.json` — idioma y señalética, condiciones ambientales,
-  hora y sombras, tipo de escena, dimensiones de la vía, entre otros. Cada uno es su propio registro
-  bajo `registros/agentes/`.
+  completo declarado en <Simbolo ruta="registros/niveles/pro.json">registros/niveles/pro.json</Simbolo> —
+  idioma y señalética, condiciones ambientales, hora y sombras, tipo de escena, dimensiones de la vía,
+  entre otros. Cada uno es su propio registro bajo `registros/agentes/`.
 </Detalle>
 
 <Detalle titulo="Qué hace esto en el código">
-  `crates/lumid/src/agentar.rs` ejecuta cada agente activo sobre la imagen de entrada y devuelve su
-  distribución de verbalizadores; esa distribución no descarta ninguna hipótesis por sí sola, solo
-  aporta un factor que la siguiente etapa combina con las demás — ver «El veredicto y su confianza».
+  <Simbolo ruta="crates/lumid/src/agentar.rs">crates/lumid/src/agentar.rs</Simbolo> ejecuta cada
+  agente activo sobre la imagen de entrada y devuelve su distribución de verbalizadores; esa
+  distribución no descarta ninguna hipótesis por sí sola, solo aporta un factor que la siguiente
+  etapa combina con las demás — ver «El veredicto y su confianza».
 </Detalle>
 
 ## Por qué verbalizadores y no una respuesta libre

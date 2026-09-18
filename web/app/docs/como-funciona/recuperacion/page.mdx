@@ -8,6 +8,7 @@ export const procedencia = [
 import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
 import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
 import { Detalle } from "../../../../components/docs/Detalle";
+import { Simbolo } from "../../../../components/docs/Simbolo";
 import { Tec } from "../../../../components/docs/Tec";
 import { EsquemaEspacioVectores } from "../../../../components/docs/esquemas/EsquemaEspacioVectores";
 import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
@@ -27,9 +28,9 @@ para que esa distancia se parezca a la distancia geográfica real, no al parecid
 <Detalle titulo="Los números exactos">
   Qdrant mantiene un índice HNSW por `(modelo, versión)`: la consulta pide `limit=200` con
   `hnsw_ef=128`, un compromiso entre recuperar casi siempre el vecino verdadero y no visitar más
-  nodos del grafo de los necesarios. El resultado se agrupa por vecindad de tesela z14 en
-  `lumi_index::agrupar` antes de pasar a verificación, así que un tramo de calle con muchas fotos
-  cuenta como una sola hipótesis.
+  nodos del grafo de los necesarios. El resultado se agrupa por vecindad de tesela z14 en{" "}
+  <Simbolo ruta="crates/lumi-index/src/agrupar.rs">lumi_index::agrupar</Simbolo> antes de pasar a
+  verificación, así que un tramo de calle con muchas fotos cuenta como una sola hipótesis.
 </Detalle>
 
 <Detalle titulo="Por qué no se descarga solo">

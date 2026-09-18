@@ -9,6 +9,7 @@ export const procedencia = [
 import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
 import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
 import { Detalle } from "../../../../components/docs/Detalle";
+import { Simbolo } from "../../../../components/docs/Simbolo";
 import { Tec } from "../../../../components/docs/Tec";
 import { EsquemaViaje } from "../../../../components/docs/esquemas/EsquemaViaje";
 import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
@@ -38,16 +39,19 @@ misma escena. Un candidato que solo se parecía en el color se cae aquí.
 <Detalle titulo="Los números exactos">
   El daemon pide a Qdrant `limit=200` con `hnsw_ef=128` y agrupa el resultado por vecindad de tesela
   z14 antes de verificar, de modo que veinte fotos de la misma manzana cuentan como una sola
-  hipótesis y no como veinte. El agrupado vive en `lumi_index::agrupar`; la atribución de cada
-  hipótesis a su índice y a su autor vive en `lumid::recuperar`, en Rust y no en el worker de Python,
-  porque la procedencia está en SQLite y el worker no la ve.
+  hipótesis y no como veinte. El agrupado vive en <Simbolo ruta="crates/lumi-index/src/agrupar.rs">lumi_index::agrupar</Simbolo>;
+  la atribución de cada hipótesis a su índice y a su autor vive en{" "}
+  <Simbolo ruta="crates/lumid/src/recuperar.rs">lumid::recuperar</Simbolo>, en Rust y no en el worker
+  de Python, porque la procedencia está en SQLite y el worker no la ve.
 </Detalle>
 
 <Detalle titulo="Qué hace esto en el código">
-  `crates/lumid/src/recuperar.rs` orquesta las cinco etapas para una analísis: pide el vector al
-  worker, consulta Qdrant, agrupa con `lumi_index::agrupar`, llama a `crates/lumid/src/verificar.rs`
-  para la geometría y a `crates/lumid/src/agentar.rs` para los agentes, y deja el resultado en la
-  tabla de análisis de SQLite.
+  <Simbolo ruta="crates/lumid/src/recuperar.rs">crates/lumid/src/recuperar.rs</Simbolo> orquesta las
+  cinco etapas para un análisis: pide el vector al worker, consulta Qdrant, agrupa con{" "}
+  <Simbolo ruta="crates/lumi-index/src/agrupar.rs">lumi_index::agrupar</Simbolo>, llama a{" "}
+  <Simbolo ruta="crates/lumid/src/verificar.rs">crates/lumid/src/verificar.rs</Simbolo> para la
+  geometría y a <Simbolo ruta="crates/lumid/src/agentar.rs">crates/lumid/src/agentar.rs</Simbolo>{" "}
+  para los agentes, y deja el resultado en la tabla de análisis de SQLite.
 </Detalle>
 
 ## Por qué son cinco y no una

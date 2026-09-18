@@ -5,6 +5,7 @@ import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
 import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
 import { Detalle } from "../../../../components/docs/Detalle";
 import { Ficha } from "../../../../components/docs/Ficha";
+import { Simbolo } from "../../../../components/docs/Simbolo";
 import { Tec } from "../../../../components/docs/Tec";
 import { EsquemaEmparejamiento } from "../../../../components/docs/esquemas/EsquemaEmparejamiento";
 import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
@@ -30,7 +31,9 @@ sigue teniendo respuesta y la marca como poco fiable, que es información útil 
   <Tec id="dinov2">DINOv2</Tec> ViT-L/14 como segundo fichero — la propia librería `romatch` lo
   descargaría sola vía `torch.hub` si no se le pasa resuelto, pero este proyecto no deja que ninguna
   librería descargue nada sin huella y licencia verificados, así que ese segundo fichero tiene su
-  propia entrada de registro (`dinov2-vitl14.json`) e instalación independiente.
+  propia entrada de registro (
+  <Simbolo ruta="registros/verificadores/dinov2-vitl14.json">dinov2-vitl14.json</Simbolo>) e
+  instalación independiente.
 </Detalle>
 
 <Detalle titulo="Por qué no se descarga solo">

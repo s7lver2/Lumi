@@ -4,6 +4,7 @@ export const procedencia = ["crates/lumid/src/verificar.rs", "registros/verifica
 import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
 import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
 import { Detalle } from "../../../../components/docs/Detalle";
+import { Simbolo } from "../../../../components/docs/Simbolo";
 import { Tec } from "../../../../components/docs/Tec";
 import { EsquemaEmparejamiento } from "../../../../components/docs/esquemas/EsquemaEmparejamiento";
 import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
@@ -23,15 +24,17 @@ descarta, por muy bien situado que estuviera en el ranking de recuperación.
 
 <Detalle titulo="Los números exactos">
   El verificador por defecto es <Tec id="roma">RoMa</Tec>, que exige un mínimo de correspondencias de
-  alta confianza (`umbral_inliers`, definido en `registros/verificadores/roma.json`) para aceptar un
-  candidato. Un umbral más alto rechaza más falsos positivos pero también más verdaderos positivos en
-  escenas difíciles — el ajuste vive en el propio registro, no en el código.
+  alta confianza (`umbral_inliers`, definido en{" "}
+  <Simbolo ruta="registros/verificadores/roma.json">registros/verificadores/roma.json</Simbolo>) para
+  aceptar un candidato. Un umbral más alto rechaza más falsos positivos pero también más verdaderos
+  positivos en escenas difíciles — el ajuste vive en el propio registro, no en el código.
 </Detalle>
 
 <Detalle titulo="Qué hace esto en el código">
-  `crates/lumid/src/verificar.rs` invoca al verificador configurado para el nivel activo (Mini no
-  verifica; Pro y Vision sí) sobre cada candidato agrupado que llega de recuperación, y anota en la
-  hipótesis tanto el número de correspondencias como su distribución espacial.
+  <Simbolo ruta="crates/lumid/src/verificar.rs">crates/lumid/src/verificar.rs</Simbolo> invoca al
+  verificador configurado para el nivel activo (Mini no verifica; Pro y Vision sí) sobre cada
+  candidato agrupado que llega de recuperación, y anota en la hipótesis tanto el número de
+  correspondencias como su distribución espacial.
 </Detalle>
 
 ## Denso frente a por puntos
