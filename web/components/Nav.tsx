@@ -133,6 +133,7 @@ export function Nav() {
           )}
         </div>
         <a className="jg-micro hover:text-fg" href="/indexado">Indexado</a>
+        <a className="jg-micro hover:text-fg" href="/docs">Docs</a>
         <a className="jg-micro hover:text-fg" href="/aboutme">Sobre mí</a>
       </div>
 

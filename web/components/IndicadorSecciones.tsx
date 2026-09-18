@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 const SECCIONES = [
@@ -16,6 +17,7 @@ const SECCIONES = [
  *  scroll activamente — se oculta a los 1.4s de inactividad, o de entrada
  *  si estás arriba o abajo del todo, para no quedar de adorno permanente. */
 export function IndicadorSecciones() {
+  const pathname = usePathname();
   const [activo, setActivo] = useState(0);
   const [visible, setVisible] = useState(false);
   const ocultarRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -55,6 +57,8 @@ export function IndicadorSecciones() {
       if (ocultarRef.current) clearTimeout(ocultarRef.current);
     };
   }, []);
+
+  if (pathname.startsWith("/docs")) return null;
 
   return (
     <div
