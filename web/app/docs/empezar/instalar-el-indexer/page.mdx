@@ -28,6 +28,50 @@ Se distribuye por el mismo instalador compartido que el cliente (`installer.exe`
 ahora) — al abrirlo, elige **Indexer** en vez de (o además de) Cliente. Nada le impide convivir en
 la misma máquina que un cliente ya instalado; son productos independientes bajo el mismo instalador.
 
+## Instalar WSL2 (requisito en Windows)
+
+El botón "Levantar en WSL" del siguiente paso no instala WSL por ti — solo lo usa una vez ya está
+ahí. Si nunca lo has instalado, hazlo antes de abrir el Indexer:
+
+<Codigo titulo="PowerShell, como Administrador" codigo={`wsl --install`} />
+
+Eso activa las características de Windows que hacen falta (Plataforma de máquina virtual,
+Subsistema de Windows para Linux), instala WSL2 y, por defecto, una distribución Ubuntu — y pide
+**reiniciar** al terminar. Tras el reinicio, Ubuntu se abre solo una vez para que crees tu usuario y
+contraseña de Linux (no tienen por qué coincidir con los de Windows).
+
+Para comprobar que quedó bien instalado:
+
+<Codigo titulo="PowerShell" codigo={`wsl -l -v`} />
+
+Debería listar al menos una distribución con `VERSION` en `2` y `STATE` en `Running` o `Stopped` —
+nunca vacío.
+
+<Detalle titulo="Problemas más comunes al instalar o usar WSL">
+  **"WSL 2 requiere que se actualice el componente del kernel"** — `wsl --install` no siempre trae
+  el kernel más reciente. Solución: `wsl --update` y reiniciar otra vez.
+
+  **`wsl --install` no hace nada, o falla en silencio** — casi siempre es la virtualización
+  desactivada en la BIOS/UEFI (`Intel VT-x` o `AMD-V`). Actívala ahí, o comprueba desde el
+  Administrador de tareas → Rendimiento → CPU si dice "Virtualización: Habilitada". Si las
+  características de Windows no se activaron solas, se pueden forzar a mano:
+
+  <Codigo titulo="PowerShell, como Administrador" codigo={`dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart`} />
+
+  **El botón "Levantar en WSL" instala/arranca en la distribución equivocada** — el Indexer llama
+  al comando `wsl` sin especificar cuál distribución (`wsl -e sh -lc "..."`), así que siempre usa
+  la que esté marcada como predeterminada. Si tienes varias (por ejemplo Ubuntu y una de Docker
+  Desktop) y no es Ubuntu la que responde, fija cuál lo es:
+
+  <Codigo titulo="PowerShell" codigo={`wsl --set-default Ubuntu`} />
+
+  **Antivirus o Hyper-V de terceros (VirtualBox, VMware) en conflicto** — WSL2 necesita Hyper-V
+  activo; algunos hipervisores de terceros exigen su propio "modo de compatibilidad con Hyper-V"
+  para poder convivir. Revisa la documentación de esa herramienta si `wsl --install` completa pero
+  las máquinas virtuales dejan de arrancar después.
+</Detalle>
+
 ## El asistente de la primera vez
 
 El Indexer nace con cuatro pasos, y el primero (la carpeta de datos) ya llega hecho — la crea el
@@ -47,8 +91,8 @@ distinto, y la app lo dice sin rodeos: Redis no publica binarios oficiales para 
 </Detalle>
 
 Si estás en Windows, este paso trae un botón **"Levantar en WSL"**. Requiere tener **WSL2 ya
-instalado y habilitado** de antemano — el Indexer no instala WSL por ti, solo usa el comando `wsl`
-para hablar con la distribución que ya tengas. Al pulsarlo:
+instalado y habilitado** de antemano (ver arriba) — el Indexer no instala WSL por ti, solo usa el
+comando `wsl` para hablar con la distribución que ya tengas. Al pulsarlo:
 
 1. Si Redis o Qdrant no están instalados dentro de tu distribución, los instala ahí — Redis desde
    los repositorios de la distro, Qdrant como binario oficial fijado a `~/.lumi-indexer/bin`, sin
