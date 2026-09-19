@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { Seccion } from "../admin/AdminPanel";
 import { api } from "../lib/api";
 import {
-  ESCALAS_INTERFAZ, leerEscalaInterfaz, leerFondoEntrada, leerReducirMovimiento,
-  setEscalaInterfaz, setFondoEntrada, setReducirMovimiento, type FondoEntrada,
+  ESCALAS_INTERFAZ, leerAvisoVersionIncompatible, leerEscalaInterfaz, leerFondoEntrada, leerReducirMovimiento,
+  setAvisoVersionIncompatible, setEscalaInterfaz, setFondoEntrada, setReducirMovimiento, type FondoEntrada,
 } from "../lib/apariencia";
 import { AjustesSidebar, type AjustesSeccion } from "./AjustesSidebar";
 import { ActualizacionesSeccion } from "./ActualizacionesSeccion";
@@ -41,6 +41,7 @@ export function AjustesView({ onBack }: { onBack: () => void }) {
 
 function GeneralPanel() {
   const [activo, setActivo] = useState<boolean | null>(null);
+  const [avisoVersion, setAvisoVersion] = useState(leerAvisoVersionIncompatible());
 
   useEffect(() => { void api.autoarranqueLeer().then(setActivo); }, []);
 
@@ -60,6 +61,21 @@ function GeneralPanel() {
           onClick={() => void cambiar(!activo)}
           className={`relative h-5 w-10 shrink-0 rounded-full border transition-colors duration-300 ease-expo disabled:opacity-40 ${activo ? "border-accent bg-accent" : "border-white/15 bg-white/10"}`}>
           <span className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-fg ring-1 ring-black/20 transition-transform duration-300 ease-expo ${activo ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+        </button>
+      </label>
+
+      <label className="mt-3 flex items-center justify-between gap-3 rounded-card border border-border bg-panel p-[13px_16px]">
+        <span className="text-[11.5px] text-fg">
+          Avisar de incompatibilidad de versión
+          <small className="mt-0.5 block text-[10px] text-subtle">
+            Al conectar con un servidor de otra versión, detiene y pregunta antes de seguir. Apágalo
+            solo si sabes lo que haces: conectará directamente, sin preguntar.
+          </small>
+        </span>
+        <button role="switch" aria-checked={avisoVersion}
+          onClick={() => { const v = !avisoVersion; setAvisoVersion(v); setAvisoVersionIncompatible(v); }}
+          className={`relative h-5 w-10 shrink-0 rounded-full border transition-colors duration-300 ease-expo ${avisoVersion ? "border-accent bg-accent" : "border-white/15 bg-white/10"}`}>
+          <span className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-fg ring-1 ring-black/20 transition-transform duration-300 ease-expo ${avisoVersion ? "translate-x-[18px]" : "translate-x-0.5"}`} />
         </button>
       </label>
     </Seccion>

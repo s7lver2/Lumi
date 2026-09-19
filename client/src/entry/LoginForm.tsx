@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, parseVersionMismatch, type LoginRes, type Me } from "../lib/api";
 import { announcePresence, fetchLumiAvatarDataUrl, setAuth } from "../lib/bridge";
+import { leerAvisoVersionIncompatible } from "../lib/apariencia";
 import { deviceId, deviceName, updateServerAvatar, updateSession, type Server } from "../lib/session";
 import { useServer } from "../lib/store";
 import { Icon } from "../ui/Icon";
@@ -26,7 +27,10 @@ export function LoginForm({ server, onServer, onAdd, onRequest, onSignedIn, onMu
   // siguiente render — `submit` seguiría leyendo el `forzarVersion` viejo
   // (`false`) de este cierre y chocaría otra vez con el mismo bloqueo.
   // Pasarlo explícito evita depender del timing de React.
-  async function submit(forzar = forzarVersion) {
+  // Con el aviso desactivado en Ajustes, se conecta con `forzar: true` desde
+  // el primer intento -- el popup de incompatibilidad nunca llega a chocar,
+  // en vez de mostrarse y depender de que se acepte a mano cada vez.
+  async function submit(forzar = forzarVersion || !leerAvisoVersionIncompatible()) {
     if (!server || !username || !password) return;
     setBusy(true); setError(null);
     try {

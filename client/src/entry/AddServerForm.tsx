@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { addrFromCard, api, fingerprintFromCard, isCard, parseVersionMismatch, type Hello, type ServerProfileSettings } from "../lib/api";
+import { leerAvisoVersionIncompatible } from "../lib/apariencia";
 import { fetchLumiAvatarDataUrl } from "../lib/bridge";
 import { addServer } from "../lib/session";
 import { Icon } from "../ui/Icon";
@@ -37,7 +38,9 @@ export function AddServerForm({ onAdded, onOwnerKey, onBack }: {
     if (!s || !isCard(s)) return;
     setBusy(true); setError(null);
     try {
-      setHello(await api.pairCard(s));
+      // Ver LoginForm.submit: con el aviso desactivado en Ajustes, esto ya
+      // conecta con `forzar: true` sin pasar por el popup.
+      setHello(await api.pairCard(s, !leerAvisoVersionIncompatible()));
       // El popup enriquecido solo aparece si hay perfil configurado — sin
       // esto, "Servidor verificado" (la línea de siempre) desaparecería y
       // dejaría un hueco en blanco mientras se decide si hay algo que

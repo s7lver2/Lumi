@@ -1,6 +1,7 @@
 const KEY = "lumi.reducir-movimiento";
 const KEY_ESCALA = "lumi.escala-interfaz";
 const KEY_FONDO = "lumi.fondo-entrada";
+const KEY_AVISO_VERSION = "lumi.avisar-version-incompatible";
 
 /** Porcentajes admitidos para el tamaño de la interfaz. Se probó `zoom` (no
  *  estándar, pero WebView2 lo soporta — es Chromium) primero, pero apilaba un
@@ -71,4 +72,22 @@ export function leerFondoEntrada(): FondoEntrada {
 
 export function setFondoEntrada(v: FondoEntrada) {
   localStorage.setItem(KEY_FONDO, v);
+}
+
+/** Nace ACTIVO: el aviso de incompatibilidad de versión (`VersionMismatchModal`)
+ *  es una protección, no una molestia — solo un `false` explícito lo apaga,
+ *  igual que `limpieza_por_presion` en el servidor. Apagarlo hace que
+ *  `pair`/`pairCard`/`reconnect` pasen `forzar: true` desde el primer intento
+ *  en vez de mostrar el popup: útil para quien conecta a propósito contra
+ *  varias versiones de servidor a diario y ya conoce el riesgo. */
+export function leerAvisoVersionIncompatible(): boolean {
+  try {
+    return localStorage.getItem(KEY_AVISO_VERSION) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function setAvisoVersionIncompatible(activo: boolean) {
+  localStorage.setItem(KEY_AVISO_VERSION, activo ? "1" : "0");
 }

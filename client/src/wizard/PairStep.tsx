@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { addrFromKey, api, parseVersionMismatch } from "../lib/api";
+import { leerAvisoVersionIncompatible } from "../lib/apariencia";
 import { useServer } from "../lib/store";
 import { addServer, updateSession } from "../lib/session";
 import { Icon } from "../ui/Icon";
@@ -10,7 +11,9 @@ export function PairStep({ onDone }: { onDone: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function verify(forzar = false) {
+  // Ver LoginForm.submit: con el aviso desactivado en Ajustes, se conecta
+  // con `forzar: true` desde el primer intento.
+  async function verify(forzar = !leerAvisoVersionIncompatible()) {
     // El montaje (auto-verify) y el onBlur del campo pueden dispararse casi
     // a la vez cuando la clave llega ya rellena (AddServerForm) -- sin este
     // guard, las dos llamadas a /v1/claim con el MISMO secreto competían: la
