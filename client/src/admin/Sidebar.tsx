@@ -42,7 +42,7 @@ const GRUPOS: { grupo: string; items: { id: Seccion; label: string; icon: IconNa
       { id: "hardware", label: "Hardware", icon: "gpu" },
       { id: "doctor", label: "Doctor", icon: "pulse" },
       { id: "actualizaciones", label: "Actualizaciones", icon: "boxes" },
-      { id: "calibracion", label: "Calibración", icon: "sparkle" },
+      { id: "calibracion", label: "Opciones avanzadas", icon: "sparkle" },
     ],
   },
 ];

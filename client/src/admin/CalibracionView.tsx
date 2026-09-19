@@ -29,14 +29,15 @@ function Interruptor({ activo, onChange, label, hint, disabled }: {
 
 const INPUT = "w-full rounded-lg border border-border bg-elevated px-2.5 py-1.5 font-mono text-[11px] text-fg outline-none transition-colors duration-300 ease-expo focus:border-white/40";
 
-/** Sección "Calibración" del panel admin (spec 2026-09-10 §4): los tres
- *  interruptores nuevos del spec entero (`upscaler_activo`,
- *  `media_por_proyecto_activo` no tienen otra pantalla natural en la que
- *  vivir hoy -- `rendimiento.rs` existe en el backend pero el panel admin
- *  todavía no tiene una vista para él, así que se consolidan aquí) y, solo
- *  con `modo_calibracion` activo, las cuatro herramientas de debug: 4a
- *  (umbrales), 4b (prompts), 4c (nota sobre respuesta cruda) y 4d (nota
- *  sobre forzar motor/dispositivo). */
+/** Sección "Opciones avanzadas" del panel admin (antes "Calibración", spec
+ *  2026-09-10 §4): los tres interruptores nuevos del spec entero
+ *  (`upscaler_activo`, `media_por_proyecto_activo` no tienen otra pantalla
+ *  natural en la que vivir hoy -- `rendimiento.rs` existe en el backend pero
+ *  el panel admin todavía no tiene una vista para él, así que se consolidan
+ *  aquí) y, solo con `modo_calibracion` activo, las herramientas de debug que
+ *  quedan tras el rediseño de agentes: 4a (umbrales), 4c (nota sobre
+ *  respuesta cruda) y 4d (nota sobre forzar motor/dispositivo) -- 4b
+ *  (prompts) se retiró, ver `routes/calibracion.rs`. */
 export function CalibracionView({ token }: { token: string }) {
   const [flags, setFlags] = useState<FeatureFlags | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -54,11 +55,11 @@ export function CalibracionView({ token }: { token: string }) {
   }
 
   if (!flags) {
-    return <Seccion titulo="Calibración" grupo="Operación"><p className="text-[11px] text-subtle">cargando</p></Seccion>;
+    return <Seccion titulo="Opciones avanzadas" grupo="Operación"><p className="text-[11px] text-subtle">cargando</p></Seccion>;
   }
 
   return (
-    <Seccion titulo="Calibración" grupo="Operación">
+    <Seccion titulo="Opciones avanzadas" grupo="Operación">
       <p className="text-[11px] text-muted">
         Interruptores del spec 2026-09-10. Los tres nacen apagados por servidor.
       </p>
