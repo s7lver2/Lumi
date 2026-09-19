@@ -2,6 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Copia literal de la paleta de tailwind.config.ts — el resto de este
+   fichero usa var(--fg)/var(--muted)/etc. en CSS crudo (fuera de las clases
+   de Tailwind), y esos custom properties no existen solos: sin este :root
+   quedaban indefinidos, por lo que cada `color: var(--muted)` o
+   `border: 1px solid var(--border)` era una declaración inválida que el
+   navegador descartaba entera — el texto heredaba el color del padre en vez
+   del gris apagado previsto, y las tablas no pintaban ni borde ni fondo de
+   cabecera. // ponytail: duplicar la paleta a mano en vez de generarla desde
+   tailwind.config.ts porque ese fichero es TypeScript y este es CSS puro sin
+   paso de build intermedio que los conecte. */
+:root {
+  --bg: #0e0f11;
+  --surface: #15171a;
+  --panel: #1a1b1e;
+  --elevated: #202226;
+  --border: #26282c;
+  --muted: #9a9a95;
+  --subtle: #6a6c70;
+  --fg: #e8e8e6;
+}
+
 @layer base {
   html { scroll-behavior: smooth; }
   body { @apply bg-bg text-fg font-sans; -webkit-font-smoothing: antialiased; }
@@ -54,28 +75,33 @@
 #contenido-docs table:not([class]) {
   margin-top: 20px;
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 12.5px;
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
+  box-shadow: 0 8px 24px -16px rgba(0,0,0,.6);
 }
 #contenido-docs th:not([class]) {
   background: var(--elevated);
   color: var(--fg);
   font-weight: 500;
   text-align: left;
-  padding: 9px 14px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
-  font-size: 11px;
+  font-size: 10.5px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
 }
 #contenido-docs td:not([class]) {
-  padding: 9px 14px;
+  padding: 10px 14px;
   border-top: 1px solid var(--border);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 #contenido-docs tbody tr:first-child td:not([class]) { border-top: none; }
+#contenido-docs tbody tr:nth-child(even) td:not([class]) { background: var(--surface); }
 #contenido-docs td:not([class]):first-child { color: var(--fg); }
 
 #contenido-docs code:not([class]) {
@@ -207,6 +233,11 @@
    una medición llegando, no como un dato ya puesto ahí desde el principio. */
 @keyframes jg-barra-llena { from { width: 0%; } to { width: var(--fin); } }
 .jg-barra-llena { animation: jg-barra-llena .7s cubic-bezier(.16,1,.3,1) both; }
+/* Variante vertical de jg-barra-llena, para gráficos de barras en columna
+   (GraficoBenchmarks/GraficoRequisitos) — mismo perfil de easing, crece
+   desde abajo en vez de desde la izquierda. */
+@keyframes jg-barra-sube { from { height: 0%; } to { height: var(--fin); } }
+.jg-barra-sube { animation: jg-barra-sube .7s cubic-bezier(.16,1,.3,1) both; }
 
 /* El pulso que recorre las cinco etapas del viaje de una foto (esquema
    EsquemaViaje) — puramente decorativo, spec §4: "el pulso las recorre;

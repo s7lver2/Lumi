@@ -1,0 +1,128 @@
+export const frase = "El modelo frontera de la generación «Stelle» (v3): sin techo de VRAM ni de cómputo por diseño, apostado a romper los benchmarks estándar de geolocalización en vez de encajar en una GPU de consumo.";
+export const procedencia = ["registros/niveles/vision.json", "registros/modelos/lumi-2.json", "registros/verificadores/roma-v2.json"];
+
+import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
+import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
+import { Detalle } from "../../../../components/docs/Detalle";
+import { InsigniaGeneracion } from "../../../../components/docs/InsigniaGeneracion";
+import { Modelo } from "../../../../components/docs/Modelo";
+import { Tec } from "../../../../components/docs/Tec";
+import { GraficoBenchmarks } from "../../../../components/docs/graficos/GraficoBenchmarks";
+import { GraficoRequisitos } from "../../../../components/docs/graficos/GraficoRequisitos";
+import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
+
+<div className="flex items-start justify-between gap-4">
+  <div>
+    <CabeceraDocs ruta="/docs/modelos/lumi-stellar" frase={frase} />
+    <InsigniaGeneracion version="?" />
+  </div>
+  <ControlProfundidad />
+</div>
+
+<Detalle titulo="Esto es un concepto, no un modelo en desarrollo">
+  Nada en esta página tiene registro, pesos, ni fecha. Lumi Stellar es el techo teórico de lo que
+  Lumi podría hacer si el coste de VRAM, cómputo o tiempo de inferencia dejaran de importar — el
+  ejercicio inverso a diseñar Mini, Pro y Vision, que existen precisamente para caber en hardware
+  real. Es perfectamente posible que la generación «Stelle» nunca llegue a existir, o que exista con
+  un diseño distinto al de aquí. Ninguna cifra de esta página está medida: son objetivos de diseño.
+</Detalle>
+
+Un solo modelo frontera, no una familia Mini/Pro/Vision — porque el presupuesto de hardware es
+justamente lo que este ejercicio ignora. Consulta el ensemble de recuperación entero, el mayor
+número de verificadores geométricos de cualquier nivel, y un panel de motores en vez de uno solo.
+
+## Todos los modelos que contiene
+
+| Etapa | Modelos activos |
+|---|---|
+| Recuperación (9) | SALAD · AnyLoc · EigenPlaces · CosPlace · DINO-Mix · CliqueMining · Lumi Preview · Lumi 2 · **Lumi Stellar (nuevo)** |
+| Verificación geométrica (6) | RoMa · RoMa v2 · tiny-RoMa · EfficientLoFTR · LightGlue + ALIKED · **RoMa-omega (nuevo)** |
+| Motor (2, en panel) | **Qwen3-VL-235B-A22B-Instruct, bf16 (nuevo)** · **un segundo VLM de otro linaje, sin cuantizar (nuevo)** |
+
+Todo lo que ya existe en <Tec id="modelos-de-recuperacion">recuperación</Tec> y{" "}
+<Tec id="verificadores-geometricos">verificación</Tec> se mantiene intacto — Stellar no sustituye
+nada del catálogo activo, vota junto a él.
+
+## Benchmarks estimados (objetivo de diseño, no medición real)
+
+Ningún nivel de Lumi tiene todavía una cifra de precisión medida en un benchmark público — esta
+tabla son objetivos de diseño para donde debería quedar cada nivel en una prueba al estilo
+IM2GPS3k/YFCC4k (porcentaje de fotos localizadas dentro de cada radio), no un resultado real:
+
+| Radio de acierto | Mini (objetivo) | Pro (objetivo) | Vision (objetivo) | Stellar (objetivo) |
+|---|---|---|---|---|
+| Calle (1 km) | ~8% | ~18% | ~28% | ~45% |
+| Ciudad (25 km) | ~22% | ~40% | ~52% | ~70% |
+| Región (200 km) | ~38% | ~58% | ~68% | ~85% |
+| País (750 km) | ~55% | ~74% | ~82% | ~93% |
+| Continente (2500 km) | ~74% | ~89% | ~94% | ~98% |
+
+<GraficoBenchmarks />
+
+<Detalle titulo="Por qué publicar un objetivo sin haberlo medido">
+  Porque el objetivo es lo que fija cuánto ensemble hace falta, no al revés: Stellar suma modelos
+  hasta que el diseño teórico apunta a superar con margen el mejor resultado publicado de un sistema
+  de geolocalización de una sola foto, no hasta un número arbitrario. En cuanto exista una medición
+  real de Mini, Pro o Vision sobre un benchmark público, esta tabla se sustituye por esa cifra.
+</Detalle>
+
+## Requisitos mínimos estimados
+
+| | Mini | Pro | Vision | Stellar (estimado) |
+|---|---|---|---|---|
+| VRAM mínima / recomendada | 8 GB / 16 GB | 8 GB / 20 GB | mayor que Pro (sin medir aún) | varias GPU de datacenter (ej. 8× H100 80GB) |
+| RAM del sistema | 16 GB | 32 GB | 64 GB (estimado) | ~2 TB (memoria de nodo, no de GPU) |
+| CPU | 4 núcleos | 8 núcleos | 16 núcleos (estimado) | 2× servidor, ~128 núcleos combinados |
+| Disco (pesos) | ~6 GB | ~15 GB | ~35 GB (estimado) | ~1 TB (motor sin cuantizar + ensemble completo) |
+| Red entre GPU | — (una sola tarjeta) | — (una sola tarjeta) | — (una sola tarjeta) | NVLink/InfiniBand — el panel de motores no cabe en una GPU |
+
+<GraficoRequisitos />
+
+<Detalle titulo="De dónde sale el ~1 TB de disco y el ~2 TB de RAM">
+  Un modelo de 235 000 millones de parámetros en bf16 (2 bytes por parámetro, sin cuantizar) ocupa
+  por sí solo cientos de gigabytes en disco, antes de contar el segundo VLM del panel, el resto del
+  ensemble de recuperación y verificación, y el espacio de activaciones en inferencia. La RAM del
+  sistema en un nodo multi-GPU de datacenter (ej. una DGX H100) no es opcional: existe para alimentar
+  varias GPU a la vez sin que la carga de pesos se convierta en el cuello de botella — de ahí que
+  "sin límite de hardware" en la práctica signifique varias tarjetas conectadas por NVLink, no una
+  sola GPU por potente que sea.
+</Detalle>
+
+## Recuperación: el ensemble entero, y uno más
+
+<Tec id="modelos-de-recuperacion">Lumi Vision</Tec> ya consulta los ocho modelos de recuperación
+existentes a la vez. Stellar parte de ese mismo ensemble y añade un noveno, propio de esta
+generación:
+
+| | Lumi 2 (v2, hoy) | Lumi Stellar (concepto) |
+|---|---|---|
+| Dimensión del vector | 12 288 | 24 576 |
+| Backbone | DINOv2 ViT-L/14, **congelado** | DINOv2 ViT-g/14, sin congelar |
+| Entrenamiento | Solo la cabeza de agregación (BoQ) | Modelo completo, de punta a punta |
+
+Congelar el backbone en Lumi 2 es la misma clase de concesión que cuantizar un motor: mucho más
+barato de entrenar, pero deja rendimiento sobre la mesa. Sin límite de cómputo de entrenamiento, ese
+backbone deja de estar congelado.
+
+## Verificación geométrica: RoMa-omega y tiny-RoMa se suman a los cuatro de Vision
+
+<Detalle titulo="Qué distingue a RoMa-omega de RoMa v2">
+  RoMa v2 corre a una resolución de entrada fija, elegida para que la matriz de coste de
+  correspondencias quepa en una GPU de consumo. RoMa-omega —entrenamiento propio del proyecto sobre
+  la misma arquitectura densa— elimina esa cota: procesa el par de fotos a su resolución nativa, sin
+  redimensionar, y usa DINOv3 ViT-g/14 como backbone en vez del ViT-L/14 de RoMa v2, el mismo salto
+  de tamaño que el modelo de recuperación de arriba.
+</Detalle>
+
+tiny-RoMa, hoy reservado a Mini como su única opción barata, entra aquí por diversidad de método más
+que por necesidad: un quinto punto de vista geométrico, por barato que sea, puede detectar un
+acuerdo o desacuerdo que los otros cinco pasan por alto.
+
+## Motor: un panel, no un solo modelo
+
+Qwen3-VL-8B-Instruct en 4-bit es el motor de todos los niveles activos hoy. Stellar lo sustituye por
+un panel de dos motores sin cuantizar, de linajes de entrenamiento distintos, que interpretan la
+misma foto por separado y contrastan sus respuestas — la misma lógica de "varios puntos de vista"
+que ya aplican la recuperación y la verificación geométrica de arriba.
+
+<PiePaginaDocs ruta="/docs/modelos/lumi-stellar" />

@@ -46,13 +46,15 @@ export const arbolDocs: RamaArbol[] = [
       // identidad propia de Lumi: la primera generación de modelo
       // (Preview, v1) y los tres niveles del producto que la sustituyeron,
       // los tres juntos la segunda generación (v2) — no cada uno una
-      // versión distinta. Lumi 3 todavía no existe ni tiene forma
-      // decidida — de ahí la insignia "?" en vez de comprometerse a "v3".
+      // versión distinta. Lumi Stellar (generación "Stelle") es el modelo
+      // frontera de la v3: tiene nombre, pero sigue sin forma confirmada
+      // ni garantía de llegar a existir — de ahí la insignia "?" en vez de
+      // comprometerse a "v3".
       { titulo: "Lumi Preview", ruta: "lumi-preview", pendiente: false, generacion: "v1" },
       { titulo: "Lumi Mini", ruta: "lumi-mini", pendiente: true, generacion: "v2" },
       { titulo: "Lumi Pro", ruta: "lumi-pro", pendiente: true, generacion: "v2" },
       { titulo: "Lumi Vision", ruta: "lumi-vision", pendiente: true, generacion: "v2" },
-      { titulo: "Lumi 3", ruta: "lumi-3", pendiente: true, generacion: "?" },
+      { titulo: "Lumi Stellar", ruta: "lumi-stellar", pendiente: false, generacion: "?" },
     ],
   },
   {
