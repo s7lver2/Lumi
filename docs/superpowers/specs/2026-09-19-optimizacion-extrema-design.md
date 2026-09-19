@@ -39,6 +39,14 @@ un modelo que no carga, en niveles que no piden agentes, sería trabajo tirado.
 
 Verificado ítem por ítem contra el código de hoy (`main`, HEAD `127aba5`).
 
+Rastro de commits que lo respalda: `3299972` (Tanda 1: WAL, índices, SSE duplicados),
+`7cc29e8` (Tanda 2: umbral por verificador, agrupación por distancia real), `9c6c282`
+(Tanda 3: post-proceso fuera del bucle, telemetría deduplicada, N+1) y `420db00`
+(Tanda 4, **etiquetada «parcial» por su propio autor** — y lo que quedó fuera de ese
+commit es exactamente lo que aquí se marca pendiente: el batch de etiquetas y el tope de
+píxeles). **El ítem 11 no tiene commit:** en su lugar entró `f961d1f`, el timeout de
+agentes configurable, que es paliativo y no el cambio propuesto.
+
 | Estado | Cuenta |
 |---|---|
 | HECHO | 20 |
