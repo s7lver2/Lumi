@@ -523,7 +523,14 @@ fn resumen_oscuro(analyses: &[Analysis], req: &ExportInformeReq) -> ResumenOscur
             if !a.agentes.is_empty() {
                 let dicho =
                     a.agentes.iter().find(|d| Some(d.agente.as_str()) == a.agente.as_deref()).unwrap_or(&a.agentes[0]);
-                agente_lineas.push(cabecera(dicho.nombre.clone()));
+                // `nombre` puede llegar vacío si el agente se quitó/renombró
+                // en el registro después de que este veredicto se guardara --
+                // una cabecera vacía es exactamente el `\\` sin línea que
+                // precede que produce "There's no line here to end" en
+                // tectonic (mismo síntoma que el `\normalfont{}` de más abajo,
+                // otra causa). Cae al id, que siempre existe.
+                let nombre_mostrado = if dicho.nombre.trim().is_empty() { dicho.agente.clone() } else { dicho.nombre.clone() };
+                agente_lineas.push(cabecera(nombre_mostrado));
                 // `confianza` es `None` en modo transcripción (spec
                 // 2026-09-17 §5, sin número inventado) -- se omite la cifra
                 // en vez de imprimir un "None". Tampoco está acotada cuando
