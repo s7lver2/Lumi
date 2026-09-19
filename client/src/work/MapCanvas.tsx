@@ -53,6 +53,58 @@ function ring(lat: number, lng: number, radiusM: number): [number, number][] {
  *  en los tres vuelos de cámara para que todos se sientan igual de fluidos. */
 const EASE_OUT_CUBIC = (t: number) => 1 - Math.pow(1 - t, 3);
 
+/** Por debajo de esto (px en pantalla) dos marcadores se leen como el mismo
+ *  punto — el diámetro real del círculo (22px) más un margen para que el
+ *  número no quede pegado al vecino ni con el zoom justo en el filo. */
+const UMBRAL_SOLAPE_PX = 26;
+
+/** Reparte en abanico los marcadores cuyo punto proyectado en pantalla cae a
+ *  menos de `UMBRAL_SOLAPE_PX` de otro — varios candidatos sobre el mismo
+ *  cruce (mismo modelo de recuperación votando el mismo sitio, o distintos
+ *  modelos coincidiendo) se pintaban literalmente unos encima de otros y sus
+ *  números quedaban ilegibles. El punto GEOGRÁFICO de cada marcador (el que
+ *  usan el círculo de confianza y el vuelo de cámara al pulsarlo) no cambia
+ *  — solo su `offset` en píxeles, que es lo que MapLibre/Mapbox dibujan
+ *  encima de ese punto. Se recalcula en cada `move` porque dos puntos
+ *  cercanos en el mundo real se separan en pantalla al hacer zoom, y el
+ *  abanico de un zoom lejano dejaría de hacer falta en uno cercano. */
+function repartirSolapados(m: AnyMap, colocados: { marker: { setOffset: (o: [number, number]) => unknown }; mk: Marker }[]) {
+  const puntos = colocados.map(({ mk }) => m.project([mk.lng, mk.lat]));
+  const visitado = new Array(colocados.length).fill(false);
+
+  for (let i = 0; i < colocados.length; i++) {
+    if (visitado[i]) continue;
+    // BFS sobre "está a menos de UMBRAL_SOLAPE_PX de alguien ya en el grupo"
+    // — transitivo, para que tres puntos en línea con el mismo paso entre
+    // ellos caigan en un solo abanico en vez de emparejarse de dos en dos.
+    const grupo = [i];
+    visitado[i] = true;
+    for (let cursor = 0; cursor < grupo.length; cursor++) {
+      const a = puntos[grupo[cursor]];
+      for (let j = 0; j < colocados.length; j++) {
+        if (visitado[j]) continue;
+        const b = puntos[j];
+        if (Math.hypot(a.x - b.x, a.y - b.y) < UMBRAL_SOLAPE_PX) {
+          visitado[j] = true;
+          grupo.push(j);
+        }
+      }
+    }
+    if (grupo.length === 1) {
+      colocados[grupo[0]].marker.setOffset([0, 0]);
+      continue;
+    }
+    // Radio proporcional al tamaño del grupo: con solo 2-3 apenas hace falta
+    // separarlos, con más el círculo tiene que crecer para que sigan sin
+    // tocarse entre sí.
+    const radio = 13 + grupo.length * 2.5;
+    grupo.forEach((idx, n) => {
+      const angulo = (n / grupo.length) * 2 * Math.PI - Math.PI / 2;
+      colocados[idx].marker.setOffset([radio * Math.cos(angulo), radio * Math.sin(angulo)]);
+    });
+  }
+}
+
 /** `--ui-scale` (index.css) escala TODA la interfaz con un `transform` en
  *  `#root` para que se lea a tamaño en ventanas grandes. Un lienzo GL anidado
  *  ahí dentro se mide en píxeles de ANTES de esa escala — MapLibre le pone al
@@ -106,7 +158,9 @@ export function MapCanvas({
    *  puede añadir a un mapa de Mapbox ni al revés, así que hay que quedarse
    *  con las del que se creó. */
   const gl = useRef<Gl | null>(null);
-  const placed = useRef<{ remove: () => void; getElement: () => HTMLElement }[]>([]);
+  const placed = useRef<
+    { marker: { remove: () => void; getElement: () => HTMLElement; setOffset: (o: [number, number]) => unknown }; mk: Marker }[]
+  >([]);
   /** `reason` es un fallo del que no se vuelve: no hay proveedor, o el estilo
    *  no llegó, y por tanto no hay lienzo que montar. */
   const [reason, setReason] = useState<string | null>(null);
@@ -288,7 +342,7 @@ export function MapCanvas({
   useEffect(() => {
     const m = map.current;
     if (!m) return;
-    placed.current.forEach((p) => p.remove());
+    placed.current.forEach((p) => p.marker.remove());
     placed.current = markers.map((mk) => {
       const marker = new gl.current!.Marker({ element: el(mk, oscuro) })
         .setLngLat([mk.lng, mk.lat])
@@ -303,8 +357,16 @@ export function MapCanvas({
         });
         onMarker?.(mk.id);
       });
-      return marker;
+      return { marker, mk };
     });
+    const reflow = () => repartirSolapados(m, placed.current);
+    reflow();
+    // No basta con calcularlo una vez al colocar los marcadores: dos puntos
+    // cercanos en el mundo real se separan en pantalla al acercar el zoom
+    // (y el abanico deja de hacer falta), o se aprietan al alejarlo (y
+    // empieza a hacer falta uno nuevo). `move` cubre pan, zoom y rotación.
+    m.on("move", reflow);
+    return () => { m.off("move", reflow); };
   }, [markers, onMarker, oscuro]);
 
   // Cambiar de proyección sin rehacer el mapa: reconstruirlo tiraría el estilo,
