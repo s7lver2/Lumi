@@ -115,6 +115,7 @@ pub async fn preguntar(
                 persistente,
                 ajustes.limpieza_activo,
                 ajustes.calibracion_activo,
+                limite,
             ))
         } else {
             Box::pin(correr(
@@ -154,6 +155,7 @@ pub async fn preguntar(
 async fn correr_persistente(
     agentes: &[String], consulta: &str, python: &Path, pesos: &Path, dispositivo: &str,
     persistente: &crate::persistente::Persistente, limpieza_activo: bool, calibracion_activo: bool,
+    limite: Duration,
 ) -> anyhow::Result<Vec<(Veredicto, String)>> {
     let script = crate::assets::ruta("workers/lumi_agentes.py");
     let registro = crate::assets::ruta("registros/agentes");
@@ -172,7 +174,11 @@ async fn correr_persistente(
         ("LUMI_LIMPIEZA_PRESION", limpieza_env),
         ("LUMI_MODO_CALIBRACION", calibracion_env),
     ];
-    let msgs = persistente.pedir(&orden, python, &script, &envs).await?;
+    // `Some(limite)`, a diferencia de la verificación geométrica: es
+    // justamente el timeout que antes solo envolvía este `.await` desde
+    // fuera (en `preguntar`) sin matar nada de verdad — ver el comentario de
+    // `Persistente::pedir`.
+    let msgs = persistente.pedir(&orden, python, &script, &envs, Some(limite)).await?;
     Ok(msgs
         .into_iter()
         .filter_map(|msg| {

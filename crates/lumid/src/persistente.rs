@@ -22,6 +22,7 @@
 
 use std::path::Path;
 use std::process::Stdio;
+use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
 use lumi_proto::worker::Msg;
@@ -91,8 +92,20 @@ impl Persistente {
     /// petición, se relanza UNA vez y se reintenta desde cero — cubre el caso
     /// de un crash entre peticiones sin dejar las siguientes estrelladas
     /// contra un proceso fantasma.
+    ///
+    /// `limite` es `None` para quien nunca lo pedía (verificación geométrica,
+    /// sin cambios de comportamiento) y `Some(d)` para agentes, donde SÍ hace
+    /// falta: un `tokio::time::timeout` puesto por fuera (como hacía antes
+    /// `agentar::preguntar` en solitario) solo suelta el `.await` de quien
+    /// espera — el proceso persistente, al ser compartido entre peticiones,
+    /// seguía vivo procesando la orden vieja de fondo mucho más allá del
+    /// límite configurado, y la siguiente petición reutilizaba ese mismo
+    /// proceso mientras aún respondía a la anterior, desincronizando su
+    /// stdin/stdout para siempre. Por eso el timeout tiene que vivir AQUÍ
+    /// dentro, donde de verdad se puede matar el proceso.
     pub async fn pedir(
         &self, orden: &serde_json::Value, python: &Path, script: &Path, envs: &[(&str, &Path)],
+        limite: Option<Duration>,
     ) -> Result<Vec<Msg>> {
         let mut guard = self.dentro.lock().await;
         for intento in 0..2 {
@@ -107,7 +120,26 @@ impl Persistente {
                     *guard = Some(self.lanzar(python, script, envs)?);
                 }
             }
-            match Self::una_peticion(self.nombre, guard.as_mut().expect("recién asegurado"), orden).await {
+            let peticion = Self::una_peticion(self.nombre, guard.as_mut().expect("recién asegurado"), orden);
+            let resultado = match limite {
+                None => peticion.await,
+                Some(d) => match tokio::time::timeout(d, peticion).await {
+                    Ok(r) => r,
+                    Err(_) => {
+                        // Nunca se reintenta un timeout (a diferencia de un
+                        // crash): reintentar dispararía otra espera de hasta
+                        // `d` más, doblando el peor caso justo cuando el
+                        // límite era la señal de "ya es demasiado".
+                        tracing::warn!("{} persistente tardó más de {}s; se mata", self.nombre, d.as_secs());
+                        if let Some(p) = guard.as_mut() {
+                            let _ = p.hijo.start_kill();
+                        }
+                        *guard = None;
+                        return Err(anyhow!("{} persistente tardó más de {}s", self.nombre, d.as_secs()));
+                    }
+                },
+            };
+            match resultado {
                 Ok(msgs) => return Ok(msgs),
                 Err(e) if intento == 0 => {
                     tracing::warn!("{} persistente falló a mitad de petición, se relanza: {e}", self.nombre);

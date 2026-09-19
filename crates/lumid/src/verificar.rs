@@ -208,7 +208,7 @@ async fn afinar_persistente(
     ];
 
     let mut por_candidato: std::collections::HashMap<i64, Vec<Veredicto>> = Default::default();
-    match persistente.pedir(&orden, python, &script, &envs).await {
+    match persistente.pedir(&orden, python, &script, &envs, None).await {
         Ok(msgs) => {
             for msg in msgs {
                 if let lumi_proto::worker::Msg::Verificado { candidato, verificador, inliers, lat, lng, .. } = msg {
