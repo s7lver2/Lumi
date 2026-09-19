@@ -150,30 +150,48 @@ export function SecurityView({ token, ajustes, onCambiar }: {
         </div>
       </div>
 
-      <div className="mt-4 rounded-card border border-border bg-panel p-[13px_16px]">
-        <p className="text-[12px] text-fg">Expulsar por inactividad</p>
-        <p className="mt-0.5 text-[10px] text-subtle">
-          Sin ningún movimiento del usuario (no del servidor) durante este tiempo dentro de un
-          proyecto, se le devuelve a la lista de proyectos y se libera el candado. No cierra la sesión.
-        </p>
-        <div className="mt-2.5 flex items-center gap-1.5">
-          <input value={minutos} onChange={(e) => setMinutos(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") void guardarInactividad(); }}
-            inputMode="numeric"
-            className="w-16 rounded-lg border border-border bg-elevated px-2 py-1 text-right font-mono text-[11px]
-              text-fg outline-none transition-colors duration-300 ease-expo focus:border-white/40" />
-          <span className="text-[10.5px] text-subtle">min · 0 = desactivado</span>
-          <button onClick={() => void guardarInactividad()}
-            disabled={Number(minutos) === Math.round(ajustes.inactivity_timeout_s / 60)}
-            className="jg-press ml-1 rounded-lg border border-white/15 px-2.5 py-1 text-[10.5px] text-fg disabled:opacity-40">
-            Guardar
-          </button>
+      <div className="mt-4 rounded-card border border-border bg-panel">
+        <Fila
+          titulo="Expulsar por inactividad"
+          sub="Sin ningún movimiento del usuario (no del servidor) durante un tiempo dentro de un proyecto, se le devuelve a la lista de proyectos y se libera el candado. No cierra la sesión."
+          on={ajustes.inactivity_timeout_s > 0}
+          onClick={() => void fijar({ inactivity_timeout_s: ajustes.inactivity_timeout_s > 0 ? 0 : DEFECTO_INACTIVIDAD_S })}
+        />
+        <div className="grid transition-[grid-template-rows] duration-[420ms] ease-expo"
+          style={{ gridTemplateRows: ajustes.inactivity_timeout_s > 0 ? "1fr" : "0fr" }}>
+          <div className="overflow-hidden">
+            <div className="border-t border-border bg-black/15 p-[13px_16px_16px]">
+              <label className="mb-1.5 block text-[9.5px] uppercase tracking-[.06em] text-muted">
+                Minutos de inactividad
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input value={minutos} onChange={(e) => setMinutos(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") void guardarInactividad(); }}
+                  inputMode="numeric"
+                  className="w-16 rounded-lg border border-border bg-elevated px-2 py-1 text-right font-mono text-[11px]
+                    text-fg outline-none transition-colors duration-300 ease-expo focus:border-white/40" />
+                <span className="text-[10.5px] text-subtle">min</span>
+                <button onClick={() => void guardarInactividad()}
+                  disabled={Number(minutos) === Math.round(ajustes.inactivity_timeout_s / 60)}
+                  className="jg-press ml-1 rounded-lg border border-white/15 px-2.5 py-1 text-[10.5px] text-fg disabled:opacity-40">
+                  Guardar
+                </button>
+              </div>
+              {errorInactividad && <p className="mt-2 text-[10.5px] text-danger-fg">{errorInactividad}</p>}
+            </div>
+          </div>
         </div>
-        {errorInactividad && <p className="mt-2 text-[10.5px] text-danger-fg">{errorInactividad}</p>}
       </div>
     </Seccion>
   );
 }
+
+/** Con lo que ya guarda el servidor de sobra (`0` = desactivado, si no un
+ *  valor entre 60 y 7200s): activar el interruptor de arriba no necesita un
+ *  campo nuevo, solo escribir un valor por defecto razonable en el mismo
+ *  `inactivity_timeout_s` -- 15 minutos, ni tan corto que expulse a media
+ *  foto ni tan largo que la protección no signifique nada. */
+const DEFECTO_INACTIVIDAD_S = 15 * 60;
 
 /** Como `Fila`, pero para una opción que vive DENTRO de otro interruptor:
  *  algo más compacta y sin el atenuado por `disabled` — si se ve, ya está
