@@ -1,0 +1,89 @@
+export const frase = "El Indexer no depende de lumid ni de ningún servidor propio: se descarga, se abre, y su propio asistente levanta lo poco que necesita en la propia máquina — Redis, Qdrant, y un entorno de Python con torch.";
+export const procedencia = [
+  "indexer/README.md",
+  "indexer/src-tauri/src/services.rs",
+  "indexer/src/setup/SetupWizard.tsx",
+  "indexer/src/setup/ServicesStep.tsx",
+  "indexer/src/setup/RuntimeStep.tsx",
+  "indexer/src/setup/IdentityStep.tsx",
+];
+
+import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
+import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
+import { Codigo } from "../../../../components/docs/Codigo";
+import { Detalle } from "../../../../components/docs/Detalle";
+import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
+
+<div className="flex items-start justify-between gap-4">
+  <CabeceraDocs ruta="/docs/indexar/instalar-el-indexer" frase={frase} />
+  <ControlProfundidad />
+</div>
+
+El Indexer es una aplicación de un solo operador: sin cuentas, sin servidor propio, sin nada que
+emparejar. Todo lo que necesita para funcionar lo levanta él mismo, la primera vez que se abre.
+
+## Descargar e instalar
+
+Se distribuye por el mismo instalador compartido que el cliente (`installer.exe`, solo Windows por
+ahora) — al abrirlo, elige **Indexer** en vez de (o además de) Cliente. Nada le impide convivir en
+la misma máquina que un cliente ya instalado; son productos independientes bajo el mismo instalador.
+
+## El asistente de la primera vez
+
+El Indexer nace con cuatro pasos, y el primero (la carpeta de datos) ya llega hecho — la crea el
+propio proceso al arrancar, así que el asistente abre directo en **Servicios**.
+
+### 1. Servicios: Redis y Qdrant
+
+Redis (la cola) y Qdrant (los vectores) tienen que estar escuchando en `127.0.0.1` antes de poder
+hacer nada. En **Linux**, el propio Indexer los arranca nativos sin preguntar. En **Windows** es
+distinto, y la app lo dice sin rodeos: Redis no publica binarios oficiales para ese sistema.
+
+<Detalle titulo="Por qué en Windows hace falta WSL">
+  No es una limitación de este proyecto en concreto: Redis, sencillamente, no compila un binario
+  oficial para Windows. La solución no es empaquetar una alternativa de terceros con su propia
+  licencia — es correr los dos servicios dentro de WSL, cuyo reenvío de `localhost` los hace
+  alcanzables desde el lado Windows sin exponerlos a la red exterior.
+</Detalle>
+
+Si estás en Windows, este paso trae un botón **"Levantar en WSL"**. Requiere tener **WSL2 ya
+instalado y habilitado** de antemano — el Indexer no instala WSL por ti, solo usa el comando `wsl`
+para hablar con la distribución que ya tengas. Al pulsarlo:
+
+1. Si Redis o Qdrant no están instalados dentro de tu distribución, los instala ahí — Redis desde
+   los repositorios de la distro, Qdrant como binario oficial fijado a `~/.lumi-indexer/bin`, sin
+   tocar nada fuera de tu carpeta de usuario.
+2. Los arranca como procesos **hijos** del propio Indexer, ligados solo a `127.0.0.1` — si cierras
+   el Indexer, mueren con él, no quedan sueltos ocupando el puerto.
+
+<Codigo titulo="lo que corre dentro de WSL, para quien quiera verlo" codigo={`redis-server --bind 127.0.0.1 --protected-mode yes --port 6379 --dir "$HOME/.lumi-indexer"
+qdrant  # con QDRANT__STORAGE__STORAGE_PATH en "$HOME/.lumi-indexer/qdrant"`} />
+
+La primera vez esto baja paquetes reales — puede tardar unos minutos. El paso se puede cerrar y
+retomar: al reabrir el Indexer, primero intenta **adoptar** cualquier servicio que ya esté vivo
+(de una ejecución anterior o de WSL) antes de plantearse lanzar uno nuevo.
+
+### 2. Runtime: el entorno de Python
+
+Un `venv` propio con `torch`, para el motor de embeddings — completamente automático, sin ningún
+botón que pulsar. Son varios gigabytes, así que puede tardar; igual que el paso anterior, se puede
+cerrar la ventana y se retoma solo al volver.
+
+### 3. Identidad (opcional)
+
+Buscar, descargar e indexar funcionan enteros sin ninguna cuenta. Esta pantalla es solo para quien
+vaya a **publicar** un índice y necesite que otros sepan quién lo firmó: conecta una cuenta de
+GitHub por el flujo de dispositivo (un código de 6 dígitos que se escribe en github.com/login/device),
+y al terminar genera una clave de firma propia con su frase de respaldo de 12 palabras — que no se
+puede recuperar si se pierde, así que el asistente no deja avanzar hasta marcar "las he guardado".
+Se puede saltar del todo y conectar la cuenta más adelante desde Ajustes.
+
+## Después del asistente: claves de los orígenes de red
+
+Buscar territorio funciona de inmediato contra los orígenes que no piden clave (KartaView, Commons,
+Monumentos, Wikipedia, Panoramax, WMS ortofoto, iNaturalist, Geograph, OpenAerialMap). Cuatro
+orígenes sí necesitan una clave propia pegada en **Ajustes → Orígenes** antes de aparecer en la capa
+de disponibilidad — Mapillary, Google, Mapbox Satellite y Flickr —, y ninguno bloquea el arranque:
+simplemente no se ofrecen hasta que se añade su clave.
+
+<PiePaginaDocs ruta="/docs/indexar/instalar-el-indexer" />

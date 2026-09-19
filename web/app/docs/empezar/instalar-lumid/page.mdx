@@ -1,0 +1,104 @@
+export const frase = "Instalar lumid es un solo comando, pero lo que hace detrás no es un truco de una línea: comprueba el sistema, genera un certificado propio, verifica firmas, y al final solo imprime una cosa — la clave con la que emparejar el primer cliente.";
+export const procedencia = [
+  "web/app/install/route.ts",
+  "web/app/install-py/route.ts",
+  "crates/lumi-cli/src/install.rs",
+  "crates/lumid/src/routes/bootstrap.rs",
+];
+
+import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
+import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
+import { Codigo } from "../../../../components/docs/Codigo";
+import { Detalle } from "../../../../components/docs/Detalle";
+import { EnlacePrevio } from "../../../../components/docs/EnlacePrevio";
+import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
+
+<div className="flex items-start justify-between gap-4">
+  <CabeceraDocs ruta="/docs/empezar/instalar-lumid" frase={frase} />
+  <ControlProfundidad />
+</div>
+
+`lumid` es el daemon: la mitad de Lumi que instala quien presta la GPU, no quien investiga. Esta
+página es esa instalación, de principio a fin.
+
+## Antes de empezar
+
+- Una máquina Linux **con systemd** — es el único camino soportado hoy. En Windows el propio
+  instalador se niega a propósito al comprobar systemd; ahí `lumid` solo sirve para desarrollo,
+  nunca como instalación real.
+- Acceso `root` (o `sudo`) y `python3` — no hace falta ningún compilador ni `cargo`: el instalador
+  público es un script de Python puro, no un binario que haya que construir.
+- Una GPU NVIDIA es opcional pero recomendada. Sin driver, la instalación termina igual — solo que
+  sin inferencia real hasta que haya una GPU que usar.
+- El puerto **7717**, fijo y no configurable por variable de entorno.
+
+## Un solo comando
+
+<Codigo titulo="terminal, en la máquina que va a ser el servidor" codigo={`curl -fsSL https://lumi.s7lver.xyz/install | sh`} />
+
+Ese comando no instala nada por sí solo: descarga el instalador real (`/install-py`, Python puro) a
+un fichero temporal y lo relanza con `sudo`. La razón de este paso intermedio es el propio `curl | sh`
+— su entrada estándar ya es la tubería, no tu terminal, así que el script se reengancha a `/dev/tty`
+antes de lanzar el instalador para que sus preguntas (modo, clave maestra, dónde guardar los datos)
+lleguen a alguien de verdad delante del teclado.
+
+<Detalle titulo="Instalar sin preguntas (CI, scripts)">
+  Si no hay terminal delante, el comando de arriba no se cuelga: imprime los dos pasos manuales en
+  su lugar. Para instalar sin ningún diálogo interactivo:
+
+  <Codigo titulo="instalación desatendida" codigo={`curl -fsSL https://lumi.s7lver.xyz/install | sh -s -- --version latest -y`} />
+</Detalle>
+
+## Lo que el instalador te pregunta
+
+1. **Modo**: nativo o Docker — se detecta solo si ya estás dentro de un contenedor
+   (`/.dockerenv`), pero puedes elegir.
+2. **Clave maestra**: automática (gestionada por `systemd-creds`, sin que nadie la escriba) o
+   sellada (una contraseña de administrador que desbloquea el servidor tras cada reinicio, desde
+   la propia app — el modo mantenimiento tiene su propia página, todavía por escribir).
+3. **Dónde vivirán los datos**: por defecto `/var/lib/lumi/runtime` — ahí acaban el entorno Python
+   del motor de inferencia y los modelos descargados.
+
+## Lo que hace sin preguntar
+
+- Comprueba que el puerto 7717 esté libre; si ya hay un `lumid.service` corriendo, pide confirmar
+  antes de reinstalar encima.
+- Si `ufw` está activo, abre 7717/tcp.
+- Genera un certificado TLS autofirmado (EC P-256) — o conserva el que ya existiera, para no
+  invalidar a los clientes que ya estén emparejados con una reinstalación.
+- Descarga el binario de `lumid` y sus assets (`registros/`, `workers/`) verificados contra el
+  manifiesto de publicación firmado con Ed25519 — el propio script reimplementa esa verificación en
+  Python puro, sin librerías de criptografía de terceros.
+- Instala **Qdrant** (versión fijada, verificada por sha256) como su propio servicio de systemd,
+  escuchando solo en `127.0.0.1:6333`.
+- Instala **tectonic** para poder exportar informes de caso a PDF — si esto falla, no aborta el
+  resto de la instalación: solo se queda sin exportación hasta que se resuelva a mano.
+- Escribe `/etc/systemd/system/lumid.service` y lo arranca.
+
+<Detalle titulo="Por qué no instala Redis">
+  `lumid` no necesita Redis: su cola de tareas vive entera en SQLite. Redis solo existe del lado
+  del Indexer, una aplicación completamente aparte — si nunca vas a indexar territorio en esta
+  misma máquina, no hace falta instalarlo aquí.
+</Detalle>
+
+## La clave de vinculación
+
+Al terminar, si el servidor está genuinamente virgen (sin usuarios, sin ninguna clave emitida
+todavía), el instalador imprime algo así:
+
+<Codigo titulo="salida del instalador · solo se ve una vez" codigo={`lumi1_192.168.1.40:7717_9fK2mXpQ7wZs_...`} />
+
+Esa clave (`lumi1_<dirección>_<huella>_<secreto>`) es de un solo uso y caduca a las 24 horas. Es lo
+único que necesitas copiar: pégala en el cliente para entrar como administrador y terminar la
+configuración desde ahí — ver{" "}
+<EnlacePrevio ruta="/docs/empezar/emparejar-cliente">Emparejar el cliente</EnlacePrevio>.
+
+<Detalle titulo="Si reinstalas sobre un servidor que ya tenía dueño">
+  El servidor solo emite una clave de vinculación real cuando de verdad no tiene ningún usuario
+  todavía. Reinstalar sobre uno que ya se reclamó imprime en su lugar una tarjeta pública sin
+  secreto (`lumi1s_...`) — sirve para verificar la identidad del servidor, no para entrar como
+  administrador. Si de verdad hace falta una clave nueva, se emite desde la propia máquina con
+  `lumi key reissue`.
+</Detalle>
+
+<PiePaginaDocs ruta="/docs/empezar/instalar-lumid" />

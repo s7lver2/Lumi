@@ -84,8 +84,8 @@ export const arbolDocs: RamaArbol[] = [
     titulo: "Empezar",
     glifo: "llave",
     paginas: [
-      { titulo: "Instalar lumid", ruta: "instalar-lumid", pendiente: true },
-      { titulo: "Emparejar el cliente", ruta: "emparejar-cliente", pendiente: true },
+      { titulo: "Instalar lumid", ruta: "instalar-lumid", pendiente: false },
+      { titulo: "Emparejar el cliente", ruta: "emparejar-cliente", pendiente: false },
       { titulo: "Actualizar", ruta: "actualizar", pendiente: true },
       { titulo: "Compilar a mano", ruta: "compilar-a-mano", pendiente: true },
       { titulo: "Cuando algo no arranca", ruta: "cuando-algo-no-arranca", pendiente: true },
@@ -97,6 +97,7 @@ export const arbolDocs: RamaArbol[] = [
     titulo: "Indexar territorio",
     glifo: "mapa",
     paginas: [
+      { titulo: "Instalar el Indexer", ruta: "instalar-el-indexer", pendiente: false },
       { titulo: "Qué es un .lumidx", ruta: "que-es-un-lumidx", pendiente: true },
       { titulo: "Orígenes de red", ruta: "origenes-de-red", pendiente: true },
       { titulo: "Presupuesto", ruta: "presupuesto", pendiente: true },

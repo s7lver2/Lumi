@@ -1,0 +1,81 @@
+export const frase = "El cliente no tiene nada que instalar por su cuenta: se descarga, se abre, y la primera pantalla que ve alguien nuevo es pegar una clave. Todo lo demás — crear el administrador, preparar el runtime del servidor — pasa dentro de un asistente de cuatro pasos.";
+export const procedencia = [
+  "web/components/SelectorDescarga.tsx",
+  "client/src/entry/AddServerForm.tsx",
+  "client/src/wizard/Wizard.tsx",
+  "client/src/wizard/PairStep.tsx",
+  "client/src/wizard/AdminStep.tsx",
+  "client/src/wizard/ProvisionStep.tsx",
+  "client/src/wizard/ModelosStep.tsx",
+];
+
+import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
+import { ControlProfundidad } from "../../../../components/docs/ControlProfundidad";
+import { Detalle } from "../../../../components/docs/Detalle";
+import { EnlacePrevio } from "../../../../components/docs/EnlacePrevio";
+import { PiePaginaDocs } from "../../../../components/docs/PiePaginaDocs";
+
+<div className="flex items-start justify-between gap-4">
+  <CabeceraDocs ruta="/docs/empezar/emparejar-cliente" frase={frase} />
+  <ControlProfundidad />
+</div>
+
+## Descargar e instalar
+
+Hoy el cliente solo se publica para **Windows**. Desde la portada del sitio, el selector de
+descarga lo sirve a través de un único instalador compartido con el Indexer (`installer.exe`): al
+abrirlo, eliges qué producto(s) instalar y dónde. `WebView2` —lo que Windows necesita para
+renderizar la interfaz— se descarga solo si falta, no hace falta instalarlo por separado antes.
+
+## Primera pantalla: entrar o añadir un servidor
+
+Al abrir el cliente por primera vez no hay ningún servidor recordado, así que la pantalla de
+entrada te lleva directo a **Añadir servidor**, donde se pega una sola cadena de texto en el campo
+"Clave del servidor". Esa cadena puede ser de dos tipos, y el cliente distingue cuál es por su
+prefijo:
+
+- **`lumi1s_<dirección>_<huella>`** — una tarjeta pública, sin secreto. Solo verifica la identidad
+  del servidor (compara la huella del certificado real contra la que trae la tarjeta) y lo añade a
+  la lista de servidores recordados. Es lo que comparte un administrador con el resto de su equipo
+  para que inicien sesión — no da acceso de administrador.
+- **`lumi1_<dirección>_<huella>_<secreto>`** — la clave real de vinculación, de un solo uso, la que
+  imprime el instalador de <EnlacePrevio ruta="/docs/empezar/instalar-lumid">`lumid`</EnlacePrevio>
+  al terminar. El cliente la reconoce como clave de administrador y ofrece **"Continuar como
+  administrador"**, que lleva directo al asistente de configuración.
+
+## El asistente, paso a paso
+
+<Detalle titulo="Puedes cerrar la app a mitad">
+  Los pasos 3 y 4 corren del lado del servidor, no del cliente: si cierras la ventana a mitad de
+  instalar el runtime, al volver a abrir el cliente te reengancha exactamente donde lo dejaste, log
+  incluido — no hay que reiniciar el paso.
+</Detalle>
+
+1. **Vincular** — el cliente pide `/v1/hello` al servidor y compara la huella del certificado TLS
+   recibido contra la que viaja dentro de la propia clave. Si coinciden, se muestra "huella
+   verificada" letra por letra; si no, el cliente aborta ahí mismo — nunca hay un diálogo de
+   "conectar de todos modos".
+2. **Admin** — usuario y contraseña para la primera cuenta, que es de administrador por definición
+   (es quien reclama un servidor virgen). La contraseña necesita al menos 12 caracteres; se guarda
+   con Argon2id, y ni el servidor ni otro administrador pueden leerla después, solo pedir que la
+   cambies.
+3. **Runtime** — el servidor instala su propio entorno de inferencia (`torch` + CUDA 12.6 +
+   `romatch`) como una tarea de fondo real, con su log en vivo. No es instantáneo — son varios
+   gigabytes — pero corre en el servidor, así que cerrar el cliente aquí no lo interrumpe.
+4. **Modelos** — un resumen de qué falta por descargar en cada nivel (Mini, Pro, Vision), sin
+   ninguna acción propia: descargar pesos y aceptar sus licencias pasa a{" "}
+   <b className="text-fg">Administración → Modelos</b> una vez termines el asistente. No hace falta
+   completar ningún nivel para seguir — "Terminar" ya deja al servidor listo para usarse.
+
+Al pulsar "Terminar", el cliente avisa al servidor de que el asistente acabó (deja de estar en
+estado `CLAIMED` para pasar a `PROVISIONING`/`READY`) y entra directo al panel de administración,
+como administrador que eres.
+
+<Detalle titulo="Qué pasa si la clave ya se usó">
+  Una clave de vinculación es de un solo uso: si el servidor ya tiene administrador, pegarla otra
+  vez muestra "este servidor ya tiene administrador" en el primer paso, en vez de dejarte avanzar.
+  En ese caso lo que hace falta es la tarjeta pública (`lumi1s_...`) de alguien que ya tenga cuenta,
+  para iniciar sesión — no otra vuelta al asistente.
+</Detalle>
+
+<PiePaginaDocs ruta="/docs/empezar/emparejar-cliente" />
