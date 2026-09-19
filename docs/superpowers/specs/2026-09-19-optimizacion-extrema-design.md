@@ -75,10 +75,87 @@ Lo que sigue vivo, por gravedad:
 | V7 | Una sola `Connection` bajo `Mutex` + `worker_threads = 2` | `store.rs:367`, `main.rs:96` | §3 D1 |
 | V8 | Comentario falso sobre `set_float32_matmul_precision` | `lumi_verify.py:118` (el ajuste es de **proceso**, no local) | §4 W12 |
 
-**Dependencia externa sin resolver:** el ítem V1 se aplazó en septiembre porque el
-techo de memoria de WSL estaba en 8 GB (`~/.wslconfig` del dueño, fuera del repo). No
-se puede verificar desde aquí. **Es la primera pregunta que hay que responder antes de
-ejecutar nada de este spec.**
+### El techo de WSL es inamovible: qué significa
+
+El ítem V1 se aplazó en septiembre a la espera de subir el techo de memoria de WSL
+(8 GB en una máquina de 32). **El dueño confirma el 2026-09-19 que no puede subirlo.**
+Eso no aplaza el problema: lo convierte en una restricción de diseño permanente, y
+reordena este spec entero.
+
+**La buena noticia:** la premisa de septiembre («con persistencia, los modelos quedan
+residentes para siempre → OOM garantizado») **ya no es cierta**. El rediseño de agentes
+del 2026-09-17 trajo un mecanismo de desalojo completo que entonces no existía:
+
+- `lumi_pesos.purgar_inactivos` (`:91`) suelta cualquier motor que lleve más de
+  `UMBRAL_INACTIVIDAD_SEG = 600` sin usarse, al principio de cada trabajo.
+- `lumi_pesos.quizas_purgar_por_presion` (`:56`) desaloja **todos** los motores si la
+  memoria disponible baja del colchón, justo antes de cargar uno nuevo.
+- Está cableado desde Rust en los cuatro trabajadores (`agentar.rs:174`, `:216`,
+  `verificar.rs:89`, `:207`, `queue/worker.rs:141`) y **activo por defecto**
+  (`routes/rendimiento.rs:47`, `leer_bool_activo_por_defecto`), al contrario que la
+  persistencia.
+- Mide `MemAvailable` de `/proc/meminfo`, no `MemFree` — la métrica correcta — y si no
+  puede leerla no se inventa un número: simplemente no se activa.
+
+**La mala noticia, y es un hallazgo nuevo de esta auditoría:** ese mecanismo está
+calibrado para una caja holgada, no para un techo de 8 GB. Ver M1 y M2. Con esos dos
+arreglos, la persistencia **sí cabe** en 8 GB — auto-regulada por desalojo en vez de por
+un interruptor global.
+
+### M1. El umbral de presión es una constante fija, no depende del modelo entrante — **CRÍTICO con 8 GB**
+
+`lumi_pesos.py:33` — `UMBRAL_MEMORIA_LIBRE_MB = 512`, comparado en `:75` con
+`libre >= UMBRAL_MEMORIA_LIBRE_MB`. El desalojo solo se dispara si quedan **menos de
+512 MB libres**, sin tener en cuenta **cuánto va a pedir el modelo que está a punto de
+cargarse**.
+
+Con 8 GB de techo y un VLM de 8B que pide 5-6 GB: si hay 3 GB libres,
+`quizas_purgar_por_presion` **no desaloja nada** (3 GB ≫ 512 MB), y acto seguido
+`from_pretrained` pide 5 GB que no existen. **El OOM killer entra exactamente por el
+hueco que este mecanismo creía cubrir.** El comentario de `:30-32` es honesto sobre su
+propia calibración: «512 es un punto de partida razonable: de sobra para que quepa un
+modelo más» — esa frase asume un modelo pequeño y una caja con margen. Ninguna de las
+dos cosas se cumple aquí.
+
+**Medida:** que el umbral sea **el tamaño estimado del modelo entrante más un margen**,
+no una constante. El tamaño ya se conoce antes de cargar: es el fichero de pesos cuyo
+sha256 se va a verificar de todos modos (`lumi_pesos._verificar`), así que
+`os.path.getsize()` lo da gratis. Firma nueva:
+`quizas_purgar_por_presion(cache, usos, activo, necesita_mb)`, desalojando si
+`libre < necesita_mb + margen`.
+
+**Impacto: ALTO y bloqueante.** Es lo que convierte «la persistencia no cabe en 8 GB» en
+«la persistencia se auto-regula en 8 GB». Coste bajo (~10 líneas: un parámetro y un
+`getsize`). Riesgo bajo: desalojar de más solo cuesta una recarga.
+
+### M2. Verificación y agentes cargan A LA VEZ, sin presupuesto de memoria — **CRÍTICO con 8 GB**
+
+`queue/mod.rs:757-781`: el `tokio::join!` lanza `verificar::afinar` y
+`agentar::preguntar` en paralelo. El comentario de `:746-748` defiende el solape con un
+argumento **correcto y que no hay que romper**: «un agente equivocado no puede matar un
+candidato antes de que RANSAC tenga ocasión de confirmarlo».
+
+Pero nadie acotó su coste en memoria. Durante ese `join!` hay hasta tres procesos Python
+vivos (embebedor persistente + verificador + agentes), y los dos últimos **cargan sus
+modelos simultáneamente**. Es exactamente el escenario del OOM de septiembre (`python3`
+con 5,25 GB de RSS). Era el punto 3 de la tabla de la Parte 3 bis de aquel spec y
+**nunca se implementó**: no estaba entre los 24 ítems numerados, así que se cayó del
+plan sin que nadie lo notara.
+
+Y hay un agravante estructural: los dos desalojos por presión son **por proceso**.
+`lumi_agentes` desaloja sus motores y `lumi_verify` los suyos, pero ninguno ve al otro.
+Con 8 GB, dos procesos que cada uno cree tener margen suficiente suman más de lo que hay.
+
+**Medida (respetando el solape):** mantener el `tokio::join!` pero **serializar la fase
+de carga, no la de trabajo**. Un semáforo de un solo permiso compartido por los dos,
+liberado en cuanto el modelo está residente: el verificador y los agentes siguen
+corriendo en paralelo, y lo que deja de solaparse es solo el pico transitorio de
+construirlos. Alternativa más ponytail si el semáforo entre procesos resulta incómodo:
+que el segundo en arrancar espere a que el primero anuncie «modelo cargado» por su
+stderr, que ya se drena.
+
+**Impacto: ALTO.** Es la causa directa del OOM medido. Coste medio. Riesgo: si el
+permiso se filtra sin liberarse, un análisis se cuelga — necesita su propio timeout.
 
 ---
 
@@ -606,10 +683,21 @@ Lo que falta es una decisión.
 
 **Medida:** que el defecto deje de ser un booleano ciego y se derive de la memoria
 disponible al arrancar (el daemon ya sabe leer hardware, subsistema 3c), o como mínimo
-que el asistente lo active explícitamente cuando la caja tenga VRAM de sobra.
+que el asistente lo active explícitamente cuando la caja tenga margen.
 
-**Orden:** con W1 aplicado el pico de VRAM baja, así que este defecto se revisa
-**después** de W1, no antes. Y **requiere confirmar el techo de memoria de WSL primero.**
+**Orden — revisado tras confirmarse que el techo de WSL no sube.** En septiembre esto
+estaba bloqueado por la memoria. Ya no lo está *si* se arregla el desalojo primero:
+
+1. **M1** (umbral de presión relativo al modelo entrante) y **M2** (no cargar
+   verificador y agentes a la vez) son el prerrequisito real. Sin ellos, activar la
+   persistencia en 8 GB reproduce el OOM de septiembre.
+2. **W1** (`logits_to_keep`) baja el pico transitorio por pase, que con 8 GB es
+   justamente el margen que falta.
+3. Solo entonces, y **ya con números**, revisar el defecto.
+
+Con el desalojo arreglado, la pregunta deja de ser «¿cabe?» y pasa a ser «¿cuántas
+recargas cuesta?» — que es una pregunta de rendimiento, medible, y no un riesgo de
+caída del servicio.
 
 ### W5. SHA-256 completo de los pesos en cada carga — **MEDIO-ALTO / ~20 líneas**
 
@@ -712,14 +800,21 @@ marca `_motores["vlm"] = None` **para toda la vida del proceso**.
 **Consecuencia: 0 veredictos de agentes, siempre**, en cualquier caja donde no se
 instalara `bitsandbytes` a mano.
 
-**Dos caminos, y conviene elegir a la vez que W1:**
-- añadir `bitsandbytes` al script del venv (`tasks.rs`), o
-- **quitar la cuantización** y cargar en fp16. Con W1 aplicado, el 8B en fp16 son ~16 GB
-  de pesos, que NO caben en una 4070 SUPER de 12 GB; el 4B en fp16 (~8 GB) sí. La
-  disyuntiva real es **8B-4bit** (más lento por token: NF4 desempaqueta en cada GEMM)
-  frente a **4B-fp16** (más rápido, menos capaz). **Medirlo antes de decidir**, en vez de
-  heredar el 4-bit por inercia. `bitsandbytes` en Windows/WSL es además una fuente
-  conocida de dolor, y el fp16 evita esa dependencia entera.
+**La disyuntiva se cierra sola con el techo de WSL.** Los dos caminos eran: añadir
+`bitsandbytes` al script del venv (`tasks.rs`), o quitar la cuantización y cargar en
+fp16. El segundo pedía **4B-fp16 (~8 GB)**, que es exactamente el techo entero de WSL:
+no deja sitio para el intérprete, el embebedor persistente ni el verificador. **Con 8 GB
+inamovibles, la cuantización 4-bit deja de ser una decisión y pasa a ser un requisito.**
+
+**Medida: añadir `bitsandbytes` al venv** (`tasks.rs:83-150`). Lo que en el spec original
+era «medirlo antes de decidir» ya está decidido por la restricción de memoria; lo único
+que queda por medir es tokens/s, para saber cuánto cuesta el NF4 (desempaqueta en cada
+GEMM), no para elegir.
+
+**Riesgo conocido:** `bitsandbytes` en Windows/WSL es una fuente habitual de dolor. Si
+no se deja instalar en la caja del dueño, la salida **no** es fp16 —no cabe— sino un
+modelo más pequeño en fp16 o una cuantización sin esa dependencia. Eso sería un cambio
+de motor, con su propia validación de calidad.
 
 ### B2. Los ids de agentes de `mini` y `pro` no existen: solo `vision` corre agentes
 
@@ -863,6 +958,10 @@ validación:
 Todas sobre el mismo lote de fotos de control, guardando la salida para comparar calidad
 además de tiempo.
 
+0. **Cuánta memoria pide de verdad cada proceso.** `systemd-cgtop` o el `anon-rss` del
+   journal durante un `pro`, con y sin persistencia, anotando el pico de cada uno de los
+   tres Python. **Con 8 GB inamovibles este es el número que gobierna todo el spec**, y
+   hoy solo se conoce de un OOM de septiembre (5,25 GB de un `python3`).
 1. **Confirmar que los agentes corren.** Una foto por nivel; leer del log
    `agentes: N pedidos, M veredictos, persistente=…, X.Xs` (`agentar.rs:142`). **Si
    `M == 0`, B1/B2 antes que cualquier optimización.**
@@ -911,23 +1010,33 @@ además de tiempo.
 
 Ordenado por relación impacto/riesgo. Cada tanda es un commit.
 
-### Tanda 0 — Responder dos preguntas antes de tocar nada
+### Tanda 0 — Una sola pregunta antes de tocar nada
+
+El techo de WSL ya está respondido: **no sube**, y eso está incorporado en el orden de
+abajo. Queda una:
 
 | # | Qué | Por qué |
 |---|---|---|
-| 0a | ¿Se subió ya el techo de memoria de WSL? (`~/.wslconfig`) | De ello depende W4, que es el ítem de más impacto pendiente desde septiembre |
-| 0b | Correr un análisis por nivel y leer `agentes: N pedidos, M veredictos` | Si `M == 0`, B1/B2 van primero y todo lo demás espera |
+| 0a | Correr un análisis por nivel y leer `agentes: N pedidos, M veredictos` (`agentar.rs:142`) | Si `M == 0`, se confirma B1/B2 y la Tanda 1 es obligatoria antes que nada |
 
-### Tanda 1 — Correcciones que desbloquean (B1, B2, W8, B3)
+### Tanda 1 — Que quepa en 8 GB (M1, M2) y que los agentes existan (B1, B2, W8, B3)
 
-No son rendimiento, pero sin ellas el resto no significa nada.
+No son rendimiento: son las correcciones sin las cuales el resto no significa nada. Con
+el techo de memoria fijo, M1 y M2 pasan de «deseable» a **prerrequisito de todo lo
+demás**.
 
 | # | Cambio | Fichero |
 |---|---|---|
-| 1 | Decidir 8B-4bit (+`bitsandbytes` en el venv) o 4B-fp16, **con la medida 7 de §8** | `tasks.rs:83-150`, `registros/motores/qwen3-vl.json` |
-| 2 | Ids de agentes correctos en `mini`/`pro`, + aviso cuando un id pedido no exista | `registros/niveles/{mini,pro}.json`, `agentes_de` |
-| 3 | `stderr` drenado en tarea aparte, copiando el patrón de los otros dos puentes | `verificar.rs:116-121` |
-| 4 | Firma de `cargar_motor` en el upscaler | `lumi_upscale.py:57` |
+| 1 | Umbral de presión **relativo al tamaño del modelo entrante**, no constante de 512 MB | `lumi_pesos.py:33`, `:56-88` + sus 4 llamantes |
+| 2 | No cargar verificador y agentes a la vez: serializar **la fase de carga**, no la de trabajo (el solape del `join!` se mantiene) | `queue/mod.rs:757-781` |
+| 3 | `bitsandbytes` al script del venv — con 8 GB la cuantización deja de ser opcional | `tasks.rs:83-150` |
+| 4 | Ids de agentes correctos en `mini`/`pro`, + aviso cuando un id pedido no exista | `registros/niveles/{mini,pro}.json`, `agentes_de` |
+| 5 | `stderr` drenado en tarea aparte, copiando el patrón de los otros dos puentes | `verificar.rs:116-121` |
+| 6 | Firma de `cargar_motor` en el upscaler | `lumi_upscale.py:57` |
+
+**Medida de éxito de esta tanda:** un `pro` completo sin que `journalctl` registre un
+solo `oom-kill`, y la línea `agentes: N pedidos, M veredictos` con `M > 0` en los tres
+niveles.
 
 ### Tanda 2 — Casi gratis, impacto alto
 
@@ -979,7 +1088,14 @@ Después de las medidas 3, 4, 5 y 6 de §8, no antes.
 | 29 | `max_pixels` **como parámetro del registro del motor**, con el barrido detrás | `lumi_motores.py:54`, `registros/motores/*.json` |
 | 30 | `attn_implementation` explícito + `inference_mode` | `lumi_motores.py:55-67`, `:101` |
 | 31 | Sello `.verificado` junto a los pesos | `lumi_pesos.py:194-207` |
-| 32 | Revisar el defecto de persistencia, **ya con números y con el techo de WSL resuelto** | `agentar.rs:93`, `verificar.rs:73`, `rendimiento.rs:26` |
+| 32 | Revisar el defecto de persistencia, **ya con M1/M2 puestos y con números** | `agentar.rs:93`, `verificar.rs:73`, `rendimiento.rs:26` |
+
+El ítem 32 es el que más cambia con el techo fijo. Con M1 y M2 aplicados, activar la
+persistencia ya no es «dejar 5 modelos residentes para siempre» sino «dejarlos mientras
+quepan, y soltarlos cuando no» — el desalojo por inactividad (10 min) y por presión hace
+el resto. **La medida que decide es cuántas recargas provoca en una sesión real de
+trabajo:** si son pocas, gana la persistencia; si el desalojo se dispara en cada
+análisis, se queda apagada y el arranque en frío se ataca solo con W1/W2/W3/W5.
 
 ### Tanda 6 — Oportunista
 
@@ -998,10 +1114,19 @@ septiembre: **son trece cambios de una a diez líneas, todos reversibles, y ning
 cambia una decisión de diseño.** Solo corrigen defectos que no sobrevivieron al contacto
 con el código real.
 
-La Tanda 1 va antes porque **B1 y B2 juntos explican «los agentes no dan buenos
-resultados» sin necesidad de invocar la calidad del modelo**: en `mini` y `pro` no corre
-ninguno, y en `vision` el motor falla al cargar si falta `bitsandbytes`. Antes de tocar
-prompts, umbrales o pesos, hay que confirmar que los agentes están corriendo de verdad.
+La Tanda 1 va antes por dos razones distintas. **B1 y B2 juntos explican «los agentes no
+dan buenos resultados» sin necesidad de invocar la calidad del modelo**: en `mini` y
+`pro` no corre ninguno, y en `vision` el motor falla al cargar si falta `bitsandbytes`.
+Antes de tocar prompts, umbrales o pesos, hay que confirmar que los agentes están
+corriendo de verdad.
+
+Y **M1 y M2 son la consecuencia de que el techo de WSL no suba.** Esa restricción no se
+puede negociar, así que el diseño tiene que absorberla: en vez de pedir más memoria, hay
+que gastar bien la que hay. El mecanismo de desalojo que llegó con el rediseño de agentes
+ya hace la mitad del trabajo; lo que le falta es saber **cuánto va a pedir lo que está a
+punto de cargarse** (M1) y que dos procesos no decidan a la vez que tienen sitio (M2).
+Con eso, 8 GB dejan de ser un techo contra el que chocar y pasan a ser un presupuesto que
+el sistema administra solo.
 
 Y la Tanda 5 va al final a propósito. Es donde está el orden de magnitud —81 pases donde
 caben 7— pero también donde cada decisión depende de un número que hoy no tenemos. El
