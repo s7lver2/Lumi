@@ -235,35 +235,6 @@ CREATE TABLE IF NOT EXISTS analysis_hypotheses (
     autor       TEXT NOT NULL,
     PRIMARY KEY (analysis_id, orden)
 );
--- Lo que dijeron los agentes de un análisis. Es a la vez el panel del cliente
--- y el registro de auditoría: como Vision corre «todos los del registro», dos
--- servidores pueden componerse distinto, y esta tabla es lo que hace que el
--- informe diga exactamente de qué se compuso ESTE.
-CREATE TABLE IF NOT EXISTS analysis_agents (
-    analysis_id INTEGER NOT NULL,
-    agente      TEXT NOT NULL,
-    nombre      TEXT NOT NULL,
-    etiqueta    TEXT NOT NULL,
-    -- NULL en modo transcripción -- no hay conjunto cerrado sobre el que
-    -- normalizar (spec 2026-09-17 §5), nunca un número inventado.
-    confianza   REAL,
-    detalle     TEXT NOT NULL DEFAULT '',
-    -- La etiqueta real elegida por el motor, aunque `etiqueta` valga
-    -- `abstiene` porque no llegó al umbral. Ver `DichoDeAgente.etiqueta_real`.
-    etiqueta_real TEXT NOT NULL DEFAULT '',
-    -- JSON de `Vec<(String, f64)>` tal cual lo trajo `Msg::Agente` -- se
-    -- guarda serializado y no en columnas propias porque no hace falta
-    -- consultarlo por campo, solo devolverlo entero al cliente.
-    alternativas TEXT,
-    -- Cuánto sube la imagen la evidencia de la opción ganadora frente a no
-    -- verla (spec 2026-09-17 §4) -- una lectura aparte de `confianza`. NULL
-    -- en modo transcripción.
-    apoyo_visual REAL,
-    -- Debug de calibración: el texto/JSON crudo que devolvió el motor, solo
-    -- relleno con `modo_calibracion` activo en el momento del análisis.
-    respuesta_cruda TEXT,
-    PRIMARY KEY (analysis_id, agente)
-);
 CREATE TABLE IF NOT EXISTS model_licenses (
     licencia     TEXT NOT NULL,
     para         TEXT NOT NULL,
@@ -432,10 +403,10 @@ impl Store {
 /// ADD COLUMN` falla con "duplicate column name" si ya existe, y ese fallo es
 /// exactamente la señal de "ya está aplicada". El techo es el día en que haga
 /// falta transformar datos y no solo añadir columnas; ahí sí toca versionar --
-/// es justo lo que hace `migracion_agentes_2026_09_17` de aquí abajo, la
-/// primera vez que hace falta versionar de verdad.
+/// es justo lo que hace `migracion_darkroom_borrar_agentes_2026_09_19` de
+/// aquí abajo.
 fn migrate(c: &Connection) {
-    migracion_agentes_2026_09_17(c);
+    migracion_darkroom_borrar_agentes_2026_09_19(c);
     for (table, col, decl) in [
         ("users", "display_name", "TEXT"),
         ("users", "blocked", "INTEGER NOT NULL DEFAULT 0"),
@@ -513,11 +484,8 @@ fn migrate(c: &Connection) {
         // simplemente no ofrece foto de comparación.
         ("analyses", "result_imagen_id", "INTEGER"),
         ("analysis_hypotheses", "imagen_id", "INTEGER"),
-        // Panel de agentes: qué agente se pidió (solo con model == "agentes")
-        // y lo que ese agente trajo de más allá de la etiqueta ganadora.
-        // alternativas/apoyo_visual/respuesta_cruda ya viven en el
-        // CREATE TABLE de analysis_agents (recreada por la migración de
-        // 2026-09-17 de más abajo); no hace falta un ALTER TABLE aparte.
+        // Columna del subsistema retirado en 2026-09-19: queda como columna
+        // muerta, `routes::analyses::create` es su único escritor que queda.
         ("analyses", "agente", "TEXT"),
         // Panel Media (spec 2026-09-10 §3): carpeta virtual de una imagen.
         // `NULL` = "Sin carpeta", el estado de toda imagen de antes de esto.
@@ -544,18 +512,13 @@ fn migrate(c: &Connection) {
         // cualquier fila de antes de esta columna -- ahí se asume 4 (el
         // único comportamiento que existía).
         ("analyses", "upscale_factor", "INTEGER"),
-        // La etiqueta real que eligió el motor aunque se abstuviera --
-        // `etiqueta` ya vale `abstiene` en ese caso y perdía el dato. Vacía
-        // en filas de antes de esta columna: un análisis viejo simplemente
-        // no ofrece "lo más parecido" al abstenerse.
-        ("analysis_agents", "etiqueta_real", "TEXT NOT NULL DEFAULT ''"),
         // El id de motor (`registros/motores/*.json`) que hace falta
         // instalar cuando un análisis termina en error por eso -- ver
         // `Msg::Fallo::falta_modelo`. `NULL` para cualquier otro fallo.
         ("analyses", "falta_modelo", "TEXT"),
         // Ver `AnalysisReq::grupo_id` -- opaco, el servidor solo lo guarda y
-        // lo devuelve para que el cliente agrupe varios análisis de agentes
-        // lanzados a la vez como un solo intento.
+        // lo devuelve para que el cliente agrupe varios análisis lanzados a
+        // la vez como un solo intento.
         ("analyses", "grupo_id", "TEXT"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
@@ -568,47 +531,30 @@ fn migrate(c: &Connection) {
     );
 }
 
-/// Migración de un solo uso (spec 2026-09-17 §8). `confianza` pasa de
-/// `NOT NULL` a admitir `NULL` (modo transcripción no tiene confianza) y la
-/// columna `tipo`/`rasgos` desaparecen -- un `ALTER TABLE ADD COLUMN` no
-/// puede relajar un `NOT NULL` existente ni quitar una columna en SQLite, así
-/// que la tabla se recrea entera. Los análisis de agentes existentes están
-/// producidos por el diseño anterior (confianza plana, ids con punto de la
-/// fusión) y no hay forma de reinterpretarlos con el formato nuevo -- se
-/// descartan, después de la copia de seguridad que `actualizacion::aplicar`
-/// ya hace por versión durante la propia actualización. Guardado en `meta`
-/// para que no se repita en cada arranque siguiente.
-fn migracion_agentes_2026_09_17(c: &Connection) {
+/// Los agentes (5c) se retiraron por completo en Darkroom (fase 0,
+/// 2026-09-19): `analysis_agents` no tiene lectores fuera de agentes, y los
+/// análisis con `model = 'agentes'` quedarían huérfanos e invisibles si se
+/// dejasen (el cliente ya no ofrece ese modo). Guardado en `meta` para que
+/// no se repita en cada arranque siguiente, mismo patrón que las migraciones
+/// de un solo uso anteriores.
+fn migracion_darkroom_borrar_agentes_2026_09_19(c: &Connection) {
     let ya_aplicada = c
-        .query_row("SELECT v FROM meta WHERE k = 'migracion_agentes_2026_09_17'", [], |r| {
-            r.get::<_, String>(0)
-        })
+        .query_row(
+            "SELECT v FROM meta WHERE k = 'migracion_darkroom_borrar_agentes_2026_09_19'",
+            [],
+            |r| r.get::<_, String>(0),
+        )
         .is_ok();
     if ya_aplicada {
         return;
     }
-    let _ = c.execute_batch(
-        "DROP TABLE IF EXISTS analysis_agents;
-         CREATE TABLE analysis_agents (
-             analysis_id INTEGER NOT NULL,
-             agente      TEXT NOT NULL,
-             nombre      TEXT NOT NULL,
-             etiqueta    TEXT NOT NULL,
-             confianza   REAL,
-             detalle     TEXT NOT NULL DEFAULT '',
-             etiqueta_real TEXT NOT NULL DEFAULT '',
-             alternativas TEXT,
-             apoyo_visual REAL,
-             respuesta_cruda TEXT,
-             PRIMARY KEY (analysis_id, agente)
-         );",
-    );
-    // Cualquier análisis de tipo "agentes" es irrecuperable con el formato
-    // nuevo (ids con punto, sin apoyo_visual) -- se vacía junto con la tabla
-    // de veredictos que ya se acaba de recrear vacía.
+    let _ = c.execute_batch("DROP TABLE IF EXISTS analysis_agents;");
     let _ = c.execute("DELETE FROM analyses WHERE model = 'agentes'", []);
-    let _ = c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES ('migracion_agentes_2026_09_17', '1')", []);
-    tracing::info!("migración 2026-09-17: análisis de agentes vaciados (diseño anterior, sin veredicto reinterpretable)");
+    let _ = c.execute(
+        "INSERT OR REPLACE INTO meta (k, v) VALUES ('migracion_darkroom_borrar_agentes_2026_09_19', '1')",
+        [],
+    );
+    tracing::info!("migración darkroom 2026-09-19: analysis_agents borrada, análisis de agentes vaciados");
 }
 
 #[cfg(test)]
