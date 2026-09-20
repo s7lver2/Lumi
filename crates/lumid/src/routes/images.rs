@@ -76,8 +76,13 @@ pub(crate) fn sobrescribir_bytes(
     image_id: i64,
     data: &[u8],
 ) -> Result<Image, String> {
-    let (pid, filename): (i64, String) = store
-        .conn()
+    // D10: las tres adquisiciones de `conn()` se agrupan en una sola --
+    // toda esta función es síncrona (nada de `.await` entre medias, ni
+    // siquiera tras pasar a `spawn_blocking` en el handler), así que sostener
+    // el mismo `MutexGuard` durante el fs::write intermedio es seguro y
+    // evita tomar/soltar el mutex global tres veces por sobrescritura.
+    let c = store.conn();
+    let (pid, filename): (i64, String) = c
         .query_row(
             "SELECT k.project_id, i.filename FROM images i JOIN cases k ON k.id = i.case_id WHERE i.id = ?1",
             [image_id],
@@ -91,16 +96,12 @@ pub(crate) fn sobrescribir_bytes(
     if let Some(thumb) = &procesada.thumb {
         let _ = std::fs::write(dir.join(format!("{image_id}.thumb")), thumb);
     }
-    store
-        .conn()
-        .execute(
-            "UPDATE images SET bytes = ?2, sha256 = ?3, width = ?4, height = ?5, mime = ?6 WHERE id = ?1",
-            rusqlite::params![image_id, data.len() as i64, procesada.sha, procesada.w, procesada.h, procesada.mime],
-        )
-        .map_err(|e| e.to_string())?;
-    store
-        .conn()
-        .query_row(&format!("SELECT {COLS} FROM images WHERE id = ?1"), [image_id], row_to_image)
+    c.execute(
+        "UPDATE images SET bytes = ?2, sha256 = ?3, width = ?4, height = ?5, mime = ?6 WHERE id = ?1",
+        rusqlite::params![image_id, data.len() as i64, procesada.sha, procesada.w, procesada.h, procesada.mime],
+    )
+    .map_err(|e| e.to_string())?;
+    c.query_row(&format!("SELECT {COLS} FROM images WHERE id = ?1"), [image_id], row_to_image)
         .map_err(|e| e.to_string())
 }
 

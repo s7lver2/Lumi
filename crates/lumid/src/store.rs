@@ -178,6 +178,13 @@ CREATE INDEX IF NOT EXISTS analyses_by_state ON analyses(state);
 CREATE INDEX IF NOT EXISTS analyses_by_requester ON analyses(requested_by);
 CREATE INDEX IF NOT EXISTS images_by_uploader ON images(uploader_id);
 CREATE INDEX IF NOT EXISTS sessions_by_user ON sessions(user_id);
+-- D6: la PK de analysis_images es (analysis_id, image_id) -- no sirve de
+-- prefijo para filtrar solo por image_id, que es justo lo que hacen
+-- routes/media.rs y routes/images.rs al listar los análisis de una imagen.
+CREATE INDEX IF NOT EXISTS analysis_images_by_image ON analysis_images(image_id);
+CREATE INDEX IF NOT EXISTS analyses_by_created_at ON analyses(created_at);
+CREATE INDEX IF NOT EXISTS media_folders_by_case ON media_folders(case_id);
+CREATE INDEX IF NOT EXISTS media_folders_by_project ON media_folders(project_id);
 CREATE UNIQUE INDEX IF NOT EXISTS limits_global ON limits(key) WHERE user_id IS NULL;
 CREATE TABLE IF NOT EXISTS installed_indices (
     paquete      TEXT PRIMARY KEY,

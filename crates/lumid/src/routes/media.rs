@@ -246,7 +246,15 @@ pub async fn sobrescribir(
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe esa imagen"))?;
     guard_case(&app, &headers, case_id)?;
     let data = leer_campo_unico(&mut mp).await?;
-    let img = sobrescribir_bytes(&app.store, &app.dir, id, &data).map_err(|e| err(StatusCode::UNSUPPORTED_MEDIA_TYPE, &e))?;
+    // Decodificar + hashear (dentro de `sobrescribir_bytes`) es CPU pura, no
+    // red -- igual que `upload`/`upscale` en `images.rs` (D10), va al pool de
+    // `spawn_blocking` en vez de bloquear el hilo del runtime async.
+    let store = app.store.clone();
+    let dir = app.dir.clone();
+    let img = tokio::task::spawn_blocking(move || sobrescribir_bytes(&store, &dir, id, &data))
+        .await
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
+        .map_err(|e| err(StatusCode::UNSUPPORTED_MEDIA_TYPE, &e))?;
     Ok(Json(img))
 }
 

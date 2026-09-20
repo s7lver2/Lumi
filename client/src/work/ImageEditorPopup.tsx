@@ -109,7 +109,10 @@ export function ImageEditorPopup({
   function snapshot() {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const data = canvas.toDataURL("image/png");
+    // JPEG 0.92 (C5), no PNG: es el historial de deshacer/rehacer, no la
+    // exportación final -- 20 snapshots de PNG de una foto grande es memoria
+    // desperdiciada cuando el mismo 0.92 que ya usa `exportarBlob` no se nota.
+    const data = canvas.toDataURL("image/jpeg", 0.92);
     // Cortar el futuro cuando se edita después de deshacer: es el
     // comportamiento estándar de cualquier editor con deshacer/rehacer.
     historial.current = historial.current.slice(0, historialIdx.current + 1);
@@ -175,7 +178,7 @@ export function ImageEditorPopup({
       const w = img.naturalWidth * 0.8;
       const h = img.naturalHeight * 0.8;
       setCaja({ x: (img.naturalWidth - w) / 2, y: (img.naturalHeight - h) / 2, w, h });
-      historial.current = [canvas.toDataURL("image/png")];
+      historial.current = [canvas.toDataURL("image/jpeg", 0.92)];
       historialIdx.current = 0;
       actualizarBotonesHistorial();
       setCargando(false);
@@ -196,12 +199,14 @@ export function ImageEditorPopup({
     historialIdx.current -= 1;
     cargarDataUrlEnCanvas(historial.current[historialIdx.current]);
     actualizarBotonesHistorial();
+    invalidarBlurOffscreen();
   }
   function rehacer() {
     if (historialIdx.current >= historial.current.length - 1) return;
     historialIdx.current += 1;
     cargarDataUrlEnCanvas(historial.current[historialIdx.current]);
     actualizarBotonesHistorial();
+    invalidarBlurOffscreen();
   }
 
   function puntoCanvas(e: React.PointerEvent): { x: number; y: number } {
@@ -262,6 +267,25 @@ export function ImageEditorPopup({
     return "default";
   }
 
+  // Offscreen difuminado del pincel de blur, cacheado por trazo (C4): antes
+  // se creaba un `<canvas>` a resolución nativa y se le aplicaba
+  // `filter: blur()` sobre la foto ENTERA en cada `pointermove` (~60/s) para
+  // pintar un círculo de unos pocos px -- el jank más caro del cliente por
+  // evento. Ahora se difumina una sola vez al empezar el trazo y cada
+  // `pointermove` es solo un `clip()` + `drawImage()`, un blit barato.
+  // Efecto secundario correcto: antes cada pincelada difuminaba lo ya
+  // difuminado dentro del mismo trazo (la intensidad dependía de lo despacio
+  // que movieras el ratón); con un offscreen fijo por trazo eso desaparece.
+  const blurOffscreenRef = useRef<HTMLCanvasElement | null>(null);
+
+  /** Invalida el offscreen cacheado: se regenera en el próximo trazo a
+   *  partir del canvas tal como quede tras `aplicarRecorte`/`rotar90`/
+   *  `voltear`/`aplicarTono`/`deshacer`/`rehacer` -- si no se invalidara, el
+   *  próximo trazo de blur pintaría sobre una versión vieja de la imagen. */
+  function invalidarBlurOffscreen() {
+    blurOffscreenRef.current = null;
+  }
+
   function aplicarBlurEn(px: number, py: number) {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -269,14 +293,19 @@ export function ImageEditorPopup({
     if (!ctx) return;
     // Blur REAL con textura de fondo visible: se renderiza una copia
     // difuminada de todo el canvas (`ctx.filter`, no un rectángulo opaco) y
-    // se pega solo el círculo del pincel, recortado con `clip()`.
-    const off = document.createElement("canvas");
-    off.width = canvas.width;
-    off.height = canvas.height;
-    const octx = off.getContext("2d");
-    if (!octx) return;
-    octx.filter = `blur(${radio}px)`;
-    octx.drawImage(canvas, 0, 0);
+    // se pega solo el círculo del pincel, recortado con `clip()`. El
+    // offscreen se crea una sola vez por trazo (ver `blurOffscreenRef`).
+    let off = blurOffscreenRef.current;
+    if (!off) {
+      off = document.createElement("canvas");
+      off.width = canvas.width;
+      off.height = canvas.height;
+      const octx = off.getContext("2d");
+      if (!octx) return;
+      octx.filter = `blur(${radio}px)`;
+      octx.drawImage(canvas, 0, 0);
+      blurOffscreenRef.current = off;
+    }
     ctx.save();
     ctx.beginPath();
     ctx.arc(px, py, radio, 0, Math.PI * 2);
@@ -383,7 +412,12 @@ export function ImageEditorPopup({
   }
 
   function onPointerUp() {
-    if (arrastreRef.current?.modo === "pintar") snapshot();
+    if (arrastreRef.current?.modo === "pintar") {
+      snapshot();
+      // Fin del trazo: el próximo debe partir de la imagen ya difuminada por
+      // este, no seguir pegando la misma copia offscreen de antes.
+      invalidarBlurOffscreen();
+    }
     arrastreRef.current = null;
   }
 
@@ -493,6 +527,7 @@ export function ImageEditorPopup({
     ajustarOverlay();
     setCaja(null);
     snapshot();
+    invalidarBlurOffscreen();
   }
 
   // Rotar intercambia ancho/alto del lienzo -- por eso hace falta un canvas
@@ -514,6 +549,7 @@ export function ImageEditorPopup({
     ajustarOverlay();
     setCaja(null);
     snapshot();
+    invalidarBlurOffscreen();
   }
 
   function voltear(eje: "h" | "v") {
@@ -530,6 +566,7 @@ export function ImageEditorPopup({
     canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
     canvas.getContext("2d")?.drawImage(nuevo, 0, 0);
     snapshot();
+    invalidarBlurOffscreen();
   }
 
   // Redibuja el canvas con el filtro ya "horneado" en los píxeles -- igual
@@ -551,6 +588,7 @@ export function ImageEditorPopup({
     setBrillo(100);
     setContraste(100);
     snapshot();
+    invalidarBlurOffscreen();
   }
 
   // Un ajuste de tono no confirmado con "Aplicar tono" solo vivía como

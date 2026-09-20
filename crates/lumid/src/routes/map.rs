@@ -154,15 +154,25 @@ fn with_key(url: &str, key: &str) -> String {
     format!("{url}{sep}access_token={key}")
 }
 
-/// Cliente HTTP hacia el proveedor. Se construye por llamada: son peticiones
-/// esporádicas y un cliente en el estado sería una pieza más que mantener.
-/// ponytail: el techo es un mapa muy usado; ahí conviene un cliente compartido
-/// en `App`, que es un campo más y ningún cambio de diseño.
+/// Cliente HTTP hacia el proveedor, compartido para todo el proceso (D7): el
+/// mapa es la pantalla principal de la vista de trabajo y cada tesela que no
+/// esté en caché pagaba un `Client::builder().build()` nuevo -- pool de
+/// conexiones, `ClientConfig` de rustls y resolutor DNS nuevos, así que
+/// ningún handshake TLS se reutilizaba entre teselas (≈100-300 ms contra
+/// `api.mapbox.com` cada vez, y un solo desplazamiento del mapa pide decenas
+/// de teselas). Ese era justo el techo que este mismo comentario ya avisaba
+/// que llegaría.
+static CLIENTE: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+
 fn outbound() -> Result<reqwest::Client, Fail> {
-    reqwest::Client::builder()
+    if let Some(c) = CLIENTE.get() {
+        return Ok(c.clone());
+    }
+    let c = reqwest::Client::builder()
         .user_agent("lumi-station")
         .build()
-        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    Ok(CLIENTE.get_or_init(|| c).clone())
 }
 
 /// El catálogo cerrado, para pintar la rejilla de temas. Estático y sin

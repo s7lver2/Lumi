@@ -32,14 +32,25 @@ impl Default for Cliente {
     }
 }
 
+// D7: `Cliente::nuevo()` se llama por análisis (`recuperar.rs`) y en cada
+// sondeo de `/v1/hello` -- un `reqwest::Client` nuevo por llamada tira su
+// pool de conexiones cada vez, en vez de reutilizar TCP/TLS ya establecido
+// contra el mismo Qdrant local. Un solo cliente compartido a nivel de
+// proceso, igual que `routes/map.rs::outbound`.
+static CLIENTE: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+
 impl Cliente {
     pub fn nuevo() -> Self {
         Self {
-            http: reqwest::Client::builder()
-                .connect_timeout(std::time::Duration::from_secs(5))
-                .timeout(std::time::Duration::from_secs(120))
-                .build()
-                .expect("construir el cliente HTTP no debería fallar"),
+            http: CLIENTE
+                .get_or_init(|| {
+                    reqwest::Client::builder()
+                        .connect_timeout(std::time::Duration::from_secs(5))
+                        .timeout(std::time::Duration::from_secs(120))
+                        .build()
+                        .expect("construir el cliente HTTP no debería fallar")
+                })
+                .clone(),
         }
     }
 
@@ -149,11 +160,14 @@ impl Cliente {
     /// deshabilitada con el motivo. Un timeout largo aquí colgaría `/v1/hello`,
     /// que es lo primero que el cliente pide y no puede esperar a una red caída.
     pub async fn vivo(&self) -> bool {
-        let cliente = reqwest::Client::builder()
-            .connect_timeout(std::time::Duration::from_millis(300))
-            .timeout(std::time::Duration::from_millis(500))
-            .build();
-        let Ok(cliente) = cliente else { return false };
+        static CLIENTE_PING: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+        let cliente = CLIENTE_PING.get_or_init(|| {
+            reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_millis(300))
+                .timeout(std::time::Duration::from_millis(500))
+                .build()
+                .expect("construir el cliente de ping no debería fallar")
+        });
         cliente
             .get(format!("{BASE}/collections"))
             .send()

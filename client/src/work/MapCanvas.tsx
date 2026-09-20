@@ -192,6 +192,15 @@ export function MapCanvas({
   // puente nativo `lumi://`, que lleva el token en su propio estado.
   const token = useServer((s) => s.token) ?? undefined;
   const uiScale = useUiScale();
+  // Patrón «callback ref» (C3): `onMarker` cambia de identidad en cada
+  // render de `CaseView` (se pasa como lambda anónima creada en el JSX), y
+  // si formara parte de las dependencias del efecto de abajo, ese efecto se
+  // repetiría en cada render de `CaseView` -- quitando y recreando TODOS los
+  // marcadores del DOM aunque `markers` y `oscuro` no hubieran cambiado.
+  // Guardarlo en un ref hace a `MapCanvas` inmune a esto para siempre, en
+  // vez de depender de que el llamante recuerde memoizarlo con `useCallback`.
+  const onMarkerRef = useRef(onMarker);
+  useEffect(() => { onMarkerRef.current = onMarker; });
 
   useEffect(() => {
     let dead = false;
@@ -355,7 +364,7 @@ export function MapCanvas({
           zoom: Math.max(m.getZoom(), 13),
           duration: 900, easing: EASE_OUT_CUBIC,
         });
-        onMarker?.(mk.id);
+        onMarkerRef.current?.(mk.id);
       });
       return { marker, mk };
     });
@@ -367,7 +376,7 @@ export function MapCanvas({
     // empieza a hacer falta uno nuevo). `move` cubre pan, zoom y rotación.
     m.on("move", reflow);
     return () => { m.off("move", reflow); };
-  }, [markers, onMarker, oscuro]);
+  }, [markers, oscuro]);
 
   // Cambiar de proyección sin rehacer el mapa: reconstruirlo tiraría el estilo,
   // las teselas ya descargadas y la posición de la cámara.
