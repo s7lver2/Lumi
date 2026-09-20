@@ -1,5 +1,15 @@
 # Optimización extrema: cliente, daemon y workers
 
+> **Fe de erratas (2026-09-20):** el subsistema de agentes (5c) se borró por completo
+> en la Fase 0 de Darkroom
+> (`docs/superpowers/specs/2026-09-19-darkroom-design.md`, commits `3ea6298`..`20acd8e`).
+> Todo lo que este spec proponía sobre `agentar.rs`, `lumi_agentes.py`, la clase `Vlm`
+> de `lumi_motores.py` y sus registros ya no tiene código al que aplicarse. La lista
+> completa de qué se retira, qué se reescribe y qué sigue vigente tal cual está al
+> final de la Parte 0 ("Qué cambia tras la Fase 0 de Darkroom"). El resto del documento
+> se deja intacto como registro de la auditoría original — la fe de erratas es la única
+> fuente de verdad sobre qué implementar ahora.
+
 ## Resumen
 
 Auditoría de rendimiento de arriba a abajo de los tres subsistemas de Lumi Station
@@ -156,6 +166,50 @@ stderr, que ya se drena.
 
 **Impacto: ALTO.** Es la causa directa del OOM medido. Coste medio. Riesgo: si el
 permiso se filtra sin liberarse, un análisis se cuelga — necesita su propio timeout.
+
+### Qué cambia tras la Fase 0 de Darkroom (2026-09-20)
+
+Con los agentes borrados, `queue/mod.rs` ya no tiene `tokio::join!` ni
+`correr_agente_unico`: solo queda el `await` de `verif_persistente`. Eso invalida el
+precondicionante de M2 y vacía casi entera la Parte 4 (Workers), porque la mayoría de
+sus hallazgos vivían dentro de la clase `Vlm` de `lumi_motores.py`, que ya no existe.
+
+| Ítem | Estado | Por qué |
+|---|---|---|
+| **M1** | Se mantiene, **downgradeado de CRÍTICO a MEDIO** | El escenario que lo hacía crítico (VLM de 8B pidiendo 5-6 GB) desapareció con `Vlm`. El defecto sigue siendo real — el umbral de 512 MB sigue sin mirar el tamaño del modelo entrante, y verificador+embebedor combinados rondan ~2 GB (W5) — pero ya no hay ningún modelo del catálogo actual que por sí solo agote 8 GB. Sigue mereciendo el arreglo de ~10 líneas, sin ser bloqueante. |
+| **M2** | **RETIRADO** | Su precondición (`tokio::join!` de verificación + agentes) no existe: la Fase 0 lo desarmó dejando un `await` simple. No hay dos procesos Python cargando a la vez que este spec deba coordinar. |
+| **V1** (Parte 0) | Se mantiene solo la mitad de verificación | `agentar.rs:93` ya no existe; `verificar.rs:73`/`routes/rendimiento.rs` (el campo `agentes_persistente` fue retirado en la Fase 0) sí siguen aplicando a W4. |
+| **W1, W2, W3, W6, W7** | **RETIRADOS** | Los cuatro viven en la clase `Vlm` de `lumi_motores.py:33-152`, borrada entera en la Fase 0. No queda motor VLM al que aplicar `logits_to_keep`, batch de opciones, caché de pases sin imagen, tope de píxeles ni decodificación única. |
+| **W4** | Se mantiene, reescrito | Pasa a ser únicamente "verificación no persistente por defecto" (`verificar.rs:73`, `routes/rendimiento.rs`). El prerrequisito ya no es M1+M2+W1: con M2 retirado y M1 downgradeado, basta con M1 antes de revisar el defecto. |
+| **W5, W8** | Se mantienen sin cambios | `lumi_verify.py`/`verificar.rs` no son código de agentes; siguen aplicando tal cual están escritos. |
+| **B1, B2** | **RETIRADOS** | `bitsandbytes`/`qwen3-vl.json` (B1) e ids de agentes en `mini`/`pro` (B2) no tienen ya nada que instalar ni corregir — el motor y los niveles de agentes se borraron. |
+| **B3** | Se mantiene sin cambios | Es un bug de `lumi_upscale.py` llamando mal a `cargar_motor`, sin relación con agentes. |
+| **Tanda 0 (0a)** | **RETIRADA** | Comprobar "agentes: N pedidos, M veredictos" no tiene sentido sin agentes. |
+| **Tanda 1, ítems 2-4** | **RETIRADOS** | Eran M2, bitsandbytes (B1) e ids de agentes (B2). |
+| **Tanda 2, ítems 11-12** | **RETIRADOS** | Caché de pases sin imagen del VLM y decodificación PIL "por agente" — ambos en la clase `Vlm` borrada. |
+| **Tanda 5, ítems 27-30** | **RETIRADOS** | `logits_to_keep`, caché de prefijo, `max_pixels`, `attn_implementation` — los cuatro en `lumi_motores.py` líneas que ya no existen. |
+| **Tanda 5, ítem 31** | Se sube a Tanda 1 | El sello `.verificado` de W5 no depende de nada retirado; sin la Tanda 5 (vaciada casi entera), no tiene sentido dejarlo al final. |
+| **Tanda 5, ítem 32** | Se mantiene, reescrito | Revisar el defecto de persistencia de W4 ya solo habla de verificación, no de agentes. |
+| **Parte 6** ("LUMI_DEVICE pasado a los agentes en los dos caminos") | **RETIRADO** de la lista de "no tocar" | Ya no hay agentes a los que pasarle el dispositivo; el patrón que sí sigue vigente es el de `queue/worker.rs` para verificación/upscale. |
+| **Parte 8, ítems 1-7** | **RETIRADOS** | Todos median el motor VLM o "que los agentes corran" — no queda nada que medir ahí. |
+
+**Todo lo demás del documento** (Parte 2 Cliente, Parte 3 Daemon completa, W5/W8/W9-W15
+de la Parte 4, Parte 6 salvo la línea de arriba, Parte 7, Parte 8 ítems 0/8-14, y las
+Tandas 2-4 y 6 salvo los dos ítems retirados) **sigue vigente tal cual está escrito** —
+ninguno de esos hallazgos toca código de agentes.
+
+**Plan de ejecución resultante, renumerado:**
+
+1. **Tanda 1 (reducida):** M1 downgradeado, W8 (drenar `stderr` en tarea aparte, copiando
+   ahora el patrón de `persistente.rs` en vez de el de `agentar.rs`, que ya no existe),
+   B3 (firma de `cargar_motor` en el upscaler), y el sello `.verificado` de W5 (subido
+   desde la Tanda 5 retirada).
+2. **Tanda 2** tal cual, menos los ítems 11 y 12.
+3. **Tanda 3** (bundle del cliente) tal cual, completa.
+4. **Tanda 4** (daemon estructural) tal cual, completa.
+5. **Tanda 5 (vaciada a un solo ítem):** revisar el defecto de persistencia de
+   verificación (antes ítem 32), ya con M1 puesto.
+6. **Tanda 6** (oportunista) tal cual, completa.
 
 ---
 
