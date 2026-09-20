@@ -88,7 +88,7 @@ fn resolver_items(app: &App, ids: &[String]) -> Vec<ItemDescarga> {
             });
         } else if let Some(g) = recursos_geo.iter().find(|g| &g.id == id) {
             // Único recurso geo que queda desde que koppen.bin salió del
-            // registro (spec 2026-09-17 §1: sin agente que consuma
+            // registro (spec 2026-09-17 §1: sin nadie que consuma
             // clima_koppen, sale el único usuario del dataset Köppen).
             let nombre = "paises.json";
             fuera.push(ItemDescarga {
@@ -209,18 +209,13 @@ pub async fn estado(
 ) -> Result<Json<Vec<NivelEstado>>, StatusCode> {
     require_admin(&app, &bearer(&headers))?;
     let niveles = app.queue.niveles.lock().unwrap().clone();
-    let agentes = app.queue.agentes.lock().unwrap().clone();
-    let motores = app.queue.motores.lock().unwrap().clone();
     let instalados = instalados_dir(&app);
 
     let fuera = niveles
         .iter()
-        .map(|n| {
-            let motores_necesarios = lumi_index::agentes::motores_de_agentes(&n.agentes, &agentes, &motores);
-            NivelEstado {
-                id: n.id.clone(), nombre: n.nombre.clone(),
-                resolucion: lumi_index::niveles::resolver_composicion(n, &motores_necesarios, &instalados),
-            }
+        .map(|n| NivelEstado {
+            id: n.id.clone(), nombre: n.nombre.clone(),
+            resolucion: lumi_index::niveles::resolver_composicion(n, &[], &instalados),
         })
         .collect();
     Ok(Json(fuera))

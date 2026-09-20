@@ -171,12 +171,11 @@
 
 \begin{document}
 
-% El destello de cuatro puntas ya usado por `MarcoVentanaLumi`
-% (`web/components/AgentesVisual.tsx`), redibujado en TikZ a partir de las
-% mismas cuatro curvas de B\'ezier del `path` SVG original -- no se inventa
-% iconograf\'ia nueva. Los iconos de dato (EXIF, integridad, hip\'otesis,
-% agente) del tema oscuro siguen el mismo criterio: son los mismos trazos
-% que ya usa `client/src/ui/Icon.tsx` (`clock`, `lock`, `via`, `bocadillo`),
+% El destello de cuatro puntas ya usado por `MarcoVentanaLumi`, redibujado en
+% TikZ a partir de las mismas cuatro curvas de B\'ezier del `path` SVG
+% original -- no se inventa iconograf\'ia nueva. Los iconos de dato (EXIF,
+% integridad, hip\'otesis) del tema oscuro siguen el mismo criterio: son los
+% mismos trazos que ya usa `client/src/ui/Icon.tsx` (`clock`, `lock`, `via`),
 % pasados a TikZ a mano -- ponytail: no son una reproducci\'on B\'ezier
 % exacta del `path` SVG (arcos/curvas se aproximan con l\'ineas y `controls`
 % sencillos), el original es una miniatura de ~11pt, no un icono a pantalla
@@ -206,13 +205,6 @@
   \draw[line width=1.6pt,rounded corners=1pt] (14.5,7) rectangle (19.5,15);
   \fill (17,8.4) circle (0.6);
 \end{tikzpicture}}
-\newcommand{\lumiiconobocadillo}{\begin{tikzpicture}[x=0.8em/24,y=0.8em/24]
-  \color{lumigris}
-  \draw[line width=1.6pt,rounded corners=1pt] (4,5) -- (20,5) -- (20,15) -- (9,15) -- (5,19) -- (5,15) -- (4,15) -- cycle;
-  \draw[line width=1.4pt] (8,9) -- (16,9);
-  \draw[line width=1.4pt] (8,12) -- (13,12);
-\end{tikzpicture}}
-
 % -------------------------------------------------- El localizador (§7) --
 % `img.mapa` llega ya proyectado a coordenadas de dibujo desde `export.rs`
 % (`construir_mapa`) -- la plantilla no sabe de latitudes/longitudes, solo
@@ -242,9 +234,9 @@
 \vspace{1.5cm}
 \begin{minipage}{0.72\textwidth}
 \centering\small\color{lumigris}
-Documento generado por Lumi. Cada hip\'otesis de geolocalizaci\'on y cada
-veredicto de agente son inferencias autom\'aticas, no una confirmaci\'on
-pericial -- se entregan con su nivel de confianza declarado.
+Documento generado por Lumi. Cada hip\'otesis de geolocalizaci\'on es una
+inferencia autom\'atica, no una confirmaci\'on pericial -- se entrega con su
+nivel de confianza declarado.
 \end{minipage}
 
 {% if incluir_estadisticas and estadisticas %}
@@ -257,7 +249,6 @@ pericial -- se entregan con su nivel de confianza declarado.
 Caso creado: & \ttfamily{{ estadisticas.creado_en | tex }} \\
 Im\'agenes incluidas: & \ttfamily{{ n_imagenes }} \\
 Con hip\'otesis: & \ttfamily{{ estadisticas.n_con_hipotesis }} \\
-Con veredicto de agente: & \ttfamily{{ estadisticas.n_con_agente }} \\
 \textbf{Sin resolver:} & \textbf{\ttfamily {{ estadisticas.n_sin_resolver }}} \\
 {% if estadisticas.peso_medio_txt is defined and estadisticas.peso_medio_txt %}
 Peso medio: & \ttfamily{{ estadisticas.peso_medio_txt }} \\
@@ -267,25 +258,21 @@ Peso medio: & \ttfamily{{ estadisticas.peso_medio_txt }} \\
 \end{minipage}
 {% else %}
 % --------------------------------------------- Portada editorial (oscuro) --
-% Cuatro n\'umeros grandes en fila, mono -- "sin resolver" nunca se funde en
+% Tres n\'umeros grandes en fila, mono -- "sin resolver" nunca se funde en
 % los otros totales (requisito expl\'icito: un informe de evidencia no puede
 % esconder qu\'e no se resolvi\'o dentro de una cifra de \'exito). Ver
 % `resumen_oscuro`/`ResumenOscuro` en `export.rs`.
 \vspace{1.5cm}
 \noindent
-\begin{minipage}[t]{0.23\textwidth}\centering
+\begin{minipage}[t]{0.3\textwidth}\centering
 {\fontsize{28}{28}\selectfont\ttfamily\lumiintersemibold\color{lumifg}{{ n_imagenes }}}\\[4pt]
 {\footnotesize\color{lumigris}im\'agenes}
 \end{minipage}\hfill
-\begin{minipage}[t]{0.23\textwidth}\centering
+\begin{minipage}[t]{0.3\textwidth}\centering
 {\fontsize{28}{28}\selectfont\ttfamily\lumiintersemibold\color{lumifg}{{ estadisticas.n_con_hipotesis }}}\\[4pt]
 {\footnotesize\color{lumigris}con hip\'otesis}
 \end{minipage}\hfill
-\begin{minipage}[t]{0.23\textwidth}\centering
-{\fontsize{28}{28}\selectfont\ttfamily\lumiintersemibold\color{lumifg}{{ estadisticas.n_con_agente }}}\\[4pt]
-{\footnotesize\color{lumigris}con agente}
-\end{minipage}\hfill
-\begin{minipage}[t]{0.23\textwidth}\centering
+\begin{minipage}[t]{0.3\textwidth}\centering
 {\fontsize{28}{28}\selectfont\ttfamily\lumiintersemibold\color{lumiavisotxt}{{ estadisticas.n_sin_resolver }}}\\[4pt]
 {\footnotesize\color{lumiavisotxt}sin resolver}
 \end{minipage}
@@ -373,17 +360,6 @@ Peso medio: & \ttfamily{{ estadisticas.peso_medio_txt }} \\
   {% if img.hipotesis_extra %}\\[4pt]\normalfont{}{% for l in img.hipotesis_extra %}{% if l.variante == "cabecera" %}\lumiintermedium {{ l.texto | tex }}\\[2pt]{% else %}{{ l.texto | tex }}\\{% endif %}{% endfor %}{% endif %}
 }
 {% endif %}
-{% if img.agente_lineas %}
-\lumibloque{\lumiiconobocadillo}{Agente}{
-  {% for l in img.agente_lineas %}{% if l.variante == "cabecera" %}\lumiintermedium {{ l.texto | tex }}\\[2pt]{% else %}{{ l.texto | tex }}\\{% endif %}{% endfor %}
-  {% for r in img.rasgos_graficos %}\vspace{6pt}{% if r.tipo == "ocr" and img.thumb_file %}\begin{center}\begin{tikzpicture}
-    \node[anchor=south west,inner sep=0] (rasgoimg) {\includegraphics[width=5cm,height=5cm,keepaspectratio]{ {{- img.thumb_file -}} }};
-    \begin{scope}[x={(rasgoimg.south east)},y={(rasgoimg.north west)}]
-    {% for c in r.cajas %}\draw[lumifg,thick] ({{ c.x1 }},{{ c.y1 }}) rectangle ({{ c.x2 }},{{ c.y2 }});{% endfor %}
-    \end{scope}\end{tikzpicture}\end{center}
-  {% elif r.tipo == "profundidad" %}\begin{center}\includegraphics[width=5cm,height=5cm,keepaspectratio]{ {{- r.archivo -}} }\end{center}{% endif %}{% endfor %}
-}
-{% endif %}
 \end{minipage}
 {% endif %}
 {% else %}
@@ -438,18 +414,6 @@ Peso medio: & \ttfamily{{ estadisticas.peso_medio_txt }} \\
 }
 {% endif %}
 
-{% if img.agente_lineas %}
-\lumibloque{\lumiiconobocadillo}{Agente}{
-  {# Mismo motivo que los `\normalfont{}`/`\small{}` de más arriba. #}
-  \small{}{% for l in img.agente_lineas %}{% if l.variante == "cabecera" %}\lumiintermedium {{ l.texto | tex }}\\[2pt]{% else %}{{ l.texto | tex }}\\{% endif %}{% endfor %}
-  {% for r in img.rasgos_graficos %}\vspace{6pt}{% if r.tipo == "ocr" and img.thumb_file %}\begin{center}\begin{tikzpicture}
-    \node[anchor=south west,inner sep=0] (rasgoimg) {\includegraphics[width=5cm,height=5cm,keepaspectratio]{ {{- img.thumb_file -}} }};
-    \begin{scope}[x={(rasgoimg.south east)},y={(rasgoimg.north west)}]
-    {% for c in r.cajas %}\draw[lumifg,thick] ({{ c.x1 }},{{ c.y1 }}) rectangle ({{ c.x2 }},{{ c.y2 }});{% endfor %}
-    \end{scope}\end{tikzpicture}\end{center}
-  {% elif r.tipo == "profundidad" %}\begin{center}\includegraphics[width=5cm,height=5cm,keepaspectratio]{ {{- r.archivo -}} }\end{center}{% endif %}{% endfor %}
-}
-{% endif %}
 {% endif %}
 {% endif %}
 \end{minipage}
