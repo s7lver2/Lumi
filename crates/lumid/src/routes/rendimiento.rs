@@ -46,12 +46,6 @@ fn settings(app: &App) -> RendimientoSettings {
         verificacion_persistente,
         limpieza_por_presion_desc: desc_limpieza(limpieza_por_presion),
         limpieza_por_presion,
-        // `agentar::limite_configurado` es quien de verdad aplica esto en el
-        // camino caliente; aquí solo se refleja el mismo valor (o su
-        // ausencia, como el `LIMITE` de fábrica) para que la UI no duplique
-        // esa lógica de parseo/clamp. Se borra en el Task 8 junto con
-        // `agentar.rs` (ver ese commit).
-        agentes_timeout_s: crate::agentar::limite_configurado(&app.store).as_secs(),
     }
 }
 

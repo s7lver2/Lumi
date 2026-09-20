@@ -4,7 +4,6 @@ mod exif;
 mod hardware;
 mod hardware_cpu;
 mod actualizacion;
-mod agentar;
 mod indices;
 mod logging;
 mod mantenimiento;

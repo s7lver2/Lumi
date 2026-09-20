@@ -158,12 +158,9 @@ pub struct Queue {
     dir: PathBuf,
     eventos: mpsc::UnboundedSender<Evento>,
     pub(crate) niveles: Mutex<Vec<lumi_index::niveles::Nivel>>,
-    // `pub(crate)`: además de `agentes_de` aquí mismo, `crate::routes::models`
-    // lo necesita para saber qué motor pide cada agente de un nivel.
-    pub(crate) agentes: Mutex<Vec<lumi_index::agentes::Agente>>,
-    // `pub(crate)`: además del árbitro de agentes de este módulo, lo lee
-    // `routes::export` para dibujar el localizador del informe PDF (§7 del
-    // spec de rediseño) -- una lectura del mutex por informe, no por imagen.
+    // `pub(crate)`: lo lee `routes::export` para dibujar el localizador del
+    // informe PDF (§7 del spec de rediseño) -- una lectura del mutex por
+    // informe, no por imagen.
     pub(crate) geo: Mutex<lumi_index::geo::Datos>,
     // `pub(crate)`: sus lectores son las rutas de gestión de modelos, en
     // `crate::routes::models`, no este módulo.
@@ -179,11 +176,6 @@ pub struct Queue {
     /// análisis como siempre. Arranque perezoso: no existe hasta el primer
     /// `pedir`, así que activar el ajuste sin usarlo nunca no gasta VRAM.
     verif_persistente: crate::persistente::Persistente,
-    /// Igual que `verif_persistente`, para agentes (`agentes_persistente`).
-    /// Aparte porque su huella de RAM/VRAM es muy distinta (VLM+OCR+
-    /// profundidad frente a tiny-roma) y el operador puede querer activar
-    /// solo uno de los dos según cuánta memoria tenga libre.
-    agentes_persistente: crate::persistente::Persistente,
     /// Media móvil (no persistida: se pierde al reiniciar, y no pasa nada,
     /// se reconstruye con los primeros análisis) de cuánto tarda un análisis
     /// COMPLETO de principio a fin -- lo único que hace falta para el "tiempo
@@ -260,7 +252,6 @@ impl Queue {
             dir,
             eventos: tx_ev,
             niveles: Mutex::new(lumi_index::registro::cargar_niveles(&crate::assets::ruta("registros/niveles"))),
-            agentes: Mutex::new(lumi_index::registro::cargar_agentes(&crate::assets::ruta("registros/agentes"))),
             geo: Mutex::new(lumi_index::geo::Datos::cargar(&crate::assets::ruta("registros/geo"))),
             modelos: Mutex::new(lumi_index::registro::cargar_modelos(&crate::assets::ruta("registros/modelos"))),
             verificadores: Mutex::new(lumi_index::registro::cargar_verificadores(&crate::assets::ruta("registros/verificadores"))),
@@ -268,7 +259,6 @@ impl Queue {
             recursos_geo: Mutex::new(lumi_index::geo::cargar_recursos(&crate::assets::ruta("registros/geo"))),
             vectores: Mutex::new(HashMap::new()),
             verif_persistente: crate::persistente::Persistente::nuevo("verificación"),
-            agentes_persistente: crate::persistente::Persistente::nuevo("agentes"),
             // 0 = "todavía sin ninguna muestra" -- `eta_de` lo trata como
             // "no hay estimación" en vez de como una duración real de 0s.
             duracion_media_ms: std::sync::atomic::AtomicU64::new(0),
@@ -290,8 +280,6 @@ impl Queue {
     pub fn recargar(&self) {
         *self.niveles.lock().unwrap() =
             lumi_index::registro::cargar_niveles(&crate::assets::ruta("registros/niveles"));
-        *self.agentes.lock().unwrap() =
-            lumi_index::registro::cargar_agentes(&crate::assets::ruta("registros/agentes"));
         *self.geo.lock().unwrap() = lumi_index::geo::Datos::cargar(&crate::assets::ruta("registros/geo"));
         *self.modelos.lock().unwrap() =
             lumi_index::registro::cargar_modelos(&crate::assets::ruta("registros/modelos"));
@@ -609,9 +597,9 @@ impl Queue {
             tokio::select! {
                 Some(ev) = rx_ev.recv() => {
                     // `Evento::Vectores` dispara el post-proceso ENTERO de un
-                    // análisis (recuperación + verificación y agentes en
-                    // paralelo, con verificación sola midiendo minutos en
-                    // producción, ver el spec de rendimiento). Hacerlo inline
+                    // análisis (recuperación + verificación, con verificación
+                    // sola midiendo minutos en producción, ver el spec de
+                    // rendimiento). Hacerlo inline
                     // aquí paraba el bucle entero mientras tanto: no se volvía
                     // a leer `rx_ev` (los eventos de OTROS trabajadores se
                     // encolaban sin atender) ni se llamaba a `repartir_ahora`
@@ -685,8 +673,8 @@ impl Queue {
                 }
                 // Instrumentación (Hallazgo 0 del spec de rendimiento): mide
                 // el post-proceso ENTERO de un análisis -- recuperación +
-                // verificación + agentes en paralelo -- que es lo que el
-                // investigador espera de verdad. Antes de esto no había
+                // verificación -- que es lo que el investigador espera de
+                // verdad. Antes de esto no había
                 // ninguna medida de extremo a extremo; solo se sabía "el
                 // análisis #51 tardó 186s" contando a mano desde el reloj del
                 // journal.
@@ -743,10 +731,6 @@ impl Queue {
                         let consulta = self.imagen_del_analisis(id).unwrap_or_default();
                         let rutas = self.rutas_de_candidatos(&c);
                         self.notificar_fase(id, "verificando", 0, inicio_analisis.elapsed().as_secs_f64());
-                        // En paralelo con el verificador, no antes: un agente
-                        // equivocado no puede matar un candidato antes de que
-                        // RANSAC tenga ocasión de confirmarlo.
-                        let agentes_del_nivel = self.agentes_de(&nivel);
                         let pesos = crate::assets::pesos_dir(&self.store, &self.dir);
                         let registro_verif = crate::assets::ruta("registros/verificadores");
                         let python = interprete_python(&self.store);
@@ -754,31 +738,20 @@ impl Queue {
                         // `std::sync::Mutex` (no `Send` a través de un punto de
                         // espera), y la lista completa son unos pocos KB.
                         let verificadores = self.verificadores.lock().unwrap().clone();
-                        let (afinados, dictamen) = tokio::join!(
-                            crate::verificar::afinar(
-                                &nivel,
-                                &consulta,
-                                c.clone(),
-                                &rutas,
-                                &python,
-                                &dispositivo,
-                                &registro_verif,
-                                &pesos,
-                                &verificadores,
-                                &self.store,
-                                &self.verif_persistente,
-                            ),
-                            crate::agentar::preguntar(
-                                &agentes_del_nivel,
-                                &consulta,
-                                &python,
-                                &pesos,
-                                &dispositivo,
-                                &self.store,
-                                &self.agentes_persistente,
-                                crate::agentar::limite_configurado(&self.store),
-                            ),
-                        );
+                        let afinados = crate::verificar::afinar(
+                            &nivel,
+                            &consulta,
+                            c.clone(),
+                            &rutas,
+                            &python,
+                            &dispositivo,
+                            &registro_verif,
+                            &pesos,
+                            &verificadores,
+                            &self.store,
+                            &self.verif_persistente,
+                        )
+                        .await;
                         let afinados = afinados.unwrap_or_default();
                         // Los que ningún verificador respaldó se caen. Si se
                         // caen todos, se contesta con la recuperación sin
@@ -815,10 +788,7 @@ impl Queue {
                                     Some((clave(g.lat, g.lng), (g.inliers, g.verificador.clone())))
                                 })
                                 .collect();
-                        // Se recuerda ANTES de que `usar` cambie más abajo
-                        // (los agentes reescalan `similitud`, pero eso no
-                        // aporta ninguna verificación geométrica nueva): sin
-                        // esto no había forma de distinguir, en el punto
+                        // Sin esto no había forma de distinguir, en el punto
                         // donde se agrupa, entre "un grupo verificado que
                         // resultó tener un solo candidato" y "nadie verificó
                         // nada" -- los dos acaban con `vivos` vacío o lleno
@@ -831,53 +801,6 @@ impl Queue {
                             vivos
                         };
 
-                        // Lo que los agentes tengan que decir de cada
-                        // candidato, con los atributos de su coordenada ya
-                        // resueltos offline y los inliers que lo protegen.
-                        let veredictos: Vec<lumi_index::agentes::Veredicto> =
-                            dictamen.iter().map(|(v, _)| v.clone()).collect();
-                        // Antes relockeaba `self.geo` una vez POR CANDIDATO
-                        // dentro del `.map()` — se agarra una sola vez fuera.
-                        let geo = self.geo.lock().unwrap();
-                        let para_aplicar: Vec<_> = usar
-                            .iter()
-                            .map(|c| {
-                                let at = geo.atributos(c.lat, c.lng);
-                                let inliers = respaldo_de.get(&clave(c.lat, c.lng)).map(|(i, _)| *i);
-                                (at, inliers)
-                            })
-                            .collect();
-                        drop(geo);
-                        let agentes = self.agentes.lock().unwrap().clone();
-                        let veredicto_final = lumi_index::agentes::aplicar(
-                            &agentes, &veredictos, &para_aplicar,
-                        );
-                        let motivo_de: std::collections::HashMap<(i64, i64), String> = usar
-                            .iter()
-                            .zip(veredicto_final.ajustes.iter())
-                            .filter_map(|(c, a)| {
-                                Some((clave(c.lat, c.lng), a.motivo.clone()?))
-                            })
-                            .collect();
-                        // Ningún agente descarta: el factor multiplica la
-                        // similitud del candidato (lo que pesa en el
-                        // agrupado y en la confianza final) en vez de
-                        // sacarlo de la lista.
-                        let usar: Vec<_> = usar
-                            .iter()
-                            .zip(veredicto_final.ajustes.iter())
-                            .map(|(c, a)| lumi_index::agrupar::Candidato {
-                                similitud: c.similitud * a.factor,
-                                ..c.clone()
-                            })
-                            .collect();
-                        tracing::info!(
-                            "agentes: {} candidatos, motivos {:?}",
-                            usar.len(),
-                            veredicto_final.ajustes.iter().map(|a| (a.factor, a.motivo.clone())).collect::<Vec<_>>(),
-                        );
-
-                        self.guardar_agentes(id, &dictamen);
                         // Sin ningún candidato verificado, agrupar por
                         // vecindad de tesela funde una ciudad entera en una
                         // sola isla (una tesela z14 mide 1,8 km a la latitud
@@ -916,6 +839,10 @@ impl Queue {
                         // («verificado por roma · 897 correspondencias») de
                         // otro candidato distinto del mismo grupo -- la
                         // prueba A etiquetada con el respaldo de la B.
+                        // El cuarto campo (`motivo_agente`) se deja siempre en
+                        // `None`: la columna de BD sigue viva (SQLite no
+                        // permite `DROP COLUMN` en este esquema), pero nada la
+                        // rellena ya desde que se retiraron los agentes.
                         let respaldo_y_foto: Vec<(Option<u32>, Option<String>, Option<String>, Option<i64>)> = h
                             .iter()
                             .map(|(_, miembros)| {
@@ -925,13 +852,9 @@ impl Queue {
                                         respaldo_de.get(&clave(lat, lng)).map(|b| (cand_id, b))
                                     })
                                     .max_by_key(|(_, (inliers, _))| *inliers);
-                                let motivo = miembros
-                                    .iter()
-                                    .find_map(|&(_, lat, lng)| motivo_de.get(&clave(lat, lng)))
-                                    .cloned();
                                 match mejor {
-                                    Some((cand_id, (i, v))) => (Some(*i), Some(v.clone()), motivo, Some(cand_id)),
-                                    None => (None, None, motivo, None),
+                                    Some((cand_id, (i, v))) => (Some(*i), Some(v.clone()), None, Some(cand_id)),
+                                    None => (None, None, None, None),
                                 }
                             })
                             .collect();
@@ -1015,58 +938,6 @@ impl Queue {
         self.store.conn().query_row("SELECT model FROM analyses WHERE id = ?1", [id], |r| r.get(0)).ok()
     }
 
-    /// El agente pedido para un análisis del modo Agentes. `None` si la
-    /// columna está vacía -- un pedido mal formado, no un dato que falte.
-    fn agente_del_analisis(&self, id: i64) -> Option<String> {
-        self.store
-            .conn()
-            .query_row("SELECT agente FROM analyses WHERE id = ?1", [id], |r| r.get::<_, Option<String>>(0))
-            .ok()
-            .flatten()
-            .filter(|s| !s.is_empty())
-    }
-
-    /// El camino entero del modo Agentes: sin recuperación ni verificación
-    /// geométrica, una sola llamada a `agentar::preguntar` con el único
-    /// agente pedido, y el resultado se guarda como un análisis normal (sin
-    /// lat/lng/radio, que quedan `NULL` como ya ocurre cuando no aplican).
-    async fn correr_agente_unico(&self, dispositivo: String, id: i64, agente_id: String, consulta: String) {
-        let pesos = crate::assets::pesos_dir(&self.store, &self.dir);
-        let python = interprete_python(&self.store);
-        let dictamen = crate::agentar::preguntar(
-            &[agente_id],
-            &consulta,
-            &python,
-            &pesos,
-            &dispositivo,
-            &self.store,
-            &self.agentes_persistente,
-            // El doble del normal, no un tope aparte: aquí el agente ES la
-            // respuesta entera (sin resultado de respaldo si se agota el
-            // tiempo), y cargar el motor VLM en frío ya se come casi todo
-            // el límite normal por sí solo.
-            crate::agentar::limite_configurado(&self.store) * 2,
-        )
-        .await;
-        self.soltar(&dispositivo, id);
-        match dictamen.into_iter().next() {
-            Some(v) => {
-                self.guardar_agentes(id, std::slice::from_ref(&v));
-                let _ = self.store.conn().execute(
-                    "UPDATE analyses SET state = 'hecho', error = NULL, finished_at = ?2 WHERE id = ?1",
-                    rusqlite::params![id, ahora()],
-                );
-                self.anunciar(id, "hecho");
-            }
-            // `agentar::preguntar` nunca distingue aquí "no contestó porque se
-            // agotó el tiempo" de "no contestó por otra razón" -- ambas caen a
-            // este mismo texto. Es exactamente el motivo real más frecuente
-            // (carga en frío del motor), así que se deja explícito en vez de
-            // dejar que el cliente adivine.
-            None => self.fallar(id, "el agente no contestó a tiempo"),
-        }
-    }
-
     /// La imagen (única) de un trabajo de upscale — `analysis_images` normal,
     /// leída por id en vez de por ruta porque `sobrescribir_bytes` necesita
     /// el id, no el camino en disco.
@@ -1081,8 +952,8 @@ impl Queue {
             .ok()
     }
 
-    /// El camino entero del upscaler (spec 2026-09-10 §2): sin recuperación,
-    /// verificación ni agentes -- una imagen, un motor real de super-
+    /// El camino entero del upscaler (spec 2026-09-10 §2): sin recuperación
+    /// ni verificación -- una imagen, un motor real de super-
     /// resolución, y sus bytes sustituidos en el sitio cuando termina. Nunca
     /// se guarda una hipótesis: el resultado de este análisis es la imagen
     /// misma, no una coordenada.
@@ -1124,17 +995,6 @@ impl Queue {
     fn nivel_de(&self, pedido: &str) -> Option<lumi_index::niveles::Nivel> {
         let capas = crate::recuperar::capas_instaladas(&self.store);
         lumi_index::niveles::resolver(&self.niveles.lock().unwrap(), pedido, &capas).cloned()
-    }
-
-    /// Los agentes del nivel. **Vacío en el nivel significa «todos los del
-    /// registro»** —así está Vision—, y por eso esto no puede ser un simple
-    /// `clone` del campo.
-    fn agentes_de(&self, nivel: &lumi_index::niveles::Nivel) -> Vec<String> {
-        if nivel.agentes.is_empty() {
-            self.agentes.lock().unwrap().iter().map(|a| a.id.clone()).collect()
-        } else {
-            nivel.agentes.clone()
-        }
     }
 
     /// La imagen de consulta del análisis, la primera de las que trae —hoy un
@@ -1236,63 +1096,6 @@ impl Queue {
         let resp_alternativas = respaldo.get(1..).unwrap_or(&[]);
         self.guardar_hipotesis(id, &principal, alternativas, resp_alternativas);
         self.anunciar(id, "hecho");
-    }
-
-    /// Los veredictos, incluidos los que se abstuvieron. Un agente que no llegó
-    /// a su umbral aparece con la etiqueta `abstiene`: en el panel se ve que
-    /// corrió y que no vio suficiente, en vez de desaparecer sin explicación.
-    fn guardar_agentes(&self, id: i64, dictamen: &[(lumi_index::agentes::Veredicto, String)]) {
-        // Debug de calibración (spec 2026-09-10 §4c): defensa en profundidad
-        // -- `agentar::preguntar` ya solo pide `respuesta_cruda` al
-        // trabajador con el modo activo, pero esto es lo que de verdad
-        // decide si se PERSISTE, para que un trabajador viejo o mal
-        // configurado que la mande de todos modos no la acumule en la base
-        // de instalaciones que nunca activaron calibración.
-        //
-        // ANTES de `store.conn()`, no después: `activo()` llama a
-        // `store.get_meta()`, que vuelve a pedir el mismo `Mutex` -- no es
-        // reentrante, así que pedirlo dos veces desde el mismo hilo con el
-        // primer guard todavía vivo (se usa más abajo, dentro del `for`) se
-        // bloqueaba a sí mismo PARA SIEMPRE. Ese hilo nunca volvía a soltar
-        // el mutex, así que la SIGUIENTE petición cualquiera que tocara la
-        // base (login, `/v1/hello` indirectamente, lo que fuera) se quedaba
-        // esperando el mismo cerrojo y consumía el segundo hilo de tokio —
-        // con los dos atascados, el daemon entero dejaba de responder. Esto
-        // es justo el "se congela después de cada análisis" reportado hoy.
-        let calibracion_activo = crate::routes::features::activo(&self.store, crate::routes::features::CLAVE_CALIBRACION);
-        let c = self.store.conn();
-        let _ = c.execute("DELETE FROM analysis_agents WHERE analysis_id = ?1", [id]);
-        let agentes = self.agentes.lock().unwrap().clone();
-        for (v, detalle) in dictamen {
-            let Some(a) = agentes.iter().find(|a| a.id == v.agente) else { continue };
-            // Solo `modo: eleccion` tiene umbral que comparar -- en
-            // `modo: transcripcion` `v.confianza` ya es `None` (spec
-            // 2026-09-17 §5) y nunca se abstiene: el texto se guarda tal
-            // cual, sin confianza que evaluar.
-            let abstiene = v.confianza.is_some_and(|conf| conf < a.umbral);
-            // JSON y no columnas propias: la forma varía (lista corta de
-            // pares) y aquí no hace falta consultar por campo, solo
-            // devolverlo entero al cliente.
-            let alternativas = serde_json::to_string(&v.alternativas).unwrap_or_default();
-            let respuesta_cruda = if calibracion_activo { v.respuesta_cruda.clone() } else { None };
-            let _ = c.execute(
-                "INSERT OR REPLACE INTO analysis_agents
-                    (analysis_id, agente, nombre, etiqueta, confianza, detalle, etiqueta_real, alternativas, apoyo_visual, respuesta_cruda)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-                rusqlite::params![
-                    id,
-                    &a.id,
-                    &a.nombre,
-                    if abstiene { "abstiene" } else { v.etiqueta.as_str() },
-                    v.confianza,
-                    detalle,
-                    v.etiqueta.as_str(),
-                    alternativas,
-                    v.apoyo_visual,
-                    respuesta_cruda,
-                ],
-            );
-        }
     }
 
     fn fallar(&self, id: i64, motivo: &str) {
@@ -1516,49 +1319,11 @@ impl Queue {
                 continue;
             }
 
-            // El modo Agentes no recupera ni verifica: es una sola pregunta
-            // cerrada a `agentar::preguntar`, sin tocar `lumi_geo.py` ni el
-            // canal del trabajador de embebido. Por eso no comparte el resto
-            // de este bucle -- lo que sigue construye un `Job` de
-            // recuperación que este modo no necesita en absoluto.
-            if modelo == "agentes" {
-                let Some(agente_id) = self.agente_del_analisis(a.analysis_id) else {
-                    self.fallar(a.analysis_id, "no se indicó qué agente lanzar");
-                    continue;
-                };
-                let ocupado = match self.estado.lock() {
-                    Ok(mut e) => match e.trabajadores.get_mut(&a.dispositivo) {
-                        Some(w) => {
-                            w.trabajo = Some(a.analysis_id);
-                            w.en_curso_desde = Some(Instant::now());
-                            true
-                        }
-                        None => false,
-                    },
-                    Err(_) => false,
-                };
-                if !ocupado {
-                    let _ = self.store.conn().execute(
-                        "UPDATE analyses SET state = 'pendiente' WHERE id = ?1",
-                        [a.analysis_id],
-                    );
-                    continue;
-                }
-                self.anunciar(a.analysis_id, "en_curso");
-                let cola = self.clone();
-                let dispositivo = a.dispositivo.clone();
-                let consulta = imagenes.first().cloned().unwrap_or_default();
-                tokio::spawn(async move {
-                    cola.correr_agente_unico(dispositivo, a.analysis_id, agente_id, consulta).await;
-                });
-                continue;
-            }
-
-            // El upscaler (spec 2026-09-10 §2): tampoco recupera ni verifica,
-            // una sola imagen de entrada y un archivo de salida que sustituye
-            // sus bytes en el sitio -- mismo motivo que "agentes" para no
-            // compartir el resto de este bucle (`Job::con_modelos` es para el
-            // camino de recuperación, que esto no usa).
+            // El upscaler (spec 2026-09-10 §2): no recupera ni verifica, una
+            // sola imagen de entrada y un archivo de salida que sustituye sus
+            // bytes en el sitio -- por eso no comparte el resto de este
+            // bucle (`Job::con_modelos` es para el camino de recuperación,
+            // que esto no usa).
             if modelo == "upscale" {
                 let (Some(imagen_id), Some(ruta)) =
                     (self.imagen_id_del_analisis(a.analysis_id), imagenes.first().cloned())

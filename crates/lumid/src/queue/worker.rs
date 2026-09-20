@@ -66,20 +66,20 @@ impl Evento {
                 motivo: "un trabajador de embebido mandó un veredicto de verificación".into(),
                 falta_modelo: None,
             },
-            // ponytail: mismo caso que `Verificado` — `Msg::Agente` es del
-            // trabajador de agentes (`workers/lumi_agentes.py`), que
-            // `crate::agentar` habla por su propia tubería. Verlo aquí es un
-            // trabajador mal configurado, no un veredicto que ignorar.
+            // ponytail: mismo caso que `Verificado` — `Msg::Agente` queda
+            // como variante muerta en `lumi_proto::worker::Msg` hasta que la
+            // Fase 0 de Darkroom termine de borrarla (crates compartidos);
+            // verla aquí seguiría siendo un trabajador mal configurado, no
+            // un veredicto que ignorar.
             Msg::Agente { id, .. } => Evento::Fallo {
                 dispositivo: d,
                 id,
-                motivo: "un trabajador de embebido mandó un veredicto de agente".into(),
+                motivo: "un trabajador de embebido mandó un mensaje de un tipo retirado".into(),
                 falta_modelo: None,
             },
             // ponytail: mismo caso — `Msg::Fin` es la marca de cierre de
-            // trabajo de `crate::persistente` (verificación/agentes
-            // persistentes), no algo que un trabajador de embebido deba
-            // mandar nunca.
+            // trabajo de `crate::persistente` (verificación persistente),
+            // no algo que un trabajador de embebido deba mandar nunca.
             Msg::Fin { id } => Evento::Fallo {
                 dispositivo: d,
                 id,
@@ -136,8 +136,8 @@ pub fn spawn(
         .arg(script)
         .env("LUMI_DEVICE", &dispositivo)
         // El trabajador de recuperación (`lumi_geo.py`) SIEMPRE es
-        // persistente -- no hay un `if` de por medio como en verificación/
-        // agentes, este interruptor le aplica siempre.
+        // persistente -- no hay un `if` de por medio como en verificación,
+        // este interruptor le aplica siempre.
         .env("LUMI_LIMPIEZA_PRESION", if limpieza_activo { "1" } else { "0" })
         // `lumi_geo.py` cae a la ruta relativa "registros/modelos" si esto
         // falta — y como el hijo hereda el cwd de `lumid` (bajo systemd, "/"
