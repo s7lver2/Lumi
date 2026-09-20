@@ -29,3 +29,19 @@ aes-gcm = "0.10"
 base64 = "0.22"
 ed25519-dalek = { version = "2", default-features = false, features = ["std", "rand_core"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
+
+# D3: perfil APARTE para empaquetar (tools/build.py build), sin tocar
+# [profile.release] -- con codegen-units=16 y sin LTO por defecto, el
+# optimizador nunca ve más de 1/16 del crate a la vez (sin inlining ni
+# devirtualización entre unidades) para un binario con 273 crates en el
+# grafo. `lto=thin` + `codegen-units=1` lo compensa a costa de mucho más
+# tiempo de compilación, así que se deja fuera de `release` para no chocar
+# con el ciclo de desarrollo del día a día (`python tools/build.py`).
+# `panic = "abort"` NO se activa: es una decisión explícita del dueño del
+# producto (un panic en un handler de axum hoy mata esa petición, con
+# `abort` mataría el daemon entero), fuera de alcance de este plan.
+[profile.dist]
+inherits = "release"
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

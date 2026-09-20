@@ -26,8 +26,8 @@ pub const KEYS: [&str; 9] = [
 fn rows(s: &Store, user_id: Option<i64>) -> HashMap<String, Value> {
     let c = s.conn();
     let mut q = match user_id {
-        Some(_) => c.prepare("SELECT key, value FROM limits WHERE user_id = ?1"),
-        None => c.prepare("SELECT key, value FROM limits WHERE user_id IS NULL"),
+        Some(_) => c.prepare_cached("SELECT key, value FROM limits WHERE user_id = ?1"),
+        None => c.prepare_cached("SELECT key, value FROM limits WHERE user_id IS NULL"),
     }
     .expect("sql de límites inválido");
     let map = |r: &rusqlite::Row| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?));

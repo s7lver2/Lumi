@@ -8,17 +8,33 @@ license.workspace = true
 lumi-proto.workspace = true
 thiserror.workspace = true
 lumi-index.workspace = true
+# D1: `worker_threads` pasa de fijo a `num_cpus::get()` -- el atributo
+# `#[tokio::main(worker_threads = ...)]` solo acepta un literal, así que ese
+# cambio también obliga a construir el runtime a mano en `main()` en vez de
+# la macro.
+num_cpus = "1"
 serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
 axum = { version = "0.7", features = ["multipart"] }
-axum-server = { version = "0.7", features = ["tls-rustls"] }
+# D4: "tls-rustls" activa `rustls/aws-lc-rs` explícitamente en el propio
+# `Cargo.toml` de axum-server -- "tls-rustls-no-provider" trae exactamente lo
+# mismo (rustls, rustls-pemfile, tokio-rustls, rustls-pki-types) sin forzar
+# ningún proveedor criptográfico, dejando que sea `ring` (el único que este
+# daemon instala de verdad, ver `main.rs`) quien gane.
+axum-server = { version = "0.7", default-features = false, features = ["tls-rustls-no-provider"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 kamadak-exif = "0.6"
 sha2.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots", "json", "gzip", "stream"] }
-rustls = "0.23"
+# D4: sin `default-features`, `rustls` activa el proveedor `aws-lc-rs` ->
+# `aws-lc-sys` (compilado con cmake+cc desde su build.rs, ~48 MB de
+# artefactos) aunque `main.rs` instale explícitamente
+# `rustls::crypto::ring::default_provider()` -- todo ese código se compilaba,
+# se enlazaba y no se ejecutaba nunca. `ring` es el proveedor que este daemon
+# usa de verdad.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 tower-http = { version = "0.6", features = ["cors"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 nvml-wrapper = "0.10"

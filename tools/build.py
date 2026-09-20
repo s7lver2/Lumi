@@ -41,7 +41,12 @@ def main():
         release_flow.lanzar(ROOT)
         return
     if target == "build":
-        run(["cargo", "build", "--release"])
+        # D3: perfil `dist` (lto=thin, codegen-units=1, strip=symbols) solo
+        # para empaquetar -- el flujo de desarrollo (`python tools/build.py`
+        # sin argumentos) se queda con `--release` normal, porque `dist`
+        # duplica o más el tiempo de compilación (hoy el incremental ya son
+        # 2 m 25 s) y eso chocaría de frente con el ciclo de desarrollo.
+        run(["cargo", "build", "--profile", "dist"])
         run([NPM, "run", "tauri", "build"], cwd=ROOT / "client")
         run([NPM, "run", "tauri", "build"], cwd=ROOT / "indexer")
         return

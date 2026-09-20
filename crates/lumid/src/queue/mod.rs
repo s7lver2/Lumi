@@ -1222,8 +1222,11 @@ impl Queue {
         if !crate::routes::features::activo(&self.store, crate::routes::features::CLAVE_PROGRESO_DETALLADO) {
             return;
         }
-        for c in candidatos {
-            let Some(posicion) = plan::posicion(candidatos, duenos, c.analysis_id) else { continue };
+        // D5: antes, una llamada a `plan::posicion` por candidato -- cada una
+        // reordenaba la cola ENTERA (O(n² log n) por tick con 200
+        // pendientes). `plan::ordenados` ya hace ese mismo orden una sola
+        // vez; la posición de cada candidato es su índice en el resultado.
+        for (posicion, (c, _)) in plan::ordenados(candidatos, duenos).into_iter().enumerate() {
             let _ = self.difusion.send(Cambio::Cola {
                 user_id: c.user_id,
                 analysis_id: c.analysis_id,
@@ -1437,37 +1440,59 @@ impl Queue {
             .lock()
             .map(|e| e.presentes.keys().copied().collect::<Vec<_>>())
             .unwrap_or_default();
+        let usuarios: std::collections::HashSet<i64> =
+            candidatos.iter().map(|c| c.user_id).collect();
+        // D5: antes eran 4 round-trips a SQLite POR USUARIO en cada reparto
+        // (`repartir_ahora` corre como mínimo cada `TICK_S`): `limits::effective`
+        // repetía `global()` -- que NO depende del usuario -- una vez por cada
+        // uno, y el `en_curso` de cada usuario era un `COUNT(*)` propio. Ahora
+        // `global`/`overrides_de_todos` se leen UNA vez fuera del bucle
+        // (`limits::apply`, ya `pub(crate)` exactamente para esto, como ya
+        // hace `routes::admin::list_users`) y `en_curso` sale de un solo
+        // `GROUP BY` para todos los usuarios pendientes: pasa de 4·N a 2+1·N.
+        let global = limits::global(&self.store);
+        let overrides_todos = limits::overrides_de_todos(&self.store);
+        let (bloqueados, en_curso_por_usuario): (HashMap<i64, bool>, HashMap<i64, i64>) = {
+            let c = self.store.conn();
+            let bloqueados: HashMap<i64, bool> = c
+                .prepare("SELECT id, blocked FROM users")
+                .and_then(|mut q| {
+                    q.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)? == 1)))
+                        .map(|filas| filas.flatten().collect())
+                })
+                .unwrap_or_default();
+            let en_curso: HashMap<i64, i64> = c
+                .prepare(
+                    "SELECT requested_by, COUNT(*) FROM analyses WHERE state = 'en_curso' GROUP BY requested_by",
+                )
+                .and_then(|mut q| {
+                    q.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))
+                        .map(|filas| filas.flatten().collect())
+                })
+                .unwrap_or_default();
+            (bloqueados, en_curso)
+        };
         let mut out = HashMap::new();
-        for uid in candidatos.iter().map(|c| c.user_id).collect::<std::collections::HashSet<_>>() {
-            // `limits::effective` y no la tabla: la precedencia de dos niveles
-            // vive ahí y en un solo sitio.
-            let l = limits::effective(&self.store, uid);
-            // Antes eran dos adquisiciones separadas de `store.conn()` por
-            // usuario — se agrupan bajo una sola.
-            let (bloqueado, en_curso): (bool, i64) = {
-                let c = self.store.conn();
-                let bloqueado = c
-                    .query_row("SELECT blocked FROM users WHERE id = ?1", [uid], |r| r.get::<_, i64>(0))
-                    .map(|b| b == 1)
-                    .unwrap_or(true);
-                let en_curso = c
-                    .query_row(
-                        "SELECT COUNT(*) FROM analyses WHERE requested_by = ?1 AND state = 'en_curso'",
-                        [uid],
-                        |r| r.get(0),
-                    )
-                    .unwrap_or(0);
-                (bloqueado, en_curso)
-            };
+        for uid in usuarios {
+            let mut l = global.clone();
+            if let Some(over) = overrides_todos.get(&uid) {
+                for (k, v) in over {
+                    limits::apply(&mut l, k, v);
+                }
+            }
             out.insert(
                 uid,
                 Dueno {
-                    bloqueado,
+                    // Sin fila en `users` no debería poder llegar aquí (todo
+                    // `requested_by` referencia un usuario real), pero se
+                    // conserva el mismo criterio conservador de antes
+                    // (`unwrap_or(true)`: bloqueado si no se sabe) por si acaso.
+                    bloqueado: bloqueados.get(&uid).copied().unwrap_or(true),
                     conectado: presentes.contains(&uid),
                     segundo_plano: l.background_jobs,
                     max_concurrent: l.max_concurrent,
                     prioridad: l.queue_priority,
-                    en_curso,
+                    en_curso: en_curso_por_usuario.get(&uid).copied().unwrap_or(0),
                 },
             );
         }

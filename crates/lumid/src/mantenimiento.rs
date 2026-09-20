@@ -14,8 +14,22 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
+// D2: `mantenimiento_gate` cuelga de TODO el router y llama `activo()` en
+// cada petición HTTP -- un `SELECT` bajo el mutex global de SQLite para leer
+// un valor que cambia, como mucho, unas pocas veces al mes. Cacheado aquí,
+// en el mismo módulo que su único escritor (`set_activo`), que es quien
+// invalida la caché -- si se olvidara invalidar en algún escritor futuro, el
+// modo mantenimiento no se aplicaría hasta reiniciar, así que la caché vive
+// pegada al escritor, no en `App`.
+static CACHE_ACTIVO: std::sync::RwLock<Option<bool>> = std::sync::RwLock::new(None);
+
 pub fn activo(app: &App) -> bool {
-    app.store.get_meta("mantenimiento").as_deref() == Some("1")
+    if let Some(v) = *CACHE_ACTIVO.read().expect("lock de mantenimiento envenenado") {
+        return v;
+    }
+    let v = app.store.get_meta("mantenimiento").as_deref() == Some("1");
+    *CACHE_ACTIVO.write().expect("lock de mantenimiento envenenado") = Some(v);
+    v
 }
 
 /// El mensaje que ve quien está bloqueado por mantenimiento: el que haya
@@ -44,7 +58,9 @@ pub fn servicios_habilitados(app: &App) -> Vec<String> {
 }
 
 pub fn set_activo(app: &App, on: bool) -> anyhow::Result<()> {
-    app.store.set_meta("mantenimiento", if on { "1" } else { "0" })
+    app.store.set_meta("mantenimiento", if on { "1" } else { "0" })?;
+    *CACHE_ACTIVO.write().expect("lock de mantenimiento envenenado") = Some(on);
+    Ok(())
 }
 
 pub fn set_mensaje(app: &App, msg: &str) -> anyhow::Result<()> {

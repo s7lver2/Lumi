@@ -1,6 +1,6 @@
 //! Casos: el contenedor dentro de un proyecto. Las imágenes cuelgan de aquí.
 
-use crate::projects::{access, project_of_case, Role};
+use crate::projects::{access, Role};
 use crate::routes::access::now;
 use crate::routes::auth::{bearer, require_session};
 use crate::routes::projects::{err, Fail};
@@ -13,12 +13,43 @@ const MAX_NAME: usize = 80;
 
 /// Sesión + acceso al proyecto del caso. Devuelve (usuario, proyecto, papel).
 /// La usan también las imágenes y los análisis: es su único camino a `access`.
-pub fn guard_case(app: &App, headers: &HeaderMap, case_id: i64) -> Result<(i64, i64, Role), Fail> {
+///
+/// D1: uno de los dos caminos calientes elegidos para la primera tanda de
+/// migración a `Store::leer` (junto a los middlewares de D2) -- las dos
+/// consultas de aquí abajo corrían antes inline en el hilo del runtime bajo
+/// `app.store.conn()` directo, y `guard_case` se llama en casi cualquier
+/// ruta protegida (imágenes, análisis, export...). Duplica el SQL de
+/// `projects::access`/`project_of_case` en vez de llamarlas (esas dos toman
+/// `&Store`, no `&Connection`, y cambiar su firma tocaría a todos SUS
+/// llamantes, fuera de alcance de este ítem) -- ambas consultas siguen
+/// siendo el mismo criterio de acceso, solo que agrupadas bajo un único
+/// `spawn_blocking`.
+pub async fn guard_case(app: &App, headers: &HeaderMap, case_id: i64) -> Result<(i64, i64, Role), Fail> {
     let (uid, _) = require_session(app, &bearer(headers))
         .map_err(|c| (c, "sesión inválida".to_string()))?;
     let missing = || err(StatusCode::NOT_FOUND, "no existe ese caso");
-    let pid = project_of_case(&app.store, case_id).ok_or_else(missing)?;
-    let role = access(&app.store, uid, pid).ok_or_else(missing)?;
+    let (pid, role): (Option<i64>, Option<String>) = crate::store::Store::leer(app.store.clone(), move |c| {
+        let pid: Option<i64> = c
+            .query_row("SELECT project_id FROM cases WHERE id = ?1", [case_id], |r| r.get(0))
+            .ok();
+        let Some(pid) = pid else { return (None, None) };
+        let role: Option<String> = c
+            .query_row(
+                "SELECT role FROM project_members
+                 WHERE project_id = ?1 AND user_id = ?2 AND status = 'accepted'",
+                rusqlite::params![pid, uid],
+                |r| r.get(0),
+            )
+            .ok();
+        (Some(pid), role)
+    })
+    .await;
+    let pid = pid.ok_or_else(missing)?;
+    let role = match role.as_deref() {
+        Some("owner") => Role::Owner,
+        Some("member") => Role::Member,
+        _ => return Err(missing()),
+    };
     Ok((uid, pid, role))
 }
 
@@ -112,7 +143,7 @@ pub async fn rename(
     headers: HeaderMap,
     Json(req): Json<NameReq>,
 ) -> Result<StatusCode, Fail> {
-    guard_case(&app, &headers, id)?;
+    guard_case(&app, &headers, id).await?;
     let name = req.name.trim();
     if name.is_empty() || name.chars().count() > MAX_NAME {
         return Err(err(StatusCode::BAD_REQUEST, "el nombre está vacío o pasa de 80 caracteres"));
@@ -129,7 +160,7 @@ pub async fn remove(
     Path(id): Path<i64>,
     headers: HeaderMap,
 ) -> Result<StatusCode, Fail> {
-    let (_, pid, _) = guard_case(&app, &headers, id)?;
+    let (_, pid, _) = guard_case(&app, &headers, id).await?;
     // Los archivos de cada imagen, antes de perder sus filas.
     let files: Vec<i64> = {
         let c = app.store.conn();

@@ -74,11 +74,25 @@ pub async fn list(State(app): State<App>, headers: HeaderMap) -> Result<Json<Vec
                     lk.username, lk.user_id
              FROM projects p
              JOIN project_members m ON m.project_id = p.id
-             LEFT JOIN (SELECT project_id, COUNT(*) AS n FROM cases GROUP BY project_id) kc
-               ON kc.project_id = p.id
+             -- D8: sin el JOIN a `project_members` de aquí dentro, SQLite
+             -- agregaba `cases`/`images` de TODOS los proyectos del servidor
+             -- -- de todos los usuarios -- antes de que el WHERE de fuera se
+             -- quedara solo con los del usuario. Correlacionar aquí hace que
+             -- el agregado escale con lo que tiene el usuario, no con el
+             -- servidor entero.
+             LEFT JOIN (
+               SELECT c.project_id AS project_id, COUNT(*) AS n
+               FROM cases c
+               JOIN project_members pm ON pm.project_id = c.project_id
+               WHERE pm.user_id = ?1 AND pm.status = 'accepted'
+               GROUP BY c.project_id
+             ) kc ON kc.project_id = p.id
              LEFT JOIN (
                SELECT k.project_id AS project_id, COUNT(*) AS n, SUM(i.bytes) AS bytes
-               FROM images i JOIN cases k ON k.id = i.case_id
+               FROM images i
+               JOIN cases k ON k.id = i.case_id
+               JOIN project_members pm ON pm.project_id = k.project_id
+               WHERE pm.user_id = ?1 AND pm.status = 'accepted'
                GROUP BY k.project_id
              ) ic ON ic.project_id = p.id
              -- Mismo criterio de validez que enter: el candado solo cuenta

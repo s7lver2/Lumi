@@ -137,10 +137,13 @@ pub async fn list(
     Path(case_id): Path<i64>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<Image>>, Fail> {
-    guard_case(&app, &headers, case_id)?;
+    guard_case(&app, &headers, case_id).await?;
     let c = app.store.conn();
+    // D12: `COLS` es una constante -- el texto de esta consulta nunca cambia
+    // entre llamadas, así que `prepare_cached` sí puede reutilizar el
+    // statement compilado en vez de volver a prepararlo en cada petición.
     let mut q = c
-        .prepare(&format!("SELECT {COLS} FROM images WHERE case_id = ?1 ORDER BY created_at"))
+        .prepare_cached(&format!("SELECT {COLS} FROM images WHERE case_id = ?1 ORDER BY created_at"))
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
     let rows = q
         .query_map([case_id], row_to_image)
@@ -164,7 +167,7 @@ pub async fn project_gallery(
         .ok_or_else(|| err(StatusCode::NOT_FOUND, "no existe ese proyecto"))?;
     let c = app.store.conn();
     let mut q = c
-        .prepare(
+        .prepare_cached(
             "SELECT i.id, i.case_id, i.filename, i.bytes, i.width, i.height, i.mime,
                     i.exif_lat, i.exif_lng, i.exif_json, i.created_at, i.sha256, i.folder_id, k.name
              FROM images i JOIN cases k ON k.id = i.case_id
@@ -192,7 +195,7 @@ pub async fn reuse(
     headers: HeaderMap,
     Json(req): Json<ReuseReq>,
 ) -> Result<Json<Image>, Fail> {
-    let (uid, pid, _) = guard_case(&app, &headers, case_id)?;
+    let (uid, pid, _) = guard_case(&app, &headers, case_id).await?;
     let is_admin = require_session(&app, &bearer(&headers)).map(|(_, a)| a).unwrap_or(false);
 
     #[allow(clippy::type_complexity)]
@@ -267,7 +270,7 @@ pub async fn upload(
     headers: HeaderMap,
     mut mp: Multipart,
 ) -> Result<Json<Vec<Image>>, Fail> {
-    let (uid, pid, _) = guard_case(&app, &headers, case_id)?;
+    let (uid, pid, _) = guard_case(&app, &headers, case_id).await?;
     let is_admin = require_session(&app, &bearer(&headers)).map(|(_, a)| a).unwrap_or(false);
     let dir = dir_for(&app, pid);
     std::fs::create_dir_all(&dir)
@@ -392,7 +395,7 @@ pub async fn upscale(
     if app.store.get_meta(crate::routes::features::CLAVE_UPSCALER).as_deref() != Some("1") {
         return Err(err(StatusCode::FORBIDDEN, "el upscaler no está activado en este servidor"));
     }
-    let (uid, pid, _) = guard_case(&app, &headers, case_id)?;
+    let (uid, pid, _) = guard_case(&app, &headers, case_id).await?;
     let is_admin = require_session(&app, &bearer(&headers)).map(|(_, a)| a).unwrap_or(false);
     let dir = dir_for(&app, pid);
     std::fs::create_dir_all(&dir).map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
@@ -492,7 +495,7 @@ pub async fn remove(
         .conn()
         .query_row("SELECT case_id FROM images WHERE id = ?1", [id], |r| r.get(0))
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe esa imagen"))?;
-    let (_, pid, _) = guard_case(&app, &headers, case_id)?;
+    let (_, pid, _) = guard_case(&app, &headers, case_id).await?;
     // Si se fuera, el resultado aterrizaría sobre un caso al que le falta la
     // prueba que lo produjo. En una herramienta forense eso no es aceptable.
     let en_uso: i64 = app
@@ -546,7 +549,7 @@ async fn serve(
             Ok((r.get(0)?, r.get(1)?))
         })
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe esa imagen"))?;
-    let (_, pid, _) = guard_case(app, headers, case_id)?;
+    let (_, pid, _) = guard_case(app, headers, case_id).await?;
 
     let dir = dir_for(app, pid);
     let (path, ctype) = if thumb {

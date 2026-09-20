@@ -100,7 +100,7 @@ pub fn avisos_para(app: &App, visto_por: Option<(i64, bool)>) -> Vec<AvisoInfo> 
     // se lleva por delante cualquier otra petición (una sola conexión global).
     let filas: Vec<AvisoInfo> = {
         let c = app.store.conn();
-        let Ok(mut q) = c.prepare(
+        let Ok(mut q) = c.prepare_cached(
             "SELECT id, contenido, icono, prioridad, destino, creado_por, created_at
              FROM avisos ORDER BY created_at DESC",
         ) else {
@@ -211,7 +211,7 @@ pub fn historial(app: &App, rango: &str) -> Vec<lumi_proto::api::MuestraHistoria
     };
     let desde = ahora() - segundos;
     let c = app.store.conn();
-    let Ok(mut q) = c.prepare(
+    let Ok(mut q) = c.prepare_cached(
         "SELECT created_at, cpu_pct, ram_used_mb, disk_free_mb, queue_depth, gpus_json
          FROM telemetry_historial WHERE created_at >= ?1 ORDER BY created_at",
     ) else {

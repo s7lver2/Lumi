@@ -340,6 +340,16 @@ impl Store {
         // `synchronous` con WAL).
         c.pragma_update(None, "journal_mode", "WAL")?;
         c.pragma_update(None, "synchronous", "NORMAL")?;
+        // D11: `cache_size` seguía en el defecto de 2 MB con `reference_images`
+        // en el orden de millones de filas -- en negativo son unidades de KB
+        // (no de páginas), así que -64000 son 64 MB de caché de páginas.
+        // `temp_store = MEMORY` evita que los `GROUP BY`/`ORDER BY` temporales
+        // (D8 entre otros) toquen disco.
+        c.pragma_update(None, "cache_size", -64000)?;
+        c.pragma_update(None, "temp_store", "MEMORY")?;
+        // ponytail: mmap_size pendiente de medir en el host real (WSL2 no se
+        // comporta igual) -- el spec (D11) avisa explícitamente de no
+        // asumirlo sin medir ahí, así que se deja sin activar.
         c.execute_batch(SCHEMA)?;
         migrate(&c);
         Ok(Self(Mutex::new(c)))
@@ -347,6 +357,29 @@ impl Store {
 
     pub fn conn(&self) -> MutexGuard<'_, Connection> {
         self.0.lock().expect("mutex del store envenenado")
+    }
+
+    // D1: `conn()` devuelve un `MutexGuard` de `std::sync`, así que toda
+    // consulta hecha con él corre INLINE en el hilo del runtime de Tokio --
+    // con pocos hilos de trabajo (ver `main.rs`), una consulta lenta bajo el
+    // mutex global para de atender cualquier otra tarea, SSE y el bucle de
+    // la cola incluidos. Migrar los ~210 llamantes de `conn()` de una vez es
+    // demasiado para este plan (ponytail): este helper se añade y se aplica
+    // SOLO a los dos middlewares (D2) y a `guard_case` en esta tanda, los
+    // caminos más calientes. El resto sigue con `conn()` directo.
+    //
+    // TODO(perf): migrar el resto de los ~200 llamantes de conn() por
+    // tandas futuras, empezando por images::serve.
+    pub async fn leer<T: Send + 'static>(
+        self_arc: std::sync::Arc<Self>,
+        f: impl FnOnce(&Connection) -> T + Send + 'static,
+    ) -> T {
+        tokio::task::spawn_blocking(move || {
+            let c = self_arc.conn();
+            f(&c)
+        })
+        .await
+        .expect("spawn_blocking de Store::leer no debería poder cancelarse ni entrar en pánico en uso normal")
     }
 
     pub fn state(&self) -> DaemonState {

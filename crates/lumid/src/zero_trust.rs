@@ -14,8 +14,25 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use std::net::{IpAddr, SocketAddr};
 
+// D2: `zero_trust_gate` corre delante de CADA petición HTTP (colgado del
+// router entero en `main.rs`) y hacía tres `SELECT`/`get_meta` -- la
+// denylist, el flag de zero trust -- bajo el mismo mutex global de SQLite,
+// para leer tres valores que cambian una vez al mes. La caché vive en este
+// mismo módulo, junto a sus escritores conocidos (`set_zero_trust`, y
+// `routes::security::add_deny`/`remove_deny` a través de `invalidar_denylist`)
+// -- si se olvidara invalidar en alguno, un cambio de política no surtiría
+// efecto hasta reiniciar, que es justo el bug que este comentario evita
+// repetir en el futuro.
+static ZERO_TRUST_CACHE: std::sync::RwLock<Option<bool>> = std::sync::RwLock::new(None);
+static DENYLIST_CACHE: std::sync::RwLock<Option<Vec<String>>> = std::sync::RwLock::new(None);
+
 pub fn zero_trust(app: &App) -> bool {
-    app.store.get_meta("zero_trust").as_deref() == Some("1")
+    if let Some(v) = *ZERO_TRUST_CACHE.read().expect("ZERO_TRUST_CACHE envenenado") {
+        return v;
+    }
+    let v = app.store.get_meta("zero_trust").as_deref() == Some("1");
+    *ZERO_TRUST_CACHE.write().expect("ZERO_TRUST_CACHE envenenado") = Some(v);
+    v
 }
 
 /// Activo por defecto: apagar el autoservicio es una decisión explícita del
@@ -25,7 +42,9 @@ pub fn self_service_ip(app: &App) -> bool {
 }
 
 pub fn set_zero_trust(app: &App, on: bool) -> anyhow::Result<()> {
-    app.store.set_meta("zero_trust", if on { "1" } else { "0" })
+    app.store.set_meta("zero_trust", if on { "1" } else { "0" })?;
+    *ZERO_TRUST_CACHE.write().expect("ZERO_TRUST_CACHE envenenado") = Some(on);
+    Ok(())
 }
 
 pub fn set_self_service_ip(app: &App, on: bool) -> anyhow::Result<()> {
@@ -33,16 +52,43 @@ pub fn set_self_service_ip(app: &App, on: bool) -> anyhow::Result<()> {
 }
 
 pub fn allowlist(app: &App) -> Vec<String> {
-    leer_lista(app, "ip_allowlist")
+    leer_lista(app, Lista::Allow)
 }
 
 pub fn denylist(app: &App) -> Vec<String> {
-    leer_lista(app, "ip_denylist")
+    if let Some(v) = DENYLIST_CACHE.read().expect("DENYLIST_CACHE envenenado").clone() {
+        return v;
+    }
+    let v = leer_lista(app, Lista::Deny);
+    *DENYLIST_CACHE.write().expect("DENYLIST_CACHE envenenado") = Some(v.clone());
+    v
 }
 
-fn leer_lista(app: &App, tabla: &str) -> Vec<String> {
+/// Invalida la caché de la lista negra -- llamarlo desde cualquier escritor
+/// de `ip_denylist` (`routes::security::add_deny`/`remove_deny`) para que el
+/// próximo `denylist()` la relea de SQLite en vez de servir la copia vieja.
+pub fn invalidar_denylist() {
+    *DENYLIST_CACHE.write().expect("DENYLIST_CACHE envenenado") = None;
+}
+
+/// D12: el nombre de tabla venía interpolado con `format!` -- una inyección
+/// latente (hoy inofensiva porque los dos llamantes son literales fijos,
+/// `allowlist`/`denylist`) que además impedía `prepare_cached`, que no puede
+/// cachear una sentencia cuyo texto cambia en cada llamada. Los dos únicos
+/// nombres de tabla posibles son literales SQL fijos aquí; `tabla` deja de
+/// tomar cualquier `&str` y pasa a ser el enum que ya expresa esa realidad.
+enum Lista {
+    Allow,
+    Deny,
+}
+
+fn leer_lista(app: &App, tabla: Lista) -> Vec<String> {
+    let sql = match tabla {
+        Lista::Allow => "SELECT ip FROM ip_allowlist ORDER BY added_at",
+        Lista::Deny => "SELECT ip FROM ip_denylist ORDER BY added_at",
+    };
     let c = app.store.conn();
-    let Ok(mut q) = c.prepare(&format!("SELECT ip FROM {tabla} ORDER BY added_at")) else {
+    let Ok(mut q) = c.prepare_cached(sql) else {
         return Vec::new();
     };
     let Ok(filas) = q.query_map([], |r| r.get(0)) else { return Vec::new() };

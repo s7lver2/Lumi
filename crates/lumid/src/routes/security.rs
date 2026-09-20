@@ -129,6 +129,7 @@ pub async fn add_deny(
             rusqlite::params![req.ip, now()],
         )
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    crate::zero_trust::invalidar_denylist();
     tracing::info!("IP {} añadida a la lista negra por el administrador {admin}", req.ip);
     Ok(StatusCode::NO_CONTENT)
 }
@@ -139,6 +140,7 @@ pub async fn remove_deny(State(app): State<App>, headers: HeaderMap, Query(q): Q
         .conn()
         .execute("DELETE FROM ip_denylist WHERE ip = ?1", [&q.ip])
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    crate::zero_trust::invalidar_denylist();
     tracing::info!("IP {} quitada de la lista negra por el administrador {admin}", q.ip);
     Ok(StatusCode::NO_CONTENT)
 }

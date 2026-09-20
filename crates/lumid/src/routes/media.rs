@@ -57,7 +57,7 @@ pub async fn listar_carpetas(
     headers: HeaderMap,
     Query(q): Query<ModoQuery>,
 ) -> Result<Json<Vec<MediaFolder>>, Fail> {
-    let (_, pid, _) = guard_case(&app, &headers, case_id)?;
+    let (_, pid, _) = guard_case(&app, &headers, case_id).await?;
     let proyecto = modo_proyecto(&app, &q)?;
     let c = app.store.conn();
     let (sql, param) = if proyecto {
@@ -81,7 +81,7 @@ pub async fn crear_carpeta(
     Query(q): Query<ModoQuery>,
     Json(req): Json<CrearCarpetaReq>,
 ) -> Result<Json<MediaFolder>, Fail> {
-    let (_, pid, _) = guard_case(&app, &headers, case_id)?;
+    let (_, pid, _) = guard_case(&app, &headers, case_id).await?;
     let proyecto = modo_proyecto(&app, &q)?;
     let nombre = req.nombre.trim();
     if nombre.is_empty() {
@@ -149,7 +149,7 @@ pub async fn mover_imagen(
         .conn()
         .query_row("SELECT case_id FROM images WHERE id = ?1", [id], |r| r.get(0))
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe esa imagen"))?;
-    let (_, pid, _) = guard_case(&app, &headers, case_id)?;
+    let (_, pid, _) = guard_case(&app, &headers, case_id).await?;
     let _ = uid;
     // Si se manda una carpeta, tiene que ser una visible desde este caso
     // (de este caso, o de su proyecto) -- sin esto, un id de carpeta ajena
@@ -195,7 +195,7 @@ pub async fn analisis_desincronizados(
         .conn()
         .query_row("SELECT case_id FROM images WHERE id = ?1", [id], |r| r.get(0))
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe esa imagen"))?;
-    guard_case(&app, &headers, case_id)?;
+    guard_case(&app, &headers, case_id).await?;
     let c = app.store.conn();
     let mut q = c
         .prepare(
@@ -244,7 +244,7 @@ pub async fn sobrescribir(
         .conn()
         .query_row("SELECT case_id FROM images WHERE id = ?1", [id], |r| r.get(0))
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe esa imagen"))?;
-    guard_case(&app, &headers, case_id)?;
+    guard_case(&app, &headers, case_id).await?;
     let data = leer_campo_unico(&mut mp).await?;
     // Decodificar + hashear (dentro de `sobrescribir_bytes`) es CPU pura, no
     // red -- igual que `upload`/`upscale` en `images.rs` (D10), va al pool de
@@ -272,7 +272,7 @@ pub async fn copiar(
         .conn()
         .query_row("SELECT case_id FROM images WHERE id = ?1", [id], |r| r.get(0))
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe esa imagen"))?;
-    let (uid, pid, _) = guard_case(&app, &headers, case_id)?;
+    let (uid, pid, _) = guard_case(&app, &headers, case_id).await?;
     let filename: String = app
         .store
         .conn()

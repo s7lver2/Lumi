@@ -53,7 +53,12 @@ pub struct Asignacion {
 /// Descarta lo que no puede correr ahora mismo y ordena lo que queda: la misma
 /// política que usa `repartir`, separada para que calcular una posición en
 /// cola no tenga que duplicar el criterio de orden.
-fn ordenados<'a>(
+// D5: expuesta (era privada) para que `notificar_posiciones`
+// (`queue/mod.rs`) pueda ordenar una sola vez y recorrer el resultado con
+// `.enumerate()`, en vez de llamar a `posicion()` por candidato -- cada
+// llamada a `posicion()` reordenaba la cola ENTERA, O(n² log n) por tick con
+// `progreso_detallado_activo`.
+pub(crate) fn ordenados<'a>(
     candidatos: &'a [Candidato],
     duenos: &'a HashMap<i64, Dueno>,
 ) -> Vec<(&'a Candidato, &'a Dueno)> {
@@ -82,6 +87,12 @@ fn ordenados<'a>(
 /// Cuántos candidatos elegibles van por delante de `analysis_id` en el orden
 /// de reparto. `None` si ese trabajo no está en la lista (ya corriendo, o su
 /// dueño no puede correr nada ahora mismo).
+///
+/// D5: sin llamante fuera de test desde que `notificar_posiciones`
+/// (`queue/mod.rs`) pasó a usar `ordenados` + `.enumerate()` en su lugar —
+/// se conserva porque `la_posicion_sigue_el_mismo_orden_que_repartir` fija
+/// la política contra ella, no porque el reparto la necesite ya.
+#[allow(dead_code)]
 pub fn posicion(
     candidatos: &[Candidato],
     duenos: &HashMap<i64, Dueno>,
