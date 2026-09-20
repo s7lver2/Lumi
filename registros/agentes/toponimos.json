@@ -1,8 +1,0 @@
-{
-  "id": "toponimos",
-  "nombre": "Topónimos legibles",
-  "icono": "toponimos",
-  "modo": "transcripcion",
-  "pregunta": "Transcribe any readable street names, place names, shop signs or other place-identifying text visible in this photo. Reply with just the text you can read, separated by ' · ' if there are several. Reply with exactly 'nothing legible' if there is no readable place-identifying text.",
-  "activo": true
-}
