@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type SecuritySettings } from "../lib/api";
-import { Seccion } from "./AdminPanel";
+import { Seccion } from "./Seccion";
 
 /** `ajustes`/`onCambiar` vienen de `AdminPanel`, que es quien de verdad los
  *  posee — así la tira de aviso de mantenimiento ve el cambio en cuanto se

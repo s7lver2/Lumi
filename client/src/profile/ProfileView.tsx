@@ -3,7 +3,7 @@ import { api, type ApiKeyInfo, type IssuedApiKey, type Me, type SessionInfo } fr
 import { blobToBase64, pickImagePath, readImageAsDataUrl, uploadAvatarBytes } from "../lib/bridge";
 import { useServer } from "../lib/store";
 import { ModalEmitir, ModalRevelada } from "../admin/ApiKeysView";
-import { Seccion } from "../admin/AdminPanel";
+import { Seccion } from "../admin/Seccion";
 import { Icon } from "../ui/Icon";
 import { ImageCropModal } from "../ui/ImageCropModal";
 import { UsageBar } from "../ui/UsageBar";

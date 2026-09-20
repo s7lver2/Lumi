@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Seccion } from "../admin/AdminPanel";
+import { Seccion } from "../admin/Seccion";
 import { api } from "../lib/api";
 import {
   ESCALAS_INTERFAZ, leerAvisoVersionIncompatible, leerEscalaInterfaz, leerFondoEntrada, leerReducirMovimiento,

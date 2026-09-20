@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type ApiKeyInfo, type IssuedApiKey, type MapConfig, type ProviderTokenState, type SecuritySettings } from "../lib/api";
 import { Icon } from "../ui/Icon";
 import { IpInput } from "./IpInput";
-import { Seccion } from "./AdminPanel";
+import { Seccion } from "./Seccion";
 import type { Seccion as SeccionId } from "./Sidebar";
 
 const CLASES = [

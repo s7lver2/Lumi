@@ -18,14 +18,15 @@ import { HardwareView } from "./HardwareView";
 import { DoctorView } from "./DoctorView";
 import { ActualizacionesView } from "./ActualizacionesView";
 import { CalibracionView } from "./CalibracionView";
-import { Sidebar, type Seccion } from "./Sidebar";
+import { Sidebar, type Seccion as SeccionId } from "./Sidebar";
+import { Seccion } from "./Seccion";
 import { UsersView } from "./UsersView";
 import { NetworkView } from "./NetworkView";
 
-const PRONTO: Seccion[] = [];
+const PRONTO: SeccionId[] = [];
 
 export function AdminPanel({ token }: { token: string }) {
-  const [seccion, setSeccion] = useState<Seccion>("resumen");
+  const [seccion, setSeccion] = useState<SeccionId>("resumen");
   const [licenciasPendientes, setLicenciasPendientes] = useState(false);
   const [abrirUserId, setAbrirUserId] = useState<number | undefined>(undefined);
   const capIndices = useServer((s) => s.hello?.capabilities.find((c) => c.id === "indices"));
@@ -64,7 +65,7 @@ export function AdminPanel({ token }: { token: string }) {
       .catch((e) => setResumenError(String(e)));
   }, [token]);
 
-  const cuentas = useMemo((): Partial<Record<Seccion, { n: number; espera?: boolean }>> => {
+  const cuentas = useMemo((): Partial<Record<SeccionId, { n: number; espera?: boolean }>> => {
     if (!resumen) return {};
     return {
       indices: { n: resumen.indices },
@@ -131,23 +132,6 @@ export function AdminPanel({ token }: { token: string }) {
         <AdminEventToast token={token} onIr={setSeccion}
           actualizacion={actualizacionEstado} enActualizaciones={seccion === "actualizaciones"} />
       </div>
-    </div>
-  );
-}
-
-/** La cabecera común de una sección mudada. Existe para que las cinco vistas
- *  que se mudan no tengan que aprender a pintar su propio título. */
-export function Seccion({ titulo, grupo, accion, children }: {
-  titulo: React.ReactNode; grupo: string; accion?: React.ReactNode; children: React.ReactNode;
-}) {
-  return (
-    <div className="px-6 pb-8 pt-5">
-      <span className="mb-1.5 block text-[8.5px] uppercase tracking-[.15em] text-subtle">{grupo}</span>
-      <div className="flex items-end gap-3 border-b border-border pb-[11px]">
-        <h2 className="text-[21px] font-medium leading-none tracking-[-.025em]">{titulo}</h2>
-        {accion && <span className="ml-auto pb-px">{accion}</span>}
-      </div>
-      <div className="mt-[19px]">{children}</div>
     </div>
   );
 }

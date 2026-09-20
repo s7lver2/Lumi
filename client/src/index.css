@@ -2,9 +2,48 @@
    en runtime). Aquí tailwind.config.ts declaraba "Inter" en la pila de
    fuentes pero nadie la cargaba: caía a system-ui (Segoe UI en Windows),
    con métricas más anchas que Inter para estas palabras — esa es la causa
-   real de que "Vincular" desbordara su columna del stepper, no la escala. */
-@import "@fontsource/inter/400.css";
-@import "@fontsource/inter/500.css";
+   real de que "Vincular" desbordara su columna del stepper, no la escala.
+
+   C11: `@fontsource/inter/{400,500}.css` trae los 14 subsets completos
+   (cyrillic, cyrillic-ext, greek, greek-ext, vietnamese, latin-ext, latin) en
+   woff2 Y woff -- WebView2 y webkit2gtk (las dos plataformas de este
+   proyecto) soportan woff2 desde siempre, así que el woff nunca se sirve, y
+   la UI es en español: solo hacen falta los subsets latin/latin-ext. Riesgo
+   cosmético explícito y aceptado: si algún dato (nombre de usuario, nota)
+   trae cirílico/griego, ese texto cae al fallback de la pila de fuentes en
+   vez de a Inter -- no hay ningún dato de ese tipo en este proyecto hoy. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(@fontsource/inter/files/inter-latin-ext-400-normal.woff2) format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(@fontsource/inter/files/inter-latin-400-normal.woff2) format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url(@fontsource/inter/files/inter-latin-ext-500-normal.woff2) format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url(@fontsource/inter/files/inter-latin-500-normal.woff2) format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
 
 @tailwind base;
 @tailwind components;

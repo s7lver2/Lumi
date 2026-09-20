@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type AdminUser, type Limits, type UserDetail } from "../lib/api";
 import { ContextMenu, menuAt, type MenuState } from "../ui/ContextMenu";
 import { Icon } from "../ui/Icon";
-import { Seccion } from "./AdminPanel";
+import { Seccion } from "./Seccion";
 import { LimitsEditor } from "./LimitsEditor";
 import { UsageBar } from "../ui/UsageBar";
 import { UserTile } from "../ui/UserTile";

@@ -1,7 +1,7 @@
 import { MapRow } from "./MapRow";
 import { PolicyRow } from "./PolicyRow";
 import { ServerProfileRow } from "./ServerProfileRow";
-import { Seccion } from "./AdminPanel";
+import { Seccion } from "./Seccion";
 
 /** El tema de mapa y quién lo dibuja, y el documento de aceptación al crear
  *  cuenta. La clave de Mapbox en sí vive en API Keys, junto al resto de

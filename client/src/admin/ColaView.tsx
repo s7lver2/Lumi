@@ -4,7 +4,7 @@ import { api, type EventoAdmin, type PendienteView, type QueueView } from "../li
 import { ago } from "../lib/time";
 import { Icon } from "../ui/Icon";
 import { UserTile } from "../ui/UserTile";
-import { Seccion } from "./AdminPanel";
+import { Seccion } from "./Seccion";
 
 const RAZON_LABEL: Record<string, string> = {
   bloqueado: "bloqueado",

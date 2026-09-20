@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import {
   api, type FeatureFlags, type PatchRendimientoReq, type RendimientoSettings, type VerificadorVista,
 } from "../lib/api";
-import { Seccion } from "./AdminPanel";
+import { Seccion } from "./Seccion";
 
 /** Mismo `role="switch"` que ya usan `ExportPopup`/otros -- no hay un
  *  `Interruptor` compartido en el repo todavía (cada pantalla define el

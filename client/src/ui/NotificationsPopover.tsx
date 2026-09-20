@@ -1,10 +1,14 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, type AdminRequest, type AvisoInfo, type Cambio, type Invite } from "../lib/api";
 import { useServer } from "../lib/store";
 import { migrarDireccion } from "../lib/session";
 import { ago } from "../lib/time";
-import { AvisoEditor } from "../admin/AvisoEditor";
+// C2: `NotificationsPopover` cuelga de `TitleBar`, montado siempre para todo
+// el mundo -- cargar el editor WYSIWYG completo de TipTap solo para pintar un
+// aviso en solo lectura (`editable={false}`) es parse de arranque que nadie
+// no-admin necesita.
+const AvisoEditor = lazy(() => import("../admin/AvisoEditor").then((m) => ({ default: m.AvisoEditor })));
 import { Avatar } from "./Avatar";
 import { Icon, type IconName } from "./Icon";
 import { usePopover } from "./TitleBar";
@@ -227,7 +231,9 @@ export function NotificationsPopover({ onProjectAccepted }: {
                     {i.kind === "aviso" ? (
                       <div className="text-[11.5px] leading-snug text-muted">
                         <b className="font-medium text-fg">{i.who}</b>{" "}
-                        <AvisoEditor contenido={i.contenido} editable={false} />
+                        <Suspense fallback={null}>
+                          <AvisoEditor contenido={i.contenido} editable={false} />
+                        </Suspense>
                       </div>
                     ) : (
                       <p className="text-[11.5px] leading-snug text-muted">

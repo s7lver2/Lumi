@@ -5,7 +5,7 @@ import { api, type LogSettings, type MuestraHistorial, type Problema, type Salud
 import { startLogsStream } from "../lib/bridge";
 import { Icon } from "../ui/Icon";
 import { Select } from "../ui/Select";
-import { Seccion } from "./AdminPanel";
+import { Seccion } from "./Seccion";
 import type { Seccion as SeccionId } from "./Sidebar";
 
 type Vista = "logs" | "historial";

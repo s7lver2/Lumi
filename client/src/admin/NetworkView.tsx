@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type NetworkSettings, type NetworkView as NetworkViewData } from "../lib/api";
 import { useServer } from "../lib/store";
 import { Icon } from "../ui/Icon";
-import { Seccion } from "./AdminPanel";
+import { Seccion } from "./Seccion";
 
 const INPUT = "ml-auto rounded-lg border border-border bg-elevated px-2.5 py-1.5 font-mono text-[11px] text-fg outline-none transition-colors duration-300 ease-expo focus:border-white/40";
 

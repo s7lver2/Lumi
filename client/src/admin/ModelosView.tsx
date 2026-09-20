@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type MetaPeso, type NivelEstado } from "../lib/api";
 import { Icon } from "../ui/Icon";
-import { Seccion } from "./AdminPanel";
+import { Seccion } from "./Seccion";
 import { LicenciasGate } from "./LicenciasGate";
 
 export function ModelosView({ token, nivelInicial, onLicenciasPendientesChange }: {

@@ -4,7 +4,7 @@ import { Avatar } from "../ui/Avatar";
 import { Icon, type IconName } from "../ui/Icon";
 import { usePopover } from "../ui/TitleBar";
 import { AvisoEditor } from "./AvisoEditor";
-import { Seccion } from "./AdminPanel";
+import { Seccion } from "./Seccion";
 
 const ICONOS: IconName[] = ["bell", "alert", "wrench", "boxes", "cloud", "shield", "globe", "layers"];
 const DOC_VACIO = { type: "doc", content: [{ type: "paragraph" }] };

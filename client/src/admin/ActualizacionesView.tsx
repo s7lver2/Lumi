@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type EstadoActualizacionLumid, type PublicacionHistorial } from "../lib/api";
 import { Icon } from "../ui/Icon";
-import { Seccion } from "./AdminPanel";
+import { Seccion } from "./Seccion";
 
 /** El sondeo (cada 4s, sin canal en vivo dedicado — ver el techo anotado en
  *  el plan) vive ahora en `AdminPanel`, no aquí: así `AdminEventToast`

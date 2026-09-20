@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { PlanetBackground } from "./ui/PlanetBackground";
@@ -13,7 +13,10 @@ import { ProfileView } from "./profile/ProfileView";
 import { StatusOverlay } from "./ui/StatusOverlay";
 import { LoadingScreen } from "./ui/LoadingScreen";
 import { EntryScreen } from "./entry/EntryScreen";
-import { AdminPanel } from "./admin/AdminPanel";
+// C2: `AdminPanel` importa sus ~20 vistas de administración estáticamente, y
+// un investigador no-admin nunca abre ninguna -- `React.lazy` saca todo ese
+// parse del chunk de arranque.
+const AdminPanel = lazy(() => import("./admin/AdminPanel").then((m) => ({ default: m.AdminPanel })));
 import { AjustesView } from "./settings/AjustesView";
 import { ConnectionBanner } from "./ui/ConnectionBanner";
 import { MantenimientoBanner } from "./ui/MantenimientoBanner";
@@ -464,7 +467,9 @@ export default function App() {
             setMode("wizard");
           }} />
       ) : mode === "admin" ? (
-        <AdminPanel token={useServer.getState().token!} />
+        <Suspense fallback={null}>
+          <AdminPanel token={useServer.getState().token!} />
+        </Suspense>
       ) : mode === "profile" ? (
         <ProfileView token={useServer.getState().token!} onBack={() => setMode("picker")} />
       ) : mode === "wizard" ? (

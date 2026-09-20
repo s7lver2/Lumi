@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listen } from "@tauri-apps/api/event";
 import { api, type Analysis, type Cambio, type Case, type FeatureFlags, type Image, type Project, type Usage } from "../lib/api";
@@ -19,7 +19,14 @@ import { Dock, type ImgState } from "./Dock";
 import { DrawerTab, DRAWER_W, RAIL_W, type DrawerId } from "./Drawer";
 import { DropFrame, DropTarget } from "./DropTarget";
 import { ExportPopup } from "./ExportPopup";
-import { MapCanvas, type Marker } from "./MapCanvas";
+import type { Marker } from "./MapCanvas";
+
+// C1: `maplibre-gl` entero (≈1 MB) se propagaba al chunk de arranque a
+// través de este import estático, parseándose/compilándose antes del primer
+// pintado incluso en login/wizard/admin, donde no hay ningún mapa. Con
+// `React.lazy` Rolldown lo saca a su propio chunk, cargado solo cuando
+// `CaseView` de verdad monta el mapa.
+const MapCanvas = lazy(() => import("./MapCanvas").then((m) => ({ default: m.MapCanvas })));
 import { MediaDrawer } from "./MediaDrawer";
 import { ResultsDrawer } from "./ResultsDrawer";
 import { UploadPopup } from "./UploadPopup";
@@ -529,12 +536,14 @@ export function CaseView({
     // cadena que resolver.
     <div className="absolute inset-0 overflow-hidden"
       style={{ animation: "jg-page-fade-in 260ms cubic-bezier(.16,1,.3,1) both" }}>
-      <MapCanvas markers={markers} flyTo={flyTo} procesando={procesando} onMarker={(id) => {
-        // "a123" es un análisis; "a123h0" es una de sus alternativas y
-        // selecciona el mismo análisis, que es lo que ya sabe pintar el cajón.
-        const m = /^a(\d+)/.exec(id);
-        if (m) setSelAnalysis(Number(m[1]));
-      }} />
+      <Suspense fallback={<div className="absolute inset-0" style={{ background: "radial-gradient(120% 90% at 50% 35%, #16191d 0%, #0e0f11 70%)" }} />}>
+        <MapCanvas markers={markers} flyTo={flyTo} procesando={procesando} onMarker={(id) => {
+          // "a123" es un análisis; "a123h0" es una de sus alternativas y
+          // selecciona el mismo análisis, que es lo que ya sabe pintar el cajón.
+          const m = /^a(\d+)/.exec(id);
+          if (m) setSelAnalysis(Number(m[1]));
+        }} />
+      </Suspense>
       {rail}
 
       {dragging && <DropFrame />}
