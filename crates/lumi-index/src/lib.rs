@@ -7,7 +7,6 @@
 
 pub mod arbitro;
 pub mod agrupar;
-pub mod agentes;
 pub mod budget;
 pub mod cifrado;
 pub mod coverage;

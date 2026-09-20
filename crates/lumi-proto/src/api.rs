@@ -501,42 +501,29 @@ pub struct ProviderTokenReq {
     pub token: Option<String>,
 }
 
-/// Los dos interruptores de "proceso persistente" para verificación
-/// geométrica y agentes — independientes entre sí porque su huella de
-/// RAM/VRAM es muy distinta (tiny-roma es ligero; el paquete de agentes con
-/// VLM+OCR+profundidad es pesado). `false` en ambos (el valor por defecto) es
-/// el comportamiento de siempre: un proceso nuevo por análisis, sin huella en
-/// reposo. La descripción humana de la contrapartida viaja en la propia
-/// respuesta — mismo principio que el `reason` de la matriz de capacidades —
-/// para que una UI que algún día lea esto no tenga que inventar el texto.
+/// El interruptor de "proceso persistente" para verificación geométrica.
+/// `false` (el valor por defecto) es el comportamiento de siempre: un
+/// proceso nuevo por análisis, sin huella en reposo. La descripción humana
+/// de la contrapartida viaja en la propia respuesta — mismo principio que el
+/// `reason` de la matriz de capacidades — para que una UI que algún día lea
+/// esto no tenga que inventar el texto.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RendimientoSettings {
     pub verificacion_persistente: bool,
     pub verificacion_persistente_desc: String,
-    pub agentes_persistente: bool,
-    pub agentes_persistente_desc: String,
-    /// A diferencia de los dos anteriores, este viene ACTIVADO de fábrica: es
+    /// A diferencia del anterior, este viene ACTIVADO de fábrica: es
     /// una segunda vía de desalojo (por presión de memoria, no por
     /// inactividad) que el owner quiere encendida salvo que se apague a
     /// mano, no un modo opt-in.
     pub limpieza_por_presion: bool,
     pub limpieza_por_presion_desc: String,
-    /// Segundos antes de seguir sin agentes (`agentar::LIMITE` por defecto,
-    /// 120). Un VLM en frío ya se come casi todo ese margen solo en cargar
-    /// -- una máquina lenta, o varios agentes pesados a la vez, puede
-    /// necesitar más para llegar a contestar algo en vez de agotarlo
-    /// siempre. El modo standalone usa el doble de este valor, no uno
-    /// independiente (ver `agentar::LIMITE_STANDALONE`).
-    pub agentes_timeout_s: u64,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct PatchRendimientoReq {
     /// `None` no toca ese ajuste — mismo patrón que `PatchLogSettingsReq`.
     pub verificacion_persistente: Option<bool>,
-    pub agentes_persistente: Option<bool>,
     pub limpieza_por_presion: Option<bool>,
-    pub agentes_timeout_s: Option<u64>,
 }
 
 /// Los tres interruptores del spec 2026-09-10 más `progreso_detallado_activo`
@@ -921,13 +908,8 @@ pub struct Analysis {
     pub id: i64,
     pub case_id: i64,
     pub model: String,
-    /// El agente pedido cuando `model == "agentes"`. `None` en cualquier
-    /// otro modelo, y también en un análisis de agentes creado antes de que
-    /// esta columna existiera.
-    #[serde(default)]
-    pub agente: Option<String>,
-    /// Ver `AnalysisReq::grupo_id`. `None` fuera de un lanzamiento múltiple
-    /// de agentes, y también en cualquier análisis de antes de esta columna.
+    /// Ver `AnalysisReq::grupo_id`. `None` fuera de un lanzamiento múltiple,
+    /// y también en cualquier análisis de antes de esta columna.
     #[serde(default)]
     pub grupo_id: Option<String>,
     /// `pendiente` | `en_curso` | `hecho` | `error`. Este subsistema solo
@@ -965,60 +947,16 @@ pub struct Analysis {
     /// `None` significa «el que se pidió».
     #[serde(default)]
     pub nivel_efectivo: Option<String>,
-    /// Lo que los agentes dijeron de la imagen. Vacía y no `null` cuando no
-    /// corrió ninguno, para que el cliente no tenga dos casos donde hay uno.
-    #[serde(default)]
-    pub agentes: Vec<DichoDeAgente>,
     pub created_at: i64,
     pub finished_at: Option<i64>,
-}
-
-/// Un veredicto tal como se guardó. `etiqueta` vale `abstiene` cuando el
-/// agente no llegó a su umbral: corrió, y no vio suficiente.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct DichoDeAgente {
-    pub agente: String,
-    pub nombre: String,
-    pub etiqueta: String,
-    /// `None` en modo transcripción -- no hay conjunto cerrado sobre el que
-    /// normalizar (spec 2026-09-17 §5), nunca un número inventado.
-    #[serde(default)]
-    pub confianza: Option<f64>,
-    #[serde(default)]
-    pub detalle: String,
-    /// La etiqueta que el motor realmente eligió, aunque no llegara al
-    /// umbral y `etiqueta` valga `abstiene` -- sin esto, un agente que se
-    /// abstiene no tiene forma de mostrar "lo más parecido" porque el valor
-    /// real se perdía al guardar. Igual a `etiqueta` cuando no se abstiene.
-    #[serde(default)]
-    pub etiqueta_real: String,
-    /// Ver `crate::worker::Msg::Agente::alternativas`. Vacío si el motor no
-    /// calcula una distribución genuina — nunca rellenado a mano.
-    #[serde(default)]
-    pub alternativas: Vec<(String, f64)>,
-    /// Ver `crate::worker::Msg::Agente::apoyo_visual` (spec 2026-09-17 §4) --
-    /// cuánto sube la imagen la evidencia de la opción ganadora frente a no
-    /// verla, una lectura aparte de `confianza`. `None` en modo transcripción.
-    #[serde(default)]
-    pub apoyo_visual: Option<f64>,
-    /// Ver `lumi_index::agentes::Veredicto::respuesta_cruda`. `None` salvo
-    /// que `modo_calibracion` estuviera activo en el momento del análisis.
-    #[serde(default)]
-    pub respuesta_cruda: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct AnalysisReq {
     pub image_ids: Vec<i64>,
     pub model: String,
-    /// Solo relleno cuando `model == "agentes"`: el único agente que se le
-    /// pide a esa imagen -- cada análisis sigue siendo de un agente, nunca
-    /// varios en la misma fila. Elegir varios en el cliente lanza una
-    /// petición por agente (ver `grupo_id`), no una lista aquí.
-    #[serde(default)]
-    pub agente: Option<String>,
     /// Opaco para el servidor: solo se guarda y se devuelve tal cual. El
-    /// cliente lo genera al lanzar varios agentes a la vez para una misma
+    /// cliente lo genera al lanzar varios análisis a la vez para una misma
     /// imagen (mismo valor en cada petición) y lo usa para agruparlos como
     /// un solo intento en la barra lateral -- cada uno sigue siendo su
     /// propio análisis en cola, con su propio estado.
@@ -1373,8 +1311,6 @@ pub struct ExportInformeReq {
     pub exif_por_imagen: bool,
     #[serde(default = "si")]
     pub hipotesis_geolocalizacion: bool,
-    #[serde(default = "si")]
-    pub veredictos_agentes: bool,
     #[serde(default)]
     pub firmado_por: String,
     /// Hash sha256 del archivo ORIGINAL (nunca de la miniatura) por imagen,
@@ -1422,7 +1358,6 @@ impl Default for ExportInformeReq {
             portada_estadisticas: true,
             exif_por_imagen: true,
             hipotesis_geolocalizacion: true,
-            veredictos_agentes: true,
             firmado_por: String::new(),
             integridad_sha256: true,
             imagenes_incluidas: None,

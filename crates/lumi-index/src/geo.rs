@@ -1,16 +1,14 @@
-//! El resolutor que convierte una coordenada en el país donde cae — lo único
-//! que un agente puede comparar hoy (spec 2026-09-17 §1: cada agente
-//! discriminante lleva su propia lista de países por opción, ya no hay un
-//! concepto separado de "lado de conducción" o "clima" a nivel de Rust).
+//! El resolutor que convierte una coordenada en el país donde cae — lo usa
+//! `routes::export` para el país que sale en el informe PDF.
 //!
 //! Es OFFLINE a propósito. Un filtro geográfico que dependiera de una API
 //! externa convertiría cada análisis en una petición de red que se puede caer,
 //! se puede cobrar y deja rastro de qué está investigando el usuario.
 //!
 //! `paises.json` NO se publica con el repositorio: lo pone el propietario
-//! siguiendo `registros/geo/LEEME.md`. Sin él, `Atributos.pais` es `None` y
-//! todo agente se abstiene de reponderar — la misma postura que el `sha256`
-//! vacío del registro de modelos: mejor no saber que fingir que se sabe.
+//! siguiendo `registros/geo/LEEME.md`. Sin él, `Atributos.pais` es `None` --
+//! la misma postura que el `sha256` vacío del registro de modelos: mejor no
+//! saber que fingir que se sabe.
 
 use std::path::Path;
 
@@ -79,7 +77,7 @@ fn sobre_arista(x: f64, y: f64, xi: f64, yi: f64, xj: f64, yj: f64) -> bool {
 
 /// Lo que se sabe de una coordenada. `None` es un estado legítimo y
 /// frecuente — un candidato en alta mar, un servidor sin `paises.json`
-/// puesto — y el que no sabe no castiga a nadie (`agentes::aplicar`).
+/// puesto.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Atributos {
     pub pais: Option<String>,
@@ -113,13 +111,7 @@ pub fn cargar_recursos(dir: &Path) -> Vec<RecursoGeo> {
         .unwrap_or_default()
 }
 
-/// El único dataset que se carga al arrancar el daemon. `lado.json` sigue en
-/// disco (spec 2026-09-17: no se pide borrarlo, a diferencia de los ficheros
-/// de Köppen) pero ya no tiene lector aquí -- cada ficha de
-/// `registros/agentes/lado-conduccion.json` lleva ahora, inline, la lista de
-/// países que conduce por cada lado, así que un `TablaLado` intermedio dejó
-/// de tener consumidor (comprobado por grep en todo el workspace: el único
-/// era `agentes::aplicar`, a través de este `Datos`).
+/// El único dataset que se carga al arrancar el daemon.
 #[derive(Debug, Clone, Default)]
 pub struct Datos {
     pub paises: Option<Paises>,
@@ -131,7 +123,7 @@ impl Datos {
             .ok()
             .and_then(|b| serde_json::from_slice::<Paises>(&b).ok());
         if paises.is_none() {
-            log::warn!("sin paises.json: los agentes que acotan por país se abstendrán");
+            log::warn!("sin paises.json: el informe PDF no podrá dar el país de cada hipótesis");
         }
         Datos { paises }
     }

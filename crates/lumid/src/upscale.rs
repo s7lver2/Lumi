@@ -1,19 +1,19 @@
 //! El puente con `workers/lumi_upscale.py` (spec 2026-09-10 §2).
 //!
-//! Mismo criterio que `agentar.rs`: Python hace el trabajo pesado, aquí solo
-//! se lanza el proceso y se lee su respuesta. A diferencia de `agentar`, este
-//! trabajo SÍ debe poder fallar de verdad (`Err`, no "sin resultado, se
-//! sigue"): un upscale que no llegó a producir nada no tiene un resultado de
-//! respaldo que mostrar, así que el análisis termina en `error` con el
-//! motivo real en vez de en `hecho` con una imagen que nadie mejoró.
+//! Python hace el trabajo pesado, aquí solo se lanza el proceso y se lee su
+//! respuesta. A diferencia de la verificación geométrica, este trabajo SÍ
+//! debe poder fallar de verdad (`Err`, no "sin resultado, se sigue"): un
+//! upscale que no llegó a producir nada no tiene un resultado de respaldo
+//! que mostrar, así que el análisis termina en `error` con el motivo real
+//! en vez de en `hecho` con una imagen que nadie mejoró.
 //!
 //! ponytail: sin modo persistente todavía (a diferencia de
-//! `agentar::preguntar`/`verificar::afinar`) -- un proceso por trabajo, como
-//! el resto del proyecto hacía antes de que el ajuste de rendimiento
-//! existiera. Es la superficie mínima que cumple el criterio de hecho del
-//! spec (un trabajo de cola real, con estado real); añadir el modo
-//! persistente es la misma receta que ya existe en `persistente.rs` el día
-//! que el upscaler se use lo bastante para que merezca la pena.
+//! `verificar::afinar`) -- un proceso por trabajo, como el resto del
+//! proyecto hacía antes de que el ajuste de rendimiento existiera. Es la
+//! superficie mínima que cumple el criterio de hecho del spec (un trabajo
+//! de cola real, con estado real); añadir el modo persistente es la misma
+//! receta que ya existe en `persistente.rs` el día que el upscaler se use
+//! lo bastante para que merezca la pena.
 
 use std::path::Path;
 use std::process::Stdio;
@@ -21,9 +21,9 @@ use std::time::Duration;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-/// Una imagen sola, con un modelo real cargando en frío si hace falta: más
-/// margen que `agentar::LIMITE` porque aquí no hay ningún resultado parcial
-/// que perder si se corta -- si se agota el tiempo, el trabajo entero falla.
+/// Una imagen sola, con un modelo real cargando en frío si hace falta: sin
+/// ningún resultado parcial que perder si se corta -- si se agota el
+/// tiempo, el trabajo entero falla.
 pub const LIMITE: Duration = Duration::from_secs(180);
 
 /// El motivo legible de un fallo (va a `analyses.error`) más, cuando aplica,

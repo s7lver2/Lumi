@@ -16,13 +16,6 @@ pub struct Nivel {
     /// índice para que el nivel se pueda correr.
     pub recuperacion: Vec<String>,
     pub geometricos: Vec<String>,
-    /// Los agentes del nivel, por id. **Vacío significa «todos los del
-    /// registro»**, que es como está Vision: crece al añadir un fichero, sin
-    /// tocar código. Tiene un coste asumido por el propietario —dos servidores
-    /// con registros distintos dan resultados distintos llamándolos igual— y
-    /// se compensa guardando en cada análisis qué agentes corrieron de verdad.
-    #[serde(default)]
-    pub agentes: Vec<String>,
     /// A qué nivel se baja si al índice le faltan capas. `None` en el más
     /// bajo: por debajo no hay nada.
     pub cae_a: Option<String>,
@@ -55,15 +48,6 @@ pub struct Resolucion {
     pub recuperacion_total: usize,
     pub geometricos_instalados: usize,
     pub geometricos_total: usize,
-    /// Motores que los AGENTES de este nivel necesitan (uno por clase
-    /// `vlm`/`ocr`/`profundidad` que de verdad haga falta, no uno por
-    /// agente — ver `agentes::motores_de_agentes`). Antes de esto un nivel
-    /// se marcaba `listo` con `recuperacion`/`geometricos` completos aunque
-    /// sus cuatro agentes no tuvieran ni idioma ni VLM con que correr: el
-    /// cliente decía "sus modelos no están instalados" sin que nada en esta
-    /// pantalla hubiera avisado de que hacía falta instalar algo más.
-    pub agentes_instalados: usize,
-    pub agentes_total: usize,
     /// Ids que faltan y que ESTE nivel necesita descargar — no incluye lo
     /// que otro nivel ya trajo, que se marca compartido en la interfaz
     /// leyendo `instalados` directamente, no aquí.
@@ -73,10 +57,10 @@ pub struct Resolucion {
 /// `instalados` es el conjunto de ids con sha256 verificado en disco — lo
 /// calcula quien llama (el endpoint, con acceso al filesystem), no esta
 /// función: aquí solo hay aritmética de conjuntos, que es lo único que la
-/// prueba necesita fijar. `motores_necesarios` es lo que devuelve
-/// `agentes::motores_de_agentes` para los agentes de ESTE nivel — se pide
-/// ya resuelto porque cruzar agente→motor necesita los registros de
-/// agentes y motores, que este módulo no conoce (aquí solo hay ids).
+/// prueba necesita fijar. `motores_necesarios` queda como parámetro para no
+/// romper la firma en todos sus llamadores, pero desde que se retiraron los
+/// agentes (Darkroom, fase 0, 2026-09-19) nadie le pasa nada más que un
+/// slice vacío.
 pub fn resolver_composicion(
     nivel: &Nivel, motores_necesarios: &[String], instalados: &std::collections::HashSet<String>,
 ) -> Resolucion {
@@ -87,8 +71,6 @@ pub fn resolver_composicion(
         recuperacion_total: nivel.recuperacion.len(),
         geometricos_instalados: nivel.geometricos.iter().filter(|id| instalados.contains(id.as_str())).count(),
         geometricos_total: nivel.geometricos.len(),
-        agentes_instalados: motores_necesarios.iter().filter(|id| instalados.contains(id.as_str())).count(),
-        agentes_total: motores_necesarios.len(),
         faltan,
     }
 }
@@ -105,7 +87,6 @@ mod tests {
                 nombre: "Lumi Vision".into(),
                 recuperacion: vec!["megaloc".into(), "boq-dinov2".into(), "anyloc".into()],
                 geometricos: vec!["roma".into(), "roma-v2".into()],
-                agentes: Vec::new(),
                 cae_a: Some("pro".into()),
             },
             Nivel {
@@ -113,7 +94,6 @@ mod tests {
                 nombre: "Lumi Pro".into(),
                 recuperacion: vec!["megaloc".into(), "boq-dinov2".into()],
                 geometricos: vec!["roma".into()],
-                agentes: Vec::new(),
                 cae_a: Some("mini".into()),
             },
             Nivel {
@@ -121,7 +101,6 @@ mod tests {
                 nombre: "Lumi Mini".into(),
                 recuperacion: vec!["cosplace".into()],
                 geometricos: vec!["tiny-roma".into()],
-                agentes: Vec::new(),
                 cae_a: None,
             },
         ]
@@ -175,7 +154,7 @@ mod tests {
             id: "vision".into(), nombre: "Vision".into(),
             recuperacion: vec!["cosplace".into(), "salad".into()],
             geometricos: vec!["roma".into()],
-            agentes: vec![], cae_a: Some("pro".into()),
+            cae_a: Some("pro".into()),
         };
         let instalados: HashSet<String> = ["cosplace".into()].into_iter().collect();
         let r = resolver_composicion(&nivel, &[], &instalados);
@@ -187,27 +166,24 @@ mod tests {
     }
 
     #[test]
-    fn un_motor_de_agente_que_falta_cuenta_como_falta_del_nivel() {
+    fn un_motor_extra_que_falta_cuenta_como_falta_del_nivel() {
         let nivel = Nivel {
             id: "mini".into(), nombre: "Mini".into(),
             recuperacion: vec!["cosplace".into()],
             geometricos: vec!["tiny-roma".into()],
-            agentes: vec!["idioma".into()], cae_a: None,
+            cae_a: None,
         };
         let instalados: HashSet<String> = ["cosplace".into(), "tiny-roma".into()].into_iter().collect();
-        // Sin esto, "mini" se marcaba listo (recuperacion y geometricos
-        // completos) aunque el motor de "idioma" nunca hubiera llegado a
-        // instalarse: el mismo bug que hacía que los agentes corrieran en
-        // silencio contra nada.
+        // `motores_necesarios` sigue sumando a `faltan` aunque desde Darkroom
+        // (fase 0, 2026-09-19) nadie le pasa nada más que un slice vacío --
+        // se ejercita aquí con un id inventado para no perder la cobertura
+        // de ese camino.
         let r = resolver_composicion(&nivel, &["paddleocr".to_string()], &instalados);
-        assert_eq!(r.agentes_total, 1);
-        assert_eq!(r.agentes_instalados, 0);
         assert_eq!(r.faltan, vec!["paddleocr".to_string()]);
 
         let instalados_completo: HashSet<String> =
             ["cosplace".into(), "tiny-roma".into(), "paddleocr".into()].into_iter().collect();
         let r2 = resolver_composicion(&nivel, &["paddleocr".to_string()], &instalados_completo);
-        assert_eq!(r2.agentes_instalados, 1);
         assert!(r2.faltan.is_empty());
     }
 }

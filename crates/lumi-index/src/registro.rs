@@ -173,19 +173,6 @@ pub fn cargar_niveles(dir: &Path) -> Vec<Nivel> {
     leer_dir::<Nivel>(dir).into_iter().filter(|n| !n.id.is_empty()).collect()
 }
 
-/// Los agentes. Mismo trato que los demás registros: un fichero malo cuesta un
-/// agente, nunca la lista. Se descarta el que declare `modo: "eleccion"` sin
-/// ninguna opción -- un agente de elección sin opciones no puede puntuar
-/// nada, así que es peor que no estar: mejor abstenerse a callar de mentira.
-pub fn cargar_agentes(dir: &Path) -> Vec<crate::agentes::Agente> {
-    leer_dir::<crate::agentes::Agente>(dir)
-        .into_iter()
-        .filter(|a| {
-            !a.id.is_empty() && !a.icono.is_empty() && (a.modo != "eleccion" || !a.opciones.is_empty())
-        })
-        .collect()
-}
-
 
 #[cfg(test)]
 mod tests {

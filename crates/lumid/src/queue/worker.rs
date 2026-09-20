@@ -66,17 +66,6 @@ impl Evento {
                 motivo: "un trabajador de embebido mandó un veredicto de verificación".into(),
                 falta_modelo: None,
             },
-            // ponytail: mismo caso que `Verificado` — `Msg::Agente` queda
-            // como variante muerta en `lumi_proto::worker::Msg` hasta que la
-            // Fase 0 de Darkroom termine de borrarla (crates compartidos);
-            // verla aquí seguiría siendo un trabajador mal configurado, no
-            // un veredicto que ignorar.
-            Msg::Agente { id, .. } => Evento::Fallo {
-                dispositivo: d,
-                id,
-                motivo: "un trabajador de embebido mandó un mensaje de un tipo retirado".into(),
-                falta_modelo: None,
-            },
             // ponytail: mismo caso — `Msg::Fin` es la marca de cierre de
             // trabajo de `crate::persistente` (verificación persistente),
             // no algo que un trabajador de embebido deba mandar nunca.

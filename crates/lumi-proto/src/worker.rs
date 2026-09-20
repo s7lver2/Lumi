@@ -66,8 +66,10 @@ pub struct Hipotesis {
     pub inliers: Option<u32>,
     #[serde(default)]
     pub verificador: Option<String>,
-    /// Por qué un agente hundió esta hipótesis. `None` significa que ninguno
-    /// la tocó, no que la aprobaran.
+    /// Campo muerto desde que el subsistema de agentes (5c) se retiró
+    /// (Darkroom, fase 0, 2026-09-19): la columna de BD sigue existiendo
+    /// (SQLite no permite `DROP COLUMN` en este esquema) pero nada la
+    /// rellena ya. Siempre `None`.
     #[serde(default)]
     pub motivo_agente: Option<String>,
 }
@@ -110,44 +112,6 @@ pub enum Msg {
         lat: f64,
         lng: f64,
     },
-    /// Un agente ha mirado la foto de consulta. **Una línea por agente**, no
-    /// una con los doce dentro: si el séptimo revienta, los seis primeros ya
-    /// están dichos y el fallo dice cuál fue. Es la misma razón por la que
-    /// `Vectores` va una por modelo.
-    ///
-    /// `confianza` no está acotada aquí y sí se compara contra el umbral del
-    /// agente en `lumi_index::agentes::aplicar`: un motor que devuelva 1,5 se
-    /// comporta como uno muy seguro, que es inofensivo, y no como una avería
-    /// que tumba un análisis.
-    Agente {
-        id: i64,
-        agente: String,
-        etiqueta: String,
-        /// `None` en modo transcripción -- no hay conjunto cerrado sobre el
-        /// que normalizar (spec 2026-09-17 §5). En modo elección, la
-        /// probabilidad softmax de la opción ganadora.
-        #[serde(default)]
-        confianza: Option<f64>,
-        /// Texto libre para el investigador: el texto transcrito en modo
-        /// transcripción, o vacío en modo elección.
-        #[serde(default)]
-        detalle: String,
-        /// La distribución completa sobre el conjunto cerrado de opciones,
-        /// ya normalizada y ordenada, cuando el motor la calcula de verdad
-        /// (softmax de evidencia contrastiva). Vacía en modo transcripción.
-        #[serde(default)]
-        alternativas: Vec<(String, f64)>,
-        /// Cuánto sube la imagen la evidencia de la opción ganadora frente a
-        /// no verla -- spec 2026-09-17 §4, la segunda lectura del veredicto,
-        /// no la misma cifra que `confianza`. `None` en modo transcripción.
-        #[serde(default)]
-        apoyo_visual: Option<f64>,
-        /// Ver `lumi_index::agentes::Veredicto::respuesta_cruda`. `None`
-        /// salvo que `modo_calibracion` estuviera activo en el momento del
-        /// análisis.
-        #[serde(default)]
-        respuesta_cruda: Option<String>,
-    },
     Resultado {
         id: i64,
         lat: f64,
@@ -179,7 +143,7 @@ pub enum Msg {
     /// tubería.
     Upscale { id: i64, ruta: String },
     /// Cierra los mensajes de UN trabajo. Solo la usa `crate::persistente`
-    /// (verificación/agentes en modo persistente, subsistema de rendimiento
+    /// (verificación en modo persistente, subsistema de rendimiento
     /// configurable): un proceso persistente no cierra `stdout` entre
     /// trabajos como sí hace el modo de una sola orden de hoy —ahí el fin de
     /// trabajo es el EOF del proceso—, así que hace falta una marca explícita
@@ -291,66 +255,5 @@ mod tests {
         assert!(s.contains(r#""tipo":"trabajo""#), "{s}");
         assert_eq!(serde_json::from_str::<Job>(&s).unwrap(), j);
 
-        // Una línea de agente se parsea con `detalle` ausente, que es como la
-        // manda un motor que no tiene nada que añadir.
-        let ag: Msg = serde_json::from_str(
-            r#"{"tipo":"agente","id":3,"agente":"escritura","etiqueta":"griego","confianza":0.9}"#,
-        )
-        .unwrap();
-        assert_eq!(
-            ag,
-            Msg::Agente {
-                id: 3,
-                agente: "escritura".into(),
-                etiqueta: "griego".into(),
-                confianza: Some(0.9),
-                detalle: String::new(),
-                alternativas: Vec::new(),
-                apoyo_visual: None,
-                respuesta_cruda: None,
-            }
-        );
-        // Y validar no tiene nada que decir de ella: no lleva coordenadas.
-        assert!(ag.validar().is_ok());
-
-        // Un motor que sí calcula distribución y apoyo visual los trae tal
-        // cual — el mismo mensaje, con los dos campos nuevos rellenos.
-        let ag_completo: Msg = serde_json::from_str(
-            r#"{"tipo":"agente","id":4,"agente":"escritura","etiqueta":"latino","confianza":0.8,
-                "alternativas":[["latino",0.8],["cirilico",0.2]],"apoyo_visual":2.3}"#,
-        )
-        .unwrap();
-        assert_eq!(
-            ag_completo,
-            Msg::Agente {
-                id: 4,
-                agente: "escritura".into(),
-                etiqueta: "latino".into(),
-                confianza: Some(0.8),
-                detalle: String::new(),
-                alternativas: vec![("latino".into(), 0.8), ("cirilico".into(), 0.2)],
-                apoyo_visual: Some(2.3),
-                respuesta_cruda: None,
-            }
-        );
-
-        // Modo transcripción: sin confianza, el texto va en `detalle`.
-        let ag_transcripcion: Msg = serde_json::from_str(
-            r#"{"tipo":"agente","id":5,"agente":"toponimos","etiqueta":"Calle Mayor","detalle":"Calle Mayor"}"#,
-        )
-        .unwrap();
-        assert_eq!(
-            ag_transcripcion,
-            Msg::Agente {
-                id: 5,
-                agente: "toponimos".into(),
-                etiqueta: "Calle Mayor".into(),
-                confianza: None,
-                detalle: "Calle Mayor".into(),
-                alternativas: Vec::new(),
-                apoyo_visual: None,
-                respuesta_cruda: None,
-            }
-        );
     }
 }

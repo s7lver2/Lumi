@@ -57,8 +57,8 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec
                 "-c".into(),
                 // Cinco comprobaciones independientes, no una: cada paquete
                 // (`romatch` para tiny-roma/roma, `safetensors` para MegaLoc,
-                // `lightglue` para lightglue-aliked, `transformers` para el
-                // motor vlm de los agentes) es una incorporación posterior a
+                // `lightglue` para lightglue-aliked, `transformers` para
+                // motores que lo necesiten) es una incorporación posterior a
                 // torch/torchvision, y un servidor que ya tenía el runtime
                 // instalado antes de que existiera un paquete nuevo se queda
                 // con el "nada que hacer" de siempre — con una sola

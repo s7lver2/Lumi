@@ -1,13 +1,11 @@
-//! Un proceso Python opcionalmente persistente, para verificación geométrica
-//! y agentes.
+//! Un proceso Python opcionalmente persistente, para verificación geométrica.
 //!
 //! Mismo espíritu que `queue::worker::Lanzado` (un canal de trabajos, una
 //! tarea de Tokio que vive con el hijo, lee su `stdout` línea a línea) pero
 //! NO el mismo tipo: `queue::worker` está atado al protocolo de embebido
 //! (`Job` de entrada, `Msg::Vectores`/`Msg::Resultado` de salida) y aquí la
 //! orden es un `serde_json::Value` libre (verificación manda "verificar" con
-//! candidatos; agentes manda "agentes" con una lista de ids) y la salida es
-//! `Msg::Verificado`/`Msg::Agente`.
+//! candidatos) y la salida es `Msg::Verificado`.
 //!
 //! ponytail: en vez de un multiplexor por id de trabajo (como si hiciera
 //! falta atender varias peticiones a la vez), `pedir` mantiene el `Mutex`
@@ -38,8 +36,8 @@ struct Proceso {
 
 fn drenar_stderr(nombre: &'static str, stderr: ChildStderr) {
     // El log del hijo no tiene contrato: se registra tal cual, igual que
-    // hace `agentar::correr` hoy con su tarea de stderr aparte para no
-    // competir por el mismo `await` que el bucle de stdout.
+    // hace `upscale::correr` con su tarea de stderr aparte para no competir
+    // por el mismo `await` que el bucle de stdout.
     tokio::spawn(async move {
         let mut lineas = BufReader::new(stderr).lines();
         while let Ok(Some(linea)) = lineas.next_line().await {
@@ -94,14 +92,17 @@ impl Persistente {
     /// contra un proceso fantasma.
     ///
     /// `limite` es `None` para quien nunca lo pedía (verificación geométrica,
-    /// sin cambios de comportamiento) y `Some(d)` para agentes, donde SÍ hace
-    /// falta: un `tokio::time::timeout` puesto por fuera (como hacía antes
-    /// `agentar::preguntar` en solitario) solo suelta el `.await` de quien
-    /// espera — el proceso persistente, al ser compartido entre peticiones,
-    /// seguía vivo procesando la orden vieja de fondo mucho más allá del
-    /// límite configurado, y la siguiente petición reutilizaba ese mismo
-    /// proceso mientras aún respondía a la anterior, desincronizando su
-    /// stdin/stdout para siempre. Por eso el timeout tiene que vivir AQUÍ
+    /// sin cambios de comportamiento) -- sin más llamador con `Some(d)` desde
+    /// que se retiró el subsistema que lo necesitaba, pero se deja el
+    /// parámetro: es la red de seguridad de un proceso persistente colgado,
+    /// y un futuro proceso persistente podría necesitarla mañana. Un
+    /// `tokio::time::timeout` puesto por fuera solo suelta el `.await` de
+    /// quien espera — el proceso persistente, al ser compartido entre
+    /// peticiones, seguiría vivo procesando la orden vieja de fondo mucho
+    /// más allá del límite configurado, y la siguiente petición reutilizaría
+    /// ese mismo proceso mientras aún respondía a la anterior,
+    /// desincronizando su stdin/stdout para siempre. Por eso el timeout
+    /// tiene que vivir AQUÍ
     /// dentro, donde de verdad se puede matar el proceso.
     pub async fn pedir(
         &self, orden: &serde_json::Value, python: &Path, script: &Path, envs: &[(&str, &Path)],

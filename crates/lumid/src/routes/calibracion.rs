@@ -10,13 +10,6 @@
 //! escribe de vuelta al fichero ni se propaga a otra instalación (ver el
 //! comentario de `verificar::construir_afinados`, que es quien de verdad LEE
 //! el override de umbrales en el camino caliente).
-//!
-//! El editor de prompts de agentes (4b) que vivía aquí se retira en el
-//! rediseño de 2026-09-17: nadie leía el override que guardaba (ni la cola,
-//! que relee las fichas del disco, ni `workers/lumi_agentes.py`, que lee
-//! `registros/agentes/` directamente) -- calibrar un agente ahora es editar
-//! su JSON en el registro y reiniciar `lumid`, spec §9 ("las fichas siguen
-//! siendo datos... esta vez de verdad").
 
 use crate::routes::auth::{bearer, require_admin};
 use crate::routes::projects::{err, Fail};

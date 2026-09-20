@@ -1,5 +1,5 @@
-//! Los tres interruptores del spec 2026-09-10 (selector de agentes
-//! compactado, editor pre-subida, panel Media, debug de calibración) más
+//! Los tres interruptores del spec 2026-09-10 (editor pre-subida, panel
+//! Media, debug de calibración) más
 //! `progreso_detallado_activo`, que llegó después por el mismo hueco:
 //! `upscaler_activo`, `media_por_proyecto_activo`, `modo_calibracion`,
 //! `progreso_detallado_activo`. Mismo patrón exacto que `routes::rendimiento`:
@@ -29,8 +29,8 @@ const DESC_UPSCALER_OFF: &str = "desactivado: el botón de mejorar calidad no ap
 const DESC_MEDIA_ON: &str = "activado: el panel Media gana un selector «Este caso / Todo el proyecto» en su cabecera.";
 const DESC_MEDIA_OFF: &str = "desactivado: el panel Media solo enseña las imágenes del caso actual, sin selector de modo.";
 
-const DESC_CALIBRACION_ON: &str = "activado: el panel admin gana la sección «Calibración» (umbrales de verificación, prompts de agentes, respuesta cruda del modelo, forzar motor/dispositivo).";
-const DESC_CALIBRACION_OFF: &str = "desactivado: ninguna de las cuatro herramientas de calibración es visible ni tiene efecto, ni para el propio administrador.";
+const DESC_CALIBRACION_ON: &str = "activado: el panel admin gana la sección «Calibración» (umbrales de verificación, respuesta cruda del modelo, forzar motor/dispositivo).";
+const DESC_CALIBRACION_OFF: &str = "desactivado: ninguna de las tres herramientas de calibración es visible ni tiene efecto, ni para el propio administrador.";
 
 const DESC_PROGRESO_ON: &str = "activado: mientras se analiza una imagen, el cliente enseña en qué fase va (recuperando, verificando) y un tiempo estimado según la media de análisis recientes.";
 const DESC_PROGRESO_OFF: &str = "desactivado: el cliente solo sabe que un análisis está «procesando», sin fases ni estimación -- comportamiento de siempre.";

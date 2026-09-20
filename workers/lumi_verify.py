@@ -426,8 +426,8 @@ def main():
     # `fin` cierra los mensajes de ESTE trabajo -- en modo no persistente
     # (una orden, stdin se cierra, el proceso muere) nadie la necesita porque
     # el EOF ya lo dice; en modo persistente (`crate::persistente`, ver
-    # `lumid/src/agentar.rs`/`verificar.rs`) es la unica forma de saber donde
-    # termina un trabajo cuando el proceso sigue vivo para el siguiente.
+    # `lumid/src/verificar.rs`) es la unica forma de saber donde termina un
+    # trabajo cuando el proceso sigue vivo para el siguiente.
     for linea in sys.stdin:
         linea = linea.strip()
         if not linea:

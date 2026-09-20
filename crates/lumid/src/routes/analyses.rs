@@ -289,11 +289,11 @@ pub async fn create(
     let id = {
         let c = app.store.conn();
         c.execute(
-            "INSERT INTO analyses (case_id, requested_by, model, agente, grupo_id, state, created_at, via_api,
+            "INSERT INTO analyses (case_id, requested_by, model, grupo_id, state, created_at, via_api,
                                     forzar_motor, forzar_dispositivo, imagen_sha256)
-             VALUES (?1, ?2, ?3, ?4, ?5, 'pendiente', ?6, ?7, ?8, ?9, ?10)",
+             VALUES (?1, ?2, ?3, ?4, 'pendiente', ?5, ?6, ?7, ?8, ?9)",
             rusqlite::params![
-                case_id, uid, req.model, req.agente, req.grupo_id, t, via_api, forzar_motor, forzar_dispositivo, imagen_sha256
+                case_id, uid, req.model, req.grupo_id, t, via_api, forzar_motor, forzar_dispositivo, imagen_sha256
             ],
         )
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
@@ -315,7 +315,6 @@ pub async fn create(
         id,
         case_id,
         model: req.model,
-        agente: req.agente,
         grupo_id: req.grupo_id,
         state: "pendiente".into(),
         falta_modelo: None,
@@ -330,7 +329,6 @@ pub async fn create(
         image_ids: req.image_ids,
         hypotheses: vec![],
         nivel_efectivo: None,
-        agentes: vec![],
         created_at: t,
         finished_at: None,
     }))

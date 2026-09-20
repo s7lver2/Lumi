@@ -45,8 +45,9 @@ pub async fn create(
     // `Mutex` internamente (vía `limits::rows`), y no es reentrante -- con
     // el guard de abajo todavía vivo (se reusa para el INSERT y las
     // consultas de después), pedirlo dos veces desde el mismo hilo se
-    // autobloquea para siempre, con el mismo efecto en cadena que ya se
-    // vio y arregló en `queue::guardar_agentes`.
+    // autobloquea para siempre, con el mismo efecto en cadena que ya se vio
+    // y arregló en otro sitio del código con el mismo patrón (ver el
+    // historial de `queue/mod.rs`).
     let l = crate::limits::effective(&app.store, uid);
     let c = app.store.conn();
     // Solo una pendiente a la vez por tipo, mismo criterio que
@@ -113,10 +114,10 @@ pub async fn resolve(
         .map_err(|c| (c, "hace falta ser administrador".to_string()))?;
     // El guard se suelta al final de este bloque, ANTES de `limits::set()`
     // más abajo: `set()` pide el mismo `Mutex` internamente, y con un guard
-    // vivo eso se autobloquea para siempre igual que en `guardar_agentes`
-    // (ver ese fix) -- aquí el guard SÍ hacía falta otra vez después (el
-    // `UPDATE` final), así que se vuelve a pedir tras soltarlo, no se
-    // reordena sin más como en `create`.
+    // vivo eso se autobloquea para siempre igual que arriba en `create`
+    // -- aquí el guard SÍ hacía falta otra vez después (el `UPDATE` final),
+    // así que se vuelve a pedir tras soltarlo, no se reordena sin más como
+    // en `create`.
     let (status, user_id, tipo, propuesto): (String, i64, String, i64) = {
         let c = app.store.conn();
         c.query_row(

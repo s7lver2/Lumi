@@ -59,11 +59,11 @@ mod tests {
         vec![
             Nivel {
                 id: "mini".into(), nombre: "Lumi Mini".into(),
-                recuperacion: vec!["cosplace".into()], geometricos: vec![], agentes: vec![], cae_a: None,
+                recuperacion: vec!["cosplace".into()], geometricos: vec![], cae_a: None,
             },
             Nivel {
                 id: "pro".into(), nombre: "Lumi Pro".into(),
-                recuperacion: vec!["lumi-2".into(), "eigenplaces".into()], geometricos: vec![], agentes: vec![],
+                recuperacion: vec!["lumi-2".into(), "eigenplaces".into()], geometricos: vec![],
                 cae_a: Some("mini".into()),
             },
         ]

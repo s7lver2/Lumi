@@ -484,8 +484,10 @@ fn migrate(c: &Connection) {
         // simplemente no ofrece foto de comparación.
         ("analyses", "result_imagen_id", "INTEGER"),
         ("analysis_hypotheses", "imagen_id", "INTEGER"),
-        // Columna del subsistema retirado en 2026-09-19: queda como columna
-        // muerta, `routes::analyses::create` es su único escritor que queda.
+        // Columna muerta desde que el subsistema de agentes se retiró
+        // (2026-09-19): nadie la escribe ni la lee ya, pero SQLite no
+        // permite `DROP COLUMN` en este esquema sin recrear la tabla
+        // entera -- mismo trato que `analysis_hypotheses.motivo_agente`.
         ("analyses", "agente", "TEXT"),
         // Panel Media (spec 2026-09-10 §3): carpeta virtual de una imagen.
         // `NULL` = "Sin carpeta", el estado de toda imagen de antes de esto.
