@@ -505,9 +505,16 @@ export function CaseView({
       fly ??
       (shown?.result_lat != null && shown.result_lng != null
         ? { lat: shown.result_lat, lng: shown.result_lng, zoom: 13 }
-        : image?.exif_lat != null && image.exif_lng != null
-          ? { lat: image.exif_lat, lng: image.exif_lng, zoom: 13 }
-          : null),
+        // Sin `result_lat` (el motor no llegó a una única respuesta, solo a
+        // varios candidatos) la primera hipótesis es la que el cajón ya
+        // muestra por defecto -- el mapa tiene que ir al mismo sitio, no
+        // quedarse encuadrando todos los candidatos como si ninguno se
+        // hubiera elegido.
+        : shown?.hypotheses[0]
+          ? { lat: shown.hypotheses[0].lat, lng: shown.hypotheses[0].lng, zoom: 13 }
+          : image?.exif_lat != null && image.exif_lng != null
+            ? { lat: image.exif_lat, lng: image.exif_lng, zoom: 13 }
+            : null),
     [shown, image, fly],
   );
 

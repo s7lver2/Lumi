@@ -58,6 +58,48 @@ const EASE_OUT_CUBIC = (t: number) => 1 - Math.pow(1 - t, 3);
  *  número no quede pegado al vecino ni con el zoom justo en el filo. */
 const UMBRAL_SOLAPE_PX = 26;
 
+/** A partir de este tamaño de grupo, el abanico deja de caber sin que los
+ *  círculos se rocen entre sí (el radio de `repartirSolapados` crecería sin
+ *  límite) y se colapsa en un único marcador "+N" — acercar el zoom vuelve a
+ *  separar el grupo lo bastante como para que `repartirSolapados` decida
+ *  mostrarlos de nuevo uno a uno. */
+const UMBRAL_CLUSTER = 6;
+
+type MarkerColocado = {
+  marker: { setOffset: (o: [number, number]) => unknown; getElement: () => HTMLElement };
+  mk: Marker;
+};
+
+type EstadoOffset = { actual: [number, number]; raf: number };
+const OFFSET_ANIM_MS = 220;
+/** Un `Marker.setOffset()` de la librería mueve el círculo de golpe — bien
+ *  para su posición geográfica (que sigue al mapa a 60fps por su cuenta),
+ *  mal para el abanico de `repartirSolapados`, que antes saltaba entre
+ *  formaciones sin transición. Interpolar aquí, a mano con `rAF`, anima solo
+ *  el offset (aditivo a la posición) sin tocar cómo la librería sigue el
+ *  pan/zoom — una `transition` de CSS en el elemento pelearía con eso, que
+ *  recalcula el `transform` del marcador en cada frame de cámara. */
+const offsetsEnCurso = new WeakMap<MarkerColocado["marker"], EstadoOffset>();
+function animarOffset(marker: MarkerColocado["marker"], destino: [number, number]) {
+  const previo = offsetsEnCurso.get(marker);
+  if (previo?.raf) cancelAnimationFrame(previo.raf);
+  const origen = previo?.actual ?? [0, 0];
+  if (Math.abs(origen[0] - destino[0]) < 0.5 && Math.abs(origen[1] - destino[1]) < 0.5) {
+    marker.setOffset(destino);
+    offsetsEnCurso.set(marker, { actual: destino, raf: 0 });
+    return;
+  }
+  const inicio = performance.now();
+  const paso = (ahora: number) => {
+    const t = Math.min(1, (ahora - inicio) / OFFSET_ANIM_MS);
+    const f = EASE_OUT_CUBIC(t);
+    const actual: [number, number] = [origen[0] + (destino[0] - origen[0]) * f, origen[1] + (destino[1] - origen[1]) * f];
+    marker.setOffset(actual);
+    offsetsEnCurso.set(marker, { actual, raf: t < 1 ? requestAnimationFrame(paso) : 0 });
+  };
+  offsetsEnCurso.set(marker, { actual: origen, raf: requestAnimationFrame(paso) });
+}
+
 /** Reparte en abanico los marcadores cuyo punto proyectado en pantalla cae a
  *  menos de `UMBRAL_SOLAPE_PX` de otro — varios candidatos sobre el mismo
  *  cruce (mismo modelo de recuperación votando el mismo sitio, o distintos
@@ -68,7 +110,7 @@ const UMBRAL_SOLAPE_PX = 26;
  *  encima de ese punto. Se recalcula en cada `move` porque dos puntos
  *  cercanos en el mundo real se separan en pantalla al hacer zoom, y el
  *  abanico de un zoom lejano dejaría de hacer falta en uno cercano. */
-function repartirSolapados(m: AnyMap, colocados: { marker: { setOffset: (o: [number, number]) => unknown }; mk: Marker }[]) {
+function repartirSolapados(m: AnyMap, colocados: MarkerColocado[]) {
   const puntos = colocados.map(({ mk }) => m.project([mk.lng, mk.lat]));
   const visitado = new Array(colocados.length).fill(false);
 
@@ -91,7 +133,28 @@ function repartirSolapados(m: AnyMap, colocados: { marker: { setOffset: (o: [num
       }
     }
     if (grupo.length === 1) {
-      colocados[grupo[0]].marker.setOffset([0, 0]);
+      const { marker } = colocados[grupo[0]];
+      marker.getElement().style.display = "";
+      marker.getElement().textContent = colocados[grupo[0]].mk.label;
+      animarOffset(marker, [0, 0]);
+      continue;
+    }
+    if (grupo.length > UMBRAL_CLUSTER) {
+      // El representante es el "top" del grupo si hay uno (la hipótesis
+      // principal no debe desaparecer dentro de un "+N"); si no, el primero.
+      const repIdx = grupo.find((idx) => colocados[idx].mk.kind === "top") ?? grupo[0];
+      grupo.forEach((idx) => {
+        const { marker, mk } = colocados[idx];
+        const el = marker.getElement();
+        if (idx === repIdx) {
+          el.style.display = "";
+          el.textContent = `+${grupo.length}`;
+          animarOffset(marker, [0, 0]);
+        } else {
+          el.textContent = mk.label;
+          el.style.display = "none";
+        }
+      });
       continue;
     }
     // Radio proporcional al tamaño del grupo: con solo 2-3 apenas hace falta
@@ -99,8 +162,12 @@ function repartirSolapados(m: AnyMap, colocados: { marker: { setOffset: (o: [num
     // tocarse entre sí.
     const radio = 13 + grupo.length * 2.5;
     grupo.forEach((idx, n) => {
+      const { marker, mk } = colocados[idx];
+      const el = marker.getElement();
+      el.style.display = "";
+      el.textContent = mk.label;
       const angulo = (n / grupo.length) * 2 * Math.PI - Math.PI / 2;
-      colocados[idx].marker.setOffset([radio * Math.cos(angulo), radio * Math.sin(angulo)]);
+      animarOffset(marker, [radio * Math.cos(angulo), radio * Math.sin(angulo)]);
     });
   }
 }
@@ -357,14 +424,17 @@ export function MapCanvas({
         .setLngLat([mk.lng, mk.lat])
         .addTo(m);
       marker.getElement().addEventListener("click", () => {
-        // Acercarse al punto que acabas de pulsar, siempre: aunque quien
-        // escucha no haga nada con el clic, el mapa tiene que responder.
+        // Un "+N" (grupo colapsado, ver `repartirSolapados`) no selecciona
+        // ningún análisis en concreto -- pulsarlo solo acerca el zoom lo
+        // bastante como para que el grupo se separe solo y cada punto vuelva
+        // a pulsarse por su cuenta.
+        const esCluster = marker.getElement().textContent?.startsWith("+");
         m.easeTo({
           center: [mk.lng, mk.lat],
-          zoom: Math.max(m.getZoom(), 13),
+          zoom: esCluster ? m.getZoom() + 3 : Math.max(m.getZoom(), 13),
           duration: 900, easing: EASE_OUT_CUBIC,
         });
-        onMarkerRef.current?.(mk.id);
+        if (!esCluster) onMarkerRef.current?.(mk.id);
       });
       return { marker, mk };
     });
@@ -409,14 +479,25 @@ export function MapCanvas({
   // del sistema, y quien lo ha activado lo ha activado por algo.
   useEffect(() => {
     if (flyTo && map.current && !camaraLibre) {
-      map.current.flyTo({
-        center: [flyTo.lng, flyTo.lat], zoom: flyTo.zoom,
-        // Inclinarse solo al llegar cerca: a zoom de mundo entero una cámara
-        // tumbada enseña medio cielo vacío en vez del planeta centrado. Y de
-        // cerca es justo donde hay edificios que ver de canto.
-        pitch: flyTo.zoom >= 14 ? 55 : 0,
-        duration: 1600, curve: 1.5, speed: 0.9, easing: EASE_OUT_CUBIC,
-      });
+      // Pulsar un marcador ya dispara su propio `easeTo` corto (arriba, en el
+      // listener de `click`) hacia ese mismo punto, y ese clic normalmente
+      // también cambia `flyTo` (selecciona el análisis) -- sin este filtro,
+      // este efecto lanzaba UN SEGUNDO vuelo (más largo y con arco) encima
+      // del primero a medio hacer, y el resultado se leía como un salto en
+      // vez de un vuelo. Si ya se está prácticamente en el destino, no hay
+      // vuelo que repetir.
+      const centro = map.current.getCenter();
+      const yaCerca = Math.abs(centro.lng - flyTo.lng) < 0.0004 && Math.abs(centro.lat - flyTo.lat) < 0.0004;
+      if (!yaCerca) {
+        map.current.flyTo({
+          center: [flyTo.lng, flyTo.lat], zoom: flyTo.zoom,
+          // Inclinarse solo al llegar cerca: a zoom de mundo entero una cámara
+          // tumbada enseña medio cielo vacío en vez del planeta centrado. Y de
+          // cerca es justo donde hay edificios que ver de canto.
+          pitch: flyTo.zoom >= 14 ? 55 : 0,
+          duration: 1600, curve: 1.5, speed: 0.9, easing: EASE_OUT_CUBIC,
+        });
+      }
     }
     // `ready` entra en las dependencias porque el caso y el mapa cargan en
     // paralelo: si los datos del caso llegaban antes que el lienzo, este
