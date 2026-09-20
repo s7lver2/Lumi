@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """El trabajador del upscaler de IA (spec 2026-09-10 §2, sección 2).
 
-Mismo contrato que `lumi_agentes.py`/`lumi_verify.py`: JSON por líneas sobre
+Mismo contrato que `lumi_verify.py`: JSON por líneas sobre
 stdin/stdout, stderr es el log. Una orden trae una ruta de entrada (la imagen
 ya recortada/con blur aplicado desde `ImageEditorPopup.tsx`) y una ruta de
 salida; el trabajador escribe el resultado ahí y contesta con esa misma ruta
@@ -9,7 +9,7 @@ salida; el trabajador escribe el resultado ahí y contesta con esa misma ruta
 de trabajos de este proyecto (ver `lumi_proto::worker::Job`).
 
 Un solo motor («upscalador», clase única en `registros/motores/`), pero se
-mantiene el mismo patrón de caché+desalojo que `lumi_agentes.py` porque es
+mantiene el mismo patrón de caché+desalojo que `lumi_verify.py` porque es
 exactamente el mismo caso: un proceso persistente que no debería recargar el
 modelo en cada trabajo, y que si `LUMI_LIMPIEZA_PRESION` está activo debe
 poder desalojarlo bajo presión de memoria igual que a cualquier otro.

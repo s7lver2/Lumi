@@ -128,11 +128,9 @@ def main():
         if item.get("gestion_propia"):
             # PaddleOCR: su propia libreria baja sus pesos la primera vez que
             # se instancia. Antes eso se dejaba para esa primera instancia
-            # real, que ocurre dentro de una llamada de agente -- y esa
-            # llamada corre bajo el timeout de 120s de `lumid::agentar`
-            # (`LIMITE`), que no distingue "se estaba descargando" de "no
-            # hay agentes": un fallo de red ahi se veia en el cliente como
-            # un misterioso "los agentes no llegaron a correr", sin log
+            # real, que corria bajo un timeout corto que no distinguia "se
+            # estaba descargando" de un fallo real -- un fallo de red ahi se
+            # veia en el cliente como un misterioso corte sin motivo, sin log
             # utilizable. Se fuerza aqui, con la generosidad de tiempo de
             # esta tarea de instalacion, para que un fallo real (red,
             # idioma no disponible) aparezca en ESTE log en vez de detras

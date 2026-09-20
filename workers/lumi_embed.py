@@ -94,8 +94,8 @@ def _embeber(job):
 
 
 def main():
-    # Compartida con `lumi_geo.py`/`lumi_verify.py`/`lumi_agentes.py` --
-    # vive en `lumi_pesos.py` desde que Station empezó a tener hasta tres
+    # Compartida con `lumi_geo.py`/`lumi_verify.py` --
+    # vive en `lumi_pesos.py` desde que Station empezó a tener varios
     # procesos Python vivos a la vez por análisis, cada uno necesitando lo
     # mismo, ver el docstring de `lumi_pesos._limitar_hilos`.
     import lumi_pesos

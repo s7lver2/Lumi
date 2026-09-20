@@ -161,8 +161,7 @@ def _construir(verificador, pesos):
 #: aceptar, OOM al construirlo...) se reintentaba en CADA candidato de la
 #: tanda -- 12 veces, cada una repitiendo el SHA-256 completo del fichero de
 #: pesos (puede ser un fichero de varios GB) antes de fallar de nuevo por lo
-#: mismo. `None` aquí significa "ya se intentó y no se puede", el mismo trato
-#: que ya usa `lumi_agentes._motor` para el mismo problema.
+#: mismo. `None` aquí significa "ya se intentó y no se puede".
 _fallidos = {}
 
 

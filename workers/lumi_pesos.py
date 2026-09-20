@@ -92,15 +92,13 @@ def purgar_inactivos(cache, usos, umbral_seg=UMBRAL_INACTIVIDAD_SEG):
     """Descarta de `cache` las entradas de `usos` (dict paralelo de
     último-uso en segundos, mismas claves) que llevan más de `umbral_seg`
     sin usarse -- sin esto un proceso persistente (`lumi_geo.py`,
-    `lumi_verify.py`, `lumi_agentes.py`) no suelta nunca un modelo ya
-    cargado, y la memoria solo puede crecer durante toda la vida del
-    proceso, sin importar cuánto tiempo lleve sin usarse ese modelo en
-    concreto.
+    `lumi_verify.py`) no suelta nunca un modelo ya cargado, y la memoria solo
+    puede crecer durante toda la vida del proceso, sin importar cuánto
+    tiempo lleve sin usarse ese modelo en concreto.
 
-    Las entradas que fallaron al cargar (`_fallidos`, o `_motores[clase] =
-    None` en `lumi_agentes.py`) no pasan por `usos` y por tanto nunca se
-    desalojan aquí -- reintentar un motor roto no cuesta memoria, así que no
-    hay nada que ganar desalojándolo.
+    Las entradas que fallaron al cargar (`_fallidos`) no pasan por `usos` y
+    por tanto nunca se desalojan aquí -- reintentar un motor roto no cuesta
+    memoria, así que no hay nada que ganar desalojándolo.
 
     Devuelve la lista de claves desalojadas, para que cada trabajador decida
     cómo registrarlo en su propio log."""
@@ -131,10 +129,9 @@ def _limitar_hilos():
     la mitad de los nucleos libres para el resto de la maquina.
 
     Vive aquí (no en cada trabajador por separado, como estaba antes solo en
-    `lumi_embed.py`) porque en Station puede haber hasta TRES procesos Python
-    vivos a la vez por análisis (embebedor persistente + verificación +
-    agentes en paralelo, `tokio::join!` en `queue::mod`) -- sin esto en los
-    tres, cada uno cogiendo todos los núcleos, es al daemon y al cliente a
+    `lumi_embed.py`) porque en Station puede haber varios procesos Python
+    vivos a la vez por análisis (embebedor persistente + verificación) --
+    sin esto en todos, cada uno cogiendo todos los núcleos, es al daemon y al cliente a
     quien muerde, no solo "al pc" del comentario original. Guardado en un
     flag de módulo: `set_num_threads` no es gratis reinvocarlo sin necesidad
     en cada job, y los trabajadores que lo llaman lo hacen desde su propio
