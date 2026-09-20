@@ -1,3 +1,7 @@
+> **DEROGADO** (2026-09-19): el subsistema de agentes descrito aquí se ha
+> eliminado por completo. Ver `docs/superpowers/specs/2026-09-19-darkroom-design.md`
+> (Parte 1) para el porqué y el plan de borrado.
+
 # Rediseño de los agentes (5c) — plan de implementación
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
