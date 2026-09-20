@@ -35,7 +35,10 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-
 # se enlazaba y no se ejecutaba nunca. `ring` es el proveedor que este daemon
 # usa de verdad.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
-tower-http = { version = "0.6", features = ["cors"] }
+# D15: "compression-gzip" activa `CompressionLayer` -- estaba declarada sin
+# usar. Solo gzip (ponytail): universal en cualquier cliente HTTP, sin sumar
+# las dependencias de brotli/zstd que este daemon no necesita para JSON.
+tower-http = { version = "0.6", features = ["cors", "compression-gzip"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 nvml-wrapper = "0.10"
 sysinfo = "0.32"

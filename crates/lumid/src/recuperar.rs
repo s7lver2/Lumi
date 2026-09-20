@@ -46,9 +46,23 @@ pub async fn candidatos(
     vectores: &[(String, Vec<f32>)],
 ) -> Result<Vec<Candidato>> {
     let cliente = crate::qdrant::Cliente::nuevo();
-    let mut listas: Vec<Vec<i64>> = Vec::new();
     let mut similitudes: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
 
+    // W10: antes cada (modelo, versión) era un `await` en serie -- hasta 8
+    // viajes secuenciales a Qdrant en el nivel `vision`. Se reúnen aquí todas
+    // las peticiones de todos los modelos/versiones (con el índice del
+    // modelo al que pertenece cada una) y se lanzan juntas con
+    // `join_all`, que devuelve los resultados EN EL MISMO ORDEN que las
+    // peticiones que se le pasaron -- así que agrupar por `modelo_idx`
+    // después reconstruye exactamente el mismo orden por lista que el
+    // bucle secuencial de antes, que es lo que le importa a RRF.
+    struct Peticion<'a> {
+        modelo_idx: usize,
+        coleccion: String,
+        vector: &'a [f32],
+    }
+    let mut peticiones: Vec<Peticion> = Vec::new();
+    let mut listas: Vec<Vec<i64>> = Vec::new();
     for modelo in &nivel.recuperacion {
         let Some((_, vector)) = vectores.iter().find(|(m, _)| m == modelo) else {
             // El trabajador no mandó este vector (falló ese modelo). Se sigue
@@ -68,18 +82,33 @@ pub async fn candidatos(
             let filas = q.query_map([modelo], |r| r.get::<_, String>(0))?.collect::<Result<Vec<_>, _>>()?;
             filas
         };
-        let mut lista = Vec::new();
+        let modelo_idx = listas.len();
+        listas.push(Vec::new());
         for v in versiones {
-            let col = crate::qdrant::coleccion_de(modelo, &v);
-            for vecino in cliente.buscar(&col, vector, VECINOS).await.unwrap_or_default() {
-                similitudes
-                    .entry(vecino.id)
-                    .and_modify(|s| *s = s.max(vecino.similitud as f64))
-                    .or_insert(vecino.similitud as f64);
-                lista.push(vecino.id);
-            }
+            peticiones.push(Peticion {
+                modelo_idx,
+                coleccion: crate::qdrant::coleccion_de(modelo, &v),
+                vector,
+            });
         }
-        listas.push(lista);
+    }
+
+    let resultados = futures::future::join_all(
+        peticiones
+            .iter()
+            .map(|p| cliente.buscar(&p.coleccion, p.vector, VECINOS)),
+    )
+    .await;
+
+    for (peticion, vecinos) in peticiones.iter().zip(resultados) {
+        let lista = &mut listas[peticion.modelo_idx];
+        for vecino in vecinos.unwrap_or_default() {
+            similitudes
+                .entry(vecino.id)
+                .and_modify(|s| *s = s.max(vecino.similitud as f64))
+                .or_insert(vecino.similitud as f64);
+            lista.push(vecino.id);
+        }
     }
 
     let fusionados = rrf(&listas, K);
@@ -87,31 +116,47 @@ pub async fn candidatos(
         return Ok(Vec::new());
     }
 
-    let c = store.conn();
+    // D14: antes eran 12 `query_row` (uno por candidato) con el mismo guard
+    // de `conn()` sostenido durante los 12 -- en el camino crítico de cada
+    // inferencia. Una sola consulta con `IN (...)` trae los 12 de una vez;
+    // el orden que importa (RRF) no es el de esta consulta, así que se
+    // reconstruye recorriendo `fusionados` otra vez y mirando el resultado
+    // por `id` en un `HashMap`.
+    let ids: Vec<i64> = fusionados.iter().take(A_VERIFICAR).map(|p| p.id).collect();
+    let mut filas_por_id: std::collections::HashMap<i64, (f64, f64, String, String, String)> =
+        Default::default();
+    if !ids.is_empty() {
+        let marcadores = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT r.id, r.lat, r.lng, r.quadkey, i.nombre, i.autor
+               FROM reference_images r JOIN installed_indices i ON i.paquete = r.paquete
+              WHERE r.id IN ({marcadores})"
+        );
+        let c = store.conn();
+        let mut q = c.prepare(&sql)?;
+        let mut filas = q.query(rusqlite::params_from_iter(ids.iter()))?;
+        while let Some(r) = filas.next()? {
+            filas_por_id.insert(
+                r.get(0)?,
+                (r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?),
+            );
+        }
+    }
     let mut fuera = Vec::new();
     for p in fusionados.iter().take(A_VERIFICAR) {
-        let fila = c.query_row(
-            "SELECT r.lat, r.lng, r.quadkey, i.nombre, i.autor
-               FROM reference_images r JOIN installed_indices i ON i.paquete = r.paquete
-              WHERE r.id = ?1",
-            rusqlite::params![p.id],
-            |r| {
-                Ok(Candidato {
-                    id: p.id,
-                    lat: r.get(0)?,
-                    lng: r.get(1)?,
-                    quadkey: r.get(2)?,
-                    // La similitud que se arrastra es la mejor que dio
-                    // cualquier modelo. El orden ya lo decidió RRF; esto solo
-                    // alimenta el peso del grupo.
-                    similitud: similitudes.get(&p.id).copied().unwrap_or(0.0),
-                    indice: r.get(3)?,
-                    autor: r.get(4)?,
-                })
-            },
-        );
-        if let Ok(cand) = fila {
-            fuera.push(cand);
+        if let Some((lat, lng, quadkey, indice, autor)) = filas_por_id.get(&p.id) {
+            fuera.push(Candidato {
+                id: p.id,
+                lat: *lat,
+                lng: *lng,
+                quadkey: quadkey.clone(),
+                // La similitud que se arrastra es la mejor que dio cualquier
+                // modelo. El orden ya lo decidió RRF; esto solo alimenta el
+                // peso del grupo.
+                similitud: similitudes.get(&p.id).copied().unwrap_or(0.0),
+                indice: indice.clone(),
+                autor: autor.clone(),
+            });
         }
     }
     Ok(fuera)

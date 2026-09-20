@@ -55,7 +55,22 @@ export const useServer = create<ServerState>((set) => ({
   setKey: (key) => set({ key }),
   setHello: (hello) => set({ hello }),
   setToken: (token) => set({ token }),
-  setSample: (sample) => set({ sample }),
+  // C6 (medida ponytail, solo cliente): `avisos` viaja entero en CADA
+  // muestra de telemetría (una vez por segundo), pero un admin los crea cada
+  // varios días -- un `Sample` nuevo con el mismo array de avisos rompía la
+  // igualdad referencial que `NotificationsPopover` necesita para no
+  // re-renderizar. Si `length` y el `id` más alto coinciden con lo que ya
+  // había, se conserva la referencia VIEJA del array en el `sample` nuevo.
+  setSample: (sample) => set((s) => {
+    if (!sample || !s.sample) return { sample };
+    const antes = s.sample.avisos;
+    const ahora = sample.avisos;
+    const idMax = (a: typeof ahora) => a.reduce((m, x) => Math.max(m, x.id), 0);
+    if (antes.length === ahora.length && idMax(antes) === idMax(ahora)) {
+      return { sample: { ...sample, avisos: antes } };
+    }
+    return { sample };
+  }),
   setBootstrapToken: (bootstrapToken) => set({ bootstrapToken }),
   setAddr: (addr) => set({ addr }),
   setUser: (username, isAdmin, limits = null, userId = null) => set({ username, isAdmin, limits, userId }),

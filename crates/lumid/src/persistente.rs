@@ -9,15 +9,22 @@
 //!
 //! ponytail: en vez de un multiplexor por id de trabajo (como si hiciera
 //! falta atender varias peticiones a la vez), `pedir` mantiene el `Mutex`
-//! asíncrono agarrado durante TODA la petición — una sola en vuelo contra
-//! este proceso en cada instante, exactamente como ya se comporta hoy el
-//! modo no persistente (una orden, se espera su respuesta entera, recién
-//! entonces se lanza la siguiente). Eso evita tener que correlacionar
-//! mensajes por id: todo lo que llega antes del `Msg::Fin` de esta petición
-//! es suyo, sin ambigüedad. El día que esto necesite paralelismo real, la
-//! salida más simple es un proceso persistente por dispositivo, como ya hace
-//! `queue::worker` — no un multiplexor aquí.
+//! asíncrono agarrado durante TODA la petición contra el proceso de SU
+//! dispositivo — una sola en vuelo contra ESE proceso en cada instante,
+//! exactamente como ya se comporta hoy el modo no persistente (una orden, se
+//! espera su respuesta entera, recién entonces se lanza la siguiente). Eso
+//! evita tener que correlacionar mensajes por id: todo lo que llega antes
+//! del `Msg::Fin` de esta petición es suyo, sin ambigüedad.
+//!
+//! W11: un `Persistente` por dispositivo, no un único proceso global -- antes
+//! TODAS las peticiones (de cualquier GPU) serializaban bajo el mismo
+//! `Mutex`, y el proceso heredaba `LUMI_DEVICE` del primer lanzamiento, así
+//! que un análisis en `cuda:1` acababa mandando su verificación a `cuda:0`.
+//! Con un `HashMap<String, Proceso>` indexado por dispositivo, cada GPU tiene
+//! su propio proceso e hilo de peticiones, igual que ya hace
+//! `queue::worker`.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
@@ -59,12 +66,26 @@ fn drenar_stderr(nombre: &'static str, stderr: ChildStderr) {
 /// lo fuerza.
 pub struct Persistente {
     nombre: &'static str,
-    dentro: Mutex<Option<Proceso>>,
+    // W11: un `Mutex<Option<Proceso>>` por dispositivo en vez de uno global
+    // -- el mapa entero vive detrás de su propio `Mutex` síncrono, pero solo
+    // se agarra para insertar/leer la entrada de UN dispositivo, nunca
+    // durante la petición al proceso en sí (eso lo sigue haciendo el
+    // `Mutex` asíncrono de cada entrada, como antes).
+    dentro: std::sync::Mutex<HashMap<String, std::sync::Arc<Mutex<Option<Proceso>>>>>,
 }
 
 impl Persistente {
     pub fn nuevo(nombre: &'static str) -> Self {
-        Self { nombre, dentro: Mutex::new(None) }
+        Self { nombre, dentro: std::sync::Mutex::new(HashMap::new()) }
+    }
+
+    /// El `Mutex` asíncrono del proceso de este dispositivo, creándolo (vacío,
+    /// perezoso) si es la primera vez que se pide.
+    fn entrada_de(&self, dispositivo: &str) -> std::sync::Arc<Mutex<Option<Proceso>>> {
+        let mut mapa = self.dentro.lock().expect("mutex del mapa de persistentes envenenado");
+        mapa.entry(dispositivo.to_string())
+            .or_insert_with(|| std::sync::Arc::new(Mutex::new(None)))
+            .clone()
     }
 
     fn lanzar(&self, python: &Path, script: &Path, envs: &[(&str, &Path)]) -> Result<Proceso> {
@@ -105,10 +126,11 @@ impl Persistente {
     /// tiene que vivir AQUÍ
     /// dentro, donde de verdad se puede matar el proceso.
     pub async fn pedir(
-        &self, orden: &serde_json::Value, python: &Path, script: &Path, envs: &[(&str, &Path)],
-        limite: Option<Duration>,
+        &self, dispositivo: &str, orden: &serde_json::Value, python: &Path, script: &Path,
+        envs: &[(&str, &Path)], limite: Option<Duration>,
     ) -> Result<Vec<Msg>> {
-        let mut guard = self.dentro.lock().await;
+        let entrada = self.entrada_de(dispositivo);
+        let mut guard = entrada.lock().await;
         for intento in 0..2 {
             if guard.is_none() {
                 *guard = Some(self.lanzar(python, script, envs)?);
@@ -117,7 +139,7 @@ impl Persistente {
                 // se descarta y se relanza en vez de escribirle a un
                 // proceso muerto.
                 if matches!(p.hijo.try_wait(), Ok(Some(_))) {
-                    tracing::warn!("{} persistente ya no estaba vivo; se relanza", self.nombre);
+                    tracing::warn!("{} persistente ({dispositivo}) ya no estaba vivo; se relanza", self.nombre);
                     *guard = Some(self.lanzar(python, script, envs)?);
                 }
             }
@@ -131,19 +153,19 @@ impl Persistente {
                         // crash): reintentar dispararía otra espera de hasta
                         // `d` más, doblando el peor caso justo cuando el
                         // límite era la señal de "ya es demasiado".
-                        tracing::warn!("{} persistente tardó más de {}s; se mata", self.nombre, d.as_secs());
+                        tracing::warn!("{} persistente ({dispositivo}) tardó más de {}s; se mata", self.nombre, d.as_secs());
                         if let Some(p) = guard.as_mut() {
                             let _ = p.hijo.start_kill();
                         }
                         *guard = None;
-                        return Err(anyhow!("{} persistente tardó más de {}s", self.nombre, d.as_secs()));
+                        return Err(anyhow!("{} persistente ({dispositivo}) tardó más de {}s", self.nombre, d.as_secs()));
                     }
                 },
             };
             match resultado {
                 Ok(msgs) => return Ok(msgs),
                 Err(e) if intento == 0 => {
-                    tracing::warn!("{} persistente falló a mitad de petición, se relanza: {e}", self.nombre);
+                    tracing::warn!("{} persistente ({dispositivo}) falló a mitad de petición, se relanza: {e}", self.nombre);
                     *guard = None;
                 }
                 Err(e) => return Err(e),

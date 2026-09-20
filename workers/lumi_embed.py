@@ -15,9 +15,10 @@ temporal de float32 crudo y se contesta con su ruta.
 """
 import json
 import os
-import struct
 import sys
 import tempfile
+
+import numpy as np
 
 DISPOSITIVO = os.environ.get("LUMI_DEVICE", "cpu")
 REGISTRO = os.environ.get("LUMI_REGISTRO", "registros/modelos")
@@ -87,7 +88,11 @@ def _embeber(job):
     fd, destino = tempfile.mkstemp(prefix="lumi-lote-%d-" % job["id"], suffix=".f32")
     with os.fdopen(fd, "wb") as f:
         for _, vector in hechas:
-            f.write(struct.pack("<%df" % dims, *vector))
+            # W13: mismo cambio que `lumi_geo.py` -- numpy vectorizado en vez
+            # de desempaquetar cada vector como argumentos posicionales de
+            # `struct.pack`. Mismo formato binario (`<f4`), el Indexer no
+            # nota la diferencia.
+            f.write(np.array(vector, dtype="<f4").tobytes())
     imagenes = [ruta for ruta, _ in hechas]
     return {"tipo": "vectores", "id": job["id"], "dims": dims,
             "cuenta": len(imagenes), "fichero": destino, "imagenes": imagenes}

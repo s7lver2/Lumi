@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { Analysis, Image } from "../lib/api";
 import { lumiUrl } from "../lib/bridge";
 import { useReorder } from "../lib/useReorder";
@@ -92,7 +93,12 @@ export function Dock({
   );
 }
 
-function Thumb({ image, on, state, queue, drag, onClick }: {
+// C12: `React.memo` solo en `Thumb`, no en `Dock` entero -- `Dock` recibe
+// `summary` como un literal nuevo en cada render de `CaseView`
+// (`CaseView.tsx`), así que memoizarlo a él no evitaría nada; `Thumb` es la
+// pieza que sí repite props idénticas la mayoría de las veces (una miniatura
+// no cambia solo porque otra de la tira sí lo haga).
+const Thumb = memo(function Thumb({ image, on, state, queue, drag, onClick }: {
   image: Image;
   on: boolean;
   state: ImgState;
@@ -149,4 +155,4 @@ function Thumb({ image, on, state, queue, drag, onClick }: {
       )}
     </button>
   );
-}
+});

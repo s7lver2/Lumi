@@ -322,6 +322,7 @@ def _reconstruir(modelo_id, dims):
 class Embebedor(object):
     def __init__(self, ficha, pesos_dir, dispositivo):
         import torch
+        from torchvision import transforms
 
         self.id = ficha["id"]
         self.dims = int(ficha["dims"])
@@ -373,14 +374,18 @@ class Embebedor(object):
             # quedarse con el mas rapido para el resto de la sesion. Sin
             # esto usa el algoritmo generico "seguro" para cualquier forma.
             torch.backends.cudnn.benchmark = True
-
-    def _prep(self):
-        from torchvision import transforms
-        return transforms.Compose([
+        # W14: construido una sola vez aquí, no en `_prep()` -- ese método se
+        # llamaba una vez POR LOTE (`vectores()`), rehaciendo el mismo
+        # `Compose` (con la misma talla y las mismas medias/desviaciones, que
+        # nunca cambian para este modelo) en cada job.
+        self._transform = transforms.Compose([
             transforms.Resize((LADO.get(self.id, 322),) * 2),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
+
+    def _prep(self):
+        return self._transform
 
     def vector(self, ruta_imagen):
         """Un solo vector. Existe para pruebas rapidas contra un fichero
@@ -433,7 +438,14 @@ class Embebedor(object):
         with torch.inference_mode(), torch.autocast("cuda", enabled=en_cuda):
             d = self.red(lote)
         d = torch.nn.functional.normalize(d.float().flatten(1), p=2, dim=1)
-        ok = list(zip(buenas, d.cpu().tolist()))
+        # W13: `.tolist()` convertia cada componente del vector (hasta 12288
+        # por imagen) en un objeto Python de por si, solo para que el
+        # llamante volviera a desempaquetarlos con `struct.pack("<%df", *v)`
+        # -- dos copias donde basta una vez que se sale de la GPU. Se
+        # devuelve el array de numpy tal cual; cada llamante hace
+        # `.astype('<f4').tobytes()` directamente sobre el, sin pasar por
+        # una lista de floats de Python en medio.
+        ok = list(zip(buenas, d.cpu().numpy()))
         return ok, saltadas
 
 

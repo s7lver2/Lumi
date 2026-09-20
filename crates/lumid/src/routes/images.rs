@@ -541,12 +541,12 @@ async fn serve(
     headers: &HeaderMap,
     id: i64,
     thumb: bool,
-) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), Fail> {
-    let (case_id, mime): (i64, String) = app
+) -> Result<([(axum::http::HeaderName, String); 3], Vec<u8>), Fail> {
+    let (case_id, mime, sha256): (i64, String, String) = app
         .store
         .conn()
-        .query_row("SELECT case_id, mime FROM images WHERE id = ?1", [id], |r| {
-            Ok((r.get(0)?, r.get(1)?))
+        .query_row("SELECT case_id, mime, sha256 FROM images WHERE id = ?1", [id], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
         })
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe esa imagen"))?;
     let (_, pid, _) = guard_case(app, headers, case_id).await?;
@@ -561,11 +561,20 @@ async fn serve(
         // Fila sin archivo: es una inconsistencia real, no un 404 del usuario.
         err(StatusCode::INTERNAL_SERVER_ERROR, "el archivo de esa imagen falta en el disco")
     })?;
-    // Inmutable de verdad: una imagen nunca se reescribe, solo se borra.
+    // D15: `immutable` afirmaba que esta URL nunca cambia de contenido, pero
+    // "Sobrescribir" (`sobrescribir_bytes`) SÍ reescribe los bytes del mismo
+    // `id` -- con `immutable`, un cliente que ya la tenía en caché seguía
+    // enseñando la versión vieja hasta un año después, sin ni siquiera
+    // revalidar en una recarga forzada (que es justo lo que `immutable`
+    // desactiva). Se quita `immutable` y se añade `ETag` con el `sha256` ya
+    // guardado en la fila -- el mismo hash que usa `sobrescribir_bytes` para
+    // detectar el cambio, así que no hay un segundo cálculo que mantener
+    // sincronizado con el primero.
     Ok((
         [
             (axum::http::header::CONTENT_TYPE, ctype),
-            (axum::http::header::CACHE_CONTROL, "private, max-age=31536000, immutable".into()),
+            (axum::http::header::CACHE_CONTROL, "private, max-age=31536000".into()),
+            (axum::http::header::ETAG, format!("\"{sha256}\"")),
         ],
         bytes,
     ))
@@ -575,7 +584,7 @@ pub async fn serve_full(
     State(app): State<App>,
     Path(id): Path<i64>,
     headers: HeaderMap,
-) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), Fail> {
+) -> Result<([(axum::http::HeaderName, String); 3], Vec<u8>), Fail> {
     serve(&app, &headers, id, false).await
 }
 
@@ -583,7 +592,7 @@ pub async fn serve_thumb(
     State(app): State<App>,
     Path(id): Path<i64>,
     headers: HeaderMap,
-) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), Fail> {
+) -> Result<([(axum::http::HeaderName, String); 3], Vec<u8>), Fail> {
     serve(&app, &headers, id, true).await
 }
 

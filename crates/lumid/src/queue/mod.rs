@@ -354,34 +354,45 @@ impl Queue {
                 )
                 .unwrap_or(0) as u32
         };
-        let trabajadores = self
+        // D16: antes `detalle_de` (que hace su propio `store.conn()`) se
+        // llamaba DENTRO del `.map()` de arriba, con el lock de `estado`
+        // todavía agarrado -- anidar el mutex de SQLite dentro del de
+        // `estado` es un orden de adquisición peligroso (y aquí además un
+        // N+1, uno por trabajador) para una ruta que un admin puede dejar
+        // abierta refrescándose sola. Se toma un snapshot barato (clonar lo
+        // que hace falta) mientras se tiene el lock, se suelta, y las
+        // consultas SQLite van después, sin ningún mutex anidado.
+        let snapshot: Vec<(String, Option<String>, Option<i64>, bool)> = self
             .estado
             .lock()
             .map(|e| {
-                let mut v: Vec<WorkerView> = e
+                let mut v: Vec<(String, Option<String>, Option<i64>, bool)> = e
                     .trabajadores
                     .iter()
-                    .map(|(d, w)| {
-                        let (dueno_actual_id, dueno_actual, caso_actual) = w
-                            .trabajo
-                            .and_then(|id| self.detalle_de(id))
-                            .map(|(_, uid, username, caso)| (Some(uid), Some(username), Some(caso)))
-                            .unwrap_or((None, None, None));
-                        WorkerView {
-                            dispositivo: d.clone(),
-                            modelo: w.modelo.clone(),
-                            trabajo: w.trabajo,
-                            listo: w.listo,
-                            dueno_actual_id,
-                            dueno_actual,
-                            caso_actual,
-                        }
-                    })
+                    .map(|(d, w)| (d.clone(), w.modelo.clone(), w.trabajo, w.listo))
                     .collect();
-                v.sort_by(|a, b| a.dispositivo.cmp(&b.dispositivo));
+                v.sort_by(|a, b| a.0.cmp(&b.0));
                 v
             })
             .unwrap_or_default();
+        let trabajadores: Vec<WorkerView> = snapshot
+            .into_iter()
+            .map(|(dispositivo, modelo, trabajo, listo)| {
+                let (dueno_actual_id, dueno_actual, caso_actual) = trabajo
+                    .and_then(|id| self.detalle_de(id))
+                    .map(|(_, uid, username, caso)| (Some(uid), Some(username), Some(caso)))
+                    .unwrap_or((None, None, None));
+                WorkerView {
+                    dispositivo,
+                    modelo,
+                    trabajo,
+                    listo,
+                    dueno_actual_id,
+                    dueno_actual,
+                    caso_actual,
+                }
+            })
+            .collect();
 
         let candidatos = self.candidatos();
         let duenos = self.duenos(&candidatos);

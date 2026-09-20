@@ -294,7 +294,12 @@ export function MediaDrawer({
 
         {error && <p className="text-[10.5px] leading-snug text-danger-fg">{error}</p>}
 
-        <div className="grid grid-cols-3 gap-1.5 overflow-y-auto pr-0.5">
+        {/* C10: la rejilla de miniaturas no se monta mientras el cajón está
+            cerrado -- `Drawer` solo la traslada fuera de pantalla con CSS
+            (`open` mueve un `transform`, no decide qué se monta), así que
+            sin esto cada `<img>` de miniatura seguía viva en el DOM, con su
+            descarga de red ya disparada, para un cajón que nadie mira. */}
+        {open && <div className="grid grid-cols-3 gap-1.5 overflow-y-auto pr-0.5">
           {imagenes.map((im) => (
             <button key={im.id}
               draggable
@@ -311,7 +316,7 @@ export function MediaDrawer({
               onContextMenu={(e) => menuContextual(e, im)}
               className={`group relative aspect-square overflow-hidden rounded-md border
                 ${seleccion.has(im.id) ? "border-fg" : "border-border"}`}>
-              <img src={lumiUrl(`/v1/images/${im.id}/thumb`)} alt="" className="h-full w-full object-cover" />
+              <img src={lumiUrl(`/v1/images/${im.id}/thumb`)} alt="" loading="lazy" className="h-full w-full object-cover" />
               {seleccion.has(im.id) && (
                 <span className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-fg text-[#111]">
                   <Icon name="check" size={9} />
@@ -324,7 +329,7 @@ export function MediaDrawer({
               {carpetaActual === "todas" ? "No hay imágenes aquí todavía." : "Esta carpeta está vacía."}
             </p>
           )}
-        </div>
+        </div>}
       </Drawer>
 
       <ContextMenu state={menu} onClose={() => setMenu(null)} />

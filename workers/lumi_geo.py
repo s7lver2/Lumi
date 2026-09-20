@@ -20,10 +20,11 @@ en el Indexer.
 """
 import json
 import os
-import struct
 import sys
 import tempfile
 import time
+
+import numpy as np
 
 DISPOSITIVO = os.environ.get("LUMI_DEVICE", "cpu")
 REGISTRO = os.environ.get("LUMI_REGISTRO", "registros/modelos")
@@ -124,7 +125,13 @@ def _embeber(job):
             continue
         fd, destino = tempfile.mkstemp(prefix="lumi-geo-%d-" % job["id"], suffix=".f32")
         with os.fdopen(fd, "wb") as f:
-            f.write(struct.pack("<%df" % e.dims, *v))
+            # W13: `struct.pack("<%df" % dims, *v)` desempaqueta hasta 12288
+            # floats como argumentos posicionales -- con `v` ya convertido a
+            # lista de Python por `.tolist()`, es una segunda conversión que
+            # numpy hace de una vez, vectorizada, sin desempaquetar nada.
+            # Mismo formato binario exacto (`<f4`, little-endian float32):
+            # el contrato de `vectores` con el Indexer no cambia.
+            f.write(np.array(v, dtype="<f4").tobytes())
         fuera.append({"tipo": "vectores", "id": job["id"], "modelo": modelo,
                       "dims": e.dims, "fichero": destino})
     return fuera

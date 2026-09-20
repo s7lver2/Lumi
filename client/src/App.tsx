@@ -115,7 +115,15 @@ export default function App() {
   const KICK_AFTER_MS = 2 * 60 * 1000;
 
   useEffect(() => {
-    const un = listen<Sample>("telemetry", (e) => useServer.getState().setSample(e.payload));
+    const un = listen<Sample>("telemetry", (e) => {
+      useServer.getState().setSample(e.payload);
+      // C7: el SSE de telemetría ya prueba "el servidor sigue vivo" con más
+      // resolución que el sondeo de `/v1/hello` de abajo -- cada evento que
+      // llega es la misma señal que un `/v1/hello` con éxito, así que
+      // resetea el mismo estado que resetearía un sondeo exitoso.
+      fails.current = 0;
+      downSince.current = null;
+    });
     return () => { un.then((f) => f()); };
   }, []);
 
@@ -253,7 +261,12 @@ export default function App() {
         }
         setStatus(fails.current > 20 ? "lost" : "reboot");
       }
-    }, 3000);
+      // C7: el SSE de telemetría (arriba) ya prueba "sigue vivo" cada
+      // segundo -- este sondeo es redundante en el caso normal, solo hace
+      // falta como reserva. 10 s en vez de 3 s: `KICK_AFTER_MS` ya es de 2
+      // minutos, así que detectar una caída 7 s más tarde no cambia nada
+      // para quien usa la app.
+    }, 10000);
     return () => clearInterval(t);
   }, [paired]);
 

@@ -421,7 +421,24 @@ async fn run() -> anyhow::Result<()> {
 
     let capa_zero_trust = axum::middleware::from_fn_with_state(app.clone(), zero_trust::zero_trust_gate);
     let capa_mantenimiento = axum::middleware::from_fn_with_state(app.clone(), mantenimiento::mantenimiento_gate);
-    let router = router.layer(capa_zero_trust).layer(capa_mantenimiento).with_state(app);
+    // D15: compresión HTTP para las respuestas JSON (la mayoría del tráfico
+    // de este daemon), que hasta ahora viajaban sin comprimir pese a que
+    // `tower-http` ya estaba en `Cargo.toml`. `DefaultPredicate` ya excluye
+    // SSE (`text/event-stream`, los 6 endpoints de eventos) e imágenes
+    // (`image/*`) por su cuenta -- comprimir un JPEG/PNG ya comprimido es
+    // trabajo desperdiciado, y comprimir un SSE rompería el streaming al
+    // forzar a bufferizar antes de poder emitir nada. Se añade también
+    // `application/x-protobuf` (teselas vectoriales, glyphs y sprites de
+    // `routes::map`), que el propio spec señala como bytes ya comprimidos.
+    use tower_http::compression::{predicate::{DefaultPredicate, NotForContentType, Predicate}, CompressionLayer};
+    let compresion = CompressionLayer::new()
+        .gzip(true)
+        .compress_when(DefaultPredicate::new().and(NotForContentType::new("application/x-protobuf")));
+    let router = router
+        .layer(capa_zero_trust)
+        .layer(capa_mantenimiento)
+        .layer(compresion)
+        .with_state(app);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("lumid escuchando en https://{addr}");
