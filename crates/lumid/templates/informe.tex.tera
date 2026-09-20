@@ -352,11 +352,22 @@ Peso medio: & \ttfamily{{ estadisticas.peso_medio_txt }} \\
     \fill[lumiaviso] ({{ img.mapa.punto.x }},{{ img.mapa.punto.y }}) circle (1.4pt);
   \end{tikzpicture}\\[4pt]{% endif %}
   \ttfamily{{ img.coord_txt | tex }}\\radio {{ img.radio_txt | tex }}
-  {# `\normalfont` es un control WORD: sin el `{}`, "Respaldo..." pegado
-     detrás se lee como parte del propio nombre del comando
-     (`\normalfontRespaldo`, indefinido) en vez de como texto -- el
-     "Undefined control sequence" reportado al previsualizar un informe con
-     respaldo geométrico. #}
+  % `\normalfont` es un control WORD: sin el `{}`, "Respaldo..." pegado
+  % detrás se lee como parte del propio nombre del comando
+  % (`\normalfontRespaldo`, indefinido) en vez de como texto -- el
+  % "Undefined control sequence" reportado al previsualizar un informe con
+  % respaldo geométrico.
+  %
+  % Comentario de LaTeX (`%`), no de Tera (`{# #}`) a propósito: un
+  % comentario de Tera desaparece del texto pero NO de las líneas en blanco
+  % que deja alrededor si no se recorta -- y esa línea en blanco es un
+  % `\par` para LaTeX. Un párrafo nuevo que empieza con el `\\[4pt]` de abajo
+  % como primer token es exactamente "There's no line here to end" (caso
+  % real: informe con alternativas en disposición banda, 2026-09-21). Un
+  % comentario `%` se traga su propio salto de línea, así que no deja ese
+  % hueco. En la ficha compacta el mismo comentario (más abajo) caía delante
+  % de un `\begin{minipage}` y por eso no reventaba allí -- mismo defecto,
+  % consecuencia distinta según lo que viniera después.
   {% if img.hipotesis_extra %}\\[4pt]\normalfont{}{% for l in img.hipotesis_extra %}{% if l.variante == "cabecera" %}\lumiintermedium {{ l.texto | tex }}\\[2pt]{% else %}{{ l.texto | tex }}\\{% endif %}{% endfor %}{% endif %}
 }
 {% endif %}
@@ -405,9 +416,12 @@ Peso medio: & \ttfamily{{ estadisticas.peso_medio_txt }} \\
     \fill[lumiaviso] ({{ img.mapa.punto.x }},{{ img.mapa.punto.y }}) circle (1.4pt);
   \end{tikzpicture}{% else %}\phantom{x}{% endif %}
   \end{minipage}\hfill
-  {# Mismo motivo que el `\normalfont{}` de más arriba: `\small` es un
-     control WORD y sin el `{}` se come el texto pegado detrás como parte
-     de su propio nombre. #}
+  % Mismo motivo que el `\normalfont{}` de más arriba: `\small` es un
+  % control WORD y sin el `{}` se come el texto pegado detrás como parte
+  % de su propio nombre. Comentario `%` y no `{# #}` por la misma razón que
+  % el comentario equivalente de la ficha banda más arriba: aquí no revienta
+  % porque lo que sigue es un `\begin{minipage}`, no un `\\`, pero es el
+  % mismo defecto de fondo -- ver ese comentario para el porqué.
   \begin{minipage}[t]{\dimexpr\linewidth-100pt\relax}\small{}
   {% for l in img.hipotesis_extra %}{% if l.variante == "cabecera" %}\lumiintermedium {{ l.texto | tex }}\\[2pt]{% else %}{{ l.texto | tex }}\\{% endif %}{% endfor %}
   \end{minipage}
