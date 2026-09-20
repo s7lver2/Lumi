@@ -34,10 +34,9 @@ const INPUT = "w-full rounded-lg border border-border bg-elevated px-2.5 py-1.5 
  *  (`upscaler_activo`, `media_por_proyecto_activo` no tienen otra pantalla
  *  natural en la que vivir hoy -- `rendimiento.rs` existe en el backend pero
  *  el panel admin todavía no tiene una vista para él, así que se consolidan
- *  aquí) y, solo con `modo_calibracion` activo, las herramientas de debug que
- *  quedan tras el rediseño de agentes: 4a (umbrales), 4c (nota sobre
- *  respuesta cruda) y 4d (nota sobre forzar motor/dispositivo) -- 4b
- *  (prompts) se retiró, ver `routes/calibracion.rs`. */
+ *  aquí) y, solo con `modo_calibracion` activo, las herramientas de debug de
+ *  calibración: umbrales, nota sobre respuesta cruda y nota sobre forzar
+ *  motor/dispositivo, ver `routes/calibracion.rs`. */
 export function CalibracionView({ token }: { token: string }) {
   const [flags, setFlags] = useState<FeatureFlags | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -84,9 +83,9 @@ export function CalibracionView({ token }: { token: string }) {
           <div className="rounded-xl border border-border bg-panel p-3.5">
             <p className="text-[11.5px] text-fg">Respuesta cruda del modelo</p>
             <p className="mt-1 text-[10.5px] leading-relaxed text-muted">
-              Con este modo activo, cada veredicto nuevo de un agente en modo elección guarda la distribución
-              completa que calculó el motor antes de decidir. Se enseña en el propio popup de resultado del
-              agente, en una sección colapsada "Ver crudo" bajo el card.
+              Con este modo activo, cada nueva hipótesis guarda la distribución completa que calculó el motor
+              antes de decidir. Se enseña en el propio detalle del resultado, en una sección colapsada
+              "Ver crudo" bajo el card.
             </p>
           </div>
           <div className="rounded-xl border border-border bg-panel p-3.5">
@@ -101,7 +100,7 @@ export function CalibracionView({ token }: { token: string }) {
         </div>
       ) : (
         <p className="mt-4 text-[11px] text-subtle">
-          Activa el modo de calibración para editar umbrales de verificación y prompts de agentes.
+          Activa el modo de calibración para editar umbrales de verificación.
         </p>
       )}
     </Seccion>
@@ -114,12 +113,10 @@ export function CalibracionView({ token }: { token: string }) {
  *  del servidor, no herramientas de debug de calibración. */
 function RendimientoEditor({ token }: { token: string }) {
   const [r, setR] = useState<RendimientoSettings | null>(null);
-  const [timeout_, setTimeout_] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   const cargar = () => api.get<RendimientoSettings>("/v1/admin/rendimiento", token)
-    .then((v) => { setR(v); setTimeout_(String(v.agentes_timeout_s)); })
+    .then(setR)
     .catch((e) => setError(String(e)));
   useEffect(() => { void cargar(); }, [token]);
 
@@ -133,24 +130,6 @@ function RendimientoEditor({ token }: { token: string }) {
     }
   }
 
-  async function guardarTimeout() {
-    const n = Number(timeout_);
-    if (!Number.isInteger(n) || n < 10 || n > 600) {
-      setError("el timeout tiene que ser un número entero entre 10 y 600 segundos");
-      return;
-    }
-    setBusy(true); setError(null);
-    try {
-      const nuevo = await api.patch<RendimientoSettings>("/v1/admin/rendimiento", { agentes_timeout_s: n }, token);
-      setR(nuevo);
-      setTimeout_(String(nuevo.agentes_timeout_s));
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (!r) return null;
 
   return (
@@ -159,31 +138,8 @@ function RendimientoEditor({ token }: { token: string }) {
       <div className="mt-2 flex flex-col divide-y divide-white/10 rounded-xl border border-border bg-panel px-3">
         <Interruptor activo={r.verificacion_persistente} onChange={(v) => void set("verificacion_persistente", v)}
           label="Verificación persistente" hint={r.verificacion_persistente_desc} />
-        <Interruptor activo={r.agentes_persistente} onChange={(v) => void set("agentes_persistente", v)}
-          label="Agentes persistentes" hint={r.agentes_persistente_desc} />
         <Interruptor activo={r.limpieza_por_presion} onChange={(v) => void set("limpieza_por_presion", v)}
           label="Limpieza por presión de memoria" hint={r.limpieza_por_presion_desc} />
-        <div className="flex items-center justify-between gap-3 py-2.5">
-          <span className="text-[12px] text-fg">
-            Timeout de agentes
-            <small className="mt-0.5 block text-[10.5px] text-subtle">
-              Segundos antes de seguir sin agentes (120 de fábrica). Un VLM en frío sin "Agentes persistentes"
-              ya se come casi todo este margen solo en cargar -- súbelo si los agentes nunca llegan a contestar.
-              El modo Agentes standalone usa el doble de este valor.
-            </small>
-          </span>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <input value={timeout_} onChange={(e) => setTimeout_(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") void guardarTimeout(); }}
-              inputMode="numeric" disabled={busy}
-              className="w-16 rounded-lg border border-border bg-elevated px-2 py-1 text-right font-mono text-[11px] text-fg outline-none transition-colors duration-300 ease-expo focus:border-white/40" />
-            <span className="text-[10.5px] text-subtle">s</span>
-            <button onClick={() => void guardarTimeout()} disabled={busy || Number(timeout_) === r.agentes_timeout_s}
-              className="jg-press rounded-lg border border-white/15 px-2.5 py-1 text-[10.5px] text-fg disabled:opacity-40">
-              Guardar
-            </button>
-          </div>
-        </div>
       </div>
       {error && <p className="mt-2 text-[10.5px] text-danger-fg">{error}</p>}
     </div>

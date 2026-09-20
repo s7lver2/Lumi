@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { lumiUrl } from "../lib/bridge";
-import type { Analysis, DichoDeAgente, Hipotesis, Image } from "../lib/api";
+import type { Analysis, Hipotesis, Image } from "../lib/api";
 import { Drawer } from "./Drawer";
 import { Icon } from "../ui/Icon";
 import { CompareSlider } from "../ui/CompareSlider";
-import { AgenteIcono } from "./AgenteIcono";
 
 /** Metros entre dos coordenadas. Haversine con el radio medio de la Tierra:
  *  precisión de sobra para decir «el EXIF declara un GPS a 300 m de aquí». */
@@ -34,7 +33,7 @@ function principalComoHipotesis(a: Analysis): Hipotesis | null {
 const ETIQUETA_FASE: Record<string, string> = {
   embebiendo: "Calculando el vector de la imagen…",
   recuperando: "Buscando candidatos en el índice…",
-  verificando: "Verificando geometría y preguntando a los agentes…",
+  verificando: "Verificando geometría…",
 };
 
 /** Fase, ETA y posición en cola (spec de feedback de progreso: "fases del
@@ -204,51 +203,6 @@ function VistaDetalle({ h, image, onCenter, onVolver }: {
   );
 }
 
-/** Lo que la imagen dice de sí misma. Una tarjeta por agente, con su icono
- *  propio y su frase de motivo visible — antes era una lista apretada de
- *  una columna con todos los `detalle` concatenados al final. Los
- *  abstenidos NO desaparecen: se ven apagados, diciendo que no hubo señal
- *  suficiente. */
-function AgentesPanel({ agentes, onAbrir }: { agentes: DichoDeAgente[]; onAbrir: () => void }) {
-  if (agentes.length === 0) return null;
-  return (
-    <div className="flex flex-col gap-2">
-      <p className="text-[9px] uppercase tracking-[.11em] text-subtle">Lo que dice la imagen</p>
-      {agentes.map((d) => {
-        const calla = d.etiqueta === "abstiene";
-        const mejorEtiqueta = calla ? (d.etiqueta_real || d.etiqueta) : d.etiqueta;
-        return (
-          <button key={d.agente} type="button" onClick={onAbrir}
-            className={`jg-press flex w-full items-center gap-3 rounded-lg bg-white/[.03] p-2.5 text-left
-              hover:bg-white/[.05] ${calla ? "opacity-50" : ""}`}>
-            {/* Sin el registro de fichas cargado aquí (panel puramente de
-                presentación, sin `token`/`api`), se usa el propio id del
-                agente como nombre de icono -- coincide con el campo `icono`
-                de la ficha en siete de los ocho agentes del catálogo; solo
-                "lado-conduccion" (icono real "volante") cae al bocadillo
-                genérico, degradación menor y no una etiqueta incorrecta. */}
-            <AgenteIcono icono={d.agente} etiqueta={calla ? undefined : d.etiqueta} apagado={calla} />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-[10.5px] text-fg">{d.nombre}</span>
-                <span className="font-mono text-[9px] tabular-nums text-subtle">
-                  {d.confianza !== null ? d.confianza.toFixed(2) : "texto"}
-                </span>
-              </div>
-              <div className="mt-0.5 text-[12px] text-fg">
-                {calla ? (mejorEtiqueta ? `¿${mejorEtiqueta}?` : "sin señal suficiente") : d.etiqueta}
-              </div>
-              {!calla && d.detalle && (
-                <p className="mt-0.5 text-[9.5px] leading-snug text-subtle">{d.detalle}</p>
-              )}
-            </div>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 /** Lo que se sabe del intento seleccionado: la foto, el resultado y el GPS
  *  que declara la cámara. `analysis` ya viene resuelto por quien monta este
  *  componente (antes `ResultsDrawer` buscaba entre TODOS los intentos y
@@ -261,7 +215,7 @@ function AgentesPanel({ agentes, onAbrir }: { agentes: DichoDeAgente[]; onAbrir:
  *  selección de un intento viejo no debería aterrizar en el detalle del
  *  intento anterior. */
 export function ResultsDrawer({
-  open, image, analysis, busy, progreso, onAnalyze, onCenter, onAbrirAgente,
+  open, image, analysis, busy, progreso, onAnalyze, onCenter,
 }: {
   open: boolean;
   image: Image | null;
@@ -273,7 +227,6 @@ export function ResultsDrawer({
   progreso: { fase?: string; etaS?: number | null; posicion?: number } | null;
   onAnalyze: () => void;
   onCenter: (lat: number, lng: number) => void;
-  onAbrirAgente: () => void;
 }) {
   const exif = image?.exif_lat != null && image.exif_lng != null;
   const [vista, setVista] = useState<"comparar" | "detalle">("comparar");
@@ -329,22 +282,6 @@ export function ResultsDrawer({
           <ListaAlternativas alternativas={alternativas} maxPeso={maxPeso}
             onAbrir={(i) => { setSel(i + 1); setVista("detalle"); }} />
         </>
-      )}
-
-      {analysis && <AgentesPanel agentes={analysis.agentes} onAbrir={onAbrirAgente} />}
-      {analysis?.state === "hecho" && analysis.agentes.length === 0 && (
-        <p className="text-[10px] leading-relaxed text-subtle">
-          {/* Antes decía "sus modelos no están instalados en este servidor"
-              -- una conjetura, no un dato: el cliente no tiene forma de
-              distinguir "no instalados" de "tardaron más de la cuenta
-              cargando y se cortó la espera", que es lo que pasa casi
-              siempre en la práctica (ver `agentar::LIMITE`, 120s). Server
-              real, medido: los modelos SÍ estaban instalados y cargando
-              (el log mostraba a `transformers` en marcha) y aun así
-              llegaron 0 veredictos por el corte de tiempo -- el mensaje
-              viejo habría afirmado justo lo contrario de lo que pasó. */}
-          Los agentes tardaron demasiado en cargar sus modelos y se siguió sin ellos.
-        </p>
       )}
 
       {exif && (

@@ -18,8 +18,6 @@ import { CreditRequestDialog } from "./CreditRequestDialog";
 import { Dock, type ImgState } from "./Dock";
 import { DrawerTab, DRAWER_W, RAIL_W, type DrawerId } from "./Drawer";
 import { DropFrame, DropTarget } from "./DropTarget";
-import { AgentPickerPopup } from "./AgentPickerPopup";
-import { AgentResultPopup } from "./AgentResultPopup";
 import { ExportPopup } from "./ExportPopup";
 import { MapCanvas, type Marker } from "./MapCanvas";
 import { MediaDrawer } from "./MediaDrawer";
@@ -29,7 +27,7 @@ import { UploadPopup } from "./UploadPopup";
 const GB = 1024 * 1024 * 1024;
 
 export function CaseView({
-  project, case_, rail, drawer, drawerId, setDrawer, exportOpen, onCloseExport, onIrAModelos,
+  project, case_, rail, drawer, drawerId, setDrawer, exportOpen, onCloseExport,
 }: {
   project: Project;
   case_: Case;
@@ -42,9 +40,6 @@ export function CaseView({
    *  `App` junto al del resto del carril, igual que `drawerId`. */
   exportOpen: boolean;
   onCloseExport: () => void;
-  /** El admin de un agente sin motor instalado puede saltar directo a
-   *  Modelos — decide `App`, que es quien sabe cambiar de `mode`. */
-  onIrAModelos: () => void;
 }) {
   const token = useServer((s) => s.token) ?? undefined;
   const isAdmin = useServer((s) => s.isAdmin);
@@ -195,17 +190,6 @@ export function CaseView({
     api.get<Image[]>(`/v1/cases/${case_.id}/images`, token).then(setImages).catch(() => {});
     return await res.blob();
   }
-  /** La imagen para la que se está eligiendo agente. `null` = popup cerrado —
-   *  se abre al elegir «Agentes» en `UploadPopup` en vez de encolar directo. */
-  const [agentPickerImage, setAgentPickerImage] = useState<Image | null>(null);
-  const agentPicker = useDismissable(agentPickerImage !== null, 180);
-  /** El resultado del agente ya lanzado — `null` = popup cerrado. Vive aquí y
-   *  no en `App` (donde vivía antes de la 2.0.36, con un `mode === "agentes"`
-   *  de pantalla completa): los dos popups de agentes (elegir + resultado)
-   *  son ahora hermanos encadenados sobre `CaseView`, igual que `UploadPopup`
-   *  ya vive aquí sin necesitar un `mode` propio. */
-  const [agentResult, setAgentResult] = useState<{ image: Image; analyses: Analysis[] } | null>(null);
-  const agentResultPopup = useDismissable(agentResult !== null, 180);
   const exportPop = useDismissable(exportOpen, 180);
 
   /** El diálogo de guardado (nativo, del lado Rust) puede volver sin ruta si
@@ -589,25 +573,14 @@ export function CaseView({
                 : null
             }
             onAnalyze={() => (sel !== null ? setStaged([sel]) : void pick())}
-            onCenter={(lat, lng) => setFly({ lat, lng, zoom: 14 })}
-            onAbrirAgente={() => {
-              if (!image || !shown) return;
-              // Si este intento es parte de un lanzamiento múltiple
-              // (`grupo_id`), se reabren todos sus análisis juntos -- es el
-              // mismo intento visual que se lanzó de una vez, no solo el que
-              // dio esta fila.
-              const grupo = shown.grupo_id
-                ? analyses.filter((a) => a.grupo_id === shown.grupo_id)
-                : [shown];
-              setAgentResult({ image, analyses: grupo });
-            }} />
+            onCenter={(lat, lng) => setFly({ lat, lng, zoom: 14 })} />
           <MediaDrawer token={token} caseId={case_.id} projectId={project.id}
             imagenesDelCaso={list} features={features}
             open={drawerId === "media"} onClose={() => setDrawer(null)}
             onSeleccionar={(img) => {
-              // El mismo popup de elegir modelo (mini/pro/agentes) que se usa
-              // para trabajar con la imagen recién subida -- no el de agentes
-              // directo, ni solo seleccionar y enseñar resultados existentes.
+              // El mismo popup de elegir modelo (mini/pro) que se usa para
+              // trabajar con la imagen recién subida -- no solo seleccionar y
+              // enseñar resultados existentes.
               setSel(img.id);
               setSelAnalysis(null);
               setFly(null);
@@ -616,11 +589,10 @@ export function CaseView({
             }}
             onAnalizar={(imgs) => {
               setDrawer(null);
-              if (imgs.length === 1) { setAgentPickerImage(imgs[0]); return; }
-              // Varias: una petición de análisis por imagen (reutiliza el
-              // endpoint actual, sin endpoint de lote nuevo) con el modelo
-              // por defecto -- elegir agente/modelo por imagen individual es
-              // el flujo de siempre (click izquierdo en una sola).
+              // Una petición de análisis por imagen (reutiliza el endpoint
+              // actual, sin endpoint de lote nuevo) con el modelo por
+              // defecto -- elegir modelo por imagen individual es el flujo
+              // de siempre (click izquierdo en una sola).
               void analyze(models[0] ?? "mini", imgs.map((i) => i.id));
             }}
             onCambio={() => void load()} />
@@ -678,41 +650,9 @@ export function CaseView({
           onAddMore={() => void pick()}
           onDiscard={(id) => void discard(id)}
           onAnalyze={(m, forzar) => {
-            // El modo Agentes solo trabaja con una imagen a la vez (multi-
-            // selección se descartó en el diseño) -- si el popup traía
-            // varias en cola, se lanza sobre la primera y el resto se queda
-            // esperando en el caso, sin analizar todavía. Elegir el agente en
-            // sí es OTRO popup (`AgentPickerPopup`), no la navegación directa
-            // de antes -- este solo se cierra y le pasa el testigo.
-            if (m === "agentes") {
-              const id = (staged ?? [])[0];
-              const img = list.find((im) => im.id === id);
-              setStaged(null);
-              if (img) setAgentPickerImage(img);
-              return;
-            }
             void analyze(m, staged ?? [], forzar);
           }}
           onClose={() => { setStaged(null); setError(null); }} />
-      )}
-
-      {agentPicker.rendered && agentPickerImage && (
-        <AgentPickerPopup token={token} caseId={case_.id} image={agentPickerImage} isAdmin={isAdmin}
-          closing={agentPicker.closing}
-          onLaunched={(analyses) => {
-            const img = agentPickerImage;
-            setAgentPickerImage(null);
-            if (analyses.length > 0) setAgentResult({ image: img, analyses });
-          }}
-          onClose={() => setAgentPickerImage(null)}
-          onIrAModelos={onIrAModelos} />
-      )}
-
-      {agentResultPopup.rendered && agentResult && (
-        <AgentResultPopup token={token} image={agentResult.image} closing={agentResultPopup.closing}
-          analysesIniciales={agentResult.analyses}
-          onElegirOtro={() => { const img = agentResult.image; setAgentResult(null); setAgentPickerImage(img); }}
-          onClose={() => setAgentResult(null)} />
       )}
 
       {topeAlcanzado && token && (

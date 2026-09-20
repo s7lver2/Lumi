@@ -34,10 +34,10 @@ export function Dock({
   const orden = useReorder(`case-imgs`, images, "x");
   const { analysis, image, caseName } = summary;
   const hecho = analysis?.state === "hecho";
-  // "Hecho" no implica coordenadas: un análisis de agentes (o de upscale)
-  // termina sin `result_lat`/`result_lng` -- son modos que no geolocalizan.
-  // Suponer que "hecho" siempre trae coordenada reventaba aquí en cuanto
-  // terminaba uno de esos modos (`null.toFixed`), tirando toda la app.
+  // "Hecho" no implica coordenadas: un análisis de upscale termina sin
+  // `result_lat`/`result_lng` -- ese modo no geolocaliza. Suponer que
+  // "hecho" siempre trae coordenada reventaba aquí en cuanto terminaba ese
+  // modo (`null.toFixed`), tirando toda la app.
   const tieneCoordenadas = hecho && analysis!.result_lat != null && analysis!.result_lng != null;
 
   const linea1 = image

@@ -87,7 +87,6 @@ function BocetoInforme({ paso, opts }: { paso: PasoId; opts: ExportInformeOpts }
       <div className="mt-2.5 flex flex-col gap-1.5">
         <div className="h-[5px] w-[70%] rounded-full bg-border" />
         {opts.hipotesis_geolocalizacion && <div className="h-[5px] w-[90%] rounded-full bg-border" />}
-        {opts.veredictos_agentes && <div className="h-[5px] w-[50%] rounded-full bg-border" />}
       </div>
     </div>
   );
@@ -95,13 +94,12 @@ function BocetoInforme({ paso, opts }: { paso: PasoId; opts: ExportInformeOpts }
 
 type ClaveContenido =
   | "portada_estadisticas" | "exif_por_imagen" | "hipotesis_geolocalizacion"
-  | "veredictos_agentes" | "integridad_sha256";
+  | "integridad_sha256";
 
 const CAMPOS_CONTENIDO: { key: ClaveContenido; icono: IconName; label: string; hint: string }[] = [
   { key: "portada_estadisticas", icono: "pulse", label: "Portada con estadísticas", hint: "Resumen del caso y gráfico por modelo" },
   { key: "exif_por_imagen", icono: "image", label: "EXIF por imagen", hint: "GPS declarado por la cámara y datos del fichero" },
   { key: "hipotesis_geolocalizacion", icono: "globe", label: "Hipótesis de geolocalización", hint: "Coordenada principal, radio, alternativas" },
-  { key: "veredictos_agentes", icono: "users", label: "Veredictos de agentes", hint: "Etiqueta, confianza y detalle de cada agente" },
   { key: "integridad_sha256", icono: "shield", label: "Integridad de archivo", hint: "Hash sha256 del original de cada foto, para cadena de custodia" },
 ];
 
@@ -127,7 +125,6 @@ export function ExportPopup({
     portada_estadisticas: true,
     exif_por_imagen: true,
     hipotesis_geolocalizacion: true,
-    veredictos_agentes: true,
     firmado_por: firmadoPorDefecto,
     integridad_sha256: true,
     imagenes_incluidas: null,

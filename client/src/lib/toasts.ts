@@ -4,8 +4,8 @@ import { useServer } from "./store";
 
 /** Un fallo que se sabe viene de "falta instalar X" (`Analysis.falta_modelo`)
  *  en vez de texto libre a secas -- lanzarlo en vez de un `Error` normal es
- *  lo que le permite a quien lo atrapa (`ImageEditorPopup`, el popup de
- *  agentes...) ofrecer la instalación sin tener que adivinar del mensaje. */
+ *  lo que le permite a quien lo atrapa (`ImageEditorPopup`...) ofrecer la
+ *  instalación sin tener que adivinar del mensaje. */
 export class FaltaModeloError extends Error {
   modeloId: string;
   constructor(modeloId: string, message: string) {
@@ -41,7 +41,7 @@ interface ToastState {
  *  panel de admin, a diferencia de `ModelToasts`/`IndexToast` (que son su
  *  propio patrón, ad hoc, montado solo dentro de `AdminPanel`). Un usuario
  *  normal (no admin) también puede toparse con "falta instalar X" desde el
- *  editor de imagen o un agente, y merece enterarse igual. */
+ *  editor de imagen, y merece enterarse igual. */
 export const useToasts = create<ToastState>((set) => ({
   toasts: [],
   mostrar: (t) => {
@@ -55,7 +55,7 @@ export const useToasts = create<ToastState>((set) => ({
   cerrar: (id) => set((s) => ({ toasts: s.toasts.filter((x) => x.id !== id) })),
 }));
 
-/** El caso concreto que motivó la cola: un análisis (agente o upscaler)
+/** El caso concreto que motivó la cola: un análisis (upscaler)
  *  terminó en error porque falta instalar un motor (`Analysis.falta_modelo`,
  *  `crates/lumi-proto/src/worker.rs::Msg::Fallo::falta_modelo`). Un admin ve
  *  un botón para lanzar la descarga ahora mismo, en segundo plano, sin salir

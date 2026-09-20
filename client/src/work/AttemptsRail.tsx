@@ -22,11 +22,11 @@ export function AttemptsRail({
   onLimpiar: () => void;
   onMenu: (s: MenuState) => void;
 }) {
-  // Varios análisis lanzados de una vez (selección múltiple de agentes,
-  // `AgentPickerPopup`) comparten `grupo_id` y se enseñan como una sola
-  // ficha -- cada uno sigue siendo su propia solicitud en cola (su propio
-  // estado, su propio error), pero visualmente son "un intento". Un análisis
-  // sin `grupo_id` forma un grupo de uno, sin cambiar nada de lo que había.
+  // Varios análisis lanzados de una vez comparten `grupo_id` y se enseñan
+  // como una sola ficha -- cada uno sigue siendo su propia solicitud en cola
+  // (su propio estado, su propio error), pero visualmente son "un intento".
+  // Un análisis sin `grupo_id` forma un grupo de uno, sin cambiar nada de lo
+  // que había.
   const grupos: { id: number; miembros: Analysis[] }[] = [];
   const indice = new Map<string, number>();
   for (const a of analyses) {
@@ -42,8 +42,8 @@ export function AttemptsRail({
 
   const menuDe = (miembros: Analysis[]): MenuEntry[] => {
     const a = miembros[0];
-    // Un análisis de agentes (o de upscale) puede terminar "hecho" sin
-    // coordenadas -- esos modos no geolocalizan. Copiarlas sin comprobarlo
+    // Un análisis de upscale puede terminar "hecho" sin
+    // coordenadas -- ese modo no geolocaliza. Copiarlas sin comprobarlo
     // reventaba con `null.toFixed` en cuanto se pulsaba el menú.
     const hecho = miembros.length === 1 && a.state === "hecho" && a.result_lat != null && a.result_lng != null;
     // Igual que el DELETE que ya arbitra el backend: lo que está corriendo

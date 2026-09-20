@@ -19,7 +19,7 @@ export interface MediaFolder { id: number; nombre: string; created_at: number }
 /** Un análisis cuyo sha256 guardado ya no coincide con el actual de la imagen —
  *  "Sobrescribir" desde el editor cambió los bytes después de que este análisis corriera. */
 export interface AnalisisDesincronizado {
-  analysis_id: number; model: string; agente: string | null; created_at: number;
+  analysis_id: number; model: string; created_at: number;
 }
 
 /** Los tres interruptores del spec 2026-09-10 más `progreso_detallado_activo`.
@@ -34,15 +34,11 @@ export interface FeatureFlags {
 /** `GET/PATCH /v1/admin/rendimiento` -- `crates/lumid/src/routes/rendimiento.rs`. */
 export interface RendimientoSettings {
   verificacion_persistente: boolean; verificacion_persistente_desc: string;
-  agentes_persistente: boolean; agentes_persistente_desc: string;
   limpieza_por_presion: boolean; limpieza_por_presion_desc: string;
-  agentes_timeout_s: number;
 }
 export interface PatchRendimientoReq {
   verificacion_persistente?: boolean;
-  agentes_persistente?: boolean;
   limpieza_por_presion?: boolean;
-  agentes_timeout_s?: number;
 }
 
 export interface Capability { id: string; label: string; state: "on" | "partial" | "off"; reason: string | null }
@@ -247,11 +243,6 @@ export interface Resolucion {
   recuperacion_total: number;
   geometricos_instalados: number;
   geometricos_total: number;
-  /** Motores que los agentes de este nivel necesitan (uno por clase, no por
-   *  agente). `agentes_total === 0` es normal en niveles sin agentes con
-   *  motor propio, no una carencia. */
-  agentes_instalados: number;
-  agentes_total: number;
   faltan: string[];
 }
 export interface NivelEstado {
@@ -382,36 +373,11 @@ export interface Hipotesis {
    *  tocó, no que la aprobaran. */
   motivo_agente: string | null;
 }
-/** Un veredicto de agente tal como se guardó. `etiqueta` vale `"abstiene"`
- *  cuando el agente corrió y no vio señal suficiente. */
-export interface DichoDeAgente {
-  agente: string; nombre: string; etiqueta: string;
-  /** `null` en modo transcripción -- no hay conjunto cerrado sobre el que
-   *  normalizar (spec 2026-09-17 §5), nunca un número inventado. */
-  confianza: number | null;
-  detalle: string;
-  /** La etiqueta que el motor realmente eligió, aunque no llegara al umbral
-   *  y `etiqueta` valga `"abstiene"` -- para mostrar "lo más parecido".
-   *  Igual a `etiqueta` cuando no se abstiene; vacía en análisis viejos. */
-  etiqueta_real: string;
-  /** La distribución completa, ordenada, cuando el motor la calcula de
-   *  verdad. Vacía en modo transcripción. */
-  alternativas: [string, number][];
-  /** Cuánto sube la imagen la evidencia de la opción ganadora frente a no
-   *  verla (spec 2026-09-17 §4) -- una lectura aparte de `confianza`, no la
-   *  misma cifra con otro nombre. `null` en modo transcripción. */
-  apoyo_visual: number | null;
-  /** El texto/JSON exacto que devolvió el motor, solo con `modo_calibracion`
-   *  activo en el momento del análisis. */
-  respuesta_cruda: string | null;
-}
 export interface Analysis {
   id: number; case_id: number; model: string;
-  /** El agente pedido, solo con `model === "agentes"`. */
-  agente: string | null;
-  /** Mismo valor en cada análisis lanzado junto en una selección múltiple de
-   *  agentes -- el cliente los agrupa como un solo intento en la barra
-   *  lateral. `null` fuera de ese caso. */
+  /** Mismo valor en cada análisis lanzado junto en una misma tanda -- el
+   *  cliente los agrupa como un solo intento en la barra lateral. `null`
+   *  fuera de ese caso. */
   grupo_id: string | null;
   state: "pendiente" | "en_curso" | "hecho" | "error";
   error: string | null;
@@ -431,22 +397,7 @@ export interface Analysis {
   /** El nivel que realmente corrió si hubo descenso por capas que faltaban.
    *  `null` significa «el que se pidió». */
   nivel_efectivo: string | null;
-  /** Lo que los agentes dijeron de la imagen. Vacía si no corrió ninguno. */
-  agentes: DichoDeAgente[];
   image_ids: number[]; created_at: number; finished_at: number | null;
-}
-/** Un agente del registro, con su estado de instalación en ESTE servidor —
- *  ver `GET /v1/agentes` (`crates/lumid/src/routes/agentes.rs`). */
-export interface AgenteVista {
-  id: string; nombre: string;
-  /** Nombre a resolver contra el set de SVG dibujados a mano de
-   *  `AgenteIcono.tsx`. */
-  icono: string;
-  modo: "eleccion" | "transcripcion";
-  instalado: boolean;
-  /** El nombre del motor que hace falta descargar. `null` cuando `instalado`
-   *  es `true`. */
-  requiere: string | null;
 }
 /** Un verificador del registro, para el picker de calibración -- ver
  *  `GET /v1/admin/verificadores` (`crates/lumid/src/routes/calibracion.rs`). */

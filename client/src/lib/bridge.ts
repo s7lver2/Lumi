@@ -58,8 +58,8 @@ export async function uploadCaseImageBytes(caseId: number, dataBase64: string, f
 
 /** Botón "Mejorar calidad": sube la imagen ya editada y la encola como un
  *  trabajo real de la cola existente. Devuelve el `Analysis` (`pendiente`) —
- *  el llamador sigue su estado igual que `AgentResultPopup` sigue el de un
- *  agente, por el mismo evento `queue-change`. */
+ *  el llamador sigue su estado por el evento `queue-change`, igual que
+ *  cualquier otro análisis. */
 export async function upscaleImageBytes(
   caseId: number, dataBase64: string, fileName: string, factor: 1 | 2 | 4,
 ): Promise<Analysis> {
@@ -169,7 +169,6 @@ export interface ExportInformeOpts {
   portada_estadisticas: boolean;
   exif_por_imagen: boolean;
   hipotesis_geolocalizacion: boolean;
-  veredictos_agentes: boolean;
   firmado_por: string;
   integridad_sha256: boolean;
   /** `null`/ausente = todas las imágenes del caso -- mismo criterio que el

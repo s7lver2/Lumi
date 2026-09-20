@@ -552,8 +552,7 @@ export default function App() {
           return mode === "case" && case_ ? (
             <CaseView project={project} case_={case_} rail={rail} drawer={cajon}
               drawerId={drawer} setDrawer={setDrawer}
-              exportOpen={exportOpen} onCloseExport={() => setExportOpen(false)}
-              onIrAModelos={() => { leaveProject(); setMode("admin"); }} />
+              exportOpen={exportOpen} onCloseExport={() => setExportOpen(false)} />
           ) : (
             <ProjectView project={project} rail={rail} drawer={cajon}
               onOpenCase={(c) => { useWorkspace.getState().setCase(c); setMode("case"); }} />

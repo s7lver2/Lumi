@@ -28,12 +28,12 @@ export function MediaDrawer({
   open: boolean;
   onClose: () => void;
   /** Click izquierdo en una sola imagen SIN selección activa: abre el mismo
-   *  popup de elegir modelo (mini/pro/agentes) que se usa para trabajar con
-   *  una imagen recién subida -- no el selector de agentes directo. */
+   *  popup de elegir modelo (mini/pro) que se usa para trabajar con una
+   *  imagen recién subida. */
   onSeleccionar: (imagen: Image) => void;
   /** Botón "Analizar", con una o varias seleccionadas (una petición por
    *  imagen, reutilizando el flujo que ya existe) -- lo decide `CaseView`,
-   *  que es quien sabe abrir `AgentPickerPopup`/lanzar. */
+   *  que es quien sabe lanzar. */
   onAnalizar: (imagenes: Image[]) => void;
   /** Tras mover/borrar/sobrescribir/copiar: `CaseView` recarga su lista. */
   onCambio: () => void;
