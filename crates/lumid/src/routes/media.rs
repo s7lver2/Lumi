@@ -199,7 +199,7 @@ pub async fn analisis_desincronizados(
     let c = app.store.conn();
     let mut q = c
         .prepare(
-            "SELECT a.id, a.model, a.agente, a.created_at
+            "SELECT a.id, a.model, a.created_at
                FROM analyses a
                JOIN analysis_images ai ON ai.analysis_id = a.id
                JOIN images i ON i.id = ai.image_id
@@ -213,8 +213,7 @@ pub async fn analisis_desincronizados(
             Ok(AnalisisDesincronizado {
                 analysis_id: r.get(0)?,
                 model: r.get(1)?,
-                agente: r.get(2)?,
-                created_at: r.get(3)?,
+                created_at: r.get(2)?,
             })
         })
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?

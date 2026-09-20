@@ -15,7 +15,7 @@ use lumi_proto::api::{Analysis, AnalysisReq};
 
 pub(crate) const COLS: &str = "id, case_id, model, state, error, result_lat, result_lng,
                     result_radius_m, result_confidence, created_at, finished_at, nivel_efectivo,
-                    result_inliers, result_verificador, result_imagen_id, agente, grupo_id, falta_modelo";
+                    result_inliers, result_verificador, result_imagen_id, grupo_id, falta_modelo";
 
 fn image_ids(c: &rusqlite::Connection, analysis_id: i64) -> Vec<i64> {
     let Ok(mut q) = c.prepare("SELECT image_id FROM analysis_images WHERE analysis_id = ?1") else {
@@ -31,11 +31,10 @@ pub(crate) fn row_to_analysis(r: &rusqlite::Row) -> rusqlite::Result<Analysis> {
         id: r.get(0)?,
         case_id: r.get(1)?,
         model: r.get(2)?,
-        agente: r.get(15)?,
-        grupo_id: r.get(16)?,
+        grupo_id: r.get(15)?,
         state: r.get(3)?,
         error: r.get(4)?,
-        falta_modelo: r.get(17)?,
+        falta_modelo: r.get(16)?,
         result_lat: r.get(5)?,
         result_lng: r.get(6)?,
         result_radius_m: r.get(7)?,
@@ -43,7 +42,6 @@ pub(crate) fn row_to_analysis(r: &rusqlite::Row) -> rusqlite::Result<Analysis> {
         image_ids: vec![],
         hypotheses: vec![],
         nivel_efectivo: r.get(11)?,
-        agentes: vec![],
         created_at: r.get(9)?,
         finished_at: r.get(10)?,
         result_inliers: r.get(12)?,
@@ -56,7 +54,7 @@ pub(crate) fn row_to_analysis(r: &rusqlite::Row) -> rusqlite::Result<Analysis> {
 /// hay ninguna: el cliente no debería tener dos casos donde hay uno.
 fn hypotheses(c: &rusqlite::Connection, analysis_id: i64) -> Vec<lumi_proto::worker::Hipotesis> {
     let Ok(mut q) = c.prepare(
-        "SELECT lat, lng, radio_m, peso, indice, autor, inliers, verificador, motivo_agente, imagen_id
+        "SELECT lat, lng, radio_m, peso, indice, autor, inliers, verificador, imagen_id
            FROM analysis_hypotheses WHERE analysis_id = ?1 ORDER BY orden",
     ) else {
         return vec![];
@@ -71,15 +69,15 @@ fn hypotheses(c: &rusqlite::Connection, analysis_id: i64) -> Vec<lumi_proto::wor
             autor: r.get(5)?,
             inliers: r.get::<_, Option<i64>>(6)?.map(|n| n as u32),
             verificador: r.get(7)?,
-            motivo_agente: r.get(8)?,
-            imagen_id: r.get(9)?,
+            motivo_agente: None,
+            imagen_id: r.get(8)?,
         })
     })
     .map(|it| it.flatten().collect())
     .unwrap_or_default()
 }
 
-/// Igual que `image_ids`/`hypotheses`/`agentes`, pero para TODOS los análisis
+/// Igual que `image_ids`/`hypotheses`, pero para TODOS los análisis
 /// de un caso a la vez -- `list()` los llamaba una vez por fila (3 consultas
 /// y 3 `prepare()` por análisis; un caso de 40 análisis eran 121 consultas
 /// con el mutex único del store agarrado todo el rato). Un `JOIN` contra
@@ -109,7 +107,7 @@ pub(crate) fn hypotheses_por_caso(
 ) -> std::collections::HashMap<i64, Vec<lumi_proto::worker::Hipotesis>> {
     let Ok(mut q) = c.prepare(
         "SELECT h.analysis_id, h.lat, h.lng, h.radio_m, h.peso, h.indice, h.autor,
-                h.inliers, h.verificador, h.motivo_agente, h.imagen_id
+                h.inliers, h.verificador, h.imagen_id
            FROM analysis_hypotheses h JOIN analyses a ON a.id = h.analysis_id
           WHERE a.case_id = ?1
           ORDER BY h.analysis_id, h.orden",
@@ -128,8 +126,8 @@ pub(crate) fn hypotheses_por_caso(
                 autor: r.get(6)?,
                 inliers: r.get::<_, Option<i64>>(7)?.map(|n| n as u32),
                 verificador: r.get(8)?,
-                motivo_agente: r.get(9)?,
-                imagen_id: r.get(10)?,
+                motivo_agente: None,
+                imagen_id: r.get(9)?,
             },
         ))
     }) else {
@@ -140,77 +138,6 @@ pub(crate) fn hypotheses_por_caso(
         mapa.entry(analysis_id).or_default().push(hip);
     }
     mapa
-}
-
-/// `alternativas` viaja como JSON en la fila (ver `store::migrate`); se
-/// de-serializa aquí y no en el llamador, así que un `NULL` o un JSON
-/// corrupto se convierten en «vacío» en un solo sitio, en vez de un
-/// `Result` que cada llamador tendría que decidir cómo tragarse.
-#[allow(clippy::too_many_arguments)]
-fn agente_de_fila(
-    agente: String, nombre: String, etiqueta: String, confianza: Option<f64>, detalle: String,
-    etiqueta_real: String, alternativas: Option<String>, apoyo_visual: Option<f64>,
-    respuesta_cruda: Option<String>,
-) -> lumi_proto::api::DichoDeAgente {
-    lumi_proto::api::DichoDeAgente {
-        agente,
-        nombre,
-        etiqueta,
-        confianza,
-        detalle,
-        etiqueta_real,
-        alternativas: alternativas
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default(),
-        apoyo_visual,
-        respuesta_cruda,
-    }
-}
-
-pub(crate) fn agentes_por_caso(
-    c: &rusqlite::Connection, case_id: i64,
-) -> std::collections::HashMap<i64, Vec<lumi_proto::api::DichoDeAgente>> {
-    let Ok(mut q) = c.prepare(
-        "SELECT ag.analysis_id, ag.agente, ag.nombre, ag.etiqueta, ag.confianza, ag.detalle,
-                ag.etiqueta_real, ag.alternativas, ag.apoyo_visual, ag.respuesta_cruda
-           FROM analysis_agents ag JOIN analyses a ON a.id = ag.analysis_id
-          WHERE a.case_id = ?1
-          ORDER BY ag.analysis_id, ag.agente",
-    ) else {
-        return Default::default();
-    };
-    let Ok(filas) = q.query_map([case_id], |r| {
-        Ok((
-            r.get::<_, i64>(0)?,
-            agente_de_fila(
-                r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?,
-            ),
-        ))
-    }) else {
-        return Default::default();
-    };
-    let mut mapa: std::collections::HashMap<i64, Vec<lumi_proto::api::DichoDeAgente>> = Default::default();
-    for (analysis_id, ag) in filas.flatten() {
-        mapa.entry(analysis_id).or_default().push(ag);
-    }
-    mapa
-}
-
-fn agentes(c: &rusqlite::Connection, analysis_id: i64) -> Vec<lumi_proto::api::DichoDeAgente> {
-    let Ok(mut q) = c.prepare(
-        "SELECT agente, nombre, etiqueta, confianza, detalle, etiqueta_real, alternativas, apoyo_visual, respuesta_cruda
-           FROM analysis_agents WHERE analysis_id = ?1 ORDER BY agente",
-    ) else {
-        return Vec::new();
-    };
-    let Ok(filas) = q.query_map([analysis_id], |r| {
-        Ok(agente_de_fila(
-            r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?,
-        ))
-    }) else {
-        return Vec::new();
-    };
-    filas.flatten().collect()
 }
 
 pub async fn list(
@@ -235,11 +162,9 @@ pub async fn list(
     // del store agarrado todo el rato) a 4 en total.
     let mut imagenes = image_ids_por_caso(&c, case_id);
     let mut hipotesis = hypotheses_por_caso(&c, case_id);
-    let mut dichos = agentes_por_caso(&c, case_id);
     for a in &mut rows {
         a.image_ids = imagenes.remove(&a.id).unwrap_or_default();
         a.hypotheses = hipotesis.remove(&a.id).unwrap_or_default();
-        a.agentes = dichos.remove(&a.id).unwrap_or_default();
     }
     Ok(Json(rows))
 }
@@ -262,7 +187,6 @@ pub async fn get_one(
         .map_err(|_| missing())?;
     a.image_ids = image_ids(&c, id);
     a.hypotheses = hypotheses(&c, id);
-    a.agentes = agentes(&c, id);
     Ok(Json(a))
 }
 
@@ -277,23 +201,6 @@ pub async fn create(
     if req.image_ids.is_empty() {
         return Err(err(StatusCode::BAD_REQUEST, "hay que elegir al menos una imagen"));
     }
-    // Cada petición sigue siendo de UN agente -- elegir varios en el
-    // cliente lanza una petición por agente (ver `AnalysisReq::grupo_id`),
-    // nunca una lista aquí. Se comprueba aquí, no solo en el cliente: un
-    // `POST` a mano con `agente: null` no debería colarse hasta la cola
-    // para fallar mucho más tarde con un mensaje genérico.
-    if req.model == "agentes" {
-        let Some(agente_id) = req.agente.as_deref().filter(|s| !s.is_empty()) else {
-            return Err(err(StatusCode::BAD_REQUEST, "hay que elegir un agente"));
-        };
-        let conocido = app.queue.agentes.lock().unwrap().iter().any(|a| a.id == agente_id);
-        if !conocido {
-            return Err(err(StatusCode::BAD_REQUEST, "ese agente no existe en el registro"));
-        }
-    } else if req.agente.is_some() {
-        return Err(err(StatusCode::BAD_REQUEST, "«agente» solo se acepta con el modelo agentes"));
-    }
-
     // Las imágenes tienen que ser de ESTE caso. Sin esto, conocer un id de
     // imagen ajena bastaría para arrastrarla a un análisis propio.
     {
@@ -457,11 +364,10 @@ pub async fn remove(
     }
     let c = app.store.conn();
     let _ = c.execute("DELETE FROM analysis_images WHERE analysis_id = ?1", [id]);
-    // Un huérfano en analysis_hypotheses/analysis_agents no rompe nada hoy,
-    // pero es basura que crece: se borra en cascada con el resto de lo que
-    // cuelga del análisis. Antes solo se limpiaba hipótesis y no agentes.
+    // Un huérfano en analysis_hypotheses no rompe nada hoy, pero es basura
+    // que crece: se borra en cascada con el resto de lo que cuelga del
+    // análisis.
     let _ = c.execute("DELETE FROM analysis_hypotheses WHERE analysis_id = ?1", [id]);
-    let _ = c.execute("DELETE FROM analysis_agents WHERE analysis_id = ?1", [id]);
     c.execute("DELETE FROM analyses WHERE id = ?1", [id])
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
     tracing::info!("análisis #{id} cancelado (estaba {state})");

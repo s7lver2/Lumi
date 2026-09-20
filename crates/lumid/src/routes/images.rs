@@ -358,7 +358,7 @@ pub async fn upload(
 /// El editor pre-subida (spec 2026-09-10 §2), botón "Mejorar calidad": sube
 /// la imagen YA recortada/con blur aplicado y la encola como un trabajo
 /// normal del sistema de colas existente (subsistema 4) -- exactamente el
-/// mismo camino que `POST /v1/cases/:id/analyses` con `model: "agentes"`
+/// mismo camino que `POST /v1/cases/:id/analyses` con `model: "upscale"`
 /// (ver `queue::Queue::repartir_ahora`, rama `modelo == "upscale"`), no una
 /// cola nueva.
 ///
@@ -436,8 +436,8 @@ pub async fn upscale(
         let image_id = c.last_insert_rowid();
 
         c.execute(
-            "INSERT INTO analyses (case_id, requested_by, model, agente, state, created_at, via_api, upscale_factor)
-             VALUES (?1, ?2, 'upscale', NULL, 'pendiente', ?3, 0, ?4)",
+            "INSERT INTO analyses (case_id, requested_by, model, state, created_at, via_api, upscale_factor)
+             VALUES (?1, ?2, 'upscale', 'pendiente', ?3, 0, ?4)",
             rusqlite::params![case_id, uid, t, factor],
         )
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
@@ -462,7 +462,6 @@ pub async fn upscale(
         id: analysis_id,
         case_id,
         model: "upscale".into(),
-        agente: None,
         grupo_id: None,
         state: "pendiente".into(),
         falta_modelo: None,
@@ -477,7 +476,6 @@ pub async fn upscale(
         image_ids: vec![image_id],
         hypotheses: vec![],
         nivel_efectivo: None,
-        agentes: vec![],
         created_at: t,
         finished_at: None,
     }))

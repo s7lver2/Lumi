@@ -902,7 +902,6 @@ pub struct MoverImagenReq {
 pub struct AnalisisDesincronizado {
     pub analysis_id: i64,
     pub model: String,
-    pub agente: Option<String>,
     pub created_at: i64,
 }
 

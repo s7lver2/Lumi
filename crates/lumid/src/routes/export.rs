@@ -1,6 +1,6 @@
 //! Exportar el caso entero a un informe forense en PDF: por cada imagen, su
 //! miniatura, el GPS declarado por la cámara (si lo hay) y cada análisis que
-//! se le ha hecho -- geolocalización o agentes -- resumido en texto. Pensado
+//! se le ha hecho -- geolocalización -- resumido en texto. Pensado
 //! para entregarse a un tercero como evidencia, así que un análisis sin
 //! terminar o que falló se dice tal cual, nunca se omite.
 //!
@@ -12,7 +12,7 @@
 //! directorio temporal propio de esta petición, nunca un `unwrap` sobre su
 //! resultado.
 
-use crate::routes::analyses::{agentes_por_caso, hypotheses_por_caso, image_ids_por_caso, row_to_analysis};
+use crate::routes::analyses::{hypotheses_por_caso, image_ids_por_caso, row_to_analysis};
 use crate::routes::cases::guard_case;
 use crate::routes::images::{dir_for, row_to_image};
 use crate::routes::projects::{err, Fail};
@@ -67,9 +67,9 @@ pub async fn export_pdf(
         images.retain(|img| incluidos.contains(&img.id));
     }
 
-    // Los análisis del caso entero, con sus imágenes/hipótesis/agentes ya
-    // resueltos -- mismo patrón de `analyses::list` (3 consultas para el
-    // caso completo, no una por análisis).
+    // Los análisis del caso entero, con sus imágenes/hipótesis ya resueltas
+    // -- mismo patrón de `analyses::list` (3 consultas para el caso
+    // completo, no una por análisis).
     let analyses: Vec<Analysis> = {
         let c = app.store.conn();
         let cols = crate::routes::analyses::COLS;
@@ -83,11 +83,9 @@ pub async fn export_pdf(
             .collect();
         let mut imagenes = image_ids_por_caso(&c, case_id);
         let mut hipotesis = hypotheses_por_caso(&c, case_id);
-        let mut dichos = agentes_por_caso(&c, case_id);
         for a in &mut rows {
             a.image_ids = imagenes.remove(&a.id).unwrap_or_default();
             a.hypotheses = hipotesis.remove(&a.id).unwrap_or_default();
-            a.agentes = dichos.remove(&a.id).unwrap_or_default();
         }
         rows
     };
@@ -232,20 +230,15 @@ struct Estadisticas {
     /// el comentario donde vivía `PuntoFranjaCtx` sobre por qué `peso` no
     /// se convierte en porcentaje.
     peso_medio_txt: Option<String>,
-    agentes_total: usize,
-    agentes_respondieron: usize,
-    agentes_abstuvieron: usize,
-    /// Los cuatro números grandes de la portada del tema oscuro -- se
+    /// Los tres números grandes de la portada del tema oscuro -- se
     /// calculan por imagen (ver `resumen_oscuro`), no por análisis, porque
     /// "imágenes con hipótesis" e "imágenes sin resolver" son conteos de
     /// fotos, no de filas de la tabla `analyses`. El tema claro no los usa,
     /// pero calcularlos siempre es más simple que duplicar
     /// `calcular_estadisticas` según el tema (ver comentario en esa función).
     n_con_hipotesis: usize,
-    n_con_agente: usize,
     n_sin_resolver: usize,
     n_errores: usize,
-    n_abstenciones: usize,
 }
 
 #[derive(Serialize, Clone)]
@@ -277,23 +270,21 @@ struct ImagenCtx {
     exif_lineas: Vec<Linea>,
 
     // ---- Campos exclusivos del tema oscuro (ver `resumen_oscuro`) ----
-    /// `true` cuando el análisis de geolocalización o el de agentes de esta
-    /// imagen terminó en error, o el de agentes terminó en abstención total
-    /// (todos sus veredictos con etiqueta "abstiene"). Es un hecho real del
-    /// caso, no depende de qué secciones estén activadas en este informe --
-    /// mismo criterio que `calcular_estadisticas` para el resto de cifras de
-    /// portada.
+    /// `true` cuando el análisis de geolocalización de esta imagen terminó en
+    /// error. Es un hecho real del caso, no depende de qué secciones estén
+    /// activadas en este informe -- mismo criterio que `calcular_estadisticas`
+    /// para el resto de cifras de portada.
     sin_resuelto: bool,
     /// Motivo real citado en el aviso ámbar que sustituye a los bloques de
     /// resultado cuando `sin_resuelto` -- nunca un texto inventado: el
     /// `error` registrado, o el genérico ya usado en el cliente cuando no
     /// hay uno.
     motivo_sin_resuelto: Option<String>,
-    /// `sin_resuelto` Y además al menos una de las dos secciones de
-    /// resultado (`hipotesis_geolocalizacion`/`veredictos_agentes`) está
-    /// activada en este informe -- si el investigador apagó las dos, no
-    /// hay ningún bloque de resultado que sustituir, así que tampoco se
-    /// imprime el aviso ámbar (no estaría reemplazando nada).
+    /// `sin_resuelto` Y además la sección de resultado
+    /// (`hipotesis_geolocalizacion`) está activada en este informe -- si el
+    /// investigador la apagó, no hay ningún bloque de resultado que
+    /// sustituir, así que tampoco se imprime el aviso ámbar (no estaría
+    /// reemplazando nada).
     mostrar_aviso_sin_resuelto: bool,
     /// Peso de la hipótesis principal, ya formateado ("4.2×") -- el número
     /// grande junto a la miniatura. `None` cuando no hay hipótesis, la
@@ -319,8 +310,6 @@ struct ImagenCtx {
     /// Alternativas y respaldo geométrico de la hipótesis principal -- todo
     /// lo que no es "el número grande" ni la coordenada/radio de cabecera.
     hipotesis_extra: Vec<Linea>,
-    /// Nombre, veredicto y detalle del agente.
-    agente_lineas: Vec<Linea>,
 }
 
 /// Contorno de país + hipótesis, ya proyectados al espacio de dibujo del
@@ -406,14 +395,15 @@ fn lineas_exif(imagen: &Image) -> Vec<Linea> {
 }
 
 // ponytail / decisión de diseño no especificada literalmente en el spec:
-// antes de este rediseño, `lineas_analisis`/`lineas_geolocalizacion`/
-// `lineas_agentes` alimentaban un bloque "Análisis" tabular EXCLUSIVO del
-// tema claro, mientras que `resumen_oscuro` (debajo) calculaba lo mismo por
-// separado para el tema oscuro -- dos caminos de datos para la misma
-// pregunta. El spec (§6a) dice que el tema claro pasa a usar "los mismos
-// bloques, en el mismo orden" que el oscuro (EXIF/Integridad/Hipótesis/
-// Agente), así que las tres funciones de arriba quedan sin ningún llamador y
-// se retiran aquí -- los dos temas comparten ahora `ResumenOscuro` como
+// antes de este rediseño, `lineas_analisis`/`lineas_geolocalizacion` (más una
+// tercera función equivalente para el subsistema retirado en Darkroom fase 0)
+// alimentaban un bloque "Análisis" tabular EXCLUSIVO del tema claro, mientras
+// que `resumen_oscuro` (debajo) calculaba lo mismo por separado para el tema
+// oscuro -- dos caminos de datos para la misma pregunta. El spec (§6a) dice
+// que el tema claro pasa a usar "los mismos bloques, en el mismo orden" que
+// el oscuro (EXIF/Integridad/Hipótesis), así que las tres funciones de arriba
+// quedan sin ningún llamador y se retiran aquí -- los dos temas comparten
+// ahora `ResumenOscuro` como
 // única fuente de la ficha de resultado. Efecto secundario aceptado: el
 // texto expl\u{ed}cito de "pendiente"/"en curso" que ese camino imprim\u{ed}a para el
 // tema claro desaparece -- el tema oscuro ya no lo mostraba (un an\u{e1}lisis sin
@@ -425,17 +415,15 @@ fn lineas_exif(imagen: &Image) -> Vec<Linea> {
 // mantenerlo en la struct sin consumidor (se elimina el gr\u{a}fico de barras),
 // as\u{ed} que no se ha tocado.
 
-/// Lo que necesita la ficha por imagen (y los cuatro números de portada de
-/// la portada oscura) de los DOS temas: una sola hipótesis principal, un
-/// solo veredicto de agente, y si ambos -- o alguno -- terminaron en error o
-/// abstención total, para poder sustituir sus bloques por un único aviso en
-/// vez de dejarlos vacíos o a medias.
+/// Lo que necesita la ficha por imagen (y los tres números de portada de la
+/// portada oscura) de los DOS temas: una sola hipótesis principal, y si
+/// terminó en error, para poder sustituir su bloque por un único aviso en
+/// vez de dejarlo vacío o a medias.
 struct ResumenOscuro {
     sin_resuelto: bool,
     es_error: bool,
     motivo_sin_resuelto: Option<String>,
     con_hipotesis: bool,
-    con_agente: bool,
     peso_txt: Option<String>,
     coord_txt: Option<String>,
     radio_txt: Option<String>,
@@ -443,38 +431,24 @@ struct ResumenOscuro {
     lng: Option<f64>,
     radio_km: Option<f64>,
     hipotesis_extra: Vec<Linea>,
-    agente_lineas: Vec<Linea>,
 }
 
 fn resumen_oscuro(analyses: &[Analysis], req: &ExportInformeReq) -> ResumenOscuro {
-    let geo = analyses.iter().find(|a| a.model != "agentes");
-    let ag = analyses.iter().find(|a| a.model == "agentes");
+    let geo = analyses.first();
 
     let con_hipotesis = geo.map(|a| a.result_lat.is_some() && a.result_lng.is_some()).unwrap_or(false);
-    let con_agente = ag.map(|a| a.agentes.iter().any(|d| d.etiqueta != "abstiene")).unwrap_or(false);
 
     let geo_error = geo.map(|a| a.state == "error").unwrap_or(false);
-    let ag_error = ag.map(|a| a.state == "error").unwrap_or(false);
-    // "Abstención total": el análisis de agentes SÍ contestó, pero ninguno
-    // de sus veredictos llegó a un umbral -- distinto de que no contestara a
-    // tiempo (`ag_error`/dichos vacío), que ya cuenta como error arriba.
-    let ag_abstencion_total =
-        ag.map(|a| !a.agentes.is_empty() && a.agentes.iter().all(|d| d.etiqueta == "abstiene")).unwrap_or(false);
 
     let (sin_resuelto, es_error, motivo_sin_resuelto) = if geo_error {
         (true, true, Some(geo.unwrap().error.clone().unwrap_or_else(|| "sin motivo registrado".into())))
-    } else if ag_error {
-        (true, true, Some(ag.unwrap().error.clone().unwrap_or_else(|| "El agente no contest\u{f3} a tiempo.".into())))
-    } else if ag_abstencion_total {
-        (true, false, Some("El agente se abstuvo -- no lleg\u{f3} a su umbral de confianza.".into()))
     } else {
         (false, false, None)
     };
 
-    // Los campos que de verdad se imprimen sí respetan los interruptores del
-    // informe (`hipotesis_geolocalizacion`/`veredictos_agentes`) y quedan en
-    // blanco cuando `sin_resuelto` -- ese caso lo cubre el aviso ámbar, no
-    // estos campos.
+    // Los campos que de verdad se imprimen sí respetan el interruptor del
+    // informe (`hipotesis_geolocalizacion`) y quedan en blanco cuando
+    // `sin_resuelto` -- ese caso lo cubre el aviso ámbar, no estos campos.
     let mut peso_txt = None;
     let mut coord_txt = None;
     let mut radio_txt = None;
@@ -517,43 +491,11 @@ fn resumen_oscuro(analyses: &[Analysis], req: &ExportInformeReq) -> ResumenOscur
         }
     }
 
-    let mut agente_lineas = Vec::new();
-    if req.veredictos_agentes && !sin_resuelto {
-        if let Some(a) = ag {
-            if !a.agentes.is_empty() {
-                let dicho =
-                    a.agentes.iter().find(|d| Some(d.agente.as_str()) == a.agente.as_deref()).unwrap_or(&a.agentes[0]);
-                // `nombre` puede llegar vacío si el agente se quitó/renombró
-                // en el registro después de que este veredicto se guardara --
-                // una cabecera vacía es exactamente el `\\` sin línea que
-                // precede que produce "There's no line here to end" en
-                // tectonic (mismo síntoma que el `\normalfont{}` de más abajo,
-                // otra causa). Cae al id, que siempre existe.
-                let nombre_mostrado = if dicho.nombre.trim().is_empty() { dicho.agente.clone() } else { dicho.nombre.clone() };
-                agente_lineas.push(cabecera(nombre_mostrado));
-                // `confianza` es `None` en modo transcripción (spec
-                // 2026-09-17 §5, sin número inventado) -- se omite la cifra
-                // en vez de imprimir un "None". Tampoco está acotada cuando
-                // sí existe: un motor que devuelva 1,5 se comporta como uno
-                // muy seguro. Mismo "×" que el resto en vez de un "%" que
-                // puede pasar de 100.
-                agente_lineas.push(cuerpo(match dicho.confianza {
-                    Some(c) => format!("Veredicto: {} ({:.1}\u{d7})", dicho.etiqueta, c),
-                    None => format!("Veredicto: {}", dicho.etiqueta),
-                }));
-                if !dicho.detalle.is_empty() {
-                    agente_lineas.push(cuerpo(format!("Detalle: {}", dicho.detalle)));
-                }
-            }
-        }
-    }
-
     ResumenOscuro {
         sin_resuelto,
         es_error,
         motivo_sin_resuelto,
         con_hipotesis,
-        con_agente,
         peso_txt,
         coord_txt,
         radio_txt,
@@ -561,7 +503,6 @@ fn resumen_oscuro(analyses: &[Analysis], req: &ExportInformeReq) -> ResumenOscur
         lng: lng_out,
         radio_km,
         hipotesis_extra,
-        agente_lineas,
     }
 }
 
@@ -570,32 +511,21 @@ fn resumen_oscuro(analyses: &[Analysis], req: &ExportInformeReq) -> ResumenOscur
 /// interruptores del popup. Cada estadística que no tiene datos de verdad se
 /// omite entera (`Option`/vacío), nunca se dibuja un cero inventado.
 ///
-/// `resueltos`: los cuatro números de portada del tema oscuro
-/// (con_hipotesis/con_agente/sin_resolver/errores/abstenciones), ya
-/// agregados por imagen en `generar_pdf` -- se reciben calculados en vez de
-/// recalcularse aquí porque esta función trabaja sobre la lista plana de
-/// `Analysis` del caso, no agrupada por imagen (ver `ResumenOscuro`).
+/// `resueltos`: los tres números de portada del tema oscuro
+/// (con_hipotesis/sin_resolver/errores), ya agregados por imagen en
+/// `generar_pdf` -- se reciben calculados en vez de recalcularse aquí porque
+/// esta función trabaja sobre la lista plana de `Analysis` del caso, no
+/// agrupada por imagen (ver `ResumenOscuro`).
 fn calcular_estadisticas(
-    case_created_at: i64, analyses: &[Analysis], resueltos: (usize, usize, usize, usize, usize),
+    case_created_at: i64, analyses: &[Analysis], resueltos: (usize, usize, usize),
 ) -> Estadisticas {
     let mut por_modelo: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     let mut confianzas: Vec<f64> = Vec::new();
-    let (mut respondieron, mut abstuvieron) = (0usize, 0usize);
     for a in analyses {
         *por_modelo.entry(a.model.clone()).or_default() += 1;
-        if a.model != "agentes" {
-            if let Some(c) = a.result_confidence {
-                if a.result_lat.is_some() && a.result_lng.is_some() {
-                    confianzas.push(c as f64);
-                }
-            }
-        } else {
-            for d in &a.agentes {
-                if d.etiqueta == "abstiene" {
-                    abstuvieron += 1;
-                } else {
-                    respondieron += 1;
-                }
+        if let Some(c) = a.result_confidence {
+            if a.result_lat.is_some() && a.result_lng.is_some() {
+                confianzas.push(c as f64);
             }
         }
     }
@@ -606,25 +536,20 @@ fn calcular_estadisticas(
     } else {
         Some(format!("{:.1}\u{d7}", confianzas.iter().sum::<f64>() / confianzas.len() as f64))
     };
-    let (n_con_hipotesis, n_con_agente, n_sin_resolver, n_errores, n_abstenciones) = resueltos;
+    let (n_con_hipotesis, n_sin_resolver, n_errores) = resueltos;
     Estadisticas {
         creado_en: fecha_legible(case_created_at),
         por_modelo: por_modelo.into_iter().map(|(modelo, n)| ModeloCount { modelo, n }).collect(),
         peso_medio_txt,
-        agentes_total: respondieron + abstuvieron,
-        agentes_respondieron: respondieron,
-        agentes_abstuvieron: abstuvieron,
         n_con_hipotesis,
-        n_con_agente,
         n_sin_resolver,
         n_errores,
-        n_abstenciones,
     }
 }
 
 /// Escapa lo que va dentro de comandos LaTeX -- registrado como filtro `tex`
 /// de Tera y usado en la plantilla para TODO texto que no haya escrito Lumi
-/// mismo (nombre de caso, de fichero, detalle de un agente, motivo de
+/// mismo (nombre de caso, de fichero, motivo de
 /// error...). Sin esto, un nombre de fichero con un `_` o un `%` rompe la
 /// compilación entera, y uno con `\` puede inyectar comandos LaTeX propios.
 fn escapar_tex(s: &str) -> String {
@@ -657,7 +582,7 @@ fn escapar_tex(s: &str) -> String {
     // sitios (fin de línea, `\\[4pt]`...). Si el texto original terminaba en
     // salto(s) de línea, ese `\\` fijo queda pegado a un párrafo vacío --
     // mismo "There's no line here to end" que las notas del investigador,
-    // pero para cualquier campo libre (motivo, veredicto de agente, EXIF...).
+    // pero para cualquier campo libre (motivo, EXIF...).
     // Un salto de línea al final de un campo no aporta nada: se recorta.
     out.trim_end_matches('\n').to_string()
 }
@@ -886,12 +811,11 @@ fn generar_pdf(
     copiar_fuentes(&job);
 
     let mut imagenes = Vec::with_capacity(filas.len());
-    // Agregados para los cuatro números de portada del tema oscuro -- se
+    // Agregados para los tres números de portada del tema oscuro -- se
     // suman aquí, imagen a imagen, en vez de recorrer `analyses_del_caso`
     // aparte (esa lista es plana y no agrupada por imagen; `filas` sí lo
     // está, ver `ResumenOscuro`).
-    let (mut n_con_hipotesis, mut n_con_agente, mut n_sin_resolver, mut n_errores, mut n_abstenciones) =
-        (0usize, 0usize, 0usize, 0usize, 0usize);
+    let (mut n_con_hipotesis, mut n_sin_resolver, mut n_errores) = (0usize, 0usize, 0usize);
     for (orden, (img, thumb, analyses)) in filas.iter().enumerate() {
         // La miniatura solo se referencia si de verdad es una imagen
         // decodificable -- un `\includegraphics` sobre un fichero corrupto
@@ -915,15 +839,10 @@ fn generar_pdf(
         if r.con_hipotesis {
             n_con_hipotesis += 1;
         }
-        if r.con_agente {
-            n_con_agente += 1;
-        }
         if r.sin_resuelto {
             n_sin_resolver += 1;
             if r.es_error {
                 n_errores += 1;
-            } else {
-                n_abstenciones += 1;
             }
         }
         let mapa = match (r.lat, r.lng, r.radio_km) {
@@ -937,7 +856,7 @@ fn generar_pdf(
             sha256,
             exif_lineas: if req.exif_por_imagen { lineas_exif(img) } else { Vec::new() },
             sin_resuelto: r.sin_resuelto,
-            mostrar_aviso_sin_resuelto: r.sin_resuelto && (req.hipotesis_geolocalizacion || req.veredictos_agentes),
+            mostrar_aviso_sin_resuelto: r.sin_resuelto && req.hipotesis_geolocalizacion,
             motivo_sin_resuelto: r.motivo_sin_resuelto,
             peso_txt: r.peso_txt,
             coord_txt: r.coord_txt,
@@ -947,7 +866,6 @@ fn generar_pdf(
             radio_km: r.radio_km,
             mapa,
             hipotesis_extra: r.hipotesis_extra,
-            agente_lineas: r.agente_lineas,
         });
     }
 
@@ -955,7 +873,7 @@ fn generar_pdf(
         Some(calcular_estadisticas(
             case_created_at,
             analyses_del_caso,
-            (n_con_hipotesis, n_con_agente, n_sin_resolver, n_errores, n_abstenciones),
+            (n_con_hipotesis, n_sin_resolver, n_errores),
         ))
     } else {
         None
