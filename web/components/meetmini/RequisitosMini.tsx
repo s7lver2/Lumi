@@ -111,10 +111,10 @@ export function RequisitosMini() {
         <span className="font-mono text-[11px] uppercase tracking-wide text-subtle">por qué 16 GB y no 8 GB para 10 usuarios</span>
         <p className="mt-2 text-[13px] leading-relaxed text-muted">
           `lumid` sirve un análisis a la vez por GPU — con una sola tarjeta, 10 peticiones no
-          corren en paralelo, se atienden en fila. Con más VRAM disponible, verificación y agentes
-          pueden quedarse cargados en memoria entre análisis en vez de recargar sus modelos en
-          cada uno (algo que hoy es opcional y configurable), lo que acorta la fila; para servir
-          10 análisis A LA VEZ de verdad hace falta una GPU por análisis simultáneo, no solo más
+          corren en paralelo, se atienden en fila. Con más VRAM disponible, la verificación puede
+          quedarse cargada en memoria entre análisis en vez de recargar su modelo en cada uno
+          (algo que hoy es opcional y configurable), lo que acorta la fila; para servir 10
+          análisis A LA VEZ de verdad hace falta una GPU por análisis simultáneo, no solo más
           VRAM en una sola.
         </p>
       </div>

@@ -4,7 +4,7 @@ import vision from "../../registros/niveles/vision.json";
 
 export type Nivel = {
   id: string; nombre: string;
-  recuperacion: string[]; geometricos: string[]; agentes: string[];
+  recuperacion: string[]; geometricos: string[];
   cae_a: string | null;
 };
 

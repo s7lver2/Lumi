@@ -4,9 +4,9 @@ Tres ficheros. `lado.json` y `orto-wms.json` vienen en el repositorio; `paises.j
 propietario, porque pesa y porque su licencia obliga a atribuir la fuente donde el usuario la vea.
 
 **Sin estos ficheros el daemon arranca igual.** Cada resolutor que se quede sin datos devuelve
-«no lo sé», y un agente cuyo resolutor no sabe nada se abstiene: no repondera, no descarta, y en
-el informe aparece diciendo que no tuvo señal suficiente. Es la misma postura que el `sha256`
-vacío del registro de modelos.
+«no lo sé» — sin `paises.json`, por ejemplo, el informe PDF simplemente no dice el país de cada
+hipótesis, en vez de inventar uno. Es la misma postura que el `sha256` vacío del registro de
+modelos.
 
 ## `paises.json`
 

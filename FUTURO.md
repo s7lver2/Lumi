@@ -227,9 +227,11 @@ de que exista la web; no tiene sentido diseñarlo en detalle antes de eso.
 
 ## Motor de inferencia (subsistema 5)
 
-El 5 se partió en tres (ver la spec `2026-08-10-motor-inferencia-design.md` §1): 5-0, 5a, 5b
-y 5c están terminados (modelos reales, ensemble de recuperación, verificadores geométricos en
-competencia, y los agentes). Esto es lo que queda aparcado a propósito para después.
+El 5 se partió en tres (ver la spec `2026-08-10-motor-inferencia-design.md` §1): 5-0, 5a y 5b
+están terminados (modelos reales, ensemble de recuperación, verificadores geométricos en
+competencia). 5c (los agentes) se retiró por completo en Darkroom fase 0 (2026-09-19) — ver
+`docs/superpowers/specs/2026-09-19-darkroom-design.md`. Esto es lo que queda aparcado a propósito
+para después.
 
 ### Elegir el corpus por caso
 
@@ -408,9 +410,12 @@ repartir: un cambio dentro de `plan.rs`.
 **Mostrar «Built with DINOv3»** en la sección de modelos de la web (subsistema 9). Entra con RoMa
 v2 y no es opcional. La otra obligación de esa licencia —entregar el acuerdo junto con los pesos—
 ya la cumple `lumi_pesos._licencia`, que se niega a cargar unos pesos sin su `LICENCIA.txt` al lado.
-Con el 5c hay dos atribuciones más que enseñar en esa misma sección: **Natural Earth** (dominio
-público, sin obligación, pero se cita) y **Beck et al. 2018** para el mapa de Köppen, que es
-CC BY 4.0 y **sí obliga**.
+Hay una atribución más que enseñar en esa misma sección: **Natural Earth** (dominio público, sin
+obligación, pero se cita), la fuente de `registros/geo/paises.json` que usa `lumi_index::geo` para
+el país de cada hipótesis en el informe PDF. La atribución a **Beck et al. 2018** para el mapa de
+Köppen (CC BY 4.0, **sí obligaba**) dejó de aplicar: ese dataset no tiene lector desde antes de
+Darkroom (fase 0, 2026-09-19 — ver `crates/lumid/src/routes/models.rs`), y el subsistema que lo
+consumía (5c, los agentes) se retiró por completo en esa misma fase.
 
 ### AnyLoc con PCA a 4096 dims
 
@@ -425,18 +430,6 @@ revisa si el tamaño molesta con corpus grandes.
 aparente** no tienen con qué contradecir a un candidato: para pesar una contradicción haría falta
 saber en qué fecha se tomó cada foto de referencia. Anotarla es trabajo del Indexer, cambia el
 formato `.lumidx` e invalida lo ya sellado, así que va en su propio ciclo.
-
-### Topónimos contra un gazetteer
-
-El agente `toponimos` saca el texto legible y se lo enseña al investigador. Cruzarlo con una base
-de nombres de calles convertiría un cartel legible en la restricción geográfica más fuerte de
-todas, y también en la más fácil de equivocar: hay diez mil calles Mayor.
-
-### El metro que la profundidad monocular no da
-
-El agente `dimensiones` se llama «forma del espacio» porque sin una referencia de escala conocida
-en la escena, Depth Anything no da metros. La salida, si algún día hacen falta, es detectar un
-objeto de tamaño conocido —una puerta, un coche, un peldaño— y escalar con él.
 
 ### Gestión de versiones de un mismo modelo
 

@@ -212,18 +212,17 @@ function main() {
       const datos = JSON.parse(readFileSync(path.join(dir, fichero), "utf8"));
       const activoEnNiveles = niveles
         .filter((n) =>
-          [n.recuperacion, n.geometricos, n.agentes].some((lista) => Array.isArray(lista) && lista.includes(datos.id))
+          [n.recuperacion, n.geometricos].some((lista) => Array.isArray(lista) && lista.includes(datos.id))
         )
         .map((n) => n.nombre);
       const ficheroUrl = datos.fichero_url ?? datos.pesos_url ?? null;
-      // Los "motores" (VLM, upscalador) no aparecen en ningún
+      // Los "motores" (p. ej. el upscalador) no aparecen en ningún
       // registros/niveles/*.json: ese fichero solo registra qué modelo de
-      // recuperación, qué verificador y qué AGENTES corren en cada nivel —
-      // no qué motor invoca cada agente. Sin este caso especial, todo motor
-      // saldría marcado "alternativa no activa" aunque esté en uso real
-      // (Qwen3-VL lo invocan todos los agentes de todos los niveles),
-      // porque activoEnNiveles siempre daría una lista vacía para esta
-      // categoría — no porque nadie lo use.
+      // recuperación y qué verificador corren en cada nivel, no qué motor
+      // se invoca bajo demanda. Sin este caso especial, todo motor saldría
+      // marcado "alternativa no activa" aunque esté en uso real, porque
+      // activoEnNiveles siempre daría una lista vacía para esta categoría
+      // — no porque nadie lo use.
       const alternativaNoActiva = categoria === "motores" ? false : activoEnNiveles.length === 0;
       salida[datos.id] = {
         id: datos.id,

@@ -369,8 +369,8 @@ export interface Hipotesis {
    *  no pasó por verificación geométrica, no que sacara cero. */
   inliers: number | null;
   verificador: string | null;
-  /** Por qué un agente hundió esta hipótesis. `null` significa que ninguno la
-   *  tocó, no que la aprobaran. */
+  /** Campo muerto desde que el subsistema de agentes (5c) se retiró
+   *  (Darkroom, fase 0, 2026-09-19): siempre `null`. */
   motivo_agente: string | null;
 }
 export interface Analysis {

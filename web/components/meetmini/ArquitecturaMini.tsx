@@ -2,31 +2,16 @@
 import { usarRevelado } from "../usarRevelado";
 
 /** El pipeline real de Mini, tal cual sale de `registros/niveles/mini.json`
- *  y de ARCHITECTURE.md §5c — no una ilustración inventada de "cómo
- *  funciona una IA". Diagrama de capas apiladas: el índice es
- *  infraestructura (una base sobre la que se consulta, no un paso de la
- *  secuencia), y encima se apilan recuperación → verificación → agentes,
- *  el orden real en el que cada capa refina lo que le llega de la de
- *  abajo.
+ *  -- no una ilustración inventada de "cómo funciona una IA". Diagrama de
+ *  capas apiladas: el índice es infraestructura (una base sobre la que se
+ *  consulta, no un paso de la secuencia), y encima se apila
+ *  recuperación → verificación, el orden real en el que cada capa refina
+ *  lo que le llega de la de abajo.
  *
  *  Cada capa muestra solo su nombre por defecto — el detalle (qué hace de
- *  verdad, con qué pregunta o restricción real de su registro) vive en
- *  hover, no siempre visible. Menos texto en reposo, más denso al mirar de
- *  cerca, en vez de párrafos permanentes debajo de cada caja. */
-type Agente = { id: string; nombre: string };
-
-// Solo el nombre: aquí la idea es VER la arquitectura, no explicarla entera
-// — el detalle de cada agente (pregunta real, motor) vive en el bloque
-// interactivo de agentes más abajo en la página, no aquí también. Los
-// cuatro son iguales entre sí: todos describen, ninguno descarta un
-// candidato (los que dan una restricción geográfica solo le bajan la
-// confianza cuando la contradicen) — sin más reparto que ese.
-const AGENTES: Agente[] = [
-  { id: "idioma", nombre: "idioma del cartel" },
-  { id: "lado-conduccion", nombre: "lado de conducción" },
-  { id: "clima-aparente", nombre: "clima aparente" },
-  { id: "hora-sombras", nombre: "hora por sombras" },
-];
+ *  verdad, con qué modelo real de su registro) vive en hover, no siempre
+ *  visible. Menos texto en reposo, más denso al mirar de cerca, en vez de
+ *  párrafos permanentes debajo de cada caja. */
 
 /** Caja con hover: por defecto solo la migaja (capa + modelo si tiene);
  *  el detalle real se revela empujando la caja hacia abajo, no como un
@@ -67,16 +52,6 @@ function Conector({ etiqueta, visible, retraso }: { etiqueta: string; visible: b
   );
 }
 
-/** Una ficha de agente: solo el nombre — ver cuáles son, no leer qué hace
- *  cada uno. Sin revelado en hover a propósito. */
-function FichaAgente({ a }: { a: Agente }) {
-  return (
-    <div className="jg-micro cursor-default rounded-[5px] border border-border px-2 py-1.5 text-center transition-colors hover:border-fg">
-      <span className="font-mono text-[10.5px] text-fg">{a.nombre}</span>
-    </div>
-  );
-}
-
 export function ArquitecturaMini() {
   const { ref, visible } = usarRevelado<HTMLElement>();
 
@@ -92,7 +67,7 @@ export function ArquitecturaMini() {
         className="mt-2 text-[clamp(24px,3.4vw,36px)] font-semibold tracking-tight"
         style={visible ? { animation: "jg-reveal-up .7s cubic-bezier(.16,1,.3,1) both .05s" } : { opacity: 0 }}
       >
-        Un recuperador, un verificador, cuatro agentes
+        Un recuperador, un verificador
       </h2>
       <p
         className="mt-3 max-w-[70ch] leading-relaxed text-muted"
@@ -103,20 +78,6 @@ export function ArquitecturaMini() {
       </p>
 
       <div className="mt-14 flex flex-col items-stretch">
-        <div
-          className="jg-micro cursor-default rounded-card border border-border bg-panel p-4 transition-colors hover:border-subtle"
-          style={visible ? { animation: "jg-reveal-up .6s cubic-bezier(.16,1,.3,1) both .48s" } : { opacity: 0 }}
-        >
-          <div className="flex items-center justify-between font-mono text-[11px] uppercase tracking-wide text-subtle">
-            <span>capa de agentes</span>
-            <span className="text-[10px] normal-case tracking-normal text-subtle">4 agentes</span>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-1.5 border-t border-border pt-3">
-            {AGENTES.map((a) => <FichaAgente key={a.id} a={a} />)}
-          </div>
-        </div>
-
-        <Conector etiqueta="confirma candidatos" visible={visible} retraso={0.4} />
         <CapaBox etiqueta="verificación geométrica" modelo="tiny-roma"
           detalle="De los candidatos que llegan de recuperación, confirma cuál encaja de verdad con la geometría de la foto."
           visible={visible} retraso={0.32} />

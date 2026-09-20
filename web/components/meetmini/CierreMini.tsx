@@ -33,7 +33,7 @@ export function CierreMini({ productos }: { productos: ProductoDescargable[] }) 
         <SelectorDescarga productos={productosCliente} />
         <a
           className="jg-micro jg-micro-scale rounded-card border border-border px-4 py-2 text-[13px] font-medium text-fg hover:border-subtle hover:bg-elevated"
-          href="/#agentes"
+          href="/#video"
         >
           See it in action ↓
         </a>

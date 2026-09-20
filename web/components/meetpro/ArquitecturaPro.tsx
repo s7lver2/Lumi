@@ -4,19 +4,14 @@ import { usarRevelado } from "../usarRevelado";
 /** El pipeline real de Pro (`registros/niveles/pro.json`), pero leído como
  *  lo que es: no una cadena de pasos como la de Mini, sino un concurso — 4
  *  recuperadores en paralelo, 4 verificadores geométricos que compiten por
- *  quién confirma más inliers, 10 agentes que describen y penalizan al
- *  final. Los nombres de motores (recuperación, verificación, agentes) son
- *  reales, tal cual el registro; las barras de "eliminación progresiva"
- *  son el mecanismo ilustrado con cifras de ejemplo — la puntuación real
- *  de inliers varía en cada consulta, esto solo enseña la FORMA del
- *  proceso. */
+ *  quién confirma más inliers. Los nombres de motores (recuperación,
+ *  verificación) son reales, tal cual el registro; las barras de
+ *  "eliminación progresiva" son el mecanismo ilustrado con cifras de
+ *  ejemplo — la puntuación real de inliers varía en cada consulta, esto
+ *  solo enseña la FORMA del proceso. */
 
 const RECUPERACION = ["lumi-preview", "lumi-2", "eigenplaces", "dino-mix"];
 const VERIFICADORES = ["roma", "dinov2-vitl14", "lightglue-aliked", "aliked-n16"];
-const AGENTES = [
-  "idioma", "lado de conducción", "clima aparente", "hora por sombras", "topónimos",
-  "estación", "escena", "señalización", "matrícula", "dimensiones",
-];
 
 // Ejemplo: puntuación de inliers de 5 candidatos típicos tras pasar por los
 // 4 verificadores — el ganador es el que más confirmaciones reales junta,
@@ -63,9 +58,8 @@ export function ArquitecturaPro() {
         className="mt-3 max-w-[70ch] leading-relaxed text-muted"
         style={visible ? { animation: "jg-reveal-up .7s cubic-bezier(.16,1,.3,1) both .1s" } : { opacity: 0 }}
       >
-        Cuatro recuperadores buscan a la vez, cuatro verificadores confirman con geometría real, y
-        diez agentes describen lo que ven. Nada se promedia entre ellos — el candidato con más
-        inliers gana, el resto se descarta.
+        Cuatro recuperadores buscan a la vez y cuatro verificadores confirman con geometría real.
+        Nada se promedia entre ellos — el candidato con más inliers gana, el resto se descarta.
       </p>
 
       <div
@@ -109,16 +103,6 @@ export function ArquitecturaPro() {
               <span className="text-right font-mono text-[12px] text-fg">{c.inliers} pts</span>
             </div>
           ))}
-        </div>
-      </div>
-
-      <div
-        className="mt-8"
-        style={visible ? { animation: "jg-reveal-up .6s cubic-bezier(.16,1,.3,1) both .5s" } : { opacity: 0 }}
-      >
-        <span className="font-mono text-[11px] uppercase tracking-wide text-subtle">agentes · 10, todos describen</span>
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          {AGENTES.map((a) => <Pildora key={a} apagada>{a}</Pildora>)}
         </div>
       </div>
     </section>

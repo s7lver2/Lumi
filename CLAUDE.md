@@ -82,10 +82,10 @@ indexer/               Lumi Indexer's Tauri v2 + React + Tailwind app (independe
   src/                  catalog, download, ingest, review, seal, settings, territory
 workers/               Python inference workers — the Rust↔Python boundary is explicit:
                        lumi_worker.py (reference geolocation stub), lumi_embed.py (embedding)
-registros/             modelos, verificadores, motores y agentes — datos, no código. `registros/geo/`
-                       trae además los datasets offline (países, Köppen) que los agentes con
-                       restricción geográfica necesitan para penalizar la confianza de un candidato
-                       que los contradice; se publican ausentes y sin ellos el agente se abstiene.
+registros/             modelos, verificadores y motores — datos, no código. `registros/geo/` trae
+                       además el dataset offline de países que `lumi_index::geo` usa para el país
+                       de cada hipótesis en el informe PDF (`routes::export`); se publica ausente y
+                       sin él ese dato simplemente falta en el informe.
                        Rellenar fichero_url/licencia/sha256 sigue siendo manual, pero descargar, aceptar la
                        licencia y verificar ya no lo es: es la pantalla de Modelos (3a)
 tools/build.py          dev orchestration (see Commands)
@@ -200,9 +200,11 @@ reads them.
 Order: `1 (install/pairing) → 2 (auth) → 6 (client/projects skeleton) → 4 (queue) → 7a (indexer
 foundations) → 7b (indexer network origins) → 8 (index catalog) → 5 (inference engine) → 3 (admin
 panel) → 9 (website)`. 1/2/4/7a/7b/8 done; 6 is skeleton-only (no reverse geocoding, no project
-ownership transfer — see FUTURO.md); 5 is **5-0, 5a, 5b and 5c done** (real models, retrieval
-ensemble, competing geometric verifiers, and the agents) **with 5d pending** (annotating the corpus
-with capture dates so season and time-of-day can filter instead of only describing); 3 is
+ownership transfer — see FUTURO.md); 5 is **5-0, 5a and 5b done** (real models, retrieval
+ensemble, competing geometric verifiers) — **5c (agents) was removed entirely in Darkroom fase 0**
+(2026-09-19, see `docs/superpowers/specs/2026-09-19-darkroom-design.md`), not "done" — **with 5d
+pending** (annotating the corpus with capture dates so season and time-of-day can describe instead
+of nothing); 3 is
 **3 and 3a done**, **3b and 3c mostly done** (3b: solicitudes/usuarios/cola/índices done, only
 the map view is still provisional; 3c: hardware/mantenimiento/notificaciones done, historical
 monitoring still missing); 9 (`web/`) has a real Next.js site live (landing, per-nivel pages,

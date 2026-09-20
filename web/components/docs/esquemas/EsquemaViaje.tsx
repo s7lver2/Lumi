@@ -38,19 +38,11 @@ const ETAPAS: Etapa[] = [
       "Cada candidato se pone a prueba emparejando píxel a píxel con RoMa u otro verificador geométrico. Un candidato que solo se parecía en el color se cae aquí.",
   },
   {
-    id: "agentes",
-    nombre: "Agentes",
-    sub: "qué se ve",
-    href: "/docs/como-funciona/agentes",
-    detalle:
-      "Modelos de visión-lenguaje leen la foto en busca de indicios — idioma, señalética, vegetación— y penalizan las hipótesis que los contradicen.",
-  },
-  {
     id: "veredicto",
     nombre: "Veredicto",
     sub: "hipótesis",
     href: "/docs/como-funciona/veredicto",
-    detalle: "Las hipótesis supervivientes se ordenan por confianza. Ningún agente descarta del todo: solo penaliza.",
+    detalle: "Las hipótesis supervivientes se ordenan por confianza geométrica.",
   },
 ];
 
@@ -63,7 +55,7 @@ export function EsquemaViaje({ rutaActual, dimensionesTexto }: { rutaActual: str
   const actual = ETAPAS[activa];
 
   return (
-    <Esquema etiqueta="esquema · el pulso recorre las cinco etapas">
+    <Esquema etiqueta="esquema · el pulso recorre las cuatro etapas">
       <div className="flex items-stretch gap-0">
         {ETAPAS.map((etapa, i) => (
           <div key={etapa.id} className="flex flex-1 items-stretch">

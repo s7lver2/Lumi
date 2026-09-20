@@ -45,8 +45,8 @@ export function RequisitosPro() {
         className="mt-3 max-w-[70ch] leading-relaxed text-muted"
         style={visible ? { animation: "jg-reveal-up .7s cubic-bezier(.16,1,.3,1) both .1s" } : { opacity: 0 }}
       >
-        Pro corre 4 recuperadores, 4 verificadores y 10 agentes por consulta — más motores
-        cargados en VRAM a la vez que Mini, aunque no se multiplique linealmente por 4.
+        Pro corre 4 recuperadores y 4 verificadores por consulta — más motores cargados en VRAM
+        a la vez que Mini, aunque no se multiplique linealmente por 4.
       </p>
 
       <div

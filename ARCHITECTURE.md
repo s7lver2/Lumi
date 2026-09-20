@@ -111,27 +111,20 @@ distintos corren dentro**:
 
 | Nombre | Composición | Coste |
 |---|---|---|
-| **Lumi Mini** | 1 recuperador (CosPlace) + 1 verificador (tiny-RoMa) + 4 agentes | Bajo; corre en un escritorio |
-| **Lumi Pro** | 4 recuperadores + 2 verificadores + 10 agentes | Medio |
-| **Lumi Vision** | 8 recuperadores + 4 verificadores + **todos los agentes instalados** | Resultados muy superiores, problemas de cómputo reales |
+| **Lumi Mini** | 1 recuperador (CosPlace) + 1 verificador (tiny-RoMa) | Bajo; corre en un escritorio |
+| **Lumi Pro** | 4 recuperadores + 2 verificadores | Medio |
+| **Lumi Vision** | 8 recuperadores + 4 verificadores | Resultados muy superiores, problemas de cómputo reales |
 
 La precisión sale de la competencia entre verificadores, no de un modelo mejor: el árbitro son
 los inliers que sobreviven a RANSAC.
 
-Los agentes —idioma del cartel, lado de conducción, clima, sombras, señalización, matrícula— son
-ficheros JSON en `registros/agentes/`, no código, y todos describen: ninguno descarta un candidato.
-Los que dan una restricción geográfica —comparando su etiqueta contra el país, el lado de la
-calzada o el grupo de Köppen que sale de la COORDENADA del candidato, resuelto offline con los
-datos de `registros/geo/`— le bajan la confianza cuando contradicen, en vez de tumbarlo; el resto
-solo se le enseña al investigador. Una regla cierra el asunto: un candidato con 25 inliers o más
-no lo penaliza ningún agente — la geometría que RANSAC ya confirmó gana siempre a una conjetura.
-
-Que Vision corra «todos los agentes instalados» significa que dos servidores con registros
-distintos pueden componerse distinto llamándose igual. Se asume, y se compensa: cada análisis
-guarda en `analysis_agents` qué agentes corrieron de verdad, así que el informe dice de qué se
-compuso aunque no se pueda repetir a ciegas en otra máquina.
-
 La composición exacta está en `registros/niveles/`, que es datos y no código.
+
+> El subsistema de agentes (5c) que existió aquí —modelos de visión-lenguaje que describían la
+> foto (idioma del cartel, lado de conducción, clima, sombras, señalización, matrícula) y
+> penalizaban la confianza geométrica al contradecirla— se retiró por completo en Darkroom (fase
+> 0, 2026-09-19). Ver `docs/superpowers/specs/2026-09-19-darkroom-design.md` (Parte 1) para el
+> porqué y el plan de borrado.
 
 ---
 
@@ -149,9 +142,8 @@ spec → plan → implementación, y cada una debe producir software que funcion
 | **3b** | **Rediseño de las vistas mudadas** | Solicitudes, usuarios, cola, mapa e índices por dentro | Solicitudes, usuarios, cola e índices **terminados**; falta el mapa (`MapRow.tsx` sigue provisional) |
 | **3c** | **La máquina** | Hardware, monitorización con histórico, modo mantenimiento, notificaciones | Hardware, modo mantenimiento y notificaciones **terminados**; falta la monitorización con histórico (hoy solo hay lectura en vivo, sin serie temporal) |
 | **4** | **Cola y planificador** | Cientos de usuarios, pausa por desconexión, prioridades, multi-GPU y GPU+CPU | **Terminado** |
-| **5** | **Motor de inferencia** | Lumi Mini / Pro / Vision, ensemble de verificadores geométricos | **5-0, 5a, 5b y 5c terminados** (instalar un `.lumidx`; consulta → candidatos → hipótesis; modelos reales, ensemble de recuperación y verificadores geométricos compitiendo; los agentes); **5d pendiente** |
-| **5c** | **Agentes** | Idioma, sombras, dimensiones, clima, estación. Todos describen; los que dan restricción geográfica penalizan la confianza al contradecir, ninguno descarta | Terminado |
-| **5d** | **Corpus anotado con fecha** | Anotar `reference_images` con la fecha de captura, para que estación y hora también puedan pesar una contradicción en vez de solo describir | Pendiente |
+| **5** | **Motor de inferencia** | Lumi Mini / Pro / Vision, ensemble de verificadores geométricos | **5-0, 5a y 5b terminados** (instalar un `.lumidx`; consulta → candidatos → hipótesis; modelos reales, ensemble de recuperación y verificadores geométricos compitiendo); **5c** (agentes) **retirado por completo en Darkroom fase 0** (2026-09-19, ver §4 más arriba); **5d pendiente** |
+| **5d** | **Corpus anotado con fecha** | Anotar `reference_images` con la fecha de captura, para que estación y hora puedan describir el contexto de una foto | Pendiente |
 | **6** | **Cliente y proyectos** | Workspaces tipo Burp/Caido, imágenes, historial, mapa | Esqueleto terminado |
 | **7a** | **Lumi Indexer · cimientos** | App Tauri aparte; las tres bases; el paquete de índice troceado; procedencia de imágenes y de trabajo; mapa, territorio y la regla de no indexar dos veces; orígenes locales | Terminado |
 | **7b** | **Lumi Indexer · orígenes de red** | Seis adaptadores tras un contrato por tesela (Mapillary, KartaView, Google, Mapbox Satellite, Commons, Flickr); disponibilidad en el mapa; estimar, confirmar y tope de gasto; descarga reanudable con atribución; qué se puede republicar | **Terminado** (la tabla llevaba treinta commits diciendo «con spec» en `master`) |
@@ -491,18 +483,15 @@ a `lumi_worker.py` como trabajador por defecto) **y el daemon recupera, agrupa y
 válida de un motor que conteste por su cuenta sin pasar por `Vectores` — sigue siendo legal,
 solo que sin alternativas.
 
-**Verificación geométrica y agentes también pueden ser procesos persistentes, ahora — de forma
+**Verificación geométrica también puede ser un proceso persistente, ahora — de forma
 opcional.** El trabajador de recuperación (`lumi_geo.py`) siempre lo fue: arranca con el daemon
-y carga sus pesos una sola vez. `lumi_verify.py` (verificación) y `lumi_agentes.py` (agentes)
-en cambio se lanzaban de cero en CADA análisis, recargando tiny-RoMa o el paquete VLM+OCR+
-profundidad cada vez — un coste real, pagado siempre, no solo la primera vez. Como su huella de
-RAM/VRAM es muy distinta entre sí (y frente a recuperación), forzar el modo persistente no es
-seguro para todo operador: dos ajustes independientes, `verificacion_persistente` y
-`agentes_persistente` (`GET`/`PATCH /v1/admin/rendimiento`, meta del store, mismo mecanismo que
-`models_dir`), dejan elegirlo según cuánta memoria haya libre — `false` por defecto en los dos,
-que es el comportamiento de siempre. Activado, `crate::persistente::Persistente` (`lumid`)
-reutiliza un proceso ya vivo en vez de lanzar uno nuevo, con arranque perezoso (no antes de la
-primera falta) y relanzo automático si murió a mitad de una petición; un `Msg::Fin` nuevo en el
+y carga sus pesos una sola vez. `lumi_verify.py` (verificación) en cambio se lanzaba de cero en
+CADA análisis, recargando tiny-RoMa cada vez — un coste real, pagado siempre, no solo la primera
+vez. Un ajuste, `verificacion_persistente` (`GET`/`PATCH /v1/admin/rendimiento`, meta del store,
+mismo mecanismo que `models_dir`), deja elegirlo según cuánta memoria haya libre — `false` por
+defecto, que es el comportamiento de siempre. Activado, `crate::persistente::Persistente`
+(`lumid`) reutiliza un proceso ya vivo en vez de lanzar uno nuevo, con arranque perezoso (no antes
+de la primera falta) y relanzo automático si murió a mitad de una petición; un `Msg::Fin` en el
 protocolo (`lumi-proto::worker`) marca dónde termina cada trabajo, porque un proceso persistente
 no cierra `stdout` entre trabajos como sí hace el modo de una sola orden.
 

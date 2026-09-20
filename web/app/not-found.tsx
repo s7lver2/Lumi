@@ -26,8 +26,8 @@ export default function NoEncontrado() {
           className="jg-hero-in mx-auto mt-5 max-w-[42ch] leading-relaxed text-muted"
           style={{ animationDelay: ".2s" }}
         >
-          La página que buscabas no existe o se movió de sitio. Ningún agente ha visto
-          suficiente para acotar esta ruta.
+          La página que buscabas no existe o se movió de sitio. Ni la geometría ni el índice
+          encontraron nada que confirme esta ruta.
         </p>
 
         <div className="jg-hero-in mt-8 flex flex-wrap items-center justify-center gap-3" style={{ animationDelay: ".28s" }}>

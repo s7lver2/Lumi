@@ -2,7 +2,6 @@ import { HeroOrbita } from "../components/HeroOrbita";
 import { Sobrevuelo } from "../components/Sobrevuelo";
 import { Escalera } from "../components/Escalera";
 import { VideoDemo } from "../components/VideoDemo";
-import { AgentesVisual } from "../components/AgentesVisual";
 import { Confianza } from "../components/Confianza";
 import { Cobertura } from "../components/Cobertura";
 import { SeparadorSeccion } from "../components/SeparadorSeccion";
@@ -66,10 +65,6 @@ export default function Home() {
       <SeparadorSeccion />
 
       <Escalera />
-
-      <SeparadorSeccion />
-
-      <AgentesVisual />
 
       <SeparadorSeccion />
 

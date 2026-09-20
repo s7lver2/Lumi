@@ -40,7 +40,7 @@ const MINI_CIUDAD25KM = 62; // ejemplo propio, pendiente de medir con el mismo r
 const CONCURRENCIA = [1, 5, 10, 20, 40];
 const MINI_ESTRES = [1.4, 1.6, 2.1, 3.4, 6.0]; // segundos, ejemplo
 const MINI_VRAM = 3.2; // GB, ejemplo
-const MINI_DESGLOSE = { recuperacion: 0.3, verificacion: 0.4, agentes: 0.7 }; // segundos, ejemplo
+const MINI_DESGLOSE = { recuperacion: 0.3, verificacion: 0.4 }; // segundos, ejemplo
 
 /** Cuenta desde 0 hasta `hasta` una sola vez, cuando `activo` pasa a true —
  *  mismo disparador que las barras (`usarRevelado`), sin un segundo
@@ -95,11 +95,10 @@ function BarraNombrada({
  *  no hay con qué comparar esto en GeoCLIP/PIGEON (no publican ese
  *  desglose), así que es solo de Mini, no una carrera entre productos. */
 function DesgloseTiempo({ visible, retraso }: { visible: boolean; retraso: number }) {
-  const total = MINI_DESGLOSE.recuperacion + MINI_DESGLOSE.verificacion + MINI_DESGLOSE.agentes;
+  const total = MINI_DESGLOSE.recuperacion + MINI_DESGLOSE.verificacion;
   const segmentos = [
     { etiqueta: "recuperación", valor: MINI_DESGLOSE.recuperacion, clase: "bg-fg" },
     { etiqueta: "verificación", valor: MINI_DESGLOSE.verificacion, clase: "bg-fg/55" },
-    { etiqueta: "agentes", valor: MINI_DESGLOSE.agentes, clase: "bg-fg/25" },
   ];
   return (
     <div style={visible ? { animation: `jg-reveal-up .5s cubic-bezier(.16,1,.3,1) both ${retraso}s` } : { opacity: 0 }}>
@@ -126,10 +125,9 @@ function DesgloseTiempo({ visible, retraso }: { visible: boolean; retraso: numbe
 }
 
 /** Tiempo de respuesta de Mini según cuántas consultas llegan a la vez —
- *  dibujado con el mismo truco SMIL que ya usa `LineaHoraDia` en
- *  `AgentesVisual.tsx` (stroke-dasharray a la longitud real del trazo,
- *  dashoffset animado de esa longitud a 0): la línea se traza, no aparece
- *  ya puesta. */
+ *  dibujado con un truco SMIL (stroke-dasharray a la longitud real del
+ *  trazo, dashoffset animado de esa longitud a 0): la línea se traza, no
+ *  aparece ya puesta. */
 function GraficoEstres({ visible }: { visible: boolean }) {
   const PAD_I = 30, PAD_D = 14, PAD_S = 12, PAD_B = 22;
   const ANCHO = 560, ALTO = 160;

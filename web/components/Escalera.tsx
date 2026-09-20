@@ -15,8 +15,6 @@ const COLOR: Record<string, string> = {
   vision: "#f2f3f5", // accent
 };
 
-const NOMBRE_CAIDA: Record<string, string> = { mini: "Mini", pro: "Pro", vision: "Vision" };
-
 /** «La escalera»: tres columnas comparadas, con cada conteo leído del
  *  registro (nunca escrito a mano) — se ve de un vistazo que Vision no es
  *  "mejor", es "más". Las cifras de rendimiento son un marcador visible:
@@ -67,7 +65,6 @@ function TarjetaNivel({
   // como tres números saltando a la vez.
   const recuperan = usarConteo(n.recuperacion.length, visible);
   const verifican = usarConteo(n.geometricos.length, visible);
-  const agentesNum = usarConteo(n.agentes.length, visible);
 
   const filaEstilo = (retraso: number): CSSProperties =>
     visible ? { animation: `jg-reveal-up .5s cubic-bezier(.16,1,.3,1) both ${retraso}s` } : { opacity: 0 };
@@ -100,16 +97,6 @@ function TarjetaNivel({
         <div className="flex items-baseline justify-between" style={filaEstilo(0.36 + i * 0.08)}>
           <dt className="text-subtle">Geometrical</dt>
           <dd className="text-fg tabular-nums">{verifican}</dd>
-        </div>
-        <div className="flex items-baseline justify-between" style={filaEstilo(0.42 + i * 0.08)}>
-          <dt className="text-subtle">Agents</dt>
-          <dd className="text-fg tabular-nums">
-            {n.agentes.length > 0
-              ? agentesNum
-              : n.cae_a
-                ? `Same as ${NOMBRE_CAIDA[n.cae_a] ?? n.cae_a}`
-                : 0}
-          </dd>
         </div>
       </dl>
 

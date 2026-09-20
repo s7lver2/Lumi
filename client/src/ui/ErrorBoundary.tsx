@@ -5,7 +5,7 @@ import { Component, useState, type ErrorInfo, type ReactNode } from "react";
  *  donde se esperaba un valor...) desmonta el árbol entero de React y deja
  *  la ventana en negro -- el fondo (`bg`, `#0e0f11`) sin nada encima, y sin
  *  ningún rastro salvo lo que haya quedado en la consola de DevTools. Reportado
- *  como "toda la app se puso en negro" mientras corría un agente: ese es
+ *  como "toda la app se puso en negro" mientras corría un análisis: ese es
  *  justo el síntoma de un error sin capturar en cualquier punto del árbol
  *  que se repinta durante la espera (progreso, telemetría, la cola).
  *

@@ -1,9 +1,8 @@
-export const frase = "Le das una foto y te dice dónde se tomó. Entre esas dos cosas hay cinco etapas, y ninguna de ellas adivina: cada una descarta o reordena lo que le llega de la anterior.";
+export const frase = "Le das una foto y te dice dónde se tomó. Entre esas dos cosas hay cuatro etapas, y ninguna de ellas adivina: cada una descarta o reordena lo que le llega de la anterior.";
 export const procedencia = [
   "crates/lumid/src/recuperar.rs",
   "crates/lumi-index/src/agrupar.rs",
   "crates/lumid/src/verificar.rs",
-  "crates/lumid/src/agentar.rs",
 ];
 
 import { CabeceraDocs } from "../../../../components/docs/CabeceraDocs";
@@ -47,26 +46,23 @@ misma escena. Un candidato que solo se parecía en el color se cae aquí.
 
 <Detalle titulo="Qué hace esto en el código">
   <Simbolo ruta="crates/lumid/src/recuperar.rs">crates/lumid/src/recuperar.rs</Simbolo> orquesta las
-  cinco etapas para un análisis: pide el vector al worker, consulta Qdrant, agrupa con{" "}
+  cuatro etapas para un análisis: pide el vector al worker, consulta Qdrant, agrupa con{" "}
   <Simbolo ruta="crates/lumi-index/src/agrupar.rs">lumi_index::agrupar</Simbolo>, llama a{" "}
   <Simbolo ruta="crates/lumid/src/verificar.rs">crates/lumid/src/verificar.rs</Simbolo> para la
-  geometría y a <Simbolo ruta="crates/lumid/src/agentar.rs">crates/lumid/src/agentar.rs</Simbolo>{" "}
-  para los agentes, y deja el resultado en la tabla de análisis de SQLite.
+  geometría, y deja el resultado en la tabla de análisis de SQLite.
 </Detalle>
 
-## Por qué son cinco y no una
+## Por qué son cuatro y no una
 
-Un solo modelo que mirara la foto y dijera una coordenada sería más simple y mucho peor. Las cinco
+Un solo modelo que mirara la foto y dijera una coordenada sería más simple y mucho peor. Las cuatro
 etapas existen porque cada una falla de una forma distinta, y una que falla tapa el fallo de otra: el
-índice puede traer un candidato equivocado, pero la verificación geométrica lo descarta; la
-verificación puede confundirse en una escena repetitiva, pero un agente que lee el idioma de un
-rótulo la corrige. Ninguna etapa tiene que ser perfecta porque ninguna decide sola.
+índice puede traer un candidato equivocado, pero la verificación geométrica lo descarta, y ninguna
+etapa tiene que ser perfecta porque ninguna decide sola.
 
 ## Qué pasa cuando no hay índice
 
 Si el servidor todavía no tiene ningún `.lumidx` instalado para la zona de la foto, la etapa del
-índice no falla: simplemente no aporta candidatos, y el análisis se resuelve solo con lo que los
-agentes puedan inferir del contenido de la imagen — con mucha menos confianza, marcada como tal en el
-veredicto.
+índice no falla: simplemente no aporta candidatos, y el análisis se resuelve sin hipótesis, marcado
+como tal en el veredicto.
 
 <PiePaginaDocs ruta="/docs/como-funciona/el-viaje-de-una-foto" />

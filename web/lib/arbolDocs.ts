@@ -31,7 +31,6 @@ export const arbolDocs: RamaArbol[] = [
       { titulo: "El índice y la cobertura", ruta: "indice-y-cobertura", pendiente: true },
       { titulo: "Recuperación: los candidatos", ruta: "recuperacion", pendiente: false },
       { titulo: "Verificación: la geometría", ruta: "verificacion", pendiente: false },
-      { titulo: "Agentes: lo que se ve en la foto", ruta: "agentes", pendiente: false },
       { titulo: "El veredicto y su confianza", ruta: "veredicto", pendiente: false },
       { titulo: "La cola y el reparto de GPU", ruta: "cola-y-gpu", pendiente: true },
       { titulo: "Confianza y transporte", ruta: "confianza-y-transporte", pendiente: true },
@@ -68,8 +67,9 @@ export const arbolDocs: RamaArbol[] = [
       // corresponden 1:1 con las tres carpetas reales de `registros/`
       // (verificadores, motores, modelos) que ya escanea
       // `scripts/indice-docs.mjs`. `depth-anything-v2` y `paddleocr`
-      // desaparecieron del catálogo porque sus registros ya no existen:
-      // el rediseño de agentes (5c) eliminó el camino de OCR por separado.
+      // desaparecieron del catálogo porque sus registros ya no existen, y el
+      // subsistema de agentes (5c) que los usaba se retiró por completo en
+      // Darkroom (fase 0, 2026-09-19).
       { titulo: "Verificadores geométricos", ruta: "verificadores-geometricos", pendiente: false },
       { titulo: "Motores", ruta: "motores", pendiente: false },
       { titulo: "Modelos de recuperación", ruta: "modelos-de-recuperacion", pendiente: false },

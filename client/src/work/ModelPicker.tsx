@@ -20,11 +20,6 @@ const CONOCIDOS: Record<string, { name: string; note: string; beta?: boolean }> 
     name: "Lumi Vision",
     note: "8 recuperadores · 4 verificadores · lo más preciso, y lo más caro de correr",
   },
-  agentes: {
-    name: "Agentes",
-    note: "una pregunta cerrada a la imagen · sin geolocalización",
-    beta: true,
-  },
 };
 
 const ficha = (id: string) =>
