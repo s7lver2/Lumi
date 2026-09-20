@@ -7,7 +7,7 @@ import { Backdrop, FloatingCard, Pop } from "../ui/FloatingCard";
 import { Icon } from "../ui/Icon";
 import { Center } from "../ui/layout";
 import { AgenteIcono } from "./AgenteIcono";
-import { BetaPill } from "./AgentPickerPopup";
+import { BetaPill } from "../ui/BetaPill";
 
 /** El resultado del modo Agentes, como popup — hasta 2.0.35 esto era la
  *  segunda pantalla de `AgentesView` (pantalla completa); el owner probó esa

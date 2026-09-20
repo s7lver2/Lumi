@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Icon } from "../ui/Icon";
-import { BetaPill } from "./AgentPickerPopup";
+import { BetaPill } from "../ui/BetaPill";
 
 /** Los tres niveles, descritos por lo que llevan dentro — que es lo que el
  *  investigador está eligiendo cuando elige. Antes solo se conocía `mini` y
