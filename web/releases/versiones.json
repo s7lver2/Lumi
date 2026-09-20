@@ -1639,7 +1639,49 @@
           "sha256": "27c9ef6a1b5717c2674a5c7ffa5d15342f2642157049fce0ca30bcc4c4dff1f1"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.0.46",
+      "publicado": "2026-09-20T20:52:34Z",
+      "notas": "starting to work in darkroom y elimi9nacion completa de los agentes",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.46/app.exe",
+          "bytes": 15865344,
+          "sha256": "4278d15fb2b629fbd1995313410f0832651af3ddc6314b2b3c0d84a9342a51b3"
+        },
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.46/Lumi-linux-x86_64.AppImage",
+          "bytes": 82283000,
+          "sha256": "56bfaabec3f6e749a7777d3bbcd0c1999e0a7c5caef97580762110d8992ee559"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.0.46",
+      "publicado": "2026-09-20T20:52:34Z",
+      "notas": "starting to work in darkroom y elimi9nacion completa de los agentes",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.46/lumid",
+          "bytes": 24072536,
+          "sha256": "8b97c4e5c598cdcd6bbac0e0e05358ce68cd61d32ea80705e4d6c064baabbd31"
+        },
+        {
+          "plataforma": "assets",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.0.46/lumid-assets.tar.gz",
+          "bytes": 936354,
+          "sha256": "0dd32062524ec056b58c6031bf0267d38a5c2c6164e8c43bd63738f256d23275"
+        }
+      ]
     }
   ],
-  "firma": "7pjKQpEgbkYbSKEA5Pu2cniaTg4pdkhsCmMvinkgd2i4j3rAlDOSIM98uOAdfjPQZ9yYI2InKFWOEJQM6E+oAA=="
+  "firma": "RLbqSJqcF40DBdC84aHdWBQ+T7WXrF9lMUxAuDbuPoOoDcBalHrOUcBsoLkGoSiyv238tDdvF6cHa4XLia9nAg=="
 }
