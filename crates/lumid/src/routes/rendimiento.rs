@@ -38,6 +38,22 @@ fn desc_limpieza(activo: bool) -> String {
     if activo { DESC_LIMPIEZA_ON.into() } else { DESC_LIMPIEZA_OFF.into() }
 }
 
+// W4 (tanda 5, revisado tras la fe de erratas -- ya solo habla de
+// verificación, no de agentes, que se borraron en la Fase 0 de Darkroom):
+// con M1 aplicado (tanda 1, `quizas_purgar_por_presion` desaloja según el
+// tamaño real del modelo entrante, no una constante fija de 512 MB), activar
+// esta persistencia por defecto ya no reproduce el escenario de OOM de
+// septiembre que la motivó apagada -- y sin agentes, el pico de memoria de
+// un VLM de 8B que preocupaba a W4 ya ni siquiera puede darse aquí: lo único
+// persistente sería el verificador geométrico (ALIKED/LightGlue/RoMa), mucho
+// más ligero.
+//
+// Aun así el defecto de fábrica se queda APAGADO en este plan: es una
+// decisión de producto sobre la máquina real del dueño (cuánta memoria pide
+// de verdad cada proceso, con y sin persistencia -- Parte 8, ítem 0 del
+// spec), no algo que quien ejecuta este plan deba adivinar sin esos números.
+// Pendiente: medir en el host real y decidir si este valor de fábrica pasa
+// a activado.
 fn settings(app: &App) -> RendimientoSettings {
     let verificacion_persistente = leer_bool(app, CLAVE_VERIFICACION);
     let limpieza_por_presion = leer_bool_activo_por_defecto(app, CLAVE_LIMPIEZA_PRESION);

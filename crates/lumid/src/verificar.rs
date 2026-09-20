@@ -66,6 +66,14 @@ pub async fn afinar(
     // Activado, se reutiliza un proceso ya vivo en vez de lanzar uno nuevo
     // por análisis — mismo protocolo de entrada/salida, solo cambia quién
     // lo lanza y cuándo muere.
+    //
+    // W4 (tanda 5): este defecto sigue apagado a propósito aun con M1 ya
+    // aplicado (el desalojo por presión ya tiene en cuenta el tamaño del
+    // modelo entrante, así que activarlo no reproduce el OOM de septiembre)
+    // -- ver el comentario de `routes::rendimiento::settings` para el
+    // razonamiento completo. Activar el valor de fábrica es una decisión del
+    // dueño del producto sobre su máquina real, no algo que este plan deba
+    // adivinar.
     // Ajuste `limpieza_por_presion` (`routes::rendimiento`): a diferencia del
     // anterior, este nace ACTIVADO -- la ausencia de la clave cuenta como
     // "activado", solo un "0" explícito lo apaga.
