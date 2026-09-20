@@ -51,10 +51,11 @@ def dispositivo():
 def _motor(disp):
     if "upscalador" not in _motores:
         import lumi_pesos
-        for m in lumi_pesos.quizas_purgar_por_presion(_motores, _ultimo_uso, LIMPIEZA_PRESION):
+        necesita_mb = lumi_pesos.tamano_estimado_mb(PESOS, "real-esrgan")
+        for m in lumi_pesos.quizas_purgar_por_presion(_motores, _ultimo_uso, LIMPIEZA_PRESION, necesita_mb):
             print("motor %s desalojado por presion de memoria" % m, file=sys.stderr)
         try:
-            _motores["upscalador"] = cargar_motor("upscalador", PESOS, disp)
+            _motores["upscalador"] = cargar_motor("upscalador", "real-esrgan", PESOS, disp)
         except Exception as e:
             print("motor upscalador fuera: %s" % e, file=sys.stderr)
             _motores["upscalador"] = None

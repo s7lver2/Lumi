@@ -182,8 +182,13 @@ def _cargar(verificador):
         lumi_pesos._limitar_hilos()
 
         # Justo antes de pedir memoria para un verificador nuevo, no en cada
-        # tanda entera (eso ya lo hace `purgar_inactivos` en `_verificar`).
-        for v in lumi_pesos.quizas_purgar_por_presion(_cargados, _ultimo_uso, LIMPIEZA_PRESION):
+        # tanda entera (eso ya lo hace `purgar_inactivos` en `_verificar`). El
+        # tamaño del fichero de pesos principal es gratis: es el mismo que se
+        # hashea unas líneas más abajo con `lumi_pesos._verificar` (M1); si el
+        # verificador necesita un segundo fichero (roma/lightglue-aliked) ese
+        # tamaño no se conoce todavía aquí, así que solo cuenta el principal.
+        necesita_mb = lumi_pesos.tamano_estimado_mb(PESOS, verificador)
+        for v in lumi_pesos.quizas_purgar_por_presion(_cargados, _ultimo_uso, LIMPIEZA_PRESION, necesita_mb):
             _log("verificador %s desalojado por presion de memoria" % v)
 
         ficha = lumi_pesos._ficha(verificador, REGISTRO)

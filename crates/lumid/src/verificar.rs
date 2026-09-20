@@ -13,7 +13,7 @@ use lumi_index::agrupar::Candidato;
 use lumi_index::arbitro::{arbitrar_con_umbrales, Ganador, Veredicto};
 use lumi_index::niveles::Nivel;
 use lumi_index::registro::Verificador;
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 pub struct Afinado {
     pub candidato: Candidato,
@@ -112,9 +112,19 @@ pub async fn afinar(
         stdin.shutdown().await?;
     }
 
-    let mut errores = String::new();
-    if let Some(mut stderr) = hijo.stderr.take() {
-        let _ = stderr.read_to_string(&mut errores).await;
+    // Tarea aparte que drena `stderr` línea a línea sin bloquear el `await`
+    // de `stdout` de abajo -- mismo patrón que
+    // `persistente.rs::drenar_stderr` y `agentar::correr` (W8): un
+    // `read_to_string` bloqueado hasta EOF de `stderr` mientras nadie lee
+    // `stdout` es un interbloqueo en cuanto el hijo llena el búfer de la
+    // tubería (64 KB típicos en Linux) antes de morir.
+    if let Some(stderr) = hijo.stderr.take() {
+        tokio::spawn(async move {
+            let mut lineas = BufReader::new(stderr).lines();
+            while let Ok(Some(linea)) = lineas.next_line().await {
+                tracing::warn!(target: "lumid::verificar", "verificar: {linea}");
+            }
+        });
     }
 
     let mut por_candidato: std::collections::HashMap<i64, Vec<Veredicto>> = Default::default();
@@ -140,11 +150,14 @@ pub async fn afinar(
     // vacío, y quien llama ya sabe caer a "sin verificación geométrica") pero
     // sin este log ese fallback es indistinguible de un verificador que de
     // verdad miró la foto y no encontró nada — que es justo lo que pasaba.
-    if por_candidato.is_empty() && !errores.trim().is_empty() {
-        tracing::warn!("verificación geométrica: el trabajador no verificó nada: {}", errores.trim());
+    // El contenido de `stderr` ya se registró línea a línea según llegaba
+    // (arriba); aquí solo queda avisar si el resultado vino vacío o el
+    // proceso no salió limpio, sin repetir el texto que ya se logueó.
+    if por_candidato.is_empty() {
+        tracing::warn!("verificación geométrica: el trabajador no verificó nada (ver stderr arriba)");
     } else if let Ok(estado) = &salida {
-        if !estado.success() && !errores.trim().is_empty() {
-            tracing::warn!("verificación geométrica: {}", errores.trim());
+        if !estado.success() {
+            tracing::warn!("verificación geométrica: el proceso salió con {:?} (ver stderr arriba)", estado.code());
         }
     }
     let max_inliers = por_candidato

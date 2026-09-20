@@ -9,6 +9,7 @@ las consultas devolverian basura para siempre.
 A diferencia de los trabajadores, este modulo SI necesita el venv: importa
 torch. El runner del 7a es quien lo instala.
 """
+import glob
 import hashlib
 import json
 import os
@@ -53,7 +54,22 @@ def _memoria_libre_mb():
     return None
 
 
-def quizas_purgar_por_presion(cache, usos, activo):
+def tamano_estimado_mb(pesos_dir, modelo_id):
+    """Tamaño (MB) de todos los ficheros del directorio de pesos de
+    `modelo_id` -- casi siempre un único `pesos.pth`, pero se suman todos los
+    ficheros del directorio por si el modelo trae más de uno. Es el mismo
+    fichero que `_verificar` va a leer para el sha256 de todas formas, así
+    que este tamaño sale gratis antes de cargar."""
+    directorio = os.path.join(pesos_dir, modelo_id)
+    total = sum(
+        os.path.getsize(p)
+        for p in glob.glob(os.path.join(directorio, "*"))
+        if os.path.isfile(p)
+    )
+    return total / (1024 * 1024)
+
+
+def quizas_purgar_por_presion(cache, usos, activo, necesita_mb=0):
     """Segunda via de desalojo, complementaria a `purgar_inactivos`: si la
     memoria disponible del sistema esta al limite justo cuando se va a cargar
     un modelo nuevo, fuerza una limpieza inmediata sin esperar los
@@ -61,6 +77,14 @@ def quizas_purgar_por_presion(cache, usos, activo):
 
     Si `activo` es `False` no mide memoria ni hace nada -- ni siquiera abre
     /proc/meminfo, el interruptor tiene que ser gratis cuando esta apagado.
+
+    `necesita_mb` es el tamaño estimado (en MB) del modelo que se está a
+    punto de cargar -- el umbral ya no es una constante fija: se desaloja si
+    la memoria libre no alcanza para ese modelo MÁS el margen de seguridad de
+    `UMBRAL_MEMORIA_LIBRE_MB`. Con 512 MB de constante y un VLM de varios GB,
+    comparar solo contra la constante dejaba pasar cargas que el sistema no
+    podía sostener (M1) -- el valor por defecto `0` conserva el comportamiento
+    de hoy para cualquier llamante que aún no conozca el tamaño.
 
     A diferencia de `purgar_inactivos`, aqui no importa cuanto tiempo llevan
     cargadas las entradas de `usos`: si hay presion de memoria YA, se
@@ -72,7 +96,7 @@ def quizas_purgar_por_presion(cache, usos, activo):
     if not activo:
         return []
     libre = _memoria_libre_mb()
-    if libre is None or libre >= UMBRAL_MEMORIA_LIBRE_MB:
+    if libre is None or libre >= necesita_mb + UMBRAL_MEMORIA_LIBRE_MB:
         return []
     desalojadas = list(usos.keys())
     for clave in desalojadas:
@@ -188,13 +212,57 @@ def _licencia(directorio):
             "del modelo y guardalos ahi antes de usar estos pesos" % ruta)
 
 
+def _sello_verificado(ruta):
+    return ruta + ".verificado"
+
+
+def _leer_sello(ruta, st):
+    """Devuelve el sha256 ya conocido para `ruta` si el sello
+    `<ruta>.verificado` existe y su `mtime`/`size` coinciden con el fichero
+    real de hoy -- si no, `None` (no hay respuesta ya sabida para este
+    inodo)."""
+    sello = _sello_verificado(ruta)
+    try:
+        with open(sello, "r") as f:
+            d = json.load(f)
+    except Exception:
+        return None
+    if d.get("mtime") == st.st_mtime and d.get("size") == st.st_size:
+        return d.get("sha256")
+    return None
+
+
+def _escribir_sello(ruta, sha256, st):
+    sello = _sello_verificado(ruta)
+    try:
+        with open(sello, "w") as f:
+            json.dump({"sha256": sha256, "mtime": st.st_mtime, "size": st.st_size}, f)
+    except Exception:
+        # El sello es solo una optimizacion -- si no se puede escribir (disco
+        # de solo lectura, permisos...) el proximo arranque vuelve a hashear
+        # completo, nunca se relaja la comprobacion en si.
+        pass
+
+
 def _verificar(ruta, esperado):
     """Sin hash no se carga. Es la misma postura que el aprovisionamiento de
-    Qdrant del subsistema 1: no hay «cargar de todas formas»."""
+    Qdrant del subsistema 1: no hay «cargar de todas formas».
+
+    Antes de rehashear el fichero completo, mira si ya existe un sello
+    `<ruta>.verificado` con `(sha256_esperado, mtime, size)` para este mismo
+    inodo -- si `mtime`/`size` coinciden, el hash ya se conoce y no hace
+    falta releer el fichero entero (W5: en `pro` son ~2 GB por análisis,
+    ~2,5 s con caché caliente). Si no hay sello o no coincide, se hashea
+    completo como siempre y, si el resultado coincide con `esperado`, se
+    escribe el sello para la próxima vez."""
     if not esperado:
         raise ValueError(
             "el registro no trae sha256 para estos pesos; rellenalo a mano "
             "descargando el fichero y calculando el hash, nunca inventandolo")
+    st = os.stat(ruta)
+    sellado = _leer_sello(ruta, st)
+    if sellado == esperado:
+        return
     h = hashlib.sha256()
     with open(ruta, "rb") as f:
         for trozo in iter(lambda: f.read(1 << 20), b""):
@@ -202,6 +270,7 @@ def _verificar(ruta, esperado):
     real = h.hexdigest()
     if real != esperado:
         raise ValueError("el sha256 de %s no coincide: %s" % (ruta, real))
+    _escribir_sello(ruta, real, st)
 
 
 def _reconstruir(modelo_id, dims):

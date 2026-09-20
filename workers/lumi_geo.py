@@ -67,8 +67,11 @@ def _cargar(modelo):
 
     # Justo antes de pedir memoria para un modelo nuevo, no en cada job
     # entero (eso ya lo hace `purgar_inactivos` en `_embeber`): "voy a cargar
-    # algo, compruebo el margen justo antes".
-    for m in lumi_pesos.quizas_purgar_por_presion(_cargados, _ultimo_uso, LIMPIEZA_PRESION):
+    # algo, compruebo el margen justo antes". El tamaño del fichero de pesos
+    # es gratis: es el mismo que `lumi_pesos._verificar` va a hashear de
+    # todos modos dentro de `cargar()` (M1).
+    necesita_mb = lumi_pesos.tamano_estimado_mb(PESOS, modelo)
+    for m in lumi_pesos.quizas_purgar_por_presion(_cargados, _ultimo_uso, LIMPIEZA_PRESION, necesita_mb):
         _log("modelo %s desalojado por presion de memoria" % m)
 
     _log("cargando modelo %s en %s" % (modelo, DISPOSITIVO))
