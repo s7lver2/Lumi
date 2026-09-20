@@ -122,14 +122,6 @@ pub fn servicio_de_ruta(path: &str) -> Option<&'static str> {
         ("/v1/images", "proyectos"),
         ("/v1/cases", "proyectos"),
         ("/v1/analyses", "proyectos"),
-        // Añadida en el rediseño de agentes (5c) y olvidada aquí: sin esto,
-        // el popup "Elegir agente" (`GET /v1/agentes`) se quedaba bloqueado
-        // en fail-closed para cualquier investigador no-admin aunque
-        // "Proyectos y casos" estuviera habilitado durante el mantenimiento
-        // -- la rejilla de agentes salía vacía, aunque el registro tuviera
-        // agentes de sobra, mientras que lanzar el análisis en sí (que ya
-        // conocía el id) seguía funcionando por `/v1/analyses`.
-        ("/v1/agentes", "proyectos"),
         ("/v1/me/invites", "proyectos"),
         ("/v1/invites", "proyectos"),
         ("/v1/me/usage", "proyectos"),

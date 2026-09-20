@@ -2,7 +2,6 @@ pub mod access;
 pub mod actualizacion;
 pub mod actividad;
 pub mod admin;
-pub mod agentes;
 pub mod api_keys;
 pub mod analyses;
 pub mod auth;
