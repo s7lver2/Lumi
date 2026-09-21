@@ -7,7 +7,7 @@ import { useServer } from "../lib/store";
 import { Icon, type IconName } from "../ui/Icon";
 
 export type Seccion =
-  | "resumen" | "modelos" | "personalizacion" | "indices" | "seguridad" | "claves" | "red"
+  | "resumen" | "modelos" | "personalizacion" | "indices" | "seguridad" | "colaboracion" | "claves" | "red"
   | "solicitudes" | "usuarios"
   | "cola" | "notificaciones" | "hardware" | "doctor" | "actualizaciones" | "calibracion";
 
@@ -23,6 +23,7 @@ const GRUPOS: { grupo: string; items: { id: Seccion; label: string; icon: IconNa
       { id: "personalizacion", label: "Customización", icon: "globe" },
       { id: "indices", label: "Índices", icon: "grid" },
       { id: "seguridad", label: "Seguridad", icon: "shield" },
+      { id: "colaboracion", label: "Colaboración", icon: "users" },
       { id: "claves", label: "API Keys", icon: "key" },
       { id: "red", label: "Red", icon: "cloud" },
     ],

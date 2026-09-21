@@ -526,6 +526,27 @@ pub struct PatchRendimientoReq {
     pub limpieza_por_presion: Option<bool>,
 }
 
+/// Los cuatro ajustes de la sección «Colaboración» del panel de
+/// administración (spec Darkroom 2026-09-19, Parte 4). Son globales: no hay
+/// ámbito por proyecto ni por caso.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ColaboracionSettings {
+    pub caso_exclusivo: bool,
+    pub caso_liberar_s: i64,
+    /// `"admin"` | `"admin_o_dueno"` | `"cualquier_miembro"`.
+    pub caso_expulsar_rol: String,
+    /// `0` = sin tope.
+    pub proyecto_max_personas: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PatchColaboracionReq {
+    pub caso_exclusivo: Option<bool>,
+    pub caso_liberar_s: Option<i64>,
+    pub caso_expulsar_rol: Option<String>,
+    pub proyecto_max_personas: Option<i64>,
+}
+
 /// Los tres interruptores del spec 2026-09-10 más `progreso_detallado_activo`
 /// (`routes::features`). Los cuatro nacen apagados — a diferencia de
 /// `RendimientoSettings::limpieza_por_presion`.

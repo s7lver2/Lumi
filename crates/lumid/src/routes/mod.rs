@@ -11,6 +11,7 @@ pub mod calibracion;
 pub mod cases;
 pub mod catalogo;
 pub mod claim;
+pub mod colaboracion;
 pub mod credit_requests;
 pub mod doctor;
 pub mod export;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type EstadoActualizacionLumid, type Resumen, type SecuritySettings } from "../lib/api";
+import { api, type ColaboracionSettings, type EstadoActualizacionLumid, type Resumen, type SecuritySettings } from "../lib/api";
 import { useServer } from "../lib/store";
 import { Hueco } from "./Hueco";
 import { NotificacionesView } from "./NotificacionesView";
@@ -8,6 +8,7 @@ import { AdminEventToast } from "./AdminEventToast";
 import { IndicesPanel } from "./IndicesPanel";
 import { ApiKeysView } from "./ApiKeysView";
 import { SecurityView } from "./SecurityView";
+import { ColaboracionView } from "./ColaboracionView";
 import { ModelosView } from "./ModelosView";
 import { ModelToasts } from "./ModelToasts";
 import { ColaView } from "./ColaView";
@@ -84,6 +85,13 @@ export function AdminPanel({ token }: { token: string }) {
     api.get<SecuritySettings>("/v1/admin/security", token).then(setSeguridad).catch(() => setSeguridad(null));
   }, [token]);
 
+  // Mismo patrón que `seguridad`: los ajustes viven aquí para que la vista
+  // vea el cambio en cuanto se guarda, sin volver a pedirlos.
+  const [colaboracion, setColaboracion] = useState<ColaboracionSettings | null>(null);
+  useEffect(() => {
+    api.get<ColaboracionSettings>("/v1/admin/colaboracion", token).then(setColaboracion).catch(() => setColaboracion(null));
+  }, [token]);
+
   return (
     <div className="relative z-10 grid h-full w-full grid-cols-[206px_1fr] overflow-hidden bg-bg">
       <Sidebar actual={seccion} onIr={setSeccion} contadores={cuentas} />
@@ -95,6 +103,7 @@ export function AdminPanel({ token }: { token: string }) {
               <RequestsView token={token} /></Seccion>
           : seccion === "usuarios" ? <UsersView token={token} abrirUserId={abrirUserId} />
           : seccion === "seguridad" ? <SecurityView token={token} ajustes={seguridad} onCambiar={setSeguridad} />
+          : seccion === "colaboracion" ? <ColaboracionView token={token} ajustes={colaboracion} onCambiar={setColaboracion} />
           : seccion === "claves" ? <ApiKeysView token={token} onIr={setSeccion} />
           : seccion === "personalizacion" ? <CustomizacionView token={token} />
           : seccion === "red" ? <NetworkView token={token} />

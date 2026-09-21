@@ -189,6 +189,12 @@ export interface SecuritySettings {
    *  devolverlo a la lista de proyectos. `0` = desactivado. */
   inactivity_timeout_s: number;
 }
+export interface ColaboracionSettings {
+  caso_exclusivo: boolean;
+  caso_liberar_s: number;
+  caso_expulsar_rol: "admin" | "admin_o_dueno" | "cualquier_miembro";
+  proyecto_max_personas: number;
+}
 export interface PoliciesSettings {
   active: boolean;
   title: string;

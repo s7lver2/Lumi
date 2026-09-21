@@ -308,6 +308,7 @@ async fn run() -> anyhow::Result<()> {
         .route("/v1/admin/hardware/:index", axum::routing::patch(routes::hardware::aplicar))
         .route("/v1/admin/hardware/cpu", get(routes::hardware_cpu::leer).patch(routes::hardware_cpu::aplicar))
         .route("/v1/admin/rendimiento", get(routes::rendimiento::get).patch(routes::rendimiento::patch))
+        .route("/v1/admin/colaboracion", get(routes::colaboracion::get).patch(routes::colaboracion::patch))
         .route("/v1/admin/features", get(routes::features::get).patch(routes::features::patch))
         .route("/v1/features", get(routes::features::get_public))
         .route("/v1/cases/:id/images/upscale", post(routes::images::upscale))
