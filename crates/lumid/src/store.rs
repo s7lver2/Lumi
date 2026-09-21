@@ -562,6 +562,10 @@ fn migrate(c: &Connection) {
         // lo devuelve para que el cliente agrupe varios análisis lanzados a
         // la vez como un solo intento.
         ("analyses", "grupo_id", "TEXT"),
+        // Darkroom (spec 2026-09-19, Parte 2): con qué interfaz nace el caso.
+        // Se elige al crearlo y no se cambia después. Los casos anteriores
+        // quedan en 'normal' por el DEFAULT -- sin migración de datos.
+        ("cases", "backend", "TEXT NOT NULL DEFAULT 'normal'"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }

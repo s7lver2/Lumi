@@ -779,6 +779,15 @@ pub struct NameReq {
     pub name: String,
 }
 
+/// Crear un caso manda además el backend elegido -- a diferencia de
+/// `NameReq`, que sigue sirviendo para renombrar (el backend no se puede
+/// cambiar después de crear, spec Darkroom Parte 2).
+#[derive(Serialize, Deserialize)]
+pub struct CaseReq {
+    pub name: String,
+    pub backend: String,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct MemberReq {
     pub username: String,
@@ -823,6 +832,9 @@ pub struct Case {
     pub id: i64,
     pub project_id: i64,
     pub name: String,
+    /// `"normal"` | `"darkroom"`. Se elige al crear el caso y no se cambia
+    /// después (spec Darkroom Parte 2).
+    pub backend: String,
     pub images: i64,
     pub analyses: i64,
     /// Análisis con resultado. La vista de proyecto pinta un marcador por caso

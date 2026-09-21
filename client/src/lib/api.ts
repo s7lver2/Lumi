@@ -352,7 +352,7 @@ export interface ProjectImage extends Image {
   case_name: string;
 }
 export interface Case {
-  id: number; project_id: number; name: string;
+  id: number; project_id: number; name: string; backend: "normal" | "darkroom";
   images: number; analyses: number; resolved: number;
   lat: number | null; lng: number | null; created_at: number;
 }

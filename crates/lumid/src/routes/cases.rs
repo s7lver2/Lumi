@@ -7,7 +7,7 @@ use crate::routes::projects::{err, Fail};
 use crate::App;
 use axum::extract::{Path, State};
 use axum::{http::HeaderMap, http::StatusCode, Json};
-use lumi_proto::api::{Case, NameReq};
+use lumi_proto::api::{Case, CaseReq, NameReq};
 
 const MAX_NAME: usize = 80;
 
@@ -70,7 +70,7 @@ pub async fn list(
     let c = app.store.conn();
     let mut q = c
         .prepare(
-            "SELECT k.id, k.project_id, k.name, k.created_at,
+            "SELECT k.id, k.project_id, k.name, k.backend, k.created_at,
                     (SELECT COUNT(*) FROM images WHERE case_id = k.id),
                     (SELECT COUNT(*) FROM analyses WHERE case_id = k.id),
                     (SELECT COUNT(*) FROM analyses WHERE case_id = k.id AND state = 'hecho'),
@@ -87,12 +87,13 @@ pub async fn list(
                 id: r.get(0)?,
                 project_id: r.get(1)?,
                 name: r.get(2)?,
-                created_at: r.get(3)?,
-                images: r.get(4)?,
-                analyses: r.get(5)?,
-                resolved: r.get(6)?,
-                lat: r.get(7)?,
-                lng: r.get(8)?,
+                backend: r.get(3)?,
+                created_at: r.get(4)?,
+                images: r.get(5)?,
+                analyses: r.get(6)?,
+                resolved: r.get(7)?,
+                lat: r.get(8)?,
+                lng: r.get(9)?,
             })
         })
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
@@ -105,29 +106,33 @@ pub async fn create(
     State(app): State<App>,
     Path(project_id): Path<i64>,
     headers: HeaderMap,
-    Json(req): Json<NameReq>,
+    Json(req): Json<CaseReq>,
 ) -> Result<Json<Case>, Fail> {
     guard_project(&app, &headers, project_id)?;
     let name = req.name.trim();
     if name.is_empty() || name.chars().count() > MAX_NAME {
         return Err(err(StatusCode::BAD_REQUEST, "el nombre está vacío o pasa de 80 caracteres"));
     }
+    if req.backend != "normal" && req.backend != "darkroom" {
+        return Err(err(StatusCode::BAD_REQUEST, "backend debe ser \"normal\" o \"darkroom\""));
+    }
     let t = now();
     let c = app.store.conn();
     c.execute(
-        "INSERT INTO cases (project_id, name, created_at) VALUES (?1, ?2, ?3)",
-        rusqlite::params![project_id, name, t],
+        "INSERT INTO cases (project_id, name, backend, created_at) VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![project_id, name, req.backend, t],
     )
     .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
     let id = c.last_insert_rowid();
     // Tocar el proyecto: la lista del arranque se ordena por uso reciente, y
     // crear un caso dentro es usarlo.
     let _ = c.execute("UPDATE projects SET updated_at = ?1 WHERE id = ?2", rusqlite::params![t, project_id]);
-    tracing::info!("caso \"{name}\" creado en el proyecto {project_id}");
+    tracing::info!("caso \"{name}\" ({}) creado en el proyecto {project_id}", req.backend);
     Ok(Json(Case {
         id,
         project_id,
         name: name.to_string(),
+        backend: req.backend,
         images: 0,
         analyses: 0,
         resolved: 0,

@@ -14,7 +14,7 @@ import { Center } from "./layout";
  *  pulsar. */
 export function PromptDialog({
   open, icon = "folder", title, subtitle, placeholder, confirmLabel = "Crear",
-  taken = [], busy, error, chrome = false, onConfirm, onClose,
+  taken = [], busy, error, chrome = false, extra, onConfirm, onClose,
 }: {
   open: boolean;
   icon?: "folder" | "pin";
@@ -28,6 +28,10 @@ export function PromptDialog({
   /** `true` cuando se muestra dentro del espacio de trabajo (con el carril a
    *  la izquierda): centra respecto al lienzo visible, no a la ventana. */
   chrome?: boolean;
+  /** Controles extra entre el campo y los botones -- hoy solo lo usa la
+   *  elección de backend al crear un caso Darkroom. Nada más debería
+   *  necesitarlo: lo que se decide después de crear no pertenece aquí. */
+  extra?: React.ReactNode;
   onConfirm: (value: string) => void;
   onClose: () => void;
 }) {
@@ -71,6 +75,7 @@ export function PromptDialog({
 
             {choca && <p className="mt-1.5 text-[10.5px] text-warning-fg">ya existe uno con ese nombre</p>}
             {error && <p className="mt-1.5 text-[10.5px] leading-snug text-danger-fg">{error}</p>}
+            {extra}
 
             <div className="mt-3.5 flex items-center gap-2">
               <span className="mr-auto font-mono text-[10px] text-[#4a4d52]">↵ crear · esc cancelar</span>

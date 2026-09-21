@@ -1,5 +1,6 @@
 import type { Case } from "../lib/api";
 import { lumiUrl } from "../lib/bridge";
+import { Icon } from "../ui/Icon";
 
 /** Un cuadrito de mapa con el punto del caso. La coordenada da el número; esto
  *  lo hace mirable, que es lo que de verdad dice si un caso cayó donde
@@ -84,7 +85,14 @@ export function CaseRow({ case_, covers, drag, onOpen, onMenu }: {
         )}
       </span>
 
-      <span className="min-w-0 flex-1 truncate text-[12.5px] text-fg">{case_.name}</span>
+      <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-[12.5px] text-fg">
+        {case_.backend === "darkroom" && (
+          <span className="shrink-0 text-subtle" title="caso Darkroom">
+            <Icon name="boxes" size={12} />
+          </span>
+        )}
+        <span className="truncate">{case_.name}</span>
+      </span>
 
       <span className="w-[76px] shrink-0">
         <span className="block h-[3px] overflow-hidden rounded-sm bg-white/[.08]">

@@ -22,6 +22,7 @@ export function ProjectView({
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [backend, setBackend] = useState<"normal" | "darkroom">("normal");
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [renaming, setRenaming] = useState<Case | null>(null);
 
@@ -52,8 +53,9 @@ export function ProjectView({
   async function create(name: string) {
     setBusy(true); setError(null);
     try {
-      const c = await api.post<Case>(`/v1/projects/${project.id}/cases`, { name }, token);
+      const c = await api.post<Case>(`/v1/projects/${project.id}/cases`, { name, backend }, token);
       setCreating(false);
+      setBackend("normal");
       onOpenCase(c);
     } catch (e) {
       setError(String(e));
@@ -136,7 +138,20 @@ export function ProjectView({
         title={`Nuevo caso en «${project.name}»`} subtitle="un caso, un sitio que averiguar"
         placeholder="Muelle 7" taken={list.map((c) => c.name)}
         busy={busy} error={error}
-        onConfirm={create} onClose={() => { setCreating(false); setError(null); }} />
+        extra={
+          <div className="mt-3 flex gap-1.5 rounded-[9px] border border-border bg-[#0d0f12] p-1">
+            {([["normal", "Normal"], ["darkroom", "Darkroom"]] as const).map(([v, label]) => (
+              <button key={v} type="button" onClick={() => setBackend(v)}
+                disabled={busy}
+                className={`flex-1 rounded-[7px] py-[7px] text-[11.5px] transition-colors duration-300 ease-expo ${
+                  backend === v ? "bg-white/[.1] text-fg" : "text-subtle hover:text-fg"}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        }
+        onConfirm={create}
+        onClose={() => { setCreating(false); setError(null); setBackend("normal"); }} />
 
       <PromptDialog open={renaming !== null} chrome icon="pin"
         title="Renombrar caso" placeholder={renaming?.name ?? ""} confirmLabel="Guardar"
