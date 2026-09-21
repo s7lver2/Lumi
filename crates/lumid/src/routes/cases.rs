@@ -385,13 +385,20 @@ pub async fn kick(
     if !permitido {
         return Err(err(StatusCode::FORBIDDEN, "no tienes permiso para expulsar a quien tiene este caso"));
     }
-    let c = app.store.conn();
-    let holder: i64 = c
-        .query_row("SELECT user_id FROM case_locks WHERE case_id = ?1", [id], |r| r.get(0))
-        .map_err(|_| err(StatusCode::CONFLICT, "no hay nadie dentro de este caso ahora mismo"))?;
-    c.execute("DELETE FROM case_locks WHERE case_id = ?1", [id])
-        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
-    let case_name: String = c.query_row("SELECT name FROM cases WHERE id = ?1", [id], |r| r.get(0)).unwrap_or_default();
+    // El bloque acota el guard de la conexión: `difundir_caso_libre` vuelve a
+    // pedir el mismo mutex del store, y hacerlo con este todavía en la mano
+    // cuelga el hilo para siempre.
+    let (holder, case_name): (i64, String) = {
+        let c = app.store.conn();
+        let holder: i64 = c
+            .query_row("SELECT user_id FROM case_locks WHERE case_id = ?1", [id], |r| r.get(0))
+            .map_err(|_| err(StatusCode::CONFLICT, "no hay nadie dentro de este caso ahora mismo"))?;
+        c.execute("DELETE FROM case_locks WHERE case_id = ?1", [id])
+            .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+        let case_name: String =
+            c.query_row("SELECT name FROM cases WHERE id = ?1", [id], |r| r.get(0)).unwrap_or_default();
+        (holder, case_name)
+    };
     tracing::info!("caso #{id} ({case_name}): usuario {holder} expulsado del candado por el usuario {uid}");
     app.queue.difundir(lumi_proto::api::Cambio::Expulsion { user_id: holder, case_id: id, case_name });
     difundir_caso_libre(&app, pid, id);
