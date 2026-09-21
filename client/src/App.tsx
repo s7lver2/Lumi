@@ -26,7 +26,7 @@ import { comprobarActualizacion, dispararActualizacionSilenciosa, errorActualiza
 import { DebugOrb } from "./dev/DebugOrb";
 import { useServer } from "./lib/store";
 import { useWorkspace } from "./lib/workspace";
-import { api, type Cambio, type Hello, type Me, type Sample, type TaskStatus } from "./lib/api";
+import { api, type Cambio, type Case, type Hello, type Me, type Sample, type TaskStatus } from "./lib/api";
 import { announcePresence, fetchLumiAvatarDataUrl, setAuth } from "./lib/bridge";
 import { loadSession, updateServerAvatar, updateSession } from "./lib/session";
 import { ProjectPicker } from "./work/ProjectPicker";
@@ -128,17 +128,18 @@ export default function App() {
   }, []);
 
   /** El dueño del proyecto (o un admin) te puede quitar el candado mientras
-   *  estás dentro, para dejárselo libre a otra persona -- un proyecto solo
-   *  admite una persona a la vez (`routes::projects::kick`). Si el aviso no
-   *  es de TU proyecto actual, no pasa nada. */
+   *  estás dentro, para dejárselo libre a otra persona -- un caso solo
+   *  admite una persona a la vez (`routes::cases::kick`). Si el aviso no
+   *  es de TU caso actual, no pasa nada. */
   const [expulsadoDe, setExpulsadoDe] = useState<string | null>(null);
   useEffect(() => {
     const un = listen<Cambio>("queue-change", (e) => {
       const c = e.payload;
       if (c.tipo !== "expulsion") return;
-      if (useWorkspace.getState().project?.id !== c.project_id) return;
-      setExpulsadoDe(c.project_name);
-      toProjects();
+      if (useWorkspace.getState().case_?.id !== c.case_id) return;
+      setExpulsadoDe(c.case_name);
+      useWorkspace.getState().setCase(null);
+      setMode("project");
       setTimeout(() => setExpulsadoDe(null), 6000);
     });
     return () => { void un.then((f) => f()); };
@@ -274,16 +275,28 @@ export default function App() {
     await api.post("/v1/unseal", { passphrase });
   }
 
-  /** Solo una persona a la vez dentro de un proyecto: salir de verdad tiene
-   *  que soltar el candado, no solo cambiar de pantalla. Best effort — si la
-   *  llamada falla (red caída, app cerrándose), el candado caduca solo al
-   *  cabo de las horas que marca `STALE_AFTER` en el servidor. */
-  function leaveProject() {
-    const { project } = useWorkspace.getState();
+  /** Solo una persona a la vez dentro de un caso (si `caso_exclusivo` está
+   *  activo): salir de verdad tiene que soltar el candado, no solo cambiar
+   *  de pantalla. Best effort -- si la llamada falla (red caída, app
+   *  cerrándose), el candado caduca solo al cabo del plazo que marca
+   *  `caso_liberar_s` en el servidor. */
+  function leaveCase() {
+    const { case_ } = useWorkspace.getState();
     const token = useServer.getState().token;
-    if (project && token) {
-      void api.post(`/v1/projects/${project.id}/leave`, {}, token).catch(() => {});
+    if (case_ && token) {
+      void api.post(`/v1/cases/${case_.id}/leave`, {}, token).catch(() => {});
     }
+  }
+
+  /** Tomar el candado del caso antes de abrirlo -- si otra persona lo tiene
+   *  (y `caso_exclusivo` está activo), rechaza con 409 y no cambia de modo. */
+  async function openCase(c: Case) {
+    const token = useServer.getState().token;
+    if (token) {
+      await api.post(`/v1/cases/${c.id}/enter`, {}, token);
+    }
+    useWorkspace.getState().setCase(c);
+    setMode("case");
   }
 
   // Cerrar la ventana (botón propio, Alt+F4, "Cerrar" de la barra de tareas)
@@ -298,12 +311,12 @@ export default function App() {
     let cancelado = false;
     let quitar: (() => void) | undefined;
     void win.onCloseRequested(async (evento) => {
-      const { project } = useWorkspace.getState();
+      const { case_ } = useWorkspace.getState();
       const token = useServer.getState().token;
-      if (!project || !token) return;
+      if (!case_ || !token) return;
       evento.preventDefault();
       await Promise.race([
-        api.post(`/v1/projects/${project.id}/leave`, {}, token).catch(() => {}),
+        api.post(`/v1/cases/${case_.id}/leave`, {}, token).catch(() => {}),
         new Promise((resolve) => setTimeout(resolve, 1500)),
       ]);
       if (!cancelado) await win.destroy();
@@ -317,7 +330,7 @@ export default function App() {
    *  imágenes. */
   function signOut() {
     setAjustesAbiertos(false);
-    leaveProject();
+    leaveCase();
     updateSession({ token: undefined });
     useServer.getState().setToken(null);
     useServer.getState().setUser("", false, null, null);
@@ -335,7 +348,7 @@ export default function App() {
   /** Volver al selector: soltar el candado y olvidar el proyecto. */
   function toProjects() {
     setAjustesAbiertos(false);
-    leaveProject();
+    leaveCase();
     useWorkspace.getState().clear();
     setDrawer(null);
     setExportOpen(false);
@@ -388,7 +401,7 @@ export default function App() {
           : mode === "case" && casoActual
             ? [
                 { label: "Proyectos", onClick: () => toProjects() },
-                { label: proyectoActual.name, onClick: () => { setAjustesAbiertos(false); useWorkspace.getState().setCase(null); setMode("project"); } },
+                { label: proyectoActual.name, onClick: () => { setAjustesAbiertos(false); leaveCase(); useWorkspace.getState().setCase(null); setMode("project"); } },
                 { label: casoActual.name },
               ]
             : [{ label: "Proyectos", onClick: () => toProjects() }, { label: proyectoActual.name }];
@@ -406,8 +419,8 @@ export default function App() {
       {/* Una sola franja arriba para todo: migas, estado del servidor,
           notificaciones, cuenta y los botones de la ventana. La telemetría ya
           no es una franja permanente de 70 px — vive en su píldora. */}
-      <TitleBar crumbs={crumbs} onOpenAdmin={() => { setAjustesAbiertos(false); leaveProject(); setMode("admin"); }}
-        onProfile={() => { setAjustesAbiertos(false); leaveProject(); setMode("profile"); }}
+      <TitleBar crumbs={crumbs} onOpenAdmin={() => { setAjustesAbiertos(false); leaveCase(); setMode("admin"); }}
+        onProfile={() => { setAjustesAbiertos(false); leaveCase(); setMode("profile"); }}
         onSettings={mode !== "entry" && mode !== "wizard" ? () => setAjustesAbiertos(true) : undefined}
         onSignOut={signOut} onProjectAccepted={() => setProjectsTick((t) => t + 1)} />
       {/* Para toda la app, no solo el panel de administración: quien esté
@@ -546,7 +559,7 @@ export default function App() {
               onCases={() => {
                 setDrawer(null);
                 setExportOpen(false);
-                if (mode === "case") { useWorkspace.getState().setCase(null); setMode("project"); }
+                if (mode === "case") { leaveCase(); useWorkspace.getState().setCase(null); setMode("project"); }
               }}
               onMembers={() => setDrawer(drawer === "invite" ? null : "invite")}
               // Media (spec 2026-09-10 §3) y Exportar comparten el mismo
@@ -558,7 +571,7 @@ export default function App() {
               // El panel de administración es una parada aparte: mientras se
               // está ahí no se está trabajando en el proyecto, así que se
               // suelta el candado para no bloquearlo a los demás por nada.
-              onAdmin={() => { leaveProject(); setMode("admin"); }}
+              onAdmin={() => { leaveCase(); setMode("admin"); }}
               onLeave={toProjects} />
           );
           // Los dos cajones comparten hueco, así que comparten estado: abrir
@@ -573,7 +586,7 @@ export default function App() {
               exportOpen={exportOpen} onCloseExport={() => setExportOpen(false)} />
           ) : (
             <ProjectView project={project} rail={rail} drawer={cajon}
-              onOpenCase={(c) => { useWorkspace.getState().setCase(c); setMode("case"); }} />
+              onOpenCase={openCase} />
           );
         })()
       )}

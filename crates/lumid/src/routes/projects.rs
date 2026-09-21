@@ -67,11 +67,12 @@ pub async fn list(State(app): State<App>, headers: HeaderMap) -> Result<Json<Vec
     // agregan cada tabla en una sola pasada, y el `LEFT JOIN` con `projects`
     // es lo único que queda por proyecto.
     let ahora = now();
+    let limite = crate::routes::colaboracion::caso_liberar_s(&app);
     let mut q = c
         .prepare(
             "SELECT p.id, p.name, m.role, p.created_at, p.updated_at,
                     COALESCE(kc.n, 0), COALESCE(ic.n, 0), COALESCE(ic.bytes, 0),
-                    lk.username, lk.user_id
+                    COALESCE(lk.n, 0)
              FROM projects p
              JOIN project_members m ON m.project_id = p.id
              -- D8: sin el JOIN a `project_members` de aquí dentro, SQLite
@@ -95,16 +96,16 @@ pub async fn list(State(app): State<App>, headers: HeaderMap) -> Result<Json<Vec
                WHERE pm.user_id = ?1 AND pm.status = 'accepted'
                GROUP BY k.project_id
              ) ic ON ic.project_id = p.id
-             -- Mismo criterio de validez que enter: el candado solo cuenta
-             -- si la sesión de quien lo tiene sigue viva y no lleva más de
-             -- STALE_AFTER agarrado. Un candado abandonado no cuenta como
-             -- alguien trabajando, es basura que todavía no se robó.
+             -- Cuántos casos de este proyecto tiene alguien abierto ahora
+             -- mismo -- mismo criterio de validez que antes tenía el
+             -- candado de proyecto: sesión viva y candado no caducado.
              LEFT JOIN (
-               SELECT pl.project_id, u.username, u.id AS user_id
-               FROM project_locks pl
-               JOIN sessions s ON s.token = pl.token AND s.expires_at > ?2
-               JOIN users u ON u.id = pl.user_id
-               WHERE ?2 - pl.since < ?3
+               SELECT k.project_id AS project_id, COUNT(*) AS n
+               FROM case_locks cl
+               JOIN cases k ON k.id = cl.case_id
+               JOIN sessions s ON s.token = cl.token AND s.expires_at > ?2
+               WHERE ?2 - cl.since < ?3
+               GROUP BY k.project_id
              ) lk ON lk.project_id = p.id
              -- Una invitación pendiente no es un proyecto tuyo todavía: vive
              -- en `/v1/me/invites` hasta que la aceptas.
@@ -113,7 +114,7 @@ pub async fn list(State(app): State<App>, headers: HeaderMap) -> Result<Json<Vec
         )
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
     let rows = q
-        .query_map(rusqlite::params![uid, ahora, STALE_AFTER], |r| {
+        .query_map(rusqlite::params![uid, ahora, limite], |r| {
             Ok(Project {
                 id: r.get(0)?,
                 name: r.get(1)?,
@@ -123,8 +124,7 @@ pub async fn list(State(app): State<App>, headers: HeaderMap) -> Result<Json<Vec
                 cases: r.get(5)?,
                 images: r.get(6)?,
                 bytes: r.get(7)?,
-                locked_by: r.get(8)?,
-                locked_by_id: r.get(9)?,
+                casos_ocupados: r.get(8)?,
             })
         })
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
@@ -175,8 +175,7 @@ pub async fn create(
         bytes: 0,
         created_at: t,
         updated_at: t,
-        locked_by: None,
-        locked_by_id: None,
+        casos_ocupados: 0,
     }))
 }
 
@@ -222,10 +221,10 @@ pub async fn remove(
             "DELETE FROM analysis_hypotheses WHERE analysis_id IN
                (SELECT a.id FROM analyses a JOIN cases k ON k.id = a.case_id WHERE k.project_id = ?1)",
             "DELETE FROM analyses WHERE case_id IN (SELECT id FROM cases WHERE project_id = ?1)",
+            "DELETE FROM case_locks WHERE case_id IN (SELECT id FROM cases WHERE project_id = ?1)",
             "DELETE FROM images   WHERE case_id IN (SELECT id FROM cases WHERE project_id = ?1)",
             "DELETE FROM cases    WHERE project_id = ?1",
             "DELETE FROM project_members WHERE project_id = ?1",
-            "DELETE FROM project_locks WHERE project_id = ?1",
             "DELETE FROM projects WHERE id = ?1",
         ];
         for s in sql {
@@ -426,98 +425,6 @@ pub async fn decline_invite(
     State(app): State<App>, Path(id): Path<i64>, headers: HeaderMap,
 ) -> Result<StatusCode, Fail> {
     resolve_invite(&app, &headers, id, false)
-}
-
-/// Un proyecto, una persona a la vez. Es una cerradura de andar por casa: una
-/// fila en `project_locks`, sin colas ni avisos en tiempo real. `enter` la
-/// toma o la roba si está muerta; `leave` la suelta. Nada la libera si la app
-/// se cierra mal salvo el tiempo (`STALE_AFTER`) o que la sesión de quien la
-/// tenía caduque: por ahora es suficiente y no hace falta un latido.
-const STALE_AFTER: i64 = 12 * 60 * 60;
-
-pub async fn enter(State(app): State<App>, Path(id): Path<i64>, headers: HeaderMap) -> Result<StatusCode, Fail> {
-    let (uid, _) = guard(&app, &headers, id, false)?;
-    let token = bearer(&headers);
-    let c = app.store.conn();
-    let held: Option<(i64, String, i64)> = c
-        .query_row(
-            "SELECT user_id, token, since FROM project_locks WHERE project_id = ?1",
-            [id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-        )
-        .ok();
-    if let Some((holder, holder_token, since)) = held {
-        if holder != uid {
-            let session_valid = c
-                .query_row(
-                    "SELECT 1 FROM sessions WHERE token = ?1 AND expires_at > ?2",
-                    rusqlite::params![holder_token, now()],
-                    |_| Ok(()),
-                )
-                .is_ok();
-            if session_valid && now() - since < STALE_AFTER {
-                let username: String = c
-                    .query_row("SELECT username FROM users WHERE id = ?1", [holder], |r| r.get(0))
-                    .unwrap_or_else(|_| "otra persona".into());
-                return Err(err(
-                    StatusCode::CONFLICT,
-                    &format!(
-                        "{username} está trabajando en este proyecto ahora mismo; solo puede haber una persona dentro a la vez"
-                    ),
-                ));
-            }
-            // La sesión de quien la tenía ya no existe o lleva media jornada
-            // colgada: se toma como abandonada y se roba sin preguntar.
-        }
-    }
-    // Se guarda el hash, no el token en claro: esta fila se compara luego
-    // directamente contra `sessions.token` (que ya guarda el hash) para
-    // saber si la sesión de quien tiene el candado sigue viva — las dos
-    // columnas tienen que hablar el mismo idioma.
-    c.execute(
-        "INSERT INTO project_locks (project_id, user_id, token, since) VALUES (?1, ?2, ?3, ?4)
-         ON CONFLICT(project_id) DO UPDATE SET user_id = ?2, token = ?3, since = ?4",
-        rusqlite::params![id, uid, lumi_proto::crypto::hash_token(&token), now()],
-    )
-    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-/// Solo quita el candado si es el tuyo: si ya te lo robaron por caducado no
-/// hay nada que soltar, y si es de otra persona no es asunto tuyo tocarlo.
-pub async fn leave(State(app): State<App>, Path(id): Path<i64>, headers: HeaderMap) -> Result<StatusCode, Fail> {
-    let (uid, _) = require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
-    app.store
-        .conn()
-        .execute(
-            "DELETE FROM project_locks WHERE project_id = ?1 AND user_id = ?2",
-            rusqlite::params![id, uid],
-        )
-        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-/// Le quita el candado a quien lo tenga, sin esperar a que lo suelte él
-/// mismo o a que caduque (`STALE_AFTER`, 12h) -- para cuando alguien se
-/// queda dentro del proyecto (con la app abierta, sin conexión, o
-/// simplemente sin acordarse) y otra persona necesita entrar ya. `manage`
-/// en `guard()` deja pasar al dueño del proyecto y a cualquier administrador
-/// del servidor, igual que el resto de acciones destructivas de este
-/// fichero -- no a un miembro cualquiera.
-pub async fn kick(State(app): State<App>, Path(id): Path<i64>, headers: HeaderMap) -> Result<StatusCode, Fail> {
-    guard(&app, &headers, id, true)?;
-    let c = app.store.conn();
-    let holder: i64 = c
-        .query_row("SELECT user_id FROM project_locks WHERE project_id = ?1", [id], |r| r.get(0))
-        .map_err(|_| err(StatusCode::CONFLICT, "no hay nadie dentro de este proyecto ahora mismo"))?;
-    c.execute("DELETE FROM project_locks WHERE project_id = ?1", [id])
-        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
-    let project_name: String = c
-        .query_row("SELECT name FROM projects WHERE id = ?1", [id], |r| r.get(0))
-        .unwrap_or_default();
-    tracing::info!("proyecto #{id} ({project_name}): usuario {holder} expulsado del candado");
-    app.queue.difundir(lumi_proto::api::Cambio::Expulsion { user_id: holder, project_id: id, project_name });
-    Ok(StatusCode::NO_CONTENT)
 }
 
 /// El dueño quita a quien quiera; cualquiera puede quitarse a sí mismo. El

@@ -772,15 +772,11 @@ pub struct Project {
     pub bytes: i64,
     pub created_at: i64,
     pub updated_at: i64,
-    /// Quién tiene el candado de trabajo (`project_locks`) ahora mismo, si lo
-    /// tiene alguien. `None` no solo significa "nadie lo pidió nunca": la
-    /// consulta ya descarta candados de sesión caducada o de más de
-    /// `STALE_AFTER`, así que esto es "de verdad, alguien está dentro ahora".
-    pub locked_by: Option<String>,
-    /// El id de quien tiene el candado — junto a `locked_by`, no en su lugar:
-    /// el nombre ya se usaba para el texto, el id hace falta aparte para
-    /// pedir su foto de perfil.
-    pub locked_by_id: Option<i64>,
+    /// Cuántos casos de este proyecto tiene alguien abierto ahora mismo
+    /// (mismo criterio de validez que antes: sesión viva y candado no
+    /// caducado). Ya no hay un candado de proyecto que nombrar a una sola
+    /// persona -- puede haber varias, cada una en un caso distinto.
+    pub casos_ocupados: i64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -866,6 +862,11 @@ pub struct Case {
     pub lat: Option<f64>,
     pub lng: Option<f64>,
     pub created_at: i64,
+    /// Quién tiene el candado de este caso ahora mismo, si lo tiene alguien
+    /// -- mismo criterio que tenía `Project::locked_by` antes de Darkroom
+    /// Fase 1: sesión viva y candado no caducado.
+    pub locked_by: Option<String>,
+    pub locked_by_id: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -1095,14 +1096,14 @@ pub enum Cambio {
     },
     /// El dueño del proyecto o un administrador del servidor le ha quitado el
     /// candado a quien lo tenía, para que otra persona pueda entrar —
-    /// `project_locks` es de una sola plaza (ver `routes::projects::enter`).
-    /// Sin este aviso, la persona expulsada seguía trabajando en un proyecto
+    /// `case_locks` es de una sola plaza (ver `routes::cases::enter`).
+    /// Sin este aviso, la persona expulsada seguía trabajando en un caso
     /// que ya no es "suyo" hasta que algo le fallara sin motivo aparente.
     Expulsion {
         #[serde(skip)]
         user_id: i64,
-        project_id: i64,
-        project_name: String,
+        case_id: i64,
+        case_name: String,
     },
     /// Cuánta gente hay por delante de un pendiente todavía sin correr, en el
     /// mismo orden que decide `queue::plan::repartir`. Se manda de nuevo en

@@ -342,9 +342,8 @@ export interface Project {
   id: number; name: string; role: "owner" | "member";
   cases: number; images: number; bytes: number;
   created_at: number; updated_at: number;
-  /** Quién tiene el candado de trabajo ahora mismo, si lo tiene alguien. */
-  locked_by: string | null;
-  locked_by_id: number | null;
+  /** Cuántos casos de este proyecto tiene alguien abierto ahora mismo. */
+  casos_ocupados: number;
 }
 export interface ProjectMember {
   user_id: number; username: string; role: "owner" | "member";
@@ -361,6 +360,8 @@ export interface Case {
   id: number; project_id: number; name: string; backend: "normal" | "darkroom";
   images: number; analyses: number; resolved: number;
   lat: number | null; lng: number | null; created_at: number;
+  /** Quién tiene el candado de este caso ahora mismo, si lo tiene alguien. */
+  locked_by: string | null; locked_by_id: number | null;
 }
 export interface Hipotesis {
   lat: number; lng: number; radio_m: number;
@@ -506,7 +507,7 @@ export interface PatchLogSettingsReq { base?: string; categorias?: Record<string
 export type Cambio =
   | { tipo: "estado"; analysis_id: number; case_id: number; estado: Analysis["state"] }
   | { tipo: "progreso"; analysis_id: number; fase: string; pct: number; eta_s: number | null }
-  | { tipo: "expulsion"; project_id: number; project_name: string }
+  | { tipo: "expulsion"; case_id: number; case_name: string }
   | { tipo: "cola"; analysis_id: number; posicion: number }
   | { tipo: "invitacion"; project_id: number; project_name: string; invited_by: string }
   | { tipo: "red"; nuevo_addr: string };

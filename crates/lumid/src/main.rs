@@ -378,9 +378,6 @@ async fn run() -> anyhow::Result<()> {
         .route("/v1/me/invites", get(routes::projects::my_invites))
         .route("/v1/invites/:id/accept", post(routes::projects::accept_invite))
         .route("/v1/invites/:id/decline", post(routes::projects::decline_invite))
-        .route("/v1/projects/:id/enter", post(routes::projects::enter))
-        .route("/v1/projects/:id/leave", post(routes::projects::leave))
-        .route("/v1/projects/:id/kick", post(routes::projects::kick))
         .route("/v1/projects/:id/images", get(routes::images::project_gallery))
         .route(
             "/v1/projects/:id/cases",
@@ -390,6 +387,9 @@ async fn run() -> anyhow::Result<()> {
             "/v1/cases/:id",
             axum::routing::patch(routes::cases::rename).delete(routes::cases::remove),
         )
+        .route("/v1/cases/:id/enter", post(routes::cases::enter))
+        .route("/v1/cases/:id/leave", post(routes::cases::leave))
+        .route("/v1/cases/:id/kick", post(routes::cases::kick))
         .route("/v1/cases/:id/export.pdf", post(routes::export::export_pdf))
         .route(
             "/v1/cases/:id/images",

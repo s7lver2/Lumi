@@ -1,6 +1,7 @@
 import type { Case } from "../lib/api";
 import { lumiUrl } from "../lib/bridge";
 import { Icon } from "../ui/Icon";
+import { UserTile } from "../ui/UserTile";
 
 /** Un cuadrito de mapa con el punto del caso. La coordenada da el número; esto
  *  lo hace mirable, que es lo que de verdad dice si un caso cayó donde
@@ -92,6 +93,11 @@ export function CaseRow({ case_, covers, drag, onOpen, onMenu }: {
           </span>
         )}
         <span className="truncate">{case_.name}</span>
+        {case_.locked_by && (
+          <span className="shrink-0" title={`${case_.locked_by} está trabajando en este caso ahora mismo`}>
+            <UserTile nombre={case_.locked_by} conectado size={14} userId={case_.locked_by_id ?? undefined} />
+          </span>
+        )}
       </span>
 
       <span className="w-[76px] shrink-0">

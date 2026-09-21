@@ -68,6 +68,8 @@ pub async fn list(
 ) -> Result<Json<Vec<Case>>, Fail> {
     guard_project(&app, &headers, project_id)?;
     let c = app.store.conn();
+    let ahora = now();
+    let limite = crate::routes::colaboracion::caso_liberar_s(&app);
     let mut q = c
         .prepare(
             "SELECT k.id, k.project_id, k.name, k.backend, k.created_at,
@@ -77,12 +79,21 @@ pub async fn list(
                     (SELECT result_lat FROM analyses WHERE case_id = k.id AND state = 'hecho'
                       ORDER BY finished_at DESC LIMIT 1),
                     (SELECT result_lng FROM analyses WHERE case_id = k.id AND state = 'hecho'
-                      ORDER BY finished_at DESC LIMIT 1)
-             FROM cases k WHERE k.project_id = ?1 ORDER BY k.created_at",
+                      ORDER BY finished_at DESC LIMIT 1),
+                    lk.username, lk.user_id
+             FROM cases k
+             LEFT JOIN (
+               SELECT cl.case_id, u.username, u.id AS user_id
+               FROM case_locks cl
+               JOIN sessions s ON s.token = cl.token AND s.expires_at > ?2
+               JOIN users u ON u.id = cl.user_id
+               WHERE ?2 - cl.since < ?3
+             ) lk ON lk.case_id = k.id
+             WHERE k.project_id = ?1 ORDER BY k.created_at",
         )
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
     let rows = q
-        .query_map([project_id], |r| {
+        .query_map(rusqlite::params![project_id, ahora, limite], |r| {
             Ok(Case {
                 id: r.get(0)?,
                 project_id: r.get(1)?,
@@ -94,6 +105,8 @@ pub async fn list(
                 resolved: r.get(7)?,
                 lat: r.get(8)?,
                 lng: r.get(9)?,
+                locked_by: r.get(10)?,
+                locked_by_id: r.get(11)?,
             })
         })
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
@@ -139,6 +152,8 @@ pub async fn create(
         lat: None,
         lng: None,
         created_at: t,
+        locked_by: None,
+        locked_by_id: None,
     }))
 }
 
@@ -197,5 +212,120 @@ pub async fn remove(
         let _ = std::fs::remove_file(base.join(format!("{img}.thumb")));
     }
     tracing::info!("caso {id} borrado, del proyecto {pid}");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Un caso, una persona a la vez -- si `caso_exclusivo` está activo
+/// (`routes::colaboracion`). Es la misma cerradura que antes vivía en
+/// `project_locks`/`routes::projects`, mudada de ámbito: varias personas ya
+/// pueden compartir un proyecto, pero no el mismo caso (spec Darkroom Parte
+/// 3).
+pub async fn enter(State(app): State<App>, Path(id): Path<i64>, headers: HeaderMap) -> Result<StatusCode, Fail> {
+    let (uid, pid, _role) = guard_case(&app, &headers, id).await?;
+    let token = bearer(&headers);
+    let c = app.store.conn();
+    if crate::routes::colaboracion::caso_exclusivo(&app) {
+        let held: Option<(i64, String, i64)> = c
+            .query_row(
+                "SELECT user_id, token, since FROM case_locks WHERE case_id = ?1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .ok();
+        if let Some((holder, holder_token, since)) = held {
+            if holder != uid {
+                let session_valid = c
+                    .query_row(
+                        "SELECT 1 FROM sessions WHERE token = ?1 AND expires_at > ?2",
+                        rusqlite::params![holder_token, now()],
+                        |_| Ok(()),
+                    )
+                    .is_ok();
+                if session_valid && now() - since < crate::routes::colaboracion::caso_liberar_s(&app) {
+                    let username: String = c
+                        .query_row("SELECT username FROM users WHERE id = ?1", [holder], |r| r.get(0))
+                        .unwrap_or_else(|_| "otra persona".into());
+                    return Err(err(
+                        StatusCode::CONFLICT,
+                        &format!(
+                            "{username} está trabajando en este caso ahora mismo; solo puede haber una persona dentro a la vez"
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+    let tope = crate::routes::colaboracion::proyecto_max_personas(&app);
+    if tope > 0 {
+        let ya_tenia: bool = c
+            .query_row("SELECT 1 FROM case_locks WHERE case_id = ?1 AND user_id = ?2", [id, uid], |_| Ok(()))
+            .is_ok();
+        if !ya_tenia {
+            let personas: i64 = c
+                .query_row(
+                    "SELECT COUNT(DISTINCT cl.user_id) FROM case_locks cl
+                     JOIN cases k ON k.id = cl.case_id
+                     JOIN sessions s ON s.token = cl.token AND s.expires_at > ?2
+                     WHERE k.project_id = ?1 AND ?2 - cl.since < ?3",
+                    rusqlite::params![pid, now(), crate::routes::colaboracion::caso_liberar_s(&app)],
+                    |r| r.get(0),
+                )
+                .unwrap_or(0);
+            if personas >= tope {
+                return Err(err(
+                    StatusCode::CONFLICT,
+                    "este proyecto ya tiene el máximo de personas trabajando a la vez que permite el administrador",
+                ));
+            }
+        }
+    }
+    // Se guarda el hash, no el token en claro: esta fila se compara luego
+    // directamente contra `sessions.token` (que ya guarda el hash) para saber
+    // si la sesión de quien tiene el candado sigue viva.
+    c.execute(
+        "INSERT INTO case_locks (case_id, user_id, token, since) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(case_id) DO UPDATE SET user_id = ?2, token = ?3, since = ?4",
+        rusqlite::params![id, uid, lumi_proto::crypto::hash_token(&token), now()],
+    )
+    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Solo quita el candado si es el tuyo: si ya te lo robaron por caducado no
+/// hay nada que soltar, y si es de otra persona no es asunto tuyo tocarlo.
+pub async fn leave(State(app): State<App>, Path(id): Path<i64>, headers: HeaderMap) -> Result<StatusCode, Fail> {
+    let (uid, _) = require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
+    app.store
+        .conn()
+        .execute("DELETE FROM case_locks WHERE case_id = ?1 AND user_id = ?2", rusqlite::params![id, uid])
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Le quita el candado a quien lo tenga, sin esperar a que lo suelte él mismo
+/// o a que caduque -- para cuando alguien se queda dentro del caso y otra
+/// persona necesita entrar ya. Quién puede hacerlo lo decide el administrador
+/// (`colaboracion::caso_expulsar_rol`).
+pub async fn kick(State(app): State<App>, Path(id): Path<i64>, headers: HeaderMap) -> Result<StatusCode, Fail> {
+    let (uid, _pid, role) = guard_case(&app, &headers, id).await?;
+    let rol = crate::routes::colaboracion::caso_expulsar_rol(&app);
+    let is_admin = crate::routes::auth::require_admin(&app, &bearer(&headers)).is_ok();
+    let permitido = match rol.as_str() {
+        "cualquier_miembro" => true,
+        "admin_o_dueno" => is_admin || role == Role::Owner,
+        _ => is_admin,
+    };
+    if !permitido {
+        return Err(err(StatusCode::FORBIDDEN, "no tienes permiso para expulsar a quien tiene este caso"));
+    }
+    let c = app.store.conn();
+    let holder: i64 = c
+        .query_row("SELECT user_id FROM case_locks WHERE case_id = ?1", [id], |r| r.get(0))
+        .map_err(|_| err(StatusCode::CONFLICT, "no hay nadie dentro de este caso ahora mismo"))?;
+    c.execute("DELETE FROM case_locks WHERE case_id = ?1", [id])
+        .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    let case_name: String = c.query_row("SELECT name FROM cases WHERE id = ?1", [id], |r| r.get(0)).unwrap_or_default();
+    tracing::info!("caso #{id} ({case_name}): usuario {holder} expulsado del candado por el usuario {uid}");
+    app.queue.difundir(lumi_proto::api::Cambio::Expulsion { user_id: holder, case_id: id, case_name });
     Ok(StatusCode::NO_CONTENT)
 }

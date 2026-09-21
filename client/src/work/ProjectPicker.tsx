@@ -5,7 +5,6 @@ import { useServer } from "../lib/store";
 import { ContextMenu, menuAt, type MenuState } from "../ui/ContextMenu";
 import { Icon } from "../ui/Icon";
 import { PromptDialog } from "../ui/PromptDialog";
-import { UserTile } from "../ui/UserTile";
 
 const GB = 1024 * 1024 * 1024;
 
@@ -77,20 +76,11 @@ export function ProjectPicker({ onOpen, refresh }: {
     localStorage.setItem("lumi.vista.proyectos", v);
   }
 
-  /** Un proyecto solo admite una persona dentro a la vez. Se comprueba justo
-   *  antes de entrar y no al listar: la lista se queda vieja enseguida, y decir
-   *  «en uso» un minuto después de que se liberó sería mentir. */
-  async function open(p: Project) {
-    setError(null);
-    setBusy(true);
-    try {
-      await api.post(`/v1/projects/${p.id}/enter`, {}, token);
-      onOpen(p);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
+  /** Abrir un proyecto ya no toma ningún candado: varias personas pueden
+   *  compartirlo (Darkroom Fase 1) -- el candado es del caso, y lo toma
+   *  `App.tsx` al abrirlo. */
+  function open(p: Project) {
+    if (!orden.dragging) onOpen(p);
   }
 
   async function create(name: string) {
@@ -98,7 +88,7 @@ export function ProjectPicker({ onOpen, refresh }: {
     try {
       const p = await api.post<Project>("/v1/projects", { name }, token);
       setCreating(false);
-      void open(p);
+      open(p);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -123,20 +113,6 @@ export function ProjectPicker({ onOpen, refresh }: {
     setError(null);
     try {
       await api.del(`/v1/projects/${p.id}`, token);
-      await load();
-    } catch (e) {
-      setError(String(e));
-    }
-  }
-
-  /** Le quita el candado a quien esté dentro, sin esperar a que lo suelte
-   *  solo o a que caduque -- el dueño del proyecto o un administrador del
-   *  servidor. La persona expulsada se entera por el mismo canal que ya usan
-   *  las invitaciones (ver `App.tsx`). */
-  async function kick(p: Project) {
-    setError(null);
-    try {
-      await api.post(`/v1/projects/${p.id}/kick`, {}, token);
       await load();
     } catch (e) {
       setError(String(e));
@@ -186,19 +162,14 @@ export function ProjectPicker({ onOpen, refresh }: {
           {orden.items.map((p, i) => (
             <Card key={p.id} project={p} vista={vista} delay={Math.min(i, 8) * 40}
               drag={orden.drag(p.id)}
-              onOpen={() => { if (!orden.dragging && !busy) void open(p); }}
+              onOpen={() => open(p)}
               onMenu={(e) => menuAt(e, p.name, [
-                { label: "Abrir", hint: "↵", onClick: () => void open(p) },
+                { label: "Abrir", hint: "↵", onClick: () => open(p) },
                 {
                   // El admin gestiona cualquier proyecto, sea o no su dueño —
                   // mismo criterio que ya aplica el servidor en `guard()`.
                   label: "Renombrar", hint: "F2", disabled: p.role !== "owner" && !isAdmin,
                   onClick: () => setRenaming(p),
-                },
-                {
-                  label: p.locked_by ? `Sacar a ${p.locked_by}` : "Sacar a quien esté dentro",
-                  disabled: !p.locked_by || (p.role !== "owner" && !isAdmin),
-                  onClick: () => void kick(p),
                 },
                 null,
                 {
@@ -286,9 +257,12 @@ function Card({ project, vista, delay, drag, onOpen, onMenu }: {
       <Stat icon="image" v={String(project.images)} />
       <Stat icon="cloud" v={size(project.bytes)} />
       <span className="ml-auto flex items-center gap-1.5">
-        {project.locked_by && (
-          <span title={`${project.locked_by} está trabajando en este proyecto ahora mismo`}>
-            <UserTile nombre={project.locked_by} conectado size={16} userId={project.locked_by_id ?? undefined} />
+        {project.casos_ocupados > 0 && (
+          <span title={`${project.casos_ocupados} caso${project.casos_ocupados === 1 ? "" : "s"} ocupado${project.casos_ocupados === 1 ? "" : "s"} ahora mismo`}
+            className="flex items-center gap-1 rounded-full border border-border bg-elevated px-1.5 py-0.5
+              font-mono text-[9.5px] text-subtle">
+            <Icon name="lock" size={10} />
+            {project.casos_ocupados}
           </span>
         )}
         {project.role !== "owner" && (

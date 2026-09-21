@@ -158,14 +158,17 @@ CREATE TABLE IF NOT EXISTS analysis_images (
     image_id    INTEGER NOT NULL,
     PRIMARY KEY (analysis_id, image_id)
 );
--- Quién tiene un proyecto abierto ahora mismo. Solo una fila por proyecto: es
--- justo lo que impide que dos personas trabajen en el mismo a la vez.
--- `enter`/`leave` en routes/projects.rs son los únicos que la tocan.
-CREATE TABLE IF NOT EXISTS project_locks (
-    project_id INTEGER PRIMARY KEY,
-    user_id    INTEGER NOT NULL,
-    token      TEXT NOT NULL,
-    since      INTEGER NOT NULL
+-- Quién tiene un caso abierto ahora mismo. Solo una fila por caso: es justo
+-- lo que impide que dos personas trabajen en el mismo a la vez. `enter`/
+-- `leave`/`kick` en routes/cases.rs son los únicos que la tocan. Sustituye a
+-- `project_locks` (candado por proyecto) -- Darkroom Fase 1, 2026-09-21: el
+-- candado baja de proyecto a caso porque varias personas ya pueden compartir
+-- un proyecto, solo no el mismo caso a la vez.
+CREATE TABLE IF NOT EXISTS case_locks (
+    case_id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    token   TEXT NOT NULL,
+    since   INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS cases_by_project ON cases(project_id);
 CREATE INDEX IF NOT EXISTS images_by_case ON images(case_id);
@@ -447,6 +450,7 @@ impl Store {
 /// aquí abajo.
 fn migrate(c: &Connection) {
     migracion_darkroom_borrar_agentes_2026_09_19(c);
+    migracion_darkroom_candado_por_caso_2026_09_21(c);
     for (table, col, decl) in [
         ("users", "display_name", "TEXT"),
         ("users", "blocked", "INTEGER NOT NULL DEFAULT 0"),
@@ -601,6 +605,31 @@ fn migracion_darkroom_borrar_agentes_2026_09_19(c: &Connection) {
         [],
     );
     tracing::info!("migración darkroom 2026-09-19: analysis_agents borrada, análisis de agentes vaciados");
+}
+
+/// El candado de trabajo baja de proyecto a caso (Darkroom Fase 1,
+/// 2026-09-19-darkroom-design.md Parte 3): `case_locks` ya nace por el
+/// `CREATE TABLE IF NOT EXISTS` de arriba, así que aquí solo hay que quitar
+/// la tabla vieja para las instalaciones que ya existían. Sin migración de
+/// datos -- un candado es estado efímero, perderlo en el momento exacto de
+/// actualizar no es una pérdida real.
+fn migracion_darkroom_candado_por_caso_2026_09_21(c: &Connection) {
+    let ya_aplicada = c
+        .query_row(
+            "SELECT v FROM meta WHERE k = 'migracion_darkroom_candado_por_caso_2026_09_21'",
+            [],
+            |r| r.get::<_, String>(0),
+        )
+        .is_ok();
+    if ya_aplicada {
+        return;
+    }
+    let _ = c.execute_batch("DROP TABLE IF EXISTS project_locks;");
+    let _ = c.execute(
+        "INSERT OR REPLACE INTO meta (k, v) VALUES ('migracion_darkroom_candado_por_caso_2026_09_21', '1')",
+        [],
+    );
+    tracing::info!("migración darkroom 2026-09-21: candado de proyecto sustituido por candado de caso");
 }
 
 #[cfg(test)]

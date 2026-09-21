@@ -12,7 +12,7 @@ export function ProjectView({
   project, onOpenCase, rail, drawer,
 }: {
   project: Project;
-  onOpenCase: (c: Case) => void;
+  onOpenCase: (c: Case) => Promise<void>;
   rail: React.ReactNode;
   drawer: React.ReactNode;
 }) {
@@ -56,7 +56,7 @@ export function ProjectView({
       const c = await api.post<Case>(`/v1/projects/${project.id}/cases`, { name, backend }, token);
       setCreating(false);
       setBackend("normal");
-      onOpenCase(c);
+      await onOpenCase(c);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -75,6 +75,23 @@ export function ProjectView({
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Sacar a quien tenga el caso. Quién puede hacerlo lo decide el
+   *  administrador (`caso_expulsar_rol`): el servidor contesta 403 si no. */
+  async function kick(c: Case) {
+    setError(null);
+    try {
+      await api.post(`/v1/cases/${c.id}/kick`, {}, token);
+      await load();
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  function open(c: Case) {
+    setError(null);
+    void onOpenCase(c).catch((e) => setError(String(e)));
   }
 
   async function remove(c: Case) {
@@ -110,10 +127,15 @@ export function ProjectView({
               style={{ animation: `jg-fade-rise 380ms ${Math.min(i, 8) * 40}ms cubic-bezier(.16,1,.3,1) both` }}>
               <CaseRow case_={c} covers={covers.get(c.id) ?? []}
                 drag={orden.drag(c.id)}
-                onOpen={() => { if (!orden.dragging) onOpenCase(c); }}
+                onOpen={() => { if (!orden.dragging) open(c); }}
                 onMenu={(e) => menuAt(e, c.name, [
-                  { label: "Abrir", hint: "↵", onClick: () => onOpenCase(c) },
+                  { label: "Abrir", hint: "↵", onClick: () => open(c) },
                   { label: "Renombrar", hint: "F2", onClick: () => setRenaming(c) },
+                  {
+                    label: c.locked_by ? `Sacar a ${c.locked_by}` : "Sacar a quien esté dentro",
+                    disabled: !c.locked_by,
+                    onClick: () => void kick(c),
+                  },
                   null,
                   { label: "Eliminar caso", danger: true, onClick: () => void remove(c) },
                 ], setMenu)} />
