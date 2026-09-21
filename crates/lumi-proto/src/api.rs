@@ -1109,6 +1109,17 @@ pub enum Cambio {
     /// mismo orden que decide `queue::plan::repartir`. Se manda de nuevo en
     /// cada tic de reparto mientras siga pendiente, así que un valor viejo se
     /// pisa solo sin que nadie tenga que borrarlo.
+    /// El candado de un caso quedó libre (alguien salió, lo expulsaron, o
+    /// caducó por inactividad), para que la lista de casos se entere sin
+    /// sondear.
+    CasoLibre {
+        /// A diferencia de las demás variantes (un único destinatario en
+        /// `user_id`), esta se difunde a varios: los miembros del proyecto
+        /// del caso que quedó libre. Ver `Cambio::para`.
+        #[serde(skip)]
+        miembros: Vec<i64>,
+        case_id: i64,
+    },
     Cola {
         #[serde(skip)]
         user_id: i64,
@@ -1140,14 +1151,21 @@ pub enum Cambio {
 }
 
 impl Cambio {
-    pub fn user_id(&self) -> i64 {
+    /// A quién le llega este cambio por SSE (`routes::queue::events`). La
+    /// mayoría son de un solo destinatario; `CasoLibre` es la primera
+    /// excepción -- se difunde a los miembros del proyecto del caso que
+    /// quedó libre, no a una sola sesión. El filtro sigue viviendo aquí
+    /// para que nadie tenga que tocar `routes::queue` cada vez que nace una
+    /// variante nueva.
+    pub fn para(&self, uid: i64) -> bool {
         match self {
             Cambio::Estado { user_id, .. }
             | Cambio::Progreso { user_id, .. }
             | Cambio::Expulsion { user_id, .. }
             | Cambio::Cola { user_id, .. }
             | Cambio::Invitacion { user_id, .. }
-            | Cambio::Red { user_id, .. } => *user_id,
+            | Cambio::Red { user_id, .. } => *user_id == uid,
+            Cambio::CasoLibre { miembros, .. } => miembros.contains(&uid),
         }
     }
 }

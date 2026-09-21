@@ -31,7 +31,7 @@ pub async fn events(
         let _presencia = presencia;
         loop {
             match rx.recv().await {
-                Ok(c) if c.user_id() == uid => {
+                Ok(c) if c.para(uid) => {
                     yield Ok(Event::default().json_data(&c).unwrap_or_default());
                 }
                 Ok(_) => {}

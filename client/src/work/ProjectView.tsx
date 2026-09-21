@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, type Case, type Project, type ProjectImage } from "../lib/api";
+import { listen } from "@tauri-apps/api/event";
+import { api, type Cambio, type Case, type Project, type ProjectImage } from "../lib/api";
 import { useReorder } from "../lib/useReorder";
 import { useServer } from "../lib/store";
 import { ContextMenu, menuAt, type MenuState } from "../ui/ContextMenu";
@@ -49,6 +50,20 @@ export function ProjectView({
 
   const list = cases ?? [];
   const orden = useReorder(`cases-${project.id}`, list, "y");
+
+  // Un caso que queda libre (alguien salió, lo expulsaron, o caducó) deja de
+  // estar ocupado para todos los demás: sin esto, la fila seguiría diciendo
+  // que hay alguien dentro hasta la siguiente recarga a mano.
+  useEffect(() => {
+    const un = listen<Cambio>("queue-change", (e) => {
+      const c = e.payload;
+      if (c.tipo !== "casolibre") return;
+      if (!list.some((k) => k.id === c.case_id)) return;
+      void load();
+    });
+    return () => { void un.then((f) => f()); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list]);
 
   async function create(name: string) {
     setBusy(true); setError(null);

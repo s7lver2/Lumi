@@ -351,10 +351,14 @@ pub async fn enter(
 /// hay nada que soltar, y si es de otra persona no es asunto tuyo tocarlo.
 pub async fn leave(State(app): State<App>, Path(id): Path<i64>, headers: HeaderMap) -> Result<StatusCode, Fail> {
     let (uid, _) = require_session(&app, &bearer(&headers)).map_err(|c| (c, "sesión inválida".to_string()))?;
+    let pid: Option<i64> = app.store.conn().query_row("SELECT project_id FROM cases WHERE id = ?1", [id], |r| r.get(0)).ok();
     app.store
         .conn()
         .execute("DELETE FROM case_locks WHERE case_id = ?1 AND user_id = ?2", rusqlite::params![id, uid])
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
+    if let Some(pid) = pid {
+        difundir_caso_libre(&app, pid, id);
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -370,7 +374,7 @@ pub async fn kick(
     // GET otra vez, por lo mismo que `enter`: expulsar a quien tiene el
     // candado no puede exigir tenerlo. Quién puede hacerlo lo decide
     // `caso_expulsar_rol` justo aquí debajo.
-    let (uid, _pid, role) = guard_case(&app, &headers, &axum::http::Method::GET, id).await?;
+    let (uid, pid, role) = guard_case(&app, &headers, &axum::http::Method::GET, id).await?;
     let rol = crate::routes::colaboracion::caso_expulsar_rol(&app);
     let is_admin = crate::routes::auth::require_admin(&app, &bearer(&headers)).is_ok();
     let permitido = match rol.as_str() {
@@ -390,6 +394,7 @@ pub async fn kick(
     let case_name: String = c.query_row("SELECT name FROM cases WHERE id = ?1", [id], |r| r.get(0)).unwrap_or_default();
     tracing::info!("caso #{id} ({case_name}): usuario {holder} expulsado del candado por el usuario {uid}");
     app.queue.difundir(lumi_proto::api::Cambio::Expulsion { user_id: holder, case_id: id, case_name });
+    difundir_caso_libre(&app, pid, id);
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -418,9 +423,26 @@ pub async fn barrer_candados_caducados(app: App) {
             }
             filas
         };
-        for (case_id, _project_id) in &caducados {
+        for (case_id, project_id) in &caducados {
             tracing::info!("caso #{case_id}: candado liberado por inactividad ({limite}s)");
+            difundir_caso_libre(&app, *project_id, *case_id);
         }
         tokio::time::sleep(std::time::Duration::from_secs(60)).await;
     }
+}
+
+/// Los miembros del proyecto de un caso, para avisarles por SSE que quedó
+/// libre. `app.queue.difundir` reparte un único `Cambio` a todos los
+/// suscriptores conectados; `Cambio::para` decide a quién le llega.
+fn difundir_caso_libre(app: &App, project_id: i64, case_id: i64) {
+    let miembros: Vec<i64> = {
+        let c = app.store.conn();
+        c.prepare("SELECT user_id FROM project_members WHERE project_id = ?1 AND status = 'accepted'")
+            .and_then(|mut q| q.query_map([project_id], |r| r.get::<_, i64>(0)).map(|rows| rows.flatten().collect()))
+            .unwrap_or_default()
+    };
+    if miembros.is_empty() {
+        return;
+    }
+    app.queue.difundir(lumi_proto::api::Cambio::CasoLibre { miembros, case_id });
 }
