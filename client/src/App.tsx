@@ -32,6 +32,7 @@ import { loadSession, updateServerAvatar, updateSession } from "./lib/session";
 import { ProjectPicker } from "./work/ProjectPicker";
 import { ProjectView } from "./work/ProjectView";
 import { CaseView } from "./work/CaseView";
+import { DarkroomView } from "./work/DarkroomView";
 import { Rail } from "./work/Rail";
 import { InviteDrawer } from "./work/InviteDrawer";
 import type { DrawerId } from "./work/Drawer";
@@ -602,9 +603,13 @@ export default function App() {
               onClose={() => setDrawer(null)} />
           );
           return mode === "case" && case_ ? (
-            <CaseView project={project} case_={case_} rail={rail} drawer={cajon}
-              drawerId={drawer} setDrawer={setDrawer}
-              exportOpen={exportOpen} onCloseExport={() => setExportOpen(false)} />
+            case_.backend === "darkroom" ? (
+              <DarkroomView project={project} case_={case_} rail={rail} drawer={cajon} />
+            ) : (
+              <CaseView project={project} case_={case_} rail={rail} drawer={cajon}
+                drawerId={drawer} setDrawer={setDrawer}
+                exportOpen={exportOpen} onCloseExport={() => setExportOpen(false)} />
+            )
           ) : (
             <ProjectView project={project} rail={rail} drawer={cajon}
               onOpenCase={openCase} />
