@@ -30,12 +30,13 @@ use std::process::Command;
 pub async fn export_pdf(
     State(app): State<App>,
     Path(case_id): Path<i64>,
+    method: axum::http::Method,
     headers: HeaderMap,
     Json(req): Json<ExportInformeReq>,
 ) -> Result<([(axum::http::HeaderName, String); 2], Vec<u8>), Fail> {
     // Mismo guardián que el resto de rutas de caso: cualquier miembro del
     // proyecto puede pedir el informe, no solo el administrador.
-    let (_, pid, _) = guard_case(&app, &headers, case_id).await?;
+    let (_, pid, _) = guard_case(&app, &headers, &method, case_id).await?;
 
     let (case_name, case_created_at): (String, i64) = app
         .store

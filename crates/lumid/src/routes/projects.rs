@@ -57,6 +57,11 @@ fn guard(app: &App, headers: &HeaderMap, project_id: i64, manage: bool) -> Resul
 pub async fn list(State(app): State<App>, headers: HeaderMap) -> Result<Json<Vec<Project>>, Fail> {
     let (uid, _) = require_session(&app, &bearer(&headers))
         .map_err(|c| (c, "sesión inválida".to_string()))?;
+    // El ajuste se lee antes de tomar la conexión: `get_meta` vuelve a pedir
+    // el mismo mutex del store, y pedirlo con el guard ya en la mano cuelga
+    // el hilo para siempre.
+    let ahora = now();
+    let limite = crate::routes::colaboracion::caso_liberar_s(&app);
     let c = app.store.conn();
     // Antes esto era una subconsulta correlacionada por proyecto (tres,
     // de hecho): para cada fila de `projects` volvía a recorrer `images`
@@ -66,8 +71,6 @@ pub async fn list(State(app): State<App>, headers: HeaderMap) -> Result<Json<Vec
     // reales, la lista tardaba segundos en cargar. Los `GROUP BY` de abajo
     // agregan cada tabla en una sola pasada, y el `LEFT JOIN` con `projects`
     // es lo único que queda por proyecto.
-    let ahora = now();
-    let limite = crate::routes::colaboracion::caso_liberar_s(&app);
     let mut q = c
         .prepare(
             "SELECT p.id, p.name, m.role, p.created_at, p.updated_at,

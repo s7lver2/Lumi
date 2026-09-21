@@ -143,9 +143,10 @@ pub(crate) fn hypotheses_por_caso(
 pub async fn list(
     State(app): State<App>,
     Path(case_id): Path<i64>,
+    method: axum::http::Method,
     headers: HeaderMap,
 ) -> Result<Json<Vec<Analysis>>, Fail> {
-    guard_case(&app, &headers, case_id).await?;
+    guard_case(&app, &headers, &method, case_id).await?;
     let c = app.store.conn();
     let mut q = c
         .prepare(&format!(
@@ -172,6 +173,7 @@ pub async fn list(
 pub async fn get_one(
     State(app): State<App>,
     Path(id): Path<i64>,
+    method: axum::http::Method,
     headers: HeaderMap,
 ) -> Result<Json<Analysis>, Fail> {
     let missing = || err(StatusCode::NOT_FOUND, "no existe ese análisis");
@@ -180,7 +182,7 @@ pub async fn get_one(
         .conn()
         .query_row("SELECT case_id FROM analyses WHERE id = ?1", [id], |r| r.get(0))
         .map_err(|_| missing())?;
-    guard_case(&app, &headers, case_id).await?;
+    guard_case(&app, &headers, &method, case_id).await?;
     let c = app.store.conn();
     let mut a = c
         .query_row(&format!("SELECT {COLS} FROM analyses WHERE id = ?1"), [id], row_to_analysis)
@@ -193,10 +195,11 @@ pub async fn get_one(
 pub async fn create(
     State(app): State<App>,
     Path(case_id): Path<i64>,
+    method: axum::http::Method,
     headers: HeaderMap,
     Json(req): Json<AnalysisReq>,
 ) -> Result<Json<Analysis>, Fail> {
-    let (uid, _, _) = guard_case(&app, &headers, case_id).await?;
+    let (uid, _, _) = guard_case(&app, &headers, &method, case_id).await?;
     let is_admin = require_session(&app, &bearer(&headers)).map(|(_, a)| a).unwrap_or(false);
     if req.image_ids.is_empty() {
         return Err(err(StatusCode::BAD_REQUEST, "hay que elegir al menos una imagen"));
@@ -337,6 +340,7 @@ pub async fn create(
 pub async fn remove(
     State(app): State<App>,
     Path(id): Path<i64>,
+    method: axum::http::Method,
     headers: HeaderMap,
 ) -> Result<StatusCode, Fail> {
     let (case_id, state): (i64, String) = app
@@ -350,7 +354,7 @@ pub async fn remove(
     // de Cola aunque no sea miembro del proyecto de ese caso. Cualquier
     // otra persona sigue necesitando `guard_case`.
     if require_admin(&app, &bearer(&headers)).is_err() {
-        guard_case(&app, &headers, case_id).await?;
+        guard_case(&app, &headers, &method, case_id).await?;
     }
     // Cancelar es esto: borrar lo que todavía no ha empezado. Lo que ya está en
     // una GPU llega hasta el final — matarlo tiraría cómputo ya gastado.

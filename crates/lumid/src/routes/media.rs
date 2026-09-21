@@ -54,10 +54,11 @@ fn row_to_folder(r: &rusqlite::Row) -> rusqlite::Result<MediaFolder> {
 pub async fn listar_carpetas(
     State(app): State<App>,
     Path(case_id): Path<i64>,
+    method: axum::http::Method,
     headers: HeaderMap,
     Query(q): Query<ModoQuery>,
 ) -> Result<Json<Vec<MediaFolder>>, Fail> {
-    let (_, pid, _) = guard_case(&app, &headers, case_id).await?;
+    let (_, pid, _) = guard_case(&app, &headers, &method, case_id).await?;
     let proyecto = modo_proyecto(&app, &q)?;
     let c = app.store.conn();
     let (sql, param) = if proyecto {
@@ -77,11 +78,12 @@ pub async fn listar_carpetas(
 pub async fn crear_carpeta(
     State(app): State<App>,
     Path(case_id): Path<i64>,
+    method: axum::http::Method,
     headers: HeaderMap,
     Query(q): Query<ModoQuery>,
     Json(req): Json<CrearCarpetaReq>,
 ) -> Result<Json<MediaFolder>, Fail> {
-    let (_, pid, _) = guard_case(&app, &headers, case_id).await?;
+    let (_, pid, _) = guard_case(&app, &headers, &method, case_id).await?;
     let proyecto = modo_proyecto(&app, &q)?;
     let nombre = req.nombre.trim();
     if nombre.is_empty() {
@@ -140,6 +142,7 @@ pub async fn borrar_carpeta(
 pub async fn mover_imagen(
     State(app): State<App>,
     Path(id): Path<i64>,
+    method: axum::http::Method,
     headers: HeaderMap,
     Json(req): Json<MoverImagenReq>,
 ) -> Result<Json<Image>, Fail> {
@@ -149,7 +152,7 @@ pub async fn mover_imagen(
         .conn()
         .query_row("SELECT case_id FROM images WHERE id = ?1", [id], |r| r.get(0))
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe esa imagen"))?;
-    let (_, pid, _) = guard_case(&app, &headers, case_id).await?;
+    let (_, pid, _) = guard_case(&app, &headers, &method, case_id).await?;
     let _ = uid;
     // Si se manda una carpeta, tiene que ser una visible desde este caso
     // (de este caso, o de su proyecto) -- sin esto, un id de carpeta ajena
@@ -188,6 +191,7 @@ pub async fn mover_imagen(
 pub async fn analisis_desincronizados(
     State(app): State<App>,
     Path(id): Path<i64>,
+    method: axum::http::Method,
     headers: HeaderMap,
 ) -> Result<Json<Vec<AnalisisDesincronizado>>, Fail> {
     let case_id: i64 = app
@@ -195,7 +199,7 @@ pub async fn analisis_desincronizados(
         .conn()
         .query_row("SELECT case_id FROM images WHERE id = ?1", [id], |r| r.get(0))
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe esa imagen"))?;
-    guard_case(&app, &headers, case_id).await?;
+    guard_case(&app, &headers, &method, case_id).await?;
     let c = app.store.conn();
     let mut q = c
         .prepare(
@@ -236,6 +240,7 @@ async fn leer_campo_unico(mp: &mut Multipart) -> Result<Vec<u8>, Fail> {
 pub async fn sobrescribir(
     State(app): State<App>,
     Path(id): Path<i64>,
+    method: axum::http::Method,
     headers: HeaderMap,
     mut mp: Multipart,
 ) -> Result<Json<Image>, Fail> {
@@ -244,7 +249,7 @@ pub async fn sobrescribir(
         .conn()
         .query_row("SELECT case_id FROM images WHERE id = ?1", [id], |r| r.get(0))
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe esa imagen"))?;
-    guard_case(&app, &headers, case_id).await?;
+    guard_case(&app, &headers, &method, case_id).await?;
     let data = leer_campo_unico(&mut mp).await?;
     // Decodificar + hashear (dentro de `sobrescribir_bytes`) es CPU pura, no
     // red -- igual que `upload`/`upscale` en `images.rs` (D10), va al pool de
@@ -264,6 +269,7 @@ pub async fn sobrescribir(
 pub async fn copiar(
     State(app): State<App>,
     Path(id): Path<i64>,
+    method: axum::http::Method,
     headers: HeaderMap,
     mut mp: Multipart,
 ) -> Result<Json<Image>, Fail> {
@@ -272,7 +278,7 @@ pub async fn copiar(
         .conn()
         .query_row("SELECT case_id FROM images WHERE id = ?1", [id], |r| r.get(0))
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe esa imagen"))?;
-    let (uid, pid, _) = guard_case(&app, &headers, case_id).await?;
+    let (uid, pid, _) = guard_case(&app, &headers, &method, case_id).await?;
     let filename: String = app
         .store
         .conn()

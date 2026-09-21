@@ -135,9 +135,10 @@ pub(crate) fn row_to_image(r: &rusqlite::Row) -> rusqlite::Result<Image> {
 pub async fn list(
     State(app): State<App>,
     Path(case_id): Path<i64>,
+    method: axum::http::Method,
     headers: HeaderMap,
 ) -> Result<Json<Vec<Image>>, Fail> {
-    guard_case(&app, &headers, case_id).await?;
+    guard_case(&app, &headers, &method, case_id).await?;
     let c = app.store.conn();
     // D12: `COLS` es una constante -- el texto de esta consulta nunca cambia
     // entre llamadas, así que `prepare_cached` sí puede reutilizar el
@@ -192,10 +193,11 @@ pub async fn project_gallery(
 pub async fn reuse(
     State(app): State<App>,
     Path(case_id): Path<i64>,
+    method: axum::http::Method,
     headers: HeaderMap,
     Json(req): Json<ReuseReq>,
 ) -> Result<Json<Image>, Fail> {
-    let (uid, pid, _) = guard_case(&app, &headers, case_id).await?;
+    let (uid, pid, _) = guard_case(&app, &headers, &method, case_id).await?;
     let is_admin = require_session(&app, &bearer(&headers)).map(|(_, a)| a).unwrap_or(false);
 
     #[allow(clippy::type_complexity)]
@@ -267,10 +269,11 @@ pub async fn reuse(
 pub async fn upload(
     State(app): State<App>,
     Path(case_id): Path<i64>,
+    method: axum::http::Method,
     headers: HeaderMap,
     mut mp: Multipart,
 ) -> Result<Json<Vec<Image>>, Fail> {
-    let (uid, pid, _) = guard_case(&app, &headers, case_id).await?;
+    let (uid, pid, _) = guard_case(&app, &headers, &method, case_id).await?;
     let is_admin = require_session(&app, &bearer(&headers)).map(|(_, a)| a).unwrap_or(false);
     let dir = dir_for(&app, pid);
     std::fs::create_dir_all(&dir)
@@ -388,6 +391,7 @@ pub async fn upscale(
     State(app): State<App>,
     Path(case_id): Path<i64>,
     Query(q): Query<UpscaleQuery>,
+    method: axum::http::Method,
     headers: HeaderMap,
     mut mp: Multipart,
 ) -> Result<Json<lumi_proto::api::Analysis>, Fail> {
@@ -395,7 +399,7 @@ pub async fn upscale(
     if app.store.get_meta(crate::routes::features::CLAVE_UPSCALER).as_deref() != Some("1") {
         return Err(err(StatusCode::FORBIDDEN, "el upscaler no está activado en este servidor"));
     }
-    let (uid, pid, _) = guard_case(&app, &headers, case_id).await?;
+    let (uid, pid, _) = guard_case(&app, &headers, &method, case_id).await?;
     let is_admin = require_session(&app, &bearer(&headers)).map(|(_, a)| a).unwrap_or(false);
     let dir = dir_for(&app, pid);
     std::fs::create_dir_all(&dir).map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
@@ -488,6 +492,7 @@ pub async fn upscale(
 pub async fn remove(
     State(app): State<App>,
     Path(id): Path<i64>,
+    method: axum::http::Method,
     headers: HeaderMap,
 ) -> Result<StatusCode, Fail> {
     let case_id: i64 = app
@@ -495,7 +500,7 @@ pub async fn remove(
         .conn()
         .query_row("SELECT case_id FROM images WHERE id = ?1", [id], |r| r.get(0))
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe esa imagen"))?;
-    let (_, pid, _) = guard_case(&app, &headers, case_id).await?;
+    let (_, pid, _) = guard_case(&app, &headers, &method, case_id).await?;
     // Si se fuera, el resultado aterrizaría sobre un caso al que le falta la
     // prueba que lo produjo. En una herramienta forense eso no es aceptable.
     let en_uso: i64 = app
@@ -549,7 +554,7 @@ async fn serve(
             Ok((r.get(0)?, r.get(1)?, r.get(2)?))
         })
         .map_err(|_| err(StatusCode::NOT_FOUND, "no existe esa imagen"))?;
-    let (_, pid, _) = guard_case(app, headers, case_id).await?;
+    let (_, pid, _) = guard_case(app, headers, &axum::http::Method::GET, case_id).await?;
 
     let dir = dir_for(app, pid);
     let (path, ctype) = if thumb {

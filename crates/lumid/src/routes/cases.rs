@@ -24,8 +24,13 @@ const MAX_NAME: usize = 80;
 /// llamantes, fuera de alcance de este ítem) -- ambas consultas siguen
 /// siendo el mismo criterio de acceso, solo que agrupadas bajo un único
 /// `spawn_blocking`.
-pub async fn guard_case(app: &App, headers: &HeaderMap, case_id: i64) -> Result<(i64, i64, Role), Fail> {
-    let (uid, _) = require_session(app, &bearer(headers))
+pub async fn guard_case(
+    app: &App,
+    headers: &HeaderMap,
+    method: &axum::http::Method,
+    case_id: i64,
+) -> Result<(i64, i64, Role), Fail> {
+    let (uid, is_admin) = require_session(app, &bearer(headers))
         .map_err(|c| (c, "sesión inválida".to_string()))?;
     let missing = || err(StatusCode::NOT_FOUND, "no existe ese caso");
     let (pid, role): (Option<i64>, Option<String>) = crate::store::Store::leer(app.store.clone(), move |c| {
@@ -50,6 +55,40 @@ pub async fn guard_case(app: &App, headers: &HeaderMap, case_id: i64) -> Result<
         Some("member") => Role::Member,
         _ => return Err(missing()),
     };
+    // Darkroom Fase 1 §3, punto 1: hasta ahora el candado solo lo comprobaba
+    // `enter` -- cualquier otra ruta (o una API key) podía escribir en un
+    // caso tomado por otra persona. Solo lo que escribe (POST/PATCH/PUT/
+    // DELETE) exige tener el caso; las lecturas pasan siempre, y un
+    // administrador nunca se queda fuera de algo que administra (mismo
+    // criterio que `routes::mantenimiento`).
+    if !is_admin
+        && method != axum::http::Method::GET
+        && method != axum::http::Method::HEAD
+        && crate::routes::colaboracion::caso_exclusivo(app)
+    {
+        let held: Option<(i64, i64)> = app
+            .store
+            .conn()
+            .query_row("SELECT user_id, since FROM case_locks WHERE case_id = ?1", [case_id], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .ok();
+        if let Some((holder, since)) = held {
+            if holder != uid && now() - since < crate::routes::colaboracion::caso_liberar_s(app) {
+                let username: String = app
+                    .store
+                    .conn()
+                    .query_row("SELECT username FROM users WHERE id = ?1", [holder], |r| r.get(0))
+                    .unwrap_or_else(|_| "otra persona".into());
+                return Err(err(
+                    StatusCode::CONFLICT,
+                    &format!(
+                        "{username} tiene este caso ahora mismo; solo puede haber una persona trabajando en él a la vez"
+                    ),
+                ));
+            }
+        }
+    }
     Ok((uid, pid, role))
 }
 
@@ -67,9 +106,12 @@ pub async fn list(
     headers: HeaderMap,
 ) -> Result<Json<Vec<Case>>, Fail> {
     guard_project(&app, &headers, project_id)?;
-    let c = app.store.conn();
+    // Los ajustes se leen ANTES de tomar la conexión: `get_meta` vuelve a
+    // pedir el mismo mutex del store, y pedirlo con el guard ya en la mano
+    // cuelga el hilo para siempre.
     let ahora = now();
     let limite = crate::routes::colaboracion::caso_liberar_s(&app);
+    let c = app.store.conn();
     let mut q = c
         .prepare(
             "SELECT k.id, k.project_id, k.name, k.backend, k.created_at,
@@ -160,10 +202,11 @@ pub async fn create(
 pub async fn rename(
     State(app): State<App>,
     Path(id): Path<i64>,
+    method: axum::http::Method,
     headers: HeaderMap,
     Json(req): Json<NameReq>,
 ) -> Result<StatusCode, Fail> {
-    guard_case(&app, &headers, id).await?;
+    guard_case(&app, &headers, &method, id).await?;
     let name = req.name.trim();
     if name.is_empty() || name.chars().count() > MAX_NAME {
         return Err(err(StatusCode::BAD_REQUEST, "el nombre está vacío o pasa de 80 caracteres"));
@@ -178,9 +221,10 @@ pub async fn rename(
 pub async fn remove(
     State(app): State<App>,
     Path(id): Path<i64>,
+    method: axum::http::Method,
     headers: HeaderMap,
 ) -> Result<StatusCode, Fail> {
-    let (_, pid, _) = guard_case(&app, &headers, id).await?;
+    let (_, pid, _) = guard_case(&app, &headers, &method, id).await?;
     // Los archivos de cada imagen, antes de perder sus filas.
     let files: Vec<i64> = {
         let c = app.store.conn();
@@ -220,11 +264,24 @@ pub async fn remove(
 /// `project_locks`/`routes::projects`, mudada de ámbito: varias personas ya
 /// pueden compartir un proyecto, pero no el mismo caso (spec Darkroom Parte
 /// 3).
-pub async fn enter(State(app): State<App>, Path(id): Path<i64>, headers: HeaderMap) -> Result<StatusCode, Fail> {
-    let (uid, pid, _role) = guard_case(&app, &headers, id).await?;
+pub async fn enter(
+    State(app): State<App>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+) -> Result<StatusCode, Fail> {
+    // `guard_case` con GET a propósito: tomar el candado es justo la
+    // operación que NO puede chocar con el candado -- si chocara, nadie
+    // podría robar uno abandonado. La exclusividad la comprueba este mismo
+    // handler unas líneas más abajo, y con más criterio (además del plazo,
+    // mira si la sesión de quien lo tiene sigue viva).
+    let (uid, pid, _role) = guard_case(&app, &headers, &axum::http::Method::GET, id).await?;
     let token = bearer(&headers);
+    // Igual que en `list`: los ajustes, antes del guard de la conexión.
+    let exclusivo = crate::routes::colaboracion::caso_exclusivo(&app);
+    let limite = crate::routes::colaboracion::caso_liberar_s(&app);
+    let tope = crate::routes::colaboracion::proyecto_max_personas(&app);
     let c = app.store.conn();
-    if crate::routes::colaboracion::caso_exclusivo(&app) {
+    if exclusivo {
         let held: Option<(i64, String, i64)> = c
             .query_row(
                 "SELECT user_id, token, since FROM case_locks WHERE case_id = ?1",
@@ -241,7 +298,7 @@ pub async fn enter(State(app): State<App>, Path(id): Path<i64>, headers: HeaderM
                         |_| Ok(()),
                     )
                     .is_ok();
-                if session_valid && now() - since < crate::routes::colaboracion::caso_liberar_s(&app) {
+                if session_valid && now() - since < limite {
                     let username: String = c
                         .query_row("SELECT username FROM users WHERE id = ?1", [holder], |r| r.get(0))
                         .unwrap_or_else(|_| "otra persona".into());
@@ -255,7 +312,6 @@ pub async fn enter(State(app): State<App>, Path(id): Path<i64>, headers: HeaderM
             }
         }
     }
-    let tope = crate::routes::colaboracion::proyecto_max_personas(&app);
     if tope > 0 {
         let ya_tenia: bool = c
             .query_row("SELECT 1 FROM case_locks WHERE case_id = ?1 AND user_id = ?2", [id, uid], |_| Ok(()))
@@ -267,7 +323,7 @@ pub async fn enter(State(app): State<App>, Path(id): Path<i64>, headers: HeaderM
                      JOIN cases k ON k.id = cl.case_id
                      JOIN sessions s ON s.token = cl.token AND s.expires_at > ?2
                      WHERE k.project_id = ?1 AND ?2 - cl.since < ?3",
-                    rusqlite::params![pid, now(), crate::routes::colaboracion::caso_liberar_s(&app)],
+                    rusqlite::params![pid, now(), limite],
                     |r| r.get(0),
                 )
                 .unwrap_or(0);
@@ -306,8 +362,15 @@ pub async fn leave(State(app): State<App>, Path(id): Path<i64>, headers: HeaderM
 /// o a que caduque -- para cuando alguien se queda dentro del caso y otra
 /// persona necesita entrar ya. Quién puede hacerlo lo decide el administrador
 /// (`colaboracion::caso_expulsar_rol`).
-pub async fn kick(State(app): State<App>, Path(id): Path<i64>, headers: HeaderMap) -> Result<StatusCode, Fail> {
-    let (uid, _pid, role) = guard_case(&app, &headers, id).await?;
+pub async fn kick(
+    State(app): State<App>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+) -> Result<StatusCode, Fail> {
+    // GET otra vez, por lo mismo que `enter`: expulsar a quien tiene el
+    // candado no puede exigir tenerlo. Quién puede hacerlo lo decide
+    // `caso_expulsar_rol` justo aquí debajo.
+    let (uid, _pid, role) = guard_case(&app, &headers, &axum::http::Method::GET, id).await?;
     let rol = crate::routes::colaboracion::caso_expulsar_rol(&app);
     let is_admin = crate::routes::auth::require_admin(&app, &bearer(&headers)).is_ok();
     let permitido = match rol.as_str() {
