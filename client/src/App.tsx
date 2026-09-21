@@ -382,6 +382,27 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
+  // Darkroom Fase 1 §3: sin este latido, el candado de un caso caduca solo
+  // por el reloj del barrido del daemon (`caso_liberar_s`, 30 min por
+  // defecto) aunque la persona siga trabajando de verdad -- perdería el
+  // caso a media tarea. Se reengancha reenviando el mismo `enter` que lo
+  // tomó (el INSERT es un upsert que refresca `since`), y solo si hubo
+  // actividad real desde el último latido: uno que se manda solo porque el
+  // temporizador tocó, sin nadie delante, sería el propio agujero que este
+  // candado existe para tapar.
+  const ultimoLatido = useRef(0);
+  useEffect(() => {
+    const t = setInterval(() => {
+      const { case_ } = useWorkspace.getState();
+      const token = useServer.getState().token;
+      if (modeRef.current !== "case" || !case_ || !token) return;
+      if (ultimaActividad.current <= ultimoLatido.current) return;
+      ultimoLatido.current = Date.now();
+      void api.post(`/v1/cases/${case_.id}/enter`, {}, token).catch(() => {});
+    }, 60_000);
+    return () => clearInterval(t);
+  }, []);
+
   const blockedByDisconnect = status !== "ok" &&
     (mode === "picker" || mode === "project" || mode === "case" || mode === "admin");
 

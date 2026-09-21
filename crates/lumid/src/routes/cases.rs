@@ -392,3 +392,35 @@ pub async fn kick(
     app.queue.difundir(lumi_proto::api::Cambio::Expulsion { user_id: holder, case_id: id, case_name });
     Ok(StatusCode::NO_CONTENT)
 }
+
+/// Nadie libera un candado de caso si cierra el portátil de golpe o pierde
+/// la red -- sin este barrido, `caso_liberar_s` sería un número que nadie
+/// aplica (spec Darkroom Parte 3, punto 2). Mismo patrón que
+/// `telemetry::muestrear_historial`: un bucle con su propio `sleep`, sin
+/// plazo fijo en el código -- lo decide el administrador
+/// (`routes::colaboracion::caso_liberar_s`) y puede cambiar en caliente.
+pub async fn barrer_candados_caducados(app: App) {
+    loop {
+        // El ajuste, antes de la conexión: `get_meta` pide el mismo mutex.
+        let limite = crate::routes::colaboracion::caso_liberar_s(&app);
+        let ahora = now();
+        let caducados: Vec<(i64, i64)> = {
+            let c = app.store.conn();
+            let filas: Vec<(i64, i64)> = c
+                .prepare("SELECT cl.case_id, k.project_id FROM case_locks cl JOIN cases k ON k.id = cl.case_id WHERE ?1 - cl.since >= ?2")
+                .and_then(|mut q| {
+                    q.query_map(rusqlite::params![ahora, limite], |r| Ok((r.get(0)?, r.get(1)?)))
+                        .map(|rows| rows.flatten().collect())
+                })
+                .unwrap_or_default();
+            if !filas.is_empty() {
+                let _ = c.execute("DELETE FROM case_locks WHERE ?1 - since >= ?2", rusqlite::params![ahora, limite]);
+            }
+            filas
+        };
+        for (case_id, _project_id) in &caducados {
+            tracing::info!("caso #{case_id}: candado liberado por inactividad ({limite}s)");
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+    }
+}

@@ -198,6 +198,7 @@ async fn run() -> anyhow::Result<()> {
     tokio::spawn(telemetry::muestrear_historial(app.clone()));
     tokio::spawn(telemetry::muestrear_en_vivo(app.clone()));
     tokio::spawn(actualizacion::tick(app.clone()));
+    tokio::spawn(routes::cases::barrer_candados_caducados(app.clone()));
 
     // Latido de diagnostico temporal: si el runtime entero se queda sin
     // repartir tiempo a NINGUNA tarea (el bloqueo que se esta cazando),
