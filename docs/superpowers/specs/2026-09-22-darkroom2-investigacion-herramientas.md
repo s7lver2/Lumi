@@ -1,10 +1,17 @@
 # Darkroom 2 — investigación de las herramientas (2026-09-22)
 
 Volcado de la investigación de fondo encargada durante el brainstorming de Darkroom 2, antes
-de escribir los specs de las herramientas 4 a 10 del índice
+de escribir los specs de las herramientas del índice
 (`2026-09-22-darkroom2-00-indice-design.md`). No es un spec: es la base factual (modelos,
 licencias, datasets, servicios, riesgo legal) sobre la que se construyen los specs que sí se
 lleguen a redactar.
+
+> **Nota (2026-09-22): OSINT eliminado.** El sistema de OSINT quedó fuera de alcance de
+> Darkroom 2 por decisión del dueño, y Car ID se limitó a **leer** la matrícula, sin resolverla
+> a titular/anuncio/registro. La antigua sección 6 (OSINT) y las partes de investigación sobre
+> matrícula → titular se han retirado de este documento por no describir nada que se vaya a
+> construir. Lo que queda es la base factual de las herramientas vigentes: Verify Image, Car ID
+> (reconocimiento + lectura de matrícula + mercado por modelo), Objetos, Especies e Interiores.
 
 Licencias marcadas **(verify)** se tomaron de memoria del investigador, no de una página leída
 en la sesión — hay que confirmarlas antes de fijarlas en cualquier spec. Las cifras de
@@ -12,10 +19,10 @@ precisión vienen de las fuentes citadas, no de pruebas propias.
 
 **Lo que Raven dice de sí mismo** ([graylark.com/raven](https://graylark.com/raven)): Find
 Region, Find Street, Find Property (beta, "ciudad soportada"), Identify Car (funciona con
-vistas "parciales, obstruidas o de interior"), Live Intelligence (email o teléfono → "cuentas
-públicas, imágenes y sitios"), Verify Image (beta: "probabilidad de generación, señales de
-manipulación facial y confianza por herramienta") y Cases. Excluye acceso a datos privados,
-rastreo de dispositivos y acceso a mensajes. Ninguna fuente de datos se nombra públicamente.
+vistas "parciales, obstruidas o de interior"), Verify Image (beta: "probabilidad de generación,
+señales de manipulación facial y confianza por herramienta") y Cases. Excluye acceso a datos
+privados, rastreo de dispositivos y acceso a mensajes. Ninguna fuente de datos se nombra
+públicamente. (Raven también ofrece Live Intelligence sobre personas; Darkroom 2 no lo copia.)
 
 ---
 
@@ -81,19 +88,18 @@ Ningún modelo con pesos de licencia claramente comercial destaca.
 - **PaddleOCR** (Apache-2.0) como reserva.
 - Formato español: `NNNN LLL` sin vocales desde 2000, más formatos provinciales antiguos (`M-1234-AB`). Validar con regex tras el OCR.
 
-**Búsqueda de anuncios (externa, habilitada por el admin):**
-- **AutoScout24:** su API oficial es solo para concesionarios y de solo escritura, sin endpoint de búsqueda ([Scrapfly](https://scrapfly.io/blog/posts/how-to-scrape-autoscout24)).
-- **mobile.de, coches.net, Wallapop, Milanuncios:** sin API de búsqueda pública encontrada. El acceso pasa por scrapers de terceros (Apify, auto-api.com y otros).
-- **Legal:** la sentencia del TJUE *Ryanair v PR Aviation* (C-30/14) permite prohibir el scraping por términos de uso aunque no aplique un derecho de base de datos ([Pinsent Masons](https://www.pinsentmasons.com/out-law/news/website-operators-can-prohibit-screen-scraping-of-unprotected-data-via-terms-and-conditions-says-eu-court-in-ryanair-case)). El derecho sui generis español (LPI art. 133) se suma.
-- **Viabilidad matrícula → anuncio:** baja. Muchos anuncios difuminan la matrícula y el texto rara vez la incluye; haría falta OCR sobre todas las fotos de un corpus grande ya raspado. **Modelo + color + zona → anuncios recientes** vía SERP/scraper es realista.
+**Mercado por modelo (externo, habilitado por el admin).** Car ID valora el *modelo*, no busca
+un coche concreto: **modelo + color + zona → anuncios recientes** vía SERP/scraper es realista y
+es lo único que el spec 6 usa. El acceso a portales (AutoScout24 solo tiene API de concesionario;
+mobile.de, coches.net, Wallapop, Milanuncios no exponen API de búsqueda pública) pasa por
+scrapers de terceros, y la sentencia del TJUE *Ryanair v PR Aviation* (C-30/14) hace exigibles
+sus cláusulas anti-scraping ([Pinsent Masons](https://www.pinsentmasons.com/out-law/news/website-operators-can-prohibit-screen-scraping-of-unprotected-data-via-terms-and-conditions-says-eu-court-in-ryanair-case));
+el riesgo de habilitar ese origen es del operador, como en Interiores.
 
-**Matrícula → titular en España:** la AEPD trata la matrícula como dato personal cuando
-identifica a una persona sin esfuerzo desproporcionado ([AEPD FAQ](https://www.aepd.es/preguntas-frecuentes/0-conceptos-basicos/FAQ-0002-sobre-la-matricula-de-un-coche)).
-El *informe de vehículo* de la DGT puede pedirlo cualquiera para datos técnicos, cargas e ITV;
-los datos del titular exigen un interés legítimo y directo declarado (accidente, compraventa,
-vehículo abandonado) ([sede DGT](https://sede.dgt.gob.es/es/vehiculos/informacion-de-vehiculos/informe-de-un-vehiculo/)).
-Existe un canal telemático profesional. Automatizar cualquiera de los dos no encaja en Lumi;
-debería quedar como paso manual del investigador.
+**Matrícula → titular/anuncio: fuera de alcance.** Car ID lee la matrícula y muestra el texto y
+el país de su formato, pero no la resuelve (spec 6 §9). La investigación previa sobre el informe
+de vehículo de la DGT y el criterio de la AEPD sobre la matrícula como dato personal queda
+retirada de este documento junto con OSINT: describía una capacidad que Darkroom 2 no construye.
 
 ---
 
@@ -175,59 +181,6 @@ corpus raspado.
 
 ---
 
-## 6. OSINT
-
-**Herramientas locales:**
-
-| Herramienta | Qué hace | Licencia | Advertencia |
-|---|---|---|---|
-| sherlock / **maigret** | alias → cuentas (maigret: miles de webs, arma un dossier) | MIT **(verify)** | muchos falsos positivos |
-| **holehe** | email → webs donde está registrado | GPL-3.0 **(verify)** | prueba activamente endpoints de recuperación/registro de terceros, zona gris de términos de uso |
-| socialscan | disponibilidad de email/usuario | MPL **(verify)** | |
-| **GHunt** | rastro público de una cuenta de Google | AGPL-3.0 **(verify)** | necesita una cookie de sesión de Google, es decir, credenciales |
-| **SpiderFoot** | 200+ módulos automatizados, grafo de entidades | MIT **(verify)** | el patrón de "Maltego abierto" |
-
-Panorama general: [OSINTBench](https://osintbench.com/guides/osint-github-repositories/).
-
-**Servicios externos (habilitados por el admin, registrados):**
-- **HIBP:** búsqueda por email requiere clave de pago (planes Core, Pro, High-RPM). Datos con
-  licencia CC-BY-4.0 con atribución obligatoria. Pwned Passwords es gratis ([HIBP](https://haveibeenpwned.com/api/v3), [términos](https://haveibeenpwned.com/TermsOfUse)).
-- **Shodan:** membresía única de 49 $, o planes de 69–1.099 $/mes ([Shodan Book](https://book.shodan.io/getting-started/platform/)).
-- **Censys:** sin API para cuentas gratuitas desde noviembre de 2024 ([Censys](https://community.censys.com/search-findings-use-cases-and-queries-32/while-generating-api-key-for-free-it-shows-you-do-not-have-access-to-the-censys-api-previously-it-was-working-fine-243)).
-- **crt.sh** (gratis; logs de transparencia de certificados, listan subdominios) y **RDAP**
-  (estándar gratuito que sustituye a WHOIS) son implementables directamente en Rust.
-- **urlscan.io:** clave con plan gratuito.
-- **DNS pasivo:** CIRCL (gratis para usuarios verificados) o SecurityTrails y similares
-  (de pago).
-
-**"Alimentado por IA".** Modelarlo como entidades y transforms al estilo Maltego (email,
-teléfono, usuario, dominio, IP, cuenta, imagen): cada herramienta envuelve un transform de un
-tipo de entidad a otro y devuelve resultados con procedencia. Un LLM local con tool-calling
-planifica qué transforms lanzar, deduplica resultados y escribe un resumen. Cada llamada queda
-registrada y cada transform externo necesita un clic humano antes de ejecutarse.
-
-Candidatos de LLM: **Qwen 3.6 35B-A3B** (MoE, 3B de parámetros activos, ~16-24 GB en Q4, buen
-tool-calling vía los parsers qwen3 de vLLM, [dev.to](https://dev.to/lavellehatcherjr/serving-qwen36-35b-a3b-with-vllm-and-building-a-coding-agent-with-tool-calling-2kob)), licencia
-Apache-2.0 **(verify)**; **gpt-oss-20b** (Apache-2.0, ~16 GB, de memoria propia, no verificado
-esta sesión). Mantener siempre al LLM como planificador y resumidor, nunca como fuente de
-hechos.
-
-**RGPD y legal.**
-- El uso policial cae bajo la Directiva de garantías procesales 2016/680, no el RGPD
-  ([EUR-Lex](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=celex%3A32016L0680)); en España, LO 7/2021 **(verify)**.
-- Usuarios privados o de empresa necesitan una base legal RGPD, normalmente interés legítimo
-  con un test de ponderación documentado. Que un dato sea público no es, por sí solo, base
-  legal ([OSINT Central](https://osint-central.com/osint-gdpr/)).
-- Los detectives privados españoles operan bajo la Ley 5/2014 de Seguridad Privada, que exige
-  encargo y un interés legítimo **(verify detalles)**.
-- Implicaciones para Lumi: registrar propósito y base legal por caso (aunque el diseño final
-  optó por no pedirlo explícitamente), retención mínima, un registro de auditoría de quién
-  consultó qué, y copiar las exclusiones de Raven (solo datos públicos, sin mensajes, sin
-  rastreo de dispositivos, sin acceso mediante credenciales). El requisito de cookie de GHunt
-  está justo al borde de esa última línea.
-
----
-
 ## Transversal: infraestructura compartida
 
 1. **Un solo patrón de galería por embeddings encaja directamente en Qdrant.** Una colección
@@ -239,18 +192,18 @@ hechos.
    reutilizan esto, con un indicador en cada galería de si son datos con licencia o
    construidos con archivos propios del operador.
 2. **Un componente compartido de "búsqueda externa"**, para anuncios de Car ID, productos de
-   Lens, SERP y transforms de OSINT. Un trait de Rust, como `origins/` en el Indexer: switch de
-   activación por servicio, clave API, límite de tasa y una entrada de auditoría (quién, qué
-   caso, qué se mandó exactamente — el hash o la imagen enviada, no solo la consulta). Un
-   servicio deshabilitado muestra su motivo en la matriz de capacidades.
+   Lens y SERP. Un trait de Rust, como `origins/` en el Indexer: switch de activación por
+   servicio, clave API, límite de tasa y una entrada de auditoría (quién, qué caso, qué se mandó
+   exactamente — el hash o la imagen enviada, no solo la consulta). Un servicio deshabilitado
+   muestra su motivo en la matriz de capacidades.
 3. **Un solo servicio local de VLM/LLM caliente** (un modelo Qwen-clase) para descripciones,
-   lectura de insignias/acabados, explicaciones estilo SIDA y planificación de OSINT. Evita
-   cargar cinco modelos distintos a la vez.
+   lectura de insignias/acabados y explicaciones estilo SIDA. Evita cargar cinco modelos
+   distintos a la vez.
 4. **Metadato de frescura en cada cabeza de clasificación** (atribución de imagen por IA, años
    de coche) guardado en `registros/` con fecha de "entrenado hasta" visible en la interfaz.
    Importa más en Verify Image, donde los resultados caducan en meses.
 5. **Riesgos legales, de mayor a menor:** scraping masivo de anuncios/portales (Interiores,
-   anuncios de coches). Luego OSINT sobre personas de la UE sin base documentada. Luego
-   matrícula → titular. Menor riesgo: detectores locales y C2PA. Las licencias no comerciales
-   (B-Free, Stanford Cars, CompCars, posiblemente los pesos de Community Forensics) importan
-   si Lumi se llegara a vender en vez de autoalojarse por el propio dueño.
+   anuncios de coches). Menor riesgo: detectores locales, C2PA y la lectura local de matrícula
+   (que no se resuelve a nadie). Las licencias no comerciales (B-Free, Stanford Cars, CompCars,
+   posiblemente los pesos de Community Forensics) importan si Lumi se llegara a vender en vez de
+   autoalojarse por el propio dueño.

@@ -360,8 +360,8 @@ Aparece en los resultados cuya herramienta declara que tienen forma de fuente
 (`Resultado::como_fuente() -> Option<(tipo, valor | image_id)>`). En este spec ninguna
 herramienta lo declara: Geolocalización no produce resultados con forma de fuente. La acción
 existe, y el esquema (`derivada_de`) y la interfaz (`↳ de fuente N · resultado M`) quedan
-listos para OSINT, Car ID y demás. Al usarla se abre «Añadir fuente» ya en el paso 2, con el
-tipo y el valor rellenos.
+listos para Car ID y demás herramientas que produzcan resultados con forma de fuente. Al usarla
+se abre «Añadir fuente» ya en el paso 2, con el tipo y el valor rellenos.
 
 ### 3.11 Tiempo real
 
