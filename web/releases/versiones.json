@@ -1681,7 +1681,64 @@
           "sha256": "0dd32062524ec056b58c6031bf0267d38a5c2c6164e8c43bd63738f256d23275"
         }
       ]
+    },
+    {
+      "producto": "cliente",
+      "version": "2.1.0",
+      "publicado": "2026-10-02T14:30:50Z",
+      "notas": "Preparacion de Lumi Vision (Qdrant en disco, degradacion de recuperadores y verificadores con aviso, aviso de hardware por nivel) y ajuste para desactivar los casos Darkroom.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.1.0/app.exe",
+          "bytes": 15870464,
+          "sha256": "d767d7f2bdc7049874231c529f95028db2ffc294dffd2ea88d6485fd4f4b0b91"
+        },
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.1.0/Lumi-linux-x86_64.AppImage",
+          "bytes": 81975800,
+          "sha256": "69be38d09b8040bb6c1202f772186ec2fe0eaa5d7432afec87eeec7af9c11742"
+        }
+      ]
+    },
+    {
+      "producto": "indexer",
+      "version": "2.1.0",
+      "publicado": "2026-10-02T14:30:50Z",
+      "notas": "Preparacion de Lumi Vision (Qdrant en disco, degradacion de recuperadores y verificadores con aviso, aviso de hardware por nivel) y ajuste para desactivar los casos Darkroom.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "windows-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.1.0/indexer-app.exe",
+          "bytes": 23548928,
+          "sha256": "cd84c8c18027d2ea09c065167219b1f4b88ca9d84b1422ec6ccecf951319555d"
+        }
+      ]
+    },
+    {
+      "producto": "lumid",
+      "version": "2.1.0",
+      "publicado": "2026-10-02T14:30:50Z",
+      "notas": "Preparacion de Lumi Vision (Qdrant en disco, degradacion de recuperadores y verificadores con aviso, aviso de hardware por nivel) y ajuste para desactivar los casos Darkroom.",
+      "retirada": false,
+      "artefactos": [
+        {
+          "plataforma": "linux-x86_64",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.1.0/lumid",
+          "bytes": 24170984,
+          "sha256": "44dd647beee9d1f892748f994c282d6cd2c9cf2bcddf561dc80d0e3fda4eef77"
+        },
+        {
+          "plataforma": "assets",
+          "url": "https://github.com/s7lver2/Lumi/releases/download/v2.1.0/lumid-assets.tar.gz",
+          "bytes": 939655,
+          "sha256": "8218edcff1c88df00205397306f8a0dbab72ea8b4159c873a1201cd4361a9d3e"
+        }
+      ]
     }
   ],
-  "firma": "RLbqSJqcF40DBdC84aHdWBQ+T7WXrF9lMUxAuDbuPoOoDcBalHrOUcBsoLkGoSiyv238tDdvF6cHa4XLia9nAg=="
+  "firma": "CPZIBk5Y8np9ceZsexZD9Reql1XhsE6uMVsrXdpE2zMs9zwzdEwgL2Rkbrvs4RbI4xq1Osoe6LE3a8PBQjifAA=="
 }
