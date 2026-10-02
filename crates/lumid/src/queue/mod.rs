@@ -170,6 +170,10 @@ pub struct Queue {
     pub(crate) recursos_geo: Mutex<Vec<lumi_index::geo::RecursoGeo>>,
     /// No se persiste: si el daemon se cae, el análisis se rehace.
     vectores: Mutex<VectoresPorAnalisis>,
+    /// Recuperadores que fallaron por análisis (modelo, motivo). Se degrada:
+    /// el análisis sigue con los que dieron vector. No se persiste aquí; al
+    /// terminar va a `analyses.capas`.
+    fallos_recup: Mutex<HashMap<i64, Vec<(String, String)>>>,
     /// Proceso persistente de verificación geométrica — solo se usa si el
     /// ajuste `verificacion_persistente` (`routes::rendimiento`) está
     /// activado; si no, `verificar::afinar` sigue lanzando uno nuevo por
@@ -258,6 +262,7 @@ impl Queue {
             motores: Mutex::new(lumi_index::registro::cargar_motores(&crate::assets::ruta("registros/motores"))),
             recursos_geo: Mutex::new(lumi_index::geo::cargar_recursos(&crate::assets::ruta("registros/geo"))),
             vectores: Mutex::new(HashMap::new()),
+            fallos_recup: Mutex::new(HashMap::new()),
             verif_persistente: crate::persistente::Persistente::nuevo("verificación"),
             // 0 = "todavía sin ninguna muestra" -- `eta_de` lo trata como
             // "no hay estimación" en vez de como una duración real de 0s.
@@ -618,7 +623,7 @@ impl Queue {
                     // dentro de `aplicar` ya liberaba al TRABAJADOR antes de
                     // este cambio; `tokio::spawn` es lo que faltaba para que el
                     // BUCLE también quedara libre.
-                    if matches!(ev, Evento::Vectores { .. }) {
+                    if matches!(ev, Evento::Vectores { .. } | Evento::RecuperadorFallo { .. }) {
                         let cola = self.clone();
                         tokio::spawn(async move { cola.aplicar(ev).await });
                     } else {
@@ -720,196 +725,37 @@ impl Queue {
                     recibidos.push((cual, vector));
                     recibidos.len()
                 };
-                if recibidos < nivel.recuperacion.len() {
+                let fallidos = self.fallos_recup.lock().unwrap().get(&id).map_or(0, |f| f.len());
+                if recibidos + fallidos < nivel.recuperacion.len() {
                     return; // faltan modelos; el trabajador sigue mandando
                 }
-
-                // Nulo significa «el pedido», que es lo normal. Solo se
-                // escribe cuando hubo descenso, para que la ausencia de valor
-                // no se confunda con «no lo sabemos».
-                if nivel.id != pedido {
-                    let _ = self.store.conn().execute(
-                        "UPDATE analyses SET nivel_efectivo = ?2 WHERE id = ?1",
-                        rusqlite::params![id, &nivel.id],
-                    );
+                self.post_proceso(dispositivo, id, nivel, pedido, inicio_analisis).await;
+            }
+            Evento::RecuperadorFallo { dispositivo, id, modelo, motivo } => {
+                if !self.es_suyo(&dispositivo, id) {
+                    return;
                 }
-
-                let vectores = self.vectores.lock().unwrap().remove(&id).unwrap_or_default();
-                self.soltar(&dispositivo, id);
-                self.notificar_fase(id, "recuperando", 0, inicio_analisis.elapsed().as_secs_f64());
-                match crate::recuperar::candidatos(&self.store, &nivel, &vectores).await {
-                    Ok(c) if !c.is_empty() => {
-                        let consulta = self.imagen_del_analisis(id).unwrap_or_default();
-                        let rutas = self.rutas_de_candidatos(&c);
-                        self.notificar_fase(id, "verificando", 0, inicio_analisis.elapsed().as_secs_f64());
-                        let pesos = crate::assets::pesos_dir(&self.store, &self.dir);
-                        let registro_verif = crate::assets::ruta("registros/verificadores");
-                        let python = interprete_python(&self.store);
-                        // Clonado fuera del `await`: `self.verificadores` es un
-                        // `std::sync::Mutex` (no `Send` a través de un punto de
-                        // espera), y la lista completa son unos pocos KB.
-                        let verificadores = self.verificadores.lock().unwrap().clone();
-                        let afinados = crate::verificar::afinar(
-                            &nivel,
-                            &consulta,
-                            c.clone(),
-                            &rutas,
-                            &python,
-                            &dispositivo,
-                            &registro_verif,
-                            &pesos,
-                            &verificadores,
-                            &self.store,
-                            &self.verif_persistente,
-                        )
-                        .await;
-                        let afinados = afinados.unwrap_or_default();
-                        // Los que ningún verificador respaldó se caen. Si se
-                        // caen todos, se contesta con la recuperación sin
-                        // afinar y se dice — negarse escondería información
-                        // que el investigador puede usar.
-                        let vivos: Vec<_> = afinados
-                            .iter()
-                            .filter(|a| a.ganador.is_some())
-                            .map(|a| {
-                                let g = a.ganador.as_ref().unwrap();
-                                lumi_index::agrupar::Candidato {
-                                    lat: g.lat,
-                                    lng: g.lng,
-                                    ..a.candidato.clone()
-                                }
-                            })
-                            .collect();
-                        // ponytail: `en_grupos` agrega candidatos por
-                        // vecindad de tesela, así que un grupo con más de un
-                        // candidato ya no tiene un único respaldo que
-                        // atribuirle. Se busca por coordenada exacta (redonda
-                        // a 6 decimales, ~11 cm): funciona para el caso común
-                        // de un grupo con un solo candidato verificado, y
-                        // degrada a «sin respaldo» —nunca a un dato
-                        // inventado— en el resto.
-                        let clave = |lat: f64, lng: f64| {
-                            ((lat * 1e6).round() as i64, (lng * 1e6).round() as i64)
-                        };
-                        let respaldo_de: std::collections::HashMap<(i64, i64), (u32, String)> =
-                            afinados
-                                .iter()
-                                .filter_map(|a| {
-                                    let g = a.ganador.as_ref()?;
-                                    Some((clave(g.lat, g.lng), (g.inliers, g.verificador.clone())))
-                                })
-                                .collect();
-                        // Sin esto no había forma de distinguir, en el punto
-                        // donde se agrupa, entre "un grupo verificado que
-                        // resultó tener un solo candidato" y "nadie verificó
-                        // nada" -- los dos acaban con `vivos` vacío o lleno
-                        // según el caso, pero solo el segundo debe evitar
-                        // `en_grupos`.
-                        let sin_verificar = vivos.is_empty();
-                        let usar: Vec<_> = if sin_verificar {
-                            afinados.into_iter().map(|a| a.candidato).collect()
-                        } else {
-                            vivos
-                        };
-
-                        // Sin ningún candidato verificado, agrupar por
-                        // vecindad de tesela funde una ciudad entera en una
-                        // sola isla (una tesela z14 mide 1,8 km a la latitud
-                        // de León): doce sitios posibles sin verificar son
-                        // más honestos que un círculo de dos kilómetros que
-                        // no señala a ninguno de ellos en particular.
-                        let h = if sin_verificar {
-                            crate::recuperar::hipotesis_sin_agrupar(&usar)
-                        } else {
-                            crate::recuperar::hipotesis(&usar)
-                        };
-                        // Para TODAS las hipótesis, principal incluida: antes
-                        // solo se calculaba para las alternativas (`skip(1)`)
-                        // porque `analyses` no tenía dónde guardar el
-                        // respaldo de la principal — un resultado con miles
-                        // de inliers de verdad se enseñaba igual que uno que
-                        // nunca pasó por un verificador.
-                        //
-                        // El centroide de un grupo (`hip.lat`/`hip.lng`) es
-                        // un promedio ponderado de sus miembros y casi nunca
-                        // coincide con la coordenada de NINGUNO de ellos —
-                        // con un solo candidato en el grupo sí coincide por
-                        // definición, pero con varios (el caso común una vez
-                        // la verificación de verdad confirma cosas) la
-                        // búsqueda por coordenada exacta del centroide nunca
-                        // encontraba nada. Se busca en cada miembro real del
-                        // grupo (`recuperar::hipotesis` los trae aparte) y se
-                        // usa el de más inliers, no el punto ya promediado.
-                        // Cuarto elemento (`Option<i64>`, aparte de la
-                        // tripleta que ya esperan `guardar_resultado`/
-                        // `guardar_hipotesis`): el id del MISMO candidato que
-                        // aporta el respaldo, no el de más similitud que
-                        // `agrupar::resumir` puso por defecto en
-                        // `Hipotesis::imagen_id`. Antes el panel podía enseñar
-                        // la foto de un candidato y el respaldo geométrico
-                        // («verificado por roma · 897 correspondencias») de
-                        // otro candidato distinto del mismo grupo -- la
-                        // prueba A etiquetada con el respaldo de la B.
-                        // El cuarto campo (`motivo_agente`) se deja siempre en
-                        // `None`: la columna de BD sigue viva (SQLite no
-                        // permite `DROP COLUMN` en este esquema), pero nada la
-                        // rellena ya desde que se retiraron los agentes.
-                        let respaldo_y_foto: Vec<(Option<u32>, Option<String>, Option<String>, Option<i64>)> = h
-                            .iter()
-                            .map(|(_, miembros)| {
-                                let mejor = miembros
-                                    .iter()
-                                    .filter_map(|&(cand_id, lat, lng)| {
-                                        respaldo_de.get(&clave(lat, lng)).map(|b| (cand_id, b))
-                                    })
-                                    .max_by_key(|(_, (inliers, _))| *inliers);
-                                match mejor {
-                                    Some((cand_id, (i, v))) => (Some(*i), Some(v.clone()), None, Some(cand_id)),
-                                    None => (None, None, None, None),
-                                }
-                            })
-                            .collect();
-                        let respaldo: Vec<(Option<u32>, Option<String>, Option<String>)> = respaldo_y_foto
-                            .iter()
-                            .map(|(i, v, m, _)| (*i, v.clone(), m.clone()))
-                            .collect();
-                        let mut h: Vec<_> = h.into_iter().map(|(hip, _)| hip).collect();
-                        // Sobrescribe `imagen_id` con el candidato del
-                        // respaldo cuando lo hay: la foto que se enseña tiene
-                        // que ser la de quien de verdad se pudo verificar, no
-                        // la de quien solo se parecía más. Sin respaldo (nadie
-                        // verificado en el grupo), se queda el de más
-                        // similitud que ya trae `agrupar::resumir` -- sigue
-                        // siendo el único criterio disponible en ese caso.
-                        for (hip, (_, _, _, foto)) in h.iter_mut().zip(respaldo_y_foto.iter()) {
-                            if let Some(cand_id) = foto {
-                                hip.imagen_id = Some(*cand_id);
-                            }
-                        }
-                        // `agrupar::confianza` compara al ganador contra el
-                        // segundo candidato -- sin uno (un solo grupo tras
-                        // agrupar) se topaba directamente al máximo (10.0),
-                        // tratando "no hay con qué comparar" como sinónimo de
-                        // "estoy seguro". Un candidato sin verificación
-                        // geométrica real detrás es justo el caso contrario:
-                        // nada lo respalda más allá de la propia recuperación.
-                        // Se topa aparte, aquí, porque `agrupar::confianza` no
-                        // conoce el veredicto del verificador -- eso solo lo
-                        // tiene esta función, vía `respaldo_de`.
-                        if let Some(((_, verificador, _), hip)) = respaldo.first().zip(h.first_mut()) {
-                            if verificador.is_none() {
-                                hip.peso = hip.peso.min(TECHO_CONFIANZA_SIN_VERIFICAR);
-                            }
-                        }
-                        let secs_totales = inicio_analisis.elapsed().as_secs_f64();
-                        tracing::info!("análisis #{id}: post-proceso completo en {secs_totales:.1}s");
-                        self.registrar_duracion(secs_totales);
-                        self.guardar_resultado(id, &h, &respaldo);
-                    }
-                    // Sin candidatos NO es una avería: es una respuesta.
-                    Ok(_) => self.fallar(id, "ningún índice instalado cubre esta imagen"),
-                    Err(e) => self.fallar(id, &format!("no se pudo recuperar: {e}")),
+                let inicio_analisis = std::time::Instant::now();
+                tracing::warn!("análisis #{id}: el recuperador {modelo} falló: {motivo}");
+                self.fallos_recup.lock().unwrap().entry(id).or_default().push((modelo, motivo));
+                // `entry().or_default()` aunque aún no haya ningún vector:
+                // `post_proceso` reclama el análisis quitando esta entrada, y
+                // eso solo es una reclamación atómica si existe siempre.
+                let recibidos = {
+                    let mut v = self.vectores.lock().unwrap();
+                    v.entry(id).or_default().len()
+                };
+                let fallidos = self.fallos_recup.lock().unwrap().get(&id).map_or(0, |f| f.len());
+                let pedido = self.modelo_del_analisis(id).unwrap_or_default();
+                let Some(nivel) = self.nivel_de(&pedido) else {
+                    self.soltar(&dispositivo, id);
+                    self.fallar(id, "ningún índice instalado sirve para consultar con este nivel");
+                    return;
+                };
+                if recibidos + fallidos < nivel.recuperacion.len() {
+                    return;
                 }
+                self.post_proceso(dispositivo, id, nivel, pedido, inicio_analisis).await;
             }
             Evento::Resultado { dispositivo, id, lat, lng, radio_m, confianza, alternativas } => {
                 if !self.es_suyo(&dispositivo, id) {
@@ -942,6 +788,284 @@ impl Queue {
                 self.fallar_con_modelo(id, &motivo, falta_modelo.as_deref());
             }
             Evento::Muerto { dispositivo } => self.enterrar(&dispositivo),
+        }
+    }
+
+    /// Todo lo que pasa cuando ya hay (o ya no va a haber) un vector por cada
+    /// recuperador del nivel: fusión, verificación y guardado. Los
+    /// recuperadores que fallaron NO tumban el análisis (decisión del dueño:
+    /// degradar y avisar); solo si fallan todos se falla.
+    async fn post_proceso(
+        &self,
+        dispositivo: String,
+        id: i64,
+        nivel: lumi_index::niveles::Nivel,
+        pedido: String,
+        inicio_analisis: std::time::Instant,
+    ) {
+        // Reclamar el análisis: quitar la entrada de vectores es atómico, así
+        // que si un `Vectores` y un `RecuperadorFallo` llegaran a la vez solo
+        // uno de los dos sigue adelante.
+        let Some(vectores) = self.vectores.lock().unwrap().remove(&id) else {
+            return;
+        };
+        let fallos_recup = self.fallos_recup.lock().unwrap().remove(&id).unwrap_or_default();
+        // Los avisos que puso `routes::analyses::create` (hardware corto) se
+        // conservan: `guardar_capas` reescribe la columna entera.
+        let avisos = self
+            .store
+            .conn()
+            .query_row("SELECT capas FROM analyses WHERE id = ?1", [id], |r| r.get::<_, Option<String>>(0))
+            .ok()
+            .flatten()
+            .and_then(|s| serde_json::from_str::<lumi_proto::api::CapasAnalisis>(&s).ok())
+            .map(|c| c.avisos)
+            .unwrap_or_default();
+        let mut capas = lumi_proto::api::CapasAnalisis {
+            avisos,
+            recuperadores_ok: vectores.iter().map(|(m, _)| m.clone()).collect(),
+            recuperadores_fallo: fallos_recup
+                .into_iter()
+                .map(|(id, motivo)| lumi_proto::api::CapaFallida { id, motivo })
+                .collect(),
+            ..Default::default()
+        };
+        if vectores.is_empty() {
+            self.soltar(&dispositivo, id);
+            self.guardar_capas(id, &capas);
+            let detalle = capas
+                .recuperadores_fallo
+                .iter()
+                .map(|f| format!("{}: {}", f.id, f.motivo))
+                .collect::<Vec<_>>()
+                .join("; ");
+            self.fallar(id, &format!("ningún recuperador pudo embeber la imagen ({detalle})"));
+            return;
+        }
+
+        // Nulo significa «el pedido», que es lo normal. Solo se
+        // escribe cuando hubo descenso, para que la ausencia de valor
+        // no se confunda con «no lo sabemos».
+        if nivel.id != pedido {
+            let _ = self.store.conn().execute(
+                "UPDATE analyses SET nivel_efectivo = ?2 WHERE id = ?1",
+                rusqlite::params![id, &nivel.id],
+            );
+        }
+
+        self.guardar_capas(id, &capas);
+        self.soltar(&dispositivo, id);
+        self.notificar_fase(id, "recuperando", 0, inicio_analisis.elapsed().as_secs_f64());
+        match crate::recuperar::candidatos(&self.store, &nivel, &vectores).await {
+            Ok(c) if !c.is_empty() => {
+                let consulta = self.imagen_del_analisis(id).unwrap_or_default();
+                let rutas = self.rutas_de_candidatos(&c);
+                self.notificar_fase(id, "verificando", 0, inicio_analisis.elapsed().as_secs_f64());
+                let pesos = crate::assets::pesos_dir(&self.store, &self.dir);
+                let registro_verif = crate::assets::ruta("registros/verificadores");
+                let python = interprete_python(&self.store);
+                // Clonado fuera del `await`: `self.verificadores` es un
+                // `std::sync::Mutex` (no `Send` a través de un punto de
+                // espera), y la lista completa son unos pocos KB.
+                let verificadores = self.verificadores.lock().unwrap().clone();
+                let afinados = crate::verificar::afinar(
+                    &nivel,
+                    &consulta,
+                    c.clone(),
+                    &rutas,
+                    &python,
+                    &dispositivo,
+                    &registro_verif,
+                    &pesos,
+                    &verificadores,
+                    &self.store,
+                    &self.verif_persistente,
+                )
+                .await;
+                // Verificadores que fallaron: se corre con los que haya y se
+                // avisa (decisión del dueño). Si no corre NINGUNO, el análisis
+                // falla con el motivo a la vista -- antes seguía en silencio
+                // con candidatos sin verificar.
+                let (afinados, informe) = match afinados {
+                    Ok(x) => x,
+                    Err(e) => {
+                        capas.verificadores_fallo = nivel
+                            .geometricos
+                            .iter()
+                            .map(|v| lumi_proto::api::CapaFallida { id: v.clone(), motivo: e.to_string() })
+                            .collect();
+                        self.guardar_capas(id, &capas);
+                        self.fallar(id, &format!("no se pudo lanzar la verificación geométrica: {e}"));
+                        return;
+                    }
+                };
+                capas.verificadores_ok = informe.corrieron;
+                capas.verificadores_fallo = informe.fallaron;
+                self.guardar_capas(id, &capas);
+                if informe.esperados > 0 && capas.verificadores_ok.is_empty() {
+                    let detalle = capas
+                        .verificadores_fallo
+                        .iter()
+                        .map(|f| format!("{}: {}", f.id, f.motivo))
+                        .collect::<Vec<_>>()
+                        .join("; ");
+                    self.fallar(id, &format!("ningún verificador geométrico pudo correr ({detalle})"));
+                    return;
+                }
+                // Los que ningún verificador respaldó se caen. Si se
+                // caen todos, se contesta con la recuperación sin
+                // afinar y se dice — negarse escondería información
+                // que el investigador puede usar.
+                let vivos: Vec<_> = afinados
+                    .iter()
+                    .filter(|a| a.ganador.is_some())
+                    .map(|a| {
+                        let g = a.ganador.as_ref().unwrap();
+                        lumi_index::agrupar::Candidato {
+                            lat: g.lat,
+                            lng: g.lng,
+                            ..a.candidato.clone()
+                        }
+                    })
+                    .collect();
+                // ponytail: `en_grupos` agrega candidatos por
+                // vecindad de tesela, así que un grupo con más de un
+                // candidato ya no tiene un único respaldo que
+                // atribuirle. Se busca por coordenada exacta (redonda
+                // a 6 decimales, ~11 cm): funciona para el caso común
+                // de un grupo con un solo candidato verificado, y
+                // degrada a «sin respaldo» —nunca a un dato
+                // inventado— en el resto.
+                let clave = |lat: f64, lng: f64| {
+                    ((lat * 1e6).round() as i64, (lng * 1e6).round() as i64)
+                };
+                let respaldo_de: std::collections::HashMap<(i64, i64), (u32, String)> =
+                    afinados
+                        .iter()
+                        .filter_map(|a| {
+                            let g = a.ganador.as_ref()?;
+                            Some((clave(g.lat, g.lng), (g.inliers, g.verificador.clone())))
+                        })
+                        .collect();
+                // Sin esto no había forma de distinguir, en el punto
+                // donde se agrupa, entre "un grupo verificado que
+                // resultó tener un solo candidato" y "nadie verificó
+                // nada" -- los dos acaban con `vivos` vacío o lleno
+                // según el caso, pero solo el segundo debe evitar
+                // `en_grupos`.
+                let sin_verificar = vivos.is_empty();
+                let usar: Vec<_> = if sin_verificar {
+                    afinados.into_iter().map(|a| a.candidato).collect()
+                } else {
+                    vivos
+                };
+
+                // Sin ningún candidato verificado, agrupar por
+                // vecindad de tesela funde una ciudad entera en una
+                // sola isla (una tesela z14 mide 1,8 km a la latitud
+                // de León): doce sitios posibles sin verificar son
+                // más honestos que un círculo de dos kilómetros que
+                // no señala a ninguno de ellos en particular.
+                let h = if sin_verificar {
+                    crate::recuperar::hipotesis_sin_agrupar(&usar)
+                } else {
+                    crate::recuperar::hipotesis(&usar)
+                };
+                // Para TODAS las hipótesis, principal incluida: antes
+                // solo se calculaba para las alternativas (`skip(1)`)
+                // porque `analyses` no tenía dónde guardar el
+                // respaldo de la principal — un resultado con miles
+                // de inliers de verdad se enseñaba igual que uno que
+                // nunca pasó por un verificador.
+                //
+                // El centroide de un grupo (`hip.lat`/`hip.lng`) es
+                // un promedio ponderado de sus miembros y casi nunca
+                // coincide con la coordenada de NINGUNO de ellos —
+                // con un solo candidato en el grupo sí coincide por
+                // definición, pero con varios (el caso común una vez
+                // la verificación de verdad confirma cosas) la
+                // búsqueda por coordenada exacta del centroide nunca
+                // encontraba nada. Se busca en cada miembro real del
+                // grupo (`recuperar::hipotesis` los trae aparte) y se
+                // usa el de más inliers, no el punto ya promediado.
+                // Cuarto elemento (`Option<i64>`, aparte de la
+                // tripleta que ya esperan `guardar_resultado`/
+                // `guardar_hipotesis`): el id del MISMO candidato que
+                // aporta el respaldo, no el de más similitud que
+                // `agrupar::resumir` puso por defecto en
+                // `Hipotesis::imagen_id`. Antes el panel podía enseñar
+                // la foto de un candidato y el respaldo geométrico
+                // («verificado por roma · 897 correspondencias») de
+                // otro candidato distinto del mismo grupo -- la
+                // prueba A etiquetada con el respaldo de la B.
+                // El cuarto campo (`motivo_agente`) se deja siempre en
+                // `None`: la columna de BD sigue viva (SQLite no
+                // permite `DROP COLUMN` en este esquema), pero nada la
+                // rellena ya desde que se retiraron los agentes.
+                let respaldo_y_foto: Vec<(Option<u32>, Option<String>, Option<String>, Option<i64>)> = h
+                    .iter()
+                    .map(|(_, miembros)| {
+                        let mejor = miembros
+                            .iter()
+                            .filter_map(|&(cand_id, lat, lng)| {
+                                respaldo_de.get(&clave(lat, lng)).map(|b| (cand_id, b))
+                            })
+                            .max_by_key(|(_, (inliers, _))| *inliers);
+                        match mejor {
+                            Some((cand_id, (i, v))) => (Some(*i), Some(v.clone()), None, Some(cand_id)),
+                            None => (None, None, None, None),
+                        }
+                    })
+                    .collect();
+                let respaldo: Vec<(Option<u32>, Option<String>, Option<String>)> = respaldo_y_foto
+                    .iter()
+                    .map(|(i, v, m, _)| (*i, v.clone(), m.clone()))
+                    .collect();
+                let mut h: Vec<_> = h.into_iter().map(|(hip, _)| hip).collect();
+                // Sobrescribe `imagen_id` con el candidato del
+                // respaldo cuando lo hay: la foto que se enseña tiene
+                // que ser la de quien de verdad se pudo verificar, no
+                // la de quien solo se parecía más. Sin respaldo (nadie
+                // verificado en el grupo), se queda el de más
+                // similitud que ya trae `agrupar::resumir` -- sigue
+                // siendo el único criterio disponible en ese caso.
+                for (hip, (_, _, _, foto)) in h.iter_mut().zip(respaldo_y_foto.iter()) {
+                    if let Some(cand_id) = foto {
+                        hip.imagen_id = Some(*cand_id);
+                    }
+                }
+                // `agrupar::confianza` compara al ganador contra el
+                // segundo candidato -- sin uno (un solo grupo tras
+                // agrupar) se topaba directamente al máximo (10.0),
+                // tratando "no hay con qué comparar" como sinónimo de
+                // "estoy seguro". Un candidato sin verificación
+                // geométrica real detrás es justo el caso contrario:
+                // nada lo respalda más allá de la propia recuperación.
+                // Se topa aparte, aquí, porque `agrupar::confianza` no
+                // conoce el veredicto del verificador -- eso solo lo
+                // tiene esta función, vía `respaldo_de`.
+                if let Some(((_, verificador, _), hip)) = respaldo.first().zip(h.first_mut()) {
+                    if verificador.is_none() {
+                        hip.peso = hip.peso.min(TECHO_CONFIANZA_SIN_VERIFICAR);
+                    }
+                }
+                let secs_totales = inicio_analisis.elapsed().as_secs_f64();
+                tracing::info!("análisis #{id}: post-proceso completo en {secs_totales:.1}s");
+                self.registrar_duracion(secs_totales);
+                self.guardar_resultado(id, &h, &respaldo);
+            }
+            // Sin candidatos NO es una avería: es una respuesta.
+            Ok(_) => self.fallar(id, "ningún índice instalado cubre esta imagen"),
+            Err(e) => self.fallar(id, &format!("no se pudo recuperar: {e}")),
+        }
+    }
+
+    fn guardar_capas(&self, id: i64, capas: &lumi_proto::api::CapasAnalisis) {
+        if let Ok(json) = serde_json::to_string(capas) {
+            let _ = self.store.conn().execute(
+                "UPDATE analyses SET capas = ?2 WHERE id = ?1",
+                rusqlite::params![id, json],
+            );
         }
     }
 

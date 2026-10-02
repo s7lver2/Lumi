@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { Seccion } from "../admin/Seccion";
 import { api } from "../lib/api";
+import { useServer } from "../lib/store";
 import {
-  ESCALAS_INTERFAZ, leerAvisoVersionIncompatible, leerEscalaInterfaz, leerFondoEntrada, leerReducirMovimiento,
-  setAvisoVersionIncompatible, setEscalaInterfaz, setFondoEntrada, setReducirMovimiento, type FondoEntrada,
+  ESCALAS_INTERFAZ, leerAvisoVersionIncompatible, leerDarkroomActivo, leerEscalaInterfaz, leerFondoEntrada,
+  leerReducirMovimiento, setAvisoVersionIncompatible, setDarkroomActivo, setEscalaInterfaz, setFondoEntrada,
+  setReducirMovimiento, type FondoEntrada,
 } from "../lib/apariencia";
 import { AjustesSidebar, type AjustesSeccion } from "./AjustesSidebar";
 import { ActualizacionesSeccion } from "./ActualizacionesSeccion";
@@ -42,6 +44,8 @@ export function AjustesView({ onBack }: { onBack: () => void }) {
 function GeneralPanel() {
   const [activo, setActivo] = useState<boolean | null>(null);
   const [avisoVersion, setAvisoVersion] = useState(leerAvisoVersionIncompatible());
+  const [darkroom, setDarkroom] = useState(leerDarkroomActivo());
+  const servidorSinDarkroom = useServer((s) => s.hello?.casos_darkroom) === false;
 
   useEffect(() => { void api.autoarranqueLeer().then(setActivo); }, []);
 
@@ -76,6 +80,22 @@ function GeneralPanel() {
           onClick={() => { const v = !avisoVersion; setAvisoVersion(v); setAvisoVersionIncompatible(v); }}
           className={`relative h-5 w-10 shrink-0 rounded-full border transition-colors duration-300 ease-expo ${avisoVersion ? "border-accent bg-accent" : "border-white/15 bg-white/10"}`}>
           <span className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-fg ring-1 ring-black/20 transition-transform duration-300 ease-expo ${avisoVersion ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+        </button>
+      </label>
+
+      <label className="mt-3 flex items-center justify-between gap-3 rounded-card border border-border bg-panel p-[13px_16px]">
+        <span className="text-[11.5px] text-fg">
+          Casos Darkroom
+          <small className="mt-0.5 block text-[10px] text-subtle">
+            {servidorSinDarkroom
+              ? "Desactivado por el administrador del servidor al que estás conectado."
+              : "Permite elegir «Darkroom» al crear un caso. Apagado, todo caso nuevo es Normal; los casos Darkroom que ya existan se siguen abriendo."}
+          </small>
+        </span>
+        <button role="switch" aria-checked={darkroom && !servidorSinDarkroom} disabled={servidorSinDarkroom}
+          onClick={() => { const v = !darkroom; setDarkroom(v); setDarkroomActivo(v); }}
+          className={`relative h-5 w-10 shrink-0 rounded-full border transition-colors duration-300 ease-expo disabled:opacity-40 ${darkroom && !servidorSinDarkroom ? "border-accent bg-accent" : "border-white/15 bg-white/10"}`}>
+          <span className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-fg ring-1 ring-black/20 transition-transform duration-300 ease-expo ${darkroom && !servidorSinDarkroom ? "translate-x-[18px]" : "translate-x-0.5"}`} />
         </button>
       </label>
     </Seccion>

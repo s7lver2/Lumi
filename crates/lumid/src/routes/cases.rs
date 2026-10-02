@@ -171,6 +171,9 @@ pub async fn create(
     if req.backend != "normal" && req.backend != "darkroom" {
         return Err(err(StatusCode::BAD_REQUEST, "backend debe ser \"normal\" o \"darkroom\""));
     }
+    if req.backend == "darkroom" && !crate::routes::colaboracion::casos_darkroom(&app) {
+        return Err(err(StatusCode::FORBIDDEN, "los casos Darkroom están desactivados en este servidor"));
+    }
     let t = now();
     let c = app.store.conn();
     c.execute(

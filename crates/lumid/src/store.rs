@@ -570,6 +570,11 @@ fn migrate(c: &Connection) {
         // Se elige al crearlo y no se cambia después. Los casos anteriores
         // quedan en 'normal' por el DEFAULT -- sin migración de datos.
         ("cases", "backend", "TEXT NOT NULL DEFAULT 'normal'"),
+        // JSON de `lumi_proto::api::CapasAnalisis`: qué recuperadores y
+        // verificadores corrieron de verdad y cuáles fallaron (y por qué).
+        // `NULL` en cualquier análisis de antes de esta columna: ausencia
+        // legítima, nunca se reconstruye.
+        ("analyses", "capas", "TEXT"),
     ] {
         let _ = c.execute(&format!("ALTER TABLE {table} ADD COLUMN {col} {decl}"), []);
     }

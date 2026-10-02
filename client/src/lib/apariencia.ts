@@ -2,6 +2,7 @@ const KEY = "lumi.reducir-movimiento";
 const KEY_ESCALA = "lumi.escala-interfaz";
 const KEY_FONDO = "lumi.fondo-entrada";
 const KEY_AVISO_VERSION = "lumi.avisar-version-incompatible";
+const KEY_DARKROOM = "lumi.casos-darkroom";
 
 /** Porcentajes admitidos para el tamaño de la interfaz. Se probó `zoom` (no
  *  estándar, pero WebView2 lo soporta — es Chromium) primero, pero apilaba un
@@ -90,4 +91,19 @@ export function leerAvisoVersionIncompatible(): boolean {
 
 export function setAvisoVersionIncompatible(activo: boolean) {
   localStorage.setItem(KEY_AVISO_VERSION, activo ? "1" : "0");
+}
+
+/** Nace ACTIVO (es lo que hay hoy): solo un `false` explícito oculta la opción
+ *  «Darkroom» al crear un caso. Es una preferencia del cliente: no cierra el
+ *  servidor ni toca los casos Darkroom que ya existan, que se siguen abriendo. */
+export function leerDarkroomActivo(): boolean {
+  try {
+    return localStorage.getItem(KEY_DARKROOM) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function setDarkroomActivo(activo: boolean) {
+  localStorage.setItem(KEY_DARKROOM, activo ? "1" : "0");
 }

@@ -131,6 +131,16 @@ fn command(kind: TaskKind, dir: &Path, models_dir: Option<&str>) -> (String, Vec
                    UV_HTTP_TIMEOUT=60 \"$UV\" pip install --python \"$1/bin/python3\" \
                    git+https://github.com/cvg/LightGlue.git; \
                  fi; \
+                 # RoMa v2 (verificador `roma-v2`): repo oficial de Parskatt;
+                 # instala el paquete `romav2` que importa `lumi_verify.py`.
+                 # Sus pesos NO los baja la libreria: `_sin_descargas` los
+                 # sustituye por el fichero ya verificado por sha256.
+                 if \"$1/bin/python3\" -c 'import romav2' 2>/dev/null; then \
+                   echo 'romav2 ya instalado, nada que hacer'; \
+                 else \
+                   UV_HTTP_TIMEOUT=60 \"$UV\" pip install --python \"$1/bin/python3\" \
+                   git+https://github.com/Parskatt/RoMaV2.git; \
+                 fi; \
                  if \"$1/bin/python3\" -c 'import transformers' 2>/dev/null; then \
                    echo 'transformers ya instalado, nada que hacer'; \
                  else \

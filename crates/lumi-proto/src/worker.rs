@@ -100,6 +100,15 @@ pub enum Msg {
         dims: u32,
         fichero: String,
     },
+    /// Un recuperador (modelo de embebido) no pudo dar vector: OOM, pesos
+    /// ausentes... El análisis sigue con los demás; solo falla entero si
+    /// fallan todos.
+    #[serde(rename = "recuperador_fallo")]
+    RecuperadorFallo { id: i64, modelo: String, motivo: String },
+    /// Un verificador geométrico no pudo correr (carga, OOM, librería
+    /// ausente). `verificar::afinar` lo recoge para avisar al usuario.
+    #[serde(rename = "verificador_fallo")]
+    VerificadorFallo { id: i64, verificador: String, motivo: String },
     /// Un verificador geométrico ha mirado un candidato. Cuantas quiera: una
     /// por (candidato, verificador). `inliers` es el respaldo con el que el
     /// daemon arbitra; no hay peso ni confianza aquí, a propósito.

@@ -112,6 +112,68 @@ def quizas_purgar_por_presion(cache, usos, activo, necesita_mb=0):
     return desalojadas
 
 
+#: Colchón de VRAM libre (MB) que se intenta dejar tras cargar un modelo:
+#: activaciones de la inferencia y fragmentación del asignador.
+MARGEN_VRAM_MB = 1024
+
+
+def vram_libre_mb():
+    """VRAM libre real de la GPU activa, o `None` si no hay CUDA/torch (CPU,
+    MPS...) -- sin dato real no se libera nada, nunca se inventa un número."""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return torch.cuda.mem_get_info()[0] / (1024 * 1024)
+    except Exception:
+        pass
+    return None
+
+
+def es_oom(err):
+    """¿Esta excepción es memoria agotada (CUDA o RAM)? Se mira el tipo y el
+    texto porque según la versión de torch es `OutOfMemoryError` o un
+    `RuntimeError` con «out of memory»."""
+    return isinstance(err, MemoryError) or "out of memory" in str(err).lower()         or type(err).__name__ == "OutOfMemoryError"
+
+
+def liberar_vram_para(cache, usos, necesita_mb):
+    """Con GPU corta de VRAM: antes de cargar un modelo de `necesita_mb`,
+    desaloja los MENOS usados de `cache` (de uno en uno, el de `usos` más
+    antiguo) hasta que quepa con `MARGEN_VRAM_MB` de colchón o no quede nada
+    que soltar. Complementa a `purgar_inactivos` (solo por tiempo) y a
+    `quizas_purgar_por_presion` (solo RAM del sistema).
+
+    ponytail: `necesita_mb` es el tamaño del fichero de pesos, una cota
+    inferior de la VRAM real (activaciones aparte) -- de ahí el colchón. El
+    techo es que no sabe lo que ocupa cada modelo ya cargado; la salida es el
+    `GestorModelos` del plan 2026-09-22-darkroom2-03, que sí lo mide.
+
+    Devuelve las claves desalojadas, para que el trabajador las registre."""
+    libre = vram_libre_mb()
+    if libre is None:
+        return []
+    fuera = []
+    while libre < necesita_mb + MARGEN_VRAM_MB and usos:
+        clave = min(usos, key=usos.get)
+        cache.pop(clave, None)
+        usos.pop(clave, None)
+        fuera.append(clave)
+        _vaciar_cuda()
+        libre = vram_libre_mb() or libre
+    return fuera
+
+
+def _vaciar_cuda():
+    import gc
+    gc.collect()
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except ImportError:
+        pass
+
+
 def purgar_inactivos(cache, usos, umbral_seg=UMBRAL_INACTIVIDAD_SEG):
     """Descarta de `cache` las entradas de `usos` (dict paralelo de
     último-uso en segundos, mismas claves) que llevan más de `umbral_seg`

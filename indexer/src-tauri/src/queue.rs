@@ -113,6 +113,9 @@ pub struct Cola {
     /// el uno al otro — solo se serializa la decisión de "qué modelo entra o
     /// sale del conjunto", no el trabajo en sí.
     trabajadores: tokio::sync::Mutex<Ranuras>,
+    /// `vram_mb` de cada modelo que lo declara en su manifiesto (ver
+    /// `ranura_para`). Se rellena en `arrancar_bucle`.
+    vram_mb: Mutex<HashMap<String, u32>>,
 }
 
 #[derive(Default)]
@@ -249,6 +252,12 @@ const CLAVE_CONCURRENCIA: &str = "concurrencia_gpu";
 /// cargados a la vez deja de ser "acelerar" y vuelve a ser "desbordar la
 /// VRAM" — el mismo problema que este mecanismo entero existe para evitar.
 const CONCURRENCIA_MAX: usize = 2;
+/// Techo de ranuras cuando TODOS los modelos en juego declaran `vram_mb` y
+/// caben en la VRAM de la GPU (ver `ranura_para`).
+const CONCURRENCIA_MAX_VRAM: usize = 4;
+/// Fracción de la VRAM total que se está dispuesto a llenar con pesos: el
+/// resto es para activaciones del lote, el driver y otras aplicaciones.
+const FRACCION_VRAM: f64 = 0.8;
 /// Clave bajo la que vive el modo de consumo en `ajustes`. Mismo patrón que
 /// `CLAVE_CONCURRENCIA`.
 const CLAVE_PRIORIDAD_BAJA: &str = "prioridad_baja_embebido";
@@ -279,6 +288,7 @@ impl Cola {
             concurrencia: std::sync::atomic::AtomicUsize::new(concurrencia),
             prioridad_baja: std::sync::atomic::AtomicBool::new(prioridad_baja),
             trabajadores: tokio::sync::Mutex::new(Ranuras::default()),
+            vram_mb: Mutex::new(HashMap::new()),
         })
     }
 
@@ -339,7 +349,34 @@ impl Cola {
             return Ok(r);
         }
         let cap = self.concurrencia();
-        while pool.ranuras.len() >= cap {
+        // ponytail: heurística. Con `vram_mb` declarado en TODOS los modelos
+        // residentes y en el nuevo, y la VRAM total leída de `nvidia-smi`,
+        // entran sin desalojar a nadie mientras la suma quepa en
+        // `FRACCION_VRAM` y no se pase de `CONCURRENCIA_MAX_VRAM`. Sin esos
+        // datos (hoy ningún manifiesto lo declara: no hay medida fiable) todo
+        // sigue como antes, con `cap` fijo. Techo: la suma de pesos no cuenta
+        // las activaciones del lote; la salida es medir el pico real por modelo
+        // y declararlo en `vram_mb`.
+        let cabe_por_vram = {
+            let conocidos = self.vram_mb.lock().unwrap().clone();
+            let suma: Option<u32> = pool
+                .ranuras
+                .keys()
+                .chain(std::iter::once(&modelo.to_string()))
+                .map(|m| conocidos.get(m).copied())
+                .sum();
+            match suma {
+                Some(suma) if pool.ranuras.len() < CONCURRENCIA_MAX_VRAM => {
+                    let total = tokio::task::spawn_blocking(crate::perf::leer)
+                        .await
+                        .ok()
+                        .and_then(|r| r.gpus.first().map(|g| g.vram_total_mb));
+                    total.is_some_and(|t| (suma as f64) <= t as f64 * FRACCION_VRAM)
+                }
+                _ => false,
+            }
+        };
+        while pool.ranuras.len() >= cap && !cabe_por_vram {
             let Some(victima) = pool.orden.first().cloned() else { break };
             pool.quitar(&victima);
             self.log.apuntar(format!("cola: se aparta {victima} de la GPU para dejar sitio a {modelo}"));
@@ -391,7 +428,10 @@ impl Cola {
     /// tokio multihilo global que se crea al pedirlo, así que desde dentro de
     /// la tarea `tokio::spawn`, `tokio::process` y los temporizadores ya
     /// funcionan con normalidad.
-    pub fn arrancar_bucle(self: Arc<Self>, modelo: String, dims: u32, version: String) {
+    pub fn arrancar_bucle(self: Arc<Self>, modelo: String, dims: u32, version: String, vram_mb: Option<u32>) {
+        if let Some(v) = vram_mb {
+            self.vram_mb.lock().unwrap().insert(modelo.clone(), v);
+        }
         tauri::async_runtime::spawn(async move {
             {
                 let pausada = *self.pausada.lock().unwrap();

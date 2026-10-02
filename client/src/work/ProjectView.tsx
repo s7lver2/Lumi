@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, type Cambio, type Case, type Project, type ProjectImage } from "../lib/api";
+import { leerDarkroomActivo } from "../lib/apariencia";
 import { useReorder } from "../lib/useReorder";
 import { useServer } from "../lib/store";
 import { ContextMenu, menuAt, type MenuState } from "../ui/ContextMenu";
@@ -18,6 +19,7 @@ export function ProjectView({
   drawer: React.ReactNode;
 }) {
   const token = useServer((s) => s.token) ?? undefined;
+  const hello = useServer((s) => s.hello);
   const [cases, setCases] = useState<Case[] | null>(null);
   const [covers, setCovers] = useState<Map<number, number[]>>(new Map());
   const [creating, setCreating] = useState(false);
@@ -175,7 +177,7 @@ export function ProjectView({
         title={`Nuevo caso en «${project.name}»`} subtitle="un caso, un sitio que averiguar"
         placeholder="Muelle 7" taken={list.map((c) => c.name)}
         busy={busy} error={error}
-        extra={
+        extra={leerDarkroomActivo() && hello?.casos_darkroom !== false ? (
           <div className="mt-3 flex gap-1.5 rounded-[9px] border border-border bg-[#0d0f12] p-1">
             {([["normal", "Normal"], ["darkroom", "Darkroom"]] as const).map(([v, label]) => (
               <button key={v} type="button" onClick={() => setBackend(v)}
@@ -186,7 +188,7 @@ export function ProjectView({
               </button>
             ))}
           </div>
-        }
+        ) : undefined}
         onConfirm={create}
         onClose={() => { setCreating(false); setError(null); setBackend("normal"); }} />
 

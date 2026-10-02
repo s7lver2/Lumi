@@ -52,8 +52,12 @@ export function ModelosView({ token, nivelInicial, onLicenciasPendientesChange }
                     </span>
                   </h4>
                   <div className="mt-[3px] text-[10.5px] text-muted">
-                    {n.resolucion.recuperacion_total} recuperadores · {n.resolucion.geometricos_total} verificadores
+                    {n.resolucion.recuperacion_total} recuperadores · {n.verificadores_reales} verificadores
+                    {n.vram_gb != null && ` · ${n.vram_gb} GB de VRAM recomendados`}
                   </div>
+                  {n.aviso_hardware && (
+                    <p className="mt-1 text-[10.5px] leading-relaxed text-warning-fg">{n.aviso_hardware}</p>
+                  )}
                   <div className="mt-[9px] h-[3px] overflow-hidden rounded-sm bg-elevated">
                     <div className="h-full bg-fg transition-[width] duration-1000 ease-expo"
                       style={{ width: `${total ? Math.round((instalado / total) * 100) : 100}%` }} />

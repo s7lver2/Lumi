@@ -14,6 +14,7 @@ const CLAVE_EXCLUSIVO: &str = "caso_exclusivo";
 const CLAVE_LIBERAR_S: &str = "caso_liberar_s";
 const CLAVE_EXPULSAR_ROL: &str = "caso_expulsar_rol";
 const CLAVE_MAX_PERSONAS: &str = "proyecto_max_personas";
+const CLAVE_DARKROOM: &str = "casos_darkroom";
 
 const DEFECTO_LIBERAR_S: i64 = 1800;
 const DEFECTO_EXPULSAR_ROL: &str = "admin_o_dueno";
@@ -37,12 +38,19 @@ pub fn proyecto_max_personas(app: &App) -> i64 {
     app.store.get_meta(CLAVE_MAX_PERSONAS).and_then(|v| v.parse().ok()).unwrap_or(0)
 }
 
+/// Nace activado (es lo que había antes de que existiera el ajuste). Solo
+/// frena la CREACIÓN de casos Darkroom: no toca los que ya existen.
+pub fn casos_darkroom(app: &App) -> bool {
+    app.store.get_meta(CLAVE_DARKROOM).as_deref() != Some("0")
+}
+
 fn settings(app: &App) -> ColaboracionSettings {
     ColaboracionSettings {
         caso_exclusivo: caso_exclusivo(app),
         caso_liberar_s: caso_liberar_s(app),
         caso_expulsar_rol: caso_expulsar_rol(app),
         proyecto_max_personas: proyecto_max_personas(app),
+        casos_darkroom: casos_darkroom(app),
     }
 }
 
@@ -89,6 +97,12 @@ pub async fn patch(
             .set_meta(CLAVE_MAX_PERSONAS, &v.to_string())
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         tracing::info!("tope de personas por proyecto fijado a {v} por el administrador {admin}");
+    }
+    if let Some(v) = req.casos_darkroom {
+        app.store
+            .set_meta(CLAVE_DARKROOM, if v { "1" } else { "0" })
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        tracing::info!("casos Darkroom {} por el administrador {admin}", if v { "activados" } else { "desactivados" });
     }
     Ok(Json(settings(&app)))
 }

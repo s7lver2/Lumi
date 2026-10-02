@@ -19,6 +19,39 @@ pub struct Nivel {
     /// A qué nivel se baja si al índice le faltan capas. `None` en el más
     /// bajo: por debajo no hay nada.
     pub cae_a: Option<String>,
+    /// Hardware recomendado para correr el nivel (GB). Solo INFORMATIVO: sirve
+    /// para avisar, nunca para bloquear (ver `aviso_hardware`).
+    #[serde(default)]
+    pub vram_gb: Option<u32>,
+    #[serde(default)]
+    pub ram_gb: Option<u32>,
+}
+
+/// Aviso legible cuando esta máquina tiene menos VRAM/RAM de la recomendada
+/// para `nivel`. `None` si cumple, o si no se pudo medir (sin dato real no se
+/// avisa de nada). Mismo patrón que la matriz de capacidades: se enseña con su
+/// causa, no se esconde ni se bloquea.
+pub fn aviso_hardware(nivel: &Nivel, vram_mb: Option<u64>, ram_mb: Option<u64>) -> Option<String> {
+    // Un 5 % de tolerancia: una tarjeta de «24 GB» reporta ~23,99 GiB.
+    let corta = |tiene_mb: Option<u64>, pide_gb: Option<u32>| match (tiene_mb, pide_gb) {
+        (Some(t), Some(p)) if (t as f64) < p as f64 * 1024.0 * 0.95 => Some((t as f64 / 1024.0, p)),
+        _ => None,
+    };
+    let mut partes = Vec::new();
+    if let Some((t, p)) = corta(vram_mb, nivel.vram_gb) {
+        partes.push(format!("{p} GB de VRAM (esta máquina tiene {t:.0} GB)"));
+    }
+    if let Some((t, p)) = corta(ram_mb, nivel.ram_gb) {
+        partes.push(format!("{p} GB de RAM (esta máquina tiene {t:.0} GB)"));
+    }
+    if partes.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "{} recomienda {}: puede quedarse sin memoria. Los recuperadores que no quepan se saltarán y el análisis lo indicará.",
+        nivel.nombre,
+        partes.join(" y ")
+    ))
 }
 
 /// El nivel que realmente se puede correr contra un índice, bajando por
@@ -88,6 +121,8 @@ mod tests {
                 recuperacion: vec!["megaloc".into(), "boq-dinov2".into(), "anyloc".into()],
                 geometricos: vec!["roma".into(), "roma-v2".into()],
                 cae_a: Some("pro".into()),
+                vram_gb: None,
+                ram_gb: None,
             },
             Nivel {
                 id: "pro".into(),
@@ -95,6 +130,8 @@ mod tests {
                 recuperacion: vec!["megaloc".into(), "boq-dinov2".into()],
                 geometricos: vec!["roma".into()],
                 cae_a: Some("mini".into()),
+                vram_gb: None,
+                ram_gb: None,
             },
             Nivel {
                 id: "mini".into(),
@@ -102,6 +139,8 @@ mod tests {
                 recuperacion: vec!["cosplace".into()],
                 geometricos: vec!["tiny-roma".into()],
                 cae_a: None,
+                vram_gb: None,
+                ram_gb: None,
             },
         ]
     }
@@ -155,6 +194,8 @@ mod tests {
             recuperacion: vec!["cosplace".into(), "salad".into()],
             geometricos: vec!["roma".into()],
             cae_a: Some("pro".into()),
+                vram_gb: None,
+                ram_gb: None,
         };
         let instalados: HashSet<String> = ["cosplace".into()].into_iter().collect();
         let r = resolver_composicion(&nivel, &[], &instalados);
@@ -172,6 +213,8 @@ mod tests {
             recuperacion: vec!["cosplace".into()],
             geometricos: vec!["tiny-roma".into()],
             cae_a: None,
+                vram_gb: None,
+                ram_gb: None,
         };
         let instalados: HashSet<String> = ["cosplace".into(), "tiny-roma".into()].into_iter().collect();
         // `motores_necesarios` sigue sumando a `faltan` aunque desde Darkroom

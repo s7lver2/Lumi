@@ -2,7 +2,8 @@
   "id": "efficient-loftr",
   "nombre": "Efficient LoFTR",
   "tipo": "semi-denso",
-  "licencia": "Apache-2.0",
+  "licencia": "Pesos Apache-2.0 (ficha de Hugging Face); el código del repo oficial va bajo «Project Registration License v1.0» de ZJU3DV: el uso en un proyecto de una organización exige registrarlo (sin coste, sin aprobación)",
   "pesos_url": "https://github.com/zju3dv/EfficientLoFTR",
-  "sha256": ""
+  "sha256": "00a5edc343fa222eba763643553548ad37a05aa3d00d266553c9f6cf67bb0e64",
+  "fichero_url": "https://huggingface.co/zju-community/efficientloftr/resolve/main/model.safetensors"
 }

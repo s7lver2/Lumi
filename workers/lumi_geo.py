@@ -75,12 +75,35 @@ def _cargar(modelo):
     for m in lumi_pesos.quizas_purgar_por_presion(_cargados, _ultimo_uso, LIMPIEZA_PRESION, necesita_mb):
         _log("modelo %s desalojado por presion de memoria" % m)
 
+    # GPU corta de VRAM: soltar los menos usados antes de cargar uno que no
+    # cabe. Sin esto los ocho recuperadores de Vision (incluido DINOv2-giant)
+    # se acumulaban hasta el OOM.
+    for m in lumi_pesos.liberar_vram_para(_cargados, _ultimo_uso, necesita_mb):
+        _log("modelo %s desalojado por falta de VRAM" % m)
+
     _log("cargando modelo %s en %s" % (modelo, DISPOSITIVO))
-    e = lumi_pesos.cargar(modelo, REGISTRO, PESOS, DISPOSITIVO)
+    try:
+        e = lumi_pesos.cargar(modelo, REGISTRO, PESOS, DISPOSITIVO)
+    except Exception as err:
+        # Un OOM de carga con otros modelos aún en memoria se reintenta UNA vez
+        # con la caché vacía. Si aun así revienta, es fallo de ESTE
+        # recuperador (`_embeber` lo reporta), no caída del análisis.
+        if not (lumi_pesos.es_oom(err) and _cargados):
+            raise
+        _log("OOM cargando %s: se sueltan los %d modelos cargados y se reintenta" % (modelo, len(_cargados)))
+        _cargados.clear()
+        _ultimo_uso.clear()
+        lumi_pesos._vaciar_cuda()
+        e = lumi_pesos.cargar(modelo, REGISTRO, PESOS, DISPOSITIVO)
     _cargados[modelo] = e
     _ultimo_uso[modelo] = time.time()
     _decir({"tipo": "listo", "dispositivo": DISPOSITIVO, "modelo": modelo})
     return e
+
+
+def lumi_pesos_es_oom(err):
+    import lumi_pesos
+    return lumi_pesos.es_oom(err)
 
 
 def _embeber(job):
@@ -120,8 +143,11 @@ def _embeber(job):
             # excepcion era imposible.
             import traceback
             _log("fallo cargando/embebiendo %s:\n%s" % (modelo, traceback.format_exc()))
-            fuera.append({"tipo": "fallo", "id": job["id"],
-                          "motivo": "modelo %s: %s" % (modelo, err)})
+            # Degradar y avisar: el daemon sigue con los recuperadores que
+            # sí dieron vector y solo falla el análisis si fallan todos.
+            fuera.append({"tipo": "recuperador_fallo", "id": job["id"], "modelo": modelo,
+                          "motivo": ("sin memoria suficiente para este modelo: %s" if lumi_pesos_es_oom(err)
+                                     else "%s") % err})
             continue
         fd, destino = tempfile.mkstemp(prefix="lumi-geo-%d-" % job["id"], suffix=".f32")
         with os.fdopen(fd, "wb") as f:

@@ -484,6 +484,7 @@ pub async fn upscale(
         image_ids: vec![image_id],
         hypotheses: vec![],
         nivel_efectivo: None,
+        capas: None,
         created_at: t,
         finished_at: None,
     }))

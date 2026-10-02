@@ -55,6 +55,11 @@ pub struct Modelo {
     /// futuro exige algo distinto de un token.
     #[serde(default)]
     pub puerta: Option<String>,
+    /// VRAM que ocupa el modelo cargado (MB), si se conoce de forma fiable.
+    /// Vacío significa «no se sabe»: la cola no adivina y se queda con el
+    /// límite fijo de ranuras. Nunca se inventa.
+    #[serde(default)]
+    pub vram_mb: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

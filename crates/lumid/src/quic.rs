@@ -78,5 +78,6 @@ async fn app_hello(app: &App) -> lumi_proto::api::Hello {
         capabilities: lumi_proto::caps::matrix(app.mode, app.gpus.len(), false, &hw),
         gpus: app.gpus.clone(),
         inactivity_timeout_s: crate::routes::security::inactivity_timeout_s(&app.store),
+        casos_darkroom: crate::routes::colaboracion::casos_darkroom(app),
     }
 }

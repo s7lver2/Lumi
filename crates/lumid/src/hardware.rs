@@ -191,6 +191,22 @@ fn perfil_guardado(app: &App, index: u32) -> Option<HardwareProfile> {
     .ok()
 }
 
+/// VRAM de la mayor GPU y RAM total de esta máquina, en MB. `None` donde no
+/// se puede medir (sin NVML, sin GPU): sin dato real no se avisa de nada.
+pub fn recursos_mb(app: &App) -> (Option<u64>, Option<u64>) {
+    let vram = app.nvml.as_ref().and_then(|n| {
+        (0..n.device_count().unwrap_or(0))
+            .filter_map(|i| n.device_by_index(i).ok()?.memory_info().ok())
+            .map(|m| m.total / 1024 / 1024)
+            .max()
+    });
+    let ram = app.sysinfo.lock().ok().map(|mut s| {
+        s.refresh_memory();
+        s.total_memory() / 1024 / 1024
+    });
+    (vram, ram)
+}
+
 /// Lista para `GET /v1/admin/hardware`. Si NVML no responde, la lista sale
 /// vacía — no es un error de la ruta, es que no hay nada que enseñar.
 pub fn dispositivos(app: &App) -> Vec<HardwareDevice> {

@@ -15,7 +15,7 @@ use lumi_proto::api::{Analysis, AnalysisReq};
 
 pub(crate) const COLS: &str = "id, case_id, model, state, error, result_lat, result_lng,
                     result_radius_m, result_confidence, created_at, finished_at, nivel_efectivo,
-                    result_inliers, result_verificador, result_imagen_id, grupo_id, falta_modelo";
+                    result_inliers, result_verificador, result_imagen_id, grupo_id, falta_modelo, capas";
 
 fn image_ids(c: &rusqlite::Connection, analysis_id: i64) -> Vec<i64> {
     let Ok(mut q) = c.prepare("SELECT image_id FROM analysis_images WHERE analysis_id = ?1") else {
@@ -42,6 +42,7 @@ pub(crate) fn row_to_analysis(r: &rusqlite::Row) -> rusqlite::Result<Analysis> {
         image_ids: vec![],
         hypotheses: vec![],
         nivel_efectivo: r.get(11)?,
+        capas: r.get::<_, Option<String>>(17)?.and_then(|s| serde_json::from_str(&s).ok()),
         created_at: r.get(9)?,
         finished_at: r.get(10)?,
         result_inliers: r.get(12)?,
@@ -289,14 +290,25 @@ pub async fn create(
     } else {
         None
     };
+    // Aviso (no bloqueo) si el nivel pedido recomienda más VRAM/RAM de la que
+    // tiene esta máquina. Viaja en `capas.avisos`, que la cola conserva.
+    let capas = {
+        let (vram_mb, ram_mb) = crate::hardware::recursos_mb(&app);
+        let nivel = app.queue.niveles.lock().unwrap().iter().find(|n| n.id == req.model).cloned();
+        nivel
+            .and_then(|n| lumi_index::niveles::aviso_hardware(&n, vram_mb, ram_mb))
+            .map(|a| lumi_proto::api::CapasAnalisis { avisos: vec![a], ..Default::default() })
+    };
+    let capas_json = capas.as_ref().and_then(|c| serde_json::to_string(c).ok());
     let id = {
         let c = app.store.conn();
         c.execute(
             "INSERT INTO analyses (case_id, requested_by, model, grupo_id, state, created_at, via_api,
-                                    forzar_motor, forzar_dispositivo, imagen_sha256)
-             VALUES (?1, ?2, ?3, ?4, 'pendiente', ?5, ?6, ?7, ?8, ?9)",
+                                    forzar_motor, forzar_dispositivo, imagen_sha256, capas)
+             VALUES (?1, ?2, ?3, ?4, 'pendiente', ?5, ?6, ?7, ?8, ?9, ?10)",
             rusqlite::params![
-                case_id, uid, req.model, req.grupo_id, t, via_api, forzar_motor, forzar_dispositivo, imagen_sha256
+                case_id, uid, req.model, req.grupo_id, t, via_api, forzar_motor, forzar_dispositivo, imagen_sha256,
+                capas_json
             ],
         )
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
@@ -332,6 +344,7 @@ pub async fn create(
         image_ids: req.image_ids,
         hypotheses: vec![],
         nivel_efectivo: None,
+        capas,
         created_at: t,
         finished_at: None,
     }))

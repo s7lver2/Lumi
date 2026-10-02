@@ -25,6 +25,8 @@ pub enum Evento {
     /// `modelo` vacío significa «el primero del nivel», que es como lo manda
     /// un trabajador viejo que no conoce el campo.
     Vectores { dispositivo: String, id: i64, modelo: String, dims: u32, fichero: String },
+    /// Un recuperador no pudo embeber: se degrada, no se falla el análisis.
+    RecuperadorFallo { dispositivo: String, id: i64, modelo: String, motivo: String },
     Resultado {
         dispositivo: String,
         id: i64,
@@ -51,6 +53,17 @@ impl Evento {
             Msg::Vectores { id, modelo, dims, fichero } => {
                 Evento::Vectores { dispositivo: d, id, modelo, dims, fichero }
             }
+            Msg::RecuperadorFallo { id, modelo, motivo } => {
+                Evento::RecuperadorFallo { dispositivo: d, id, modelo, motivo }
+            }
+            // ponytail: `VerificadorFallo` es del trabajador de verificación,
+            // igual que `Verificado` (ver abajo).
+            Msg::VerificadorFallo { id, .. } => Evento::Fallo {
+                dispositivo: d,
+                id,
+                motivo: "un trabajador de embebido mandó un fallo de verificador".into(),
+                falta_modelo: None,
+            },
             Msg::Resultado { id, lat, lng, radio_m, confianza, alternativas } => {
                 Evento::Resultado { dispositivo: d, id, lat, lng, radio_m, confianza, alternativas }
             }

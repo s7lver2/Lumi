@@ -39,6 +39,11 @@ pub struct Hello {
     /// porque cualquier sesión (no solo un admin) necesita aplicarlo.
     #[serde(default)]
     pub inactivity_timeout_s: u64,
+    /// Si el servidor permite crear casos Darkroom (`ColaboracionSettings`).
+    /// Se expone aquí por la misma razón que `inactivity_timeout_s`: el
+    /// selector de backend lo ve cualquier sesión, no solo un admin.
+    #[serde(default = "si")]
+    pub casos_darkroom: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -537,6 +542,9 @@ pub struct ColaboracionSettings {
     pub caso_expulsar_rol: String,
     /// `0` = sin tope.
     pub proyecto_max_personas: i64,
+    /// Apagado, el servidor rechaza crear casos Darkroom. Los que ya existen
+    /// se siguen abriendo.
+    pub casos_darkroom: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -545,6 +553,7 @@ pub struct PatchColaboracionReq {
     pub caso_liberar_s: Option<i64>,
     pub caso_expulsar_rol: Option<String>,
     pub proyecto_max_personas: Option<i64>,
+    pub casos_darkroom: Option<bool>,
 }
 
 /// Los tres interruptores del spec 2026-09-10 más `progreso_detallado_activo`
@@ -981,8 +990,38 @@ pub struct Analysis {
     /// `None` significa «el que se pidió».
     #[serde(default)]
     pub nivel_efectivo: Option<String>,
+    /// Qué capas corrieron de verdad y cuáles fallaron. `None` en un análisis
+    /// de antes de que se guardara, o que no pasó por recuperación.
+    #[serde(default)]
+    pub capas: Option<CapasAnalisis>,
     pub created_at: i64,
     pub finished_at: Option<i64>,
+}
+
+/// Una capa (recuperador o verificador) que no llegó a dar resultado, con el
+/// motivo legible: nada se esconde, igual que en la matriz de capacidades.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct CapaFallida {
+    pub id: String,
+    pub motivo: String,
+}
+
+/// Degradación honesta de un análisis: el análisis sigue con lo que funciona
+/// y deja constancia de lo que no.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct CapasAnalisis {
+    #[serde(default)]
+    pub recuperadores_ok: Vec<String>,
+    #[serde(default)]
+    pub recuperadores_fallo: Vec<CapaFallida>,
+    #[serde(default)]
+    pub verificadores_ok: Vec<String>,
+    #[serde(default)]
+    pub verificadores_fallo: Vec<CapaFallida>,
+    /// Avisos informativos que no impidieron nada (hoy: el nivel pedido
+    /// recomienda más VRAM/RAM de la que tiene esta máquina).
+    #[serde(default)]
+    pub avisos: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]

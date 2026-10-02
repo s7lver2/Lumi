@@ -194,6 +194,8 @@ export interface ColaboracionSettings {
   caso_liberar_s: number;
   caso_expulsar_rol: "admin" | "admin_o_dueno" | "cualquier_miembro";
   proyecto_max_personas: number;
+  /** Apagado, el servidor rechaza crear casos Darkroom (los existentes se abren). */
+  casos_darkroom: boolean;
 }
 export interface PoliciesSettings {
   active: boolean;
@@ -244,6 +246,15 @@ export interface TaskStatus {
 export interface ProviderTokenState {
   has_token: boolean;
 }
+export interface CapaFallida { id: string; motivo: string }
+export interface CapasAnalisis {
+  recuperadores_ok: string[];
+  recuperadores_fallo: CapaFallida[];
+  verificadores_ok: string[];
+  verificadores_fallo: CapaFallida[];
+  /** Avisos que no impidieron nada (p. ej. VRAM por debajo de la recomendada). */
+  avisos: string[];
+}
 export interface Resolucion {
   recuperacion_instalados: number;
   recuperacion_total: number;
@@ -255,6 +266,12 @@ export interface NivelEstado {
   id: string;
   nombre: string;
   resolucion: Resolucion;
+  vram_gb: number | null;
+  ram_gb: number | null;
+  /** Motivo legible si esta máquina tiene menos VRAM/RAM de la recomendada. */
+  aviso_hardware: string | null;
+  /** Verificadores reales: `resolucion.geometricos_total` cuenta también los componentes. */
+  verificadores_reales: number;
 }
 export interface MetaPeso {
   id: string;
@@ -279,6 +296,9 @@ export interface Hello {
   /** Ver `SecuritySettings.inactivity_timeout_s`. Se expone aquí, y no solo
    *  al panel de admin, porque cualquier sesión necesita aplicarlo. */
   inactivity_timeout_s: number;
+  /** Ver `ColaboracionSettings.casos_darkroom`. Aquí porque el selector de
+   *  backend lo ve cualquier sesión. Ausente en servidores viejos = permitido. */
+  casos_darkroom?: boolean;
 }
 
 /** `partes`/`comparar` de `lumi-proto::actualizacion`, mismo criterio en TS:
@@ -404,6 +424,9 @@ export interface Analysis {
   /** El nivel que realmente corrió si hubo descenso por capas que faltaban.
    *  `null` significa «el que se pidió». */
   nivel_efectivo: string | null;
+  /** Qué recuperadores y verificadores corrieron de verdad y cuáles fallaron
+   *  (con motivo). `null` en un análisis de antes de que se guardara. */
+  capas: CapasAnalisis | null;
   image_ids: number[]; created_at: number; finished_at: number | null;
 }
 /** Un verificador del registro, para el picker de calibración -- ver

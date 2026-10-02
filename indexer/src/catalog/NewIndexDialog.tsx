@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { api, type Nivel } from "../lib/api";
+import { api, type Modelo, type Nivel } from "../lib/api";
 
 function slugDe(nombre: string): string {
   return nombre
@@ -22,8 +22,16 @@ export function NewIndexDialog({ proyecto, onCancelar, onCreado }: {
   const [error, setError] = useState<string | null>(null);
   const [niveles, setNiveles] = useState<Nivel[]>([]);
   const [elegido, setElegido] = useState<string | null>(null);
+  const [modelos, setModelos] = useState<Modelo[]>([]);
 
   useEffect(() => { void api.nivelesLista().then(setNiveles); }, []);
+  useEffect(() => { void api.modelosLista().then(setModelos).catch(() => setModelos([])); }, []);
+
+  /** Dimensiones por foto de un nivel: la suma de las de sus recuperadores.
+   *  En el paquete .lumidx cada dimensión ocupa 1 byte (int8). */
+  const dimsDe = (n: Nivel) =>
+    n.recuperacion.reduce((a, id) => a + (modelos.find((m) => m.id === id)?.dims ?? 0), 0);
+  const kib = (b: number) => (b >= 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MiB` : `${(b / 1024).toFixed(1)} KiB`);
 
   async function crear() {
     if (!nombre.trim() || !elegido) return;
@@ -64,7 +72,8 @@ export function NewIndexDialog({ proyecto, onCancelar, onCreado }: {
       <label className="mt-3.5 block text-[10.5px] text-subtle">Nivel a embeber</label>
       <p className="mt-0.5 text-[9.5px] leading-relaxed text-subtle">
         Fija hasta qué nivel llega este índice — más alto pide más modelos de recuperación, más
-        tiempo de GPU y disco por imagen. Se fija al crear el índice y no se puede cambiar después.
+        tiempo de GPU y disco por imagen. Puedes cambiarlo más adelante: subir de nivel solo
+        añade los modelos que falten, sin repetir lo ya embebido.
       </p>
       <div className="mt-2 grid grid-cols-3 gap-1.5">
         {niveles.map((n) => (
@@ -75,6 +84,12 @@ export function NewIndexDialog({ proyecto, onCancelar, onCreado }: {
             <span className="font-mono text-[9.5px] text-subtle">
               {n.recuperacion.length} {n.recuperacion.length === 1 ? "modelo" : "modelos"}
             </span>
+            {dimsDe(n) > 0 && (
+              <span className="mt-0.5 block font-mono text-[9px] leading-snug text-subtle">
+                {kib(dimsDe(n))}/foto · {kib(dimsDe(n) * 10000)} por 10 000 fotos (int8, paquete)
+                · {n.recuperacion.length} {n.recuperacion.length === 1 ? "pasada" : "pasadas"} de embebido
+              </span>
+            )}
           </button>
         ))}
       </div>

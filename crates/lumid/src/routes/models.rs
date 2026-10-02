@@ -124,6 +124,13 @@ pub async fn download(
         return Err((StatusCode::BAD_REQUEST, "alguno de estos pesos no tiene URL de descarga: modo guía, no se puede pedir aquí".to_string()));
     }
 
+    // Sin texto de licencia no hay nada que aceptar: dejaría un LICENCIA.txt
+    // vacío y el peso contaría como «instalado y aceptado». Pendiente del
+    // dueño (hoy: efficient-loftr y roma-v2, ver sus fichas).
+    if let Some(i) = items.iter().find(|i| i.licencia_texto.trim().is_empty() && !i.gestion_propia && i.hf_repo.is_empty()) {
+        return Err((StatusCode::BAD_REQUEST, format!("«{}» aún no tiene texto de licencia en el registro: pendiente del propietario", i.id)));
+    }
+
     let id = crate::tasks::spawn_model_download(&app, items)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     tracing::info!("descarga de modelos pedida por el administrador {admin}: {:?}", req.items);
@@ -179,6 +186,14 @@ pub struct NivelEstado {
     pub id: String,
     pub nombre: String,
     pub resolucion: lumi_index::niveles::Resolucion,
+    /// Hardware recomendado por el nivel (GB) y, si esta máquina se queda
+    /// corta, el aviso con su motivo. Informativo: no bloquea nada.
+    pub vram_gb: Option<u32>,
+    pub ram_gb: Option<u32>,
+    pub aviso_hardware: Option<String>,
+    /// Verificadores reales del nivel: `resolucion.geometricos_total` cuenta
+    /// también los componentes (dinov2-vitl14, aliked-n16).
+    pub verificadores_reales: usize,
 }
 
 // Instalado = LICENCIA.txt presente junto al peso — el mismo criterio que
@@ -211,11 +226,21 @@ pub async fn estado(
     let niveles = app.queue.niveles.lock().unwrap().clone();
     let instalados = instalados_dir(&app);
 
+    let (vram_mb, ram_mb) = crate::hardware::recursos_mb(&app);
+    let registro_verif = app.queue.verificadores.lock().unwrap().clone();
     let fuera = niveles
         .iter()
         .map(|n| NivelEstado {
             id: n.id.clone(), nombre: n.nombre.clone(),
             resolucion: lumi_index::niveles::resolver_composicion(n, &[], &instalados),
+            vram_gb: n.vram_gb,
+            ram_gb: n.ram_gb,
+            aviso_hardware: lumi_index::niveles::aviso_hardware(n, vram_mb, ram_mb),
+            verificadores_reales: n
+                .geometricos
+                .iter()
+                .filter(|id| !registro_verif.iter().any(|v| &v.id == *id && v.tipo == "componente"))
+                .count(),
         })
         .collect();
     Ok(Json(fuera))

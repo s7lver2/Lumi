@@ -49,5 +49,6 @@ pub async fn get(State(app): State<App>) -> Json<Hello> {
         },
         gpus: app.gpus.clone(),
         inactivity_timeout_s: crate::routes::security::inactivity_timeout_s(&app.store),
+        casos_darkroom: crate::routes::colaboracion::casos_darkroom(&app),
     })
 }

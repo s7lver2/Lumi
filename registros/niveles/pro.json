@@ -3,5 +3,7 @@
   "nombre": "Lumi Pro",
   "recuperacion": ["lumi-preview", "lumi-2", "eigenplaces", "dino-mix"],
   "geometricos": ["roma", "dinov2-vitl14", "lightglue-aliked", "aliked-n16"],
-  "cae_a": "mini"
+  "cae_a": "mini",
+  "vram_gb": 12,
+  "ram_gb": 32
 }

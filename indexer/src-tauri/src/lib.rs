@@ -1415,11 +1415,12 @@ async fn paquete_agregar_capa(
 /// el índice 4 (10.346 imágenes) era exactamente esto, no un origen de red
 /// ni nada de lo tocado en sesiones anteriores.
 ///
-/// La fase de red se resuelve primero y se guarda en memoria; TODO lo demás
-/// —fragmentos, filas, copia de imágenes, manifiesto, cobertura, firmado—
-/// pasa entero a `tokio::task::spawn_blocking`, que lo corre en un hilo
-/// dedicado del pool bloqueante de tokio: por mucho que tarde, no compite
-/// por los mismos hilos que la interfaz necesita para seguir respondiendo.
+/// Los fragmentos se escriben en streaming: una tesela de un modelo cada vez
+/// (leer de Qdrant con `.await`, escribir en `spawn_blocking`, soltar). TODO
+/// lo demás —filas, copia de imágenes, manifiesto, cobertura, firmado— pasa
+/// entero a `tokio::task::spawn_blocking`, que lo corre en un hilo dedicado
+/// del pool bloqueante de tokio: por mucho que tarde, no compite por los
+/// mismos hilos que la interfaz necesita para seguir respondiendo.
 async fn sellar(
     almacen: Arc<store::Almacen>,
     modelos: Vec<models::Modelo>,
@@ -1474,34 +1475,45 @@ async fn sellar(
     prog.fijar_total((por_qk.len() * modelos.len() + imagenes_que_viajan) as u32);
     prog.etapa("vectores");
 
-    // Única fase que de verdad necesita `.await`: se resuelve entera aquí y
-    // se guarda en memoria (un fragmento son unos KB de f32, nunca miles de
-    // ellos a la vez pesan lo que pesan las imágenes) para que la escritura
-    // a disco quede toda del otro lado de `spawn_blocking`, sin partirla.
+    // Streaming por tesela y modelo: se lee UN fragmento de Qdrant (`.await`),
+    // se escribe a disco en un hilo bloqueante y se suelta, antes de leer el
+    // siguiente. Antes se guardaban en un HashMap los vectores de TODOS los
+    // modelos y teselas antes de escribir, y con Vision (93 440 dimensiones
+    // entre modelos, ~374 KB por imagen en f32) eso no son «unos KB»: son
+    // gigas en RAM. Lo que queda en memoria a la vez es una tesela de un
+    // modelo.
+    //
+    // La invariante crítica no cambia: el orden de `ids` sale de `por_qk`, la
+    // MISMA lista de la que más abajo se escriben las `filas/`, y `leer`
+    // devuelve los vectores en el orden pedido y falla si falta alguno. Así la
+    // fila N de una tesela es el vector N de esa tesela, por construcción.
     let qdrant = qdrant::Cliente::nuevo();
-    let mut vectores_por: std::collections::HashMap<(String, String), Vec<Vec<f32>>> = Default::default();
     for m in &modelos {
         let coleccion = qdrant::coleccion_de(&m.id, &m.version);
         for (qk, filas) in &por_qk {
             let ids: Vec<i64> = filas.iter().map(|(id, _)| *id).collect();
             let vectores = qdrant.leer(&coleccion, &ids).await.map_err(|e| e.to_string())?;
-            vectores_por.insert((m.id.clone(), qk.clone()), vectores);
+            if vectores.len() != ids.len() {
+                return Err(format!(
+                    "Qdrant devolvió {} vectores de {} en {qk} para {}: las filas no cuadrarían",
+                    vectores.len(), ids.len(), m.id
+                ));
+            }
+            let dir = raiz.join("fragmentos").join(qk);
+            let (modelo_id, version) = (m.id.clone(), m.version.clone());
+            let prog = prog.clone();
+            tokio::task::spawn_blocking(move || -> Result<(), String> {
+                package::escribir_fragmento(&dir, &modelo_id, &version, &vectores)
+                    .map_err(|e| format!("no se pudo escribir el fragmento {}: {e}", dir.display()))?;
+                prog.avanzar();
+                Ok(())
+            })
+            .await
+            .map_err(|e| format!("el sellado se interrumpió a mitad: {e}"))??;
         }
     }
 
     tokio::task::spawn_blocking(move || -> Result<package::Informe, String> {
-        for (clave, vectores) in &vectores_por {
-            let (modelo_id, qk) = clave;
-            let m = modelos
-                .iter()
-                .find(|m| &m.id == modelo_id)
-                .expect("la clave viene de iterar sobre estos mismos modelos, arriba");
-            let dir = raiz.join("fragmentos").join(qk);
-            package::escribir_fragmento(&dir, &m.id, &m.version, vectores)
-                .map_err(|e| format!("no se pudo escribir el fragmento {}: {e}", dir.display()))?;
-            prog.avanzar();
-        }
-
         // Las filas que hacen utilizable el paquete. Sin `lat`/`lng` y `fuente`
         // por imagen, un vector instalado no se puede situar en el mapa ni
         // atribuir a nadie, y eso es justo lo que le pasaba a `lumid`: esperaba
@@ -2105,7 +2117,7 @@ pub fn run() {
     // filas se quedaban en `pendiente` para siempre, y el sellado se negaba
     // eternamente con "0 de N" sin que nada estuviera realmente roto.
     for m in &modelos {
-        cola.clone().arrancar_bucle(m.id.clone(), m.dims, m.version.clone());
+        cola.clone().arrancar_bucle(m.id.clone(), m.dims, m.version.clone(), m.vram_mb);
     }
 
     tauri::Builder::default()

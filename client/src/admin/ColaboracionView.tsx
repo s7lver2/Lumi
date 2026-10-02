@@ -47,6 +47,8 @@ export function ColaboracionView({ token, ajustes, onCambiar }: {
       <div className="mt-4 rounded-card border border-border bg-panel">
         <Fila titulo="Exclusividad de caso" sub="Una sola persona a la vez dentro de cada caso. Apagado, varias personas pueden abrirlo a la vez."
           on={ajustes.caso_exclusivo} onClick={() => void fijar({ caso_exclusivo: !ajustes.caso_exclusivo })} />
+        <Fila titulo="Casos Darkroom" sub="Permite crear casos Darkroom. Apagado, el servidor rechaza crearlos y nadie ve la opción; los casos Darkroom que ya existan se siguen abriendo."
+          on={ajustes.casos_darkroom} onClick={() => void fijar({ casos_darkroom: !ajustes.casos_darkroom })} />
       </div>
 
       <div className="mt-3 rounded-card border border-border bg-panel p-[13px_16px]">

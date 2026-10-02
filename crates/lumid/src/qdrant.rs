@@ -54,6 +54,13 @@ impl Cliente {
         }
     }
 
+    /// Misma configuración que el Indexer (`indexer/src-tauri/src/qdrant.rs`):
+    /// vectores y grafo HNSW en disco, cuantización binaria en RAM. Sin esto
+    /// Qdrant carga los vectores enteros en f32 (12288-d, y con Vision hasta
+    /// 93 440-d entre modelos): se midieron 9,9 GB de RSS con Pro.
+    /// Una colección que YA existe se deja tal cual (`existe` devuelve antes):
+    /// recrearla obligaría a reinstalar el índice; el Indexer tiene
+    /// `migrar_a_on_disk` si hace falta pasarla.
     pub async fn asegurar_coleccion(&self, nombre: &str, dims: u32) -> Result<()> {
         let existe = self
             .http
@@ -69,7 +76,9 @@ impl Cliente {
             .http
             .put(format!("{BASE}/collections/{nombre}"))
             .json(&serde_json::json!({
-                "vectors": { "size": dims, "distance": "Cosine" }
+                "vectors": { "size": dims, "distance": "Cosine", "on_disk": true },
+                "hnsw_config": { "on_disk": true },
+                "quantization_config": { "binary": { "always_ram": true } }
             }))
             .send()
             .await?;

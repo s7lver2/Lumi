@@ -3,5 +3,7 @@
   "nombre": "Lumi Mini",
   "recuperacion": ["cosplace"],
   "geometricos": ["tiny-roma"],
-  "cae_a": null
+  "cae_a": null,
+  "vram_gb": 8,
+  "ram_gb": 16
 }

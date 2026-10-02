@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { lumiUrl } from "../lib/bridge";
-import type { Analysis, Hipotesis, Image } from "../lib/api";
+import type { Analysis, CapasAnalisis, Hipotesis, Image } from "../lib/api";
 import { Drawer } from "./Drawer";
 import { Icon } from "../ui/Icon";
 import { CompareSlider } from "../ui/CompareSlider";
@@ -214,6 +214,43 @@ function VistaDetalle({ h, image, onCenter, onVolver }: {
  *  el mapa). Se reinician a Comparar cada vez que cambia de análisis — la
  *  selección de un intento viejo no debería aterrizar en el detalle del
  *  intento anterior. */
+/** Degradación honesta: qué capas del nivel NO corrieron y por qué, más los
+ *  avisos de hardware. Mismo patrón que la matriz de capacidades: nada se
+ *  esconde, cada ausencia lleva su motivo. */
+function CapasAviso({ capas }: { capas: CapasAnalisis | null }) {
+  if (!capas) return null;
+  const filas: { etiqueta: string; id: string; motivo: string }[] = [
+    ...capas.recuperadores_fallo.map((f) => ({ etiqueta: "Recuperador", ...f })),
+    ...capas.verificadores_fallo.map((f) => ({ etiqueta: "Verificador", ...f })),
+  ];
+  if (filas.length === 0 && capas.avisos.length === 0) return null;
+  const corrieron = capas.recuperadores_ok.length + capas.verificadores_ok.length;
+  return (
+    <div className="flex flex-col gap-1.5 text-[10.5px] leading-relaxed text-warning-fg">
+      {capas.avisos.map((a, i) => (
+        <p key={`a${i}`} className="flex items-start gap-2">
+          <Icon name="alert" size={12} className="mt-px shrink-0" />{a}
+        </p>
+      ))}
+      {filas.length > 0 && (
+        <>
+          <p className="flex items-start gap-2">
+            <Icon name="alert" size={12} className="mt-px shrink-0" />
+            Este análisis corrió con {corrieron} capas y {filas.length} no pudieron correr:
+          </p>
+          <ul className="ml-5 flex flex-col gap-0.5">
+            {filas.map((f) => (
+              <li key={`${f.etiqueta}-${f.id}`}>
+                {f.etiqueta} <span className="font-mono">{f.id}</span>: {f.motivo}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function ResultsDrawer({
   open, image, analysis, busy, progreso, onAnalyze, onCenter,
 }: {
@@ -271,6 +308,8 @@ export function ResultsDrawer({
           faltan capas de vectores de los modelos que {analysis.model} necesita.
         </p>
       )}
+
+      <CapasAviso capas={analysis?.capas ?? null} />
 
       {vista === "detalle" && seleccionada ? (
         <VistaDetalle h={seleccionada} image={image} onCenter={onCenter} onVolver={() => setVista("comparar")} />

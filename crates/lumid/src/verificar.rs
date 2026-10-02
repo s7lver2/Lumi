@@ -15,6 +15,16 @@ use lumi_index::niveles::Nivel;
 use lumi_index::registro::Verificador;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
+/// Quién participó de verdad en la verificación y quién no, con motivo.
+/// Es lo que el análisis guarda junto al resultado (`analyses.capas`).
+#[derive(Debug, Default)]
+pub struct Informe {
+    pub corrieron: Vec<String>,
+    pub fallaron: Vec<lumi_proto::api::CapaFallida>,
+    /// Cuántos verificadores reales (no componentes) tocaban en este nivel.
+    pub esperados: usize,
+}
+
 pub struct Afinado {
     pub candidato: Candidato,
     /// `None` significa que ningún verificador llegó al umbral: el candidato
@@ -53,7 +63,7 @@ pub async fn afinar(
     verificadores: &[Verificador],
     store: &crate::store::Store,
     persistente: &crate::persistente::Persistente,
-) -> Result<Vec<Afinado>> {
+) -> Result<(Vec<Afinado>, Informe)> {
     // Instrumentación (Hallazgo 0 del spec de rendimiento): antes de esto no
     // había un solo `Instant` en toda la verificación, y en el repo convivían
     // dos cifras contradictorias en dos órdenes de magnitud para el mismo
@@ -136,20 +146,24 @@ pub async fn afinar(
     }
 
     let mut por_candidato: std::collections::HashMap<i64, Vec<Veredicto>> = Default::default();
+    let mut fallos: Vec<(String, String)> = Vec::new();
     if let Some(stdout) = hijo.stdout.take() {
         let mut lineas = BufReader::new(stdout).lines();
         while let Some(linea) = lineas.next_line().await? {
             let Ok(msg) = serde_json::from_str::<lumi_proto::worker::Msg>(&linea) else {
                 continue;
             };
-            if let lumi_proto::worker::Msg::Verificado {
-                candidato, verificador, inliers, lat, lng, ..
-            } = msg
-            {
-                por_candidato
-                    .entry(candidato)
-                    .or_default()
-                    .push(Veredicto { verificador, inliers, lat, lng });
+            match msg {
+                lumi_proto::worker::Msg::Verificado { candidato, verificador, inliers, lat, lng, .. } => {
+                    por_candidato
+                        .entry(candidato)
+                        .or_default()
+                        .push(Veredicto { verificador, inliers, lat, lng });
+                }
+                lumi_proto::worker::Msg::VerificadorFallo { verificador, motivo, .. } => {
+                    fallos.push((verificador, motivo));
+                }
+                _ => {}
             }
         }
     }
@@ -185,7 +199,8 @@ pub async fn afinar(
         inicio.elapsed().as_secs_f64(),
     );
 
-    Ok(construir_afinados(candidatos, rutas, &por_candidato, verificadores, store))
+    let informe = construir_informe(nivel, verificadores, &por_candidato, fallos, None);
+    Ok((construir_afinados(candidatos, rutas, &por_candidato, verificadores, store), informe))
 }
 
 /// El mismo trámite de siempre (mandar la orden, recoger un veredicto por
@@ -205,7 +220,7 @@ async fn afinar_persistente(
     persistente: &crate::persistente::Persistente,
     limpieza_activo: bool,
     store: &crate::store::Store,
-) -> Result<Vec<Afinado>> {
+) -> Result<(Vec<Afinado>, Informe)> {
     let inicio = std::time::Instant::now();
     let script = crate::assets::ruta("workers/lumi_verify.py");
     let lista: Vec<serde_json::Value> = candidatos
@@ -229,11 +244,19 @@ async fn afinar_persistente(
     ];
 
     let mut por_candidato: std::collections::HashMap<i64, Vec<Veredicto>> = Default::default();
+    let mut fallos: Vec<(String, String)> = Vec::new();
+    let mut caida: Option<String> = None;
     match persistente.pedir(dispositivo, &orden, python, &script, &envs, None).await {
         Ok(msgs) => {
             for msg in msgs {
-                if let lumi_proto::worker::Msg::Verificado { candidato, verificador, inliers, lat, lng, .. } = msg {
-                    por_candidato.entry(candidato).or_default().push(Veredicto { verificador, inliers, lat, lng });
+                match msg {
+                    lumi_proto::worker::Msg::Verificado { candidato, verificador, inliers, lat, lng, .. } => {
+                        por_candidato.entry(candidato).or_default().push(Veredicto { verificador, inliers, lat, lng });
+                    }
+                    lumi_proto::worker::Msg::VerificadorFallo { verificador, motivo, .. } => {
+                        fallos.push((verificador, motivo));
+                    }
+                    _ => {}
                 }
             }
         }
@@ -241,7 +264,10 @@ async fn afinar_persistente(
         // contesta no tumba el análisis, solo se queda sin verificación
         // geométrica — y se registra, para que no sea indistinguible de un
         // verificador que de verdad miró la foto y no encontró nada.
-        Err(e) => tracing::warn!("verificación geométrica persistente: {e}"),
+        Err(e) => {
+            tracing::warn!("verificación geométrica persistente: {e}");
+            caida = Some(format!("el trabajador de verificación no respondió: {e}"));
+        }
     }
 
     let max_inliers = por_candidato.values().flatten().map(|v| v.inliers).max().unwrap_or(0);
@@ -255,7 +281,39 @@ async fn afinar_persistente(
         inicio.elapsed().as_secs_f64(),
     );
 
-    Ok(construir_afinados(candidatos, rutas, &por_candidato, verificadores, store))
+    let informe = construir_informe(nivel, verificadores, &por_candidato, fallos, caida);
+    Ok((construir_afinados(candidatos, rutas, &por_candidato, verificadores, store), informe))
+}
+
+/// Quién corrió y quién no. «Corrió» = dio al menos un veredicto (aunque
+/// fueran cero inliers: miró la foto y no encontró nada, que es otra cosa).
+/// Los componentes (`tipo: "componente"`) no son verificadores y no cuentan.
+fn construir_informe(
+    nivel: &Nivel,
+    registro: &[Verificador],
+    por_candidato: &std::collections::HashMap<i64, Vec<Veredicto>>,
+    fallos: Vec<(String, String)>,
+    caida: Option<String>,
+) -> Informe {
+    let es_componente = |id: &str| registro.iter().any(|v| v.id == id && v.tipo == "componente");
+    let esperados: Vec<&String> = nivel.geometricos.iter().filter(|id| !es_componente(id)).collect();
+    let dieron: std::collections::HashSet<&str> =
+        por_candidato.values().flatten().map(|v| v.verificador.as_str()).collect();
+    let mut informe = Informe { esperados: esperados.len(), ..Default::default() };
+    for id in esperados {
+        if dieron.contains(id.as_str()) {
+            informe.corrieron.push(id.clone());
+        } else {
+            let motivo = fallos
+                .iter()
+                .find(|(v, _)| v == id)
+                .map(|(_, m)| m.clone())
+                .or_else(|| caida.clone())
+                .unwrap_or_else(|| "no dio ningún veredicto (ver el registro del servidor)".into());
+            informe.fallaron.push(lumi_proto::api::CapaFallida { id: id.clone(), motivo });
+        }
+    }
+    informe
 }
 
 fn construir_afinados(

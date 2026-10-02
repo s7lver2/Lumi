@@ -40,6 +40,11 @@ pub struct Modelo {
     /// proveedor y a traer un token propio — no se descarga desde aquí.
     #[serde(default)]
     pub puerta: Option<String>,
+    /// VRAM que ocupa el modelo cargado (MB), si se conoce de forma fiable.
+    /// Vacío significa «no se sabe»: la cola no adivina y se queda con el
+    /// límite fijo de ranuras. Nunca se inventa.
+    #[serde(default)]
+    pub vram_mb: Option<u32>,
 }
 
 /// Lee todos los `.json` del directorio. Un fichero ilegible o incompleto se

@@ -151,10 +151,75 @@ def _construir(verificador, pesos):
             extractor = ALIKED(model_name="aliked-n16", max_num_keypoints=4096).eval().to(DISPOSITIVO)
             matcher = LightGlue(features="aliked").eval().to(DISPOSITIVO)
         return (extractor, matcher)
+    if verificador == "efficient-loftr":
+        # NO PROBADO contra los pesos reales (aún sin aceptar licencia/sha256
+        # en ninguna instalación). Los pesos oficiales de la integración en
+        # `transformers` (`zju-community/efficientloftr`, Apache-2.0) llegan
+        # ya como state_dict (`_cargar` los lee con safetensors); la
+        # arquitectura se monta con la config por defecto de la clase y
+        # `load_state_dict` estricto: si esa config no fuera la del
+        # checkpoint, falla en voz alta (y el verificador se degrada y se
+        # avisa) en vez de correr con pesos a medias.
+        from transformers import (
+            EfficientLoFTRConfig, EfficientLoFTRForKeypointMatching, EfficientLoFTRImageProcessor,
+        )
+
+        modelo = EfficientLoFTRForKeypointMatching(EfficientLoFTRConfig())
+        modelo.load_state_dict(pesos)
+        return _Loftr(modelo.eval().to(DISPOSITIVO), EfficientLoFTRImageProcessor())
+    if verificador == "roma-v2":
+        # NO PROBADO contra los pesos reales. `RoMaV2()` descarga su
+        # checkpoint por su cuenta con `torch.hub.load_state_dict_from_url`
+        # (github.com/Parskatt/RoMaV2/releases/.../romav2.0.1.pt): se
+        # intercepta igual que con lightglue-aliked para que use el fichero
+        # que este registro ya verificó por sha256 y no baje nada.
+        from romav2 import RoMaV2
+
+        with _sin_descargas({"https://github.com/Parskatt/RoMaV2/releases/download/": pesos}):
+            modelo = RoMaV2()
+        return _RomaV2(modelo.to(DISPOSITIVO))
     raise ValueError(
         f"{verificador} no tiene una arquitectura conocida para reconstruir su state_dict "
         "-- hace falta añadir su caso en _construir(), igual que tiny-roma"
     )
+
+
+class _Loftr(object):
+    """EfficientLoFTR (semi-denso, vía `transformers`). Contrato común de los
+    verificadores que dan puntos emparejados directamente: `puntos(img_a,
+    img_b)` -> (kpts_a, kpts_b) en píxeles de cada imagen, que `_inliers_puntos`
+    pasa al MISMO RANSAC que usan roma y lightglue-aliked."""
+
+    def __init__(self, modelo, procesador):
+        self.modelo, self.procesador = modelo, procesador
+
+    def eval(self):
+        return self
+
+    def puntos(self, img_a, img_b):
+        entradas = self.procesador([[img_a, img_b]], return_tensors="pt").to(DISPOSITIVO)
+        salida = self.modelo(**entradas)
+        res = self.procesador.post_process_keypoint_matching(
+            salida, [[(img_a.height, img_a.width), (img_b.height, img_b.width)]], threshold=0.2,
+        )[0]
+        return res["keypoints0"].cpu().numpy(), res["keypoints1"].cpu().numpy()
+
+
+class _RomaV2(object):
+    """RoMa v2 (denso). Mismo contrato `puntos()` que `_Loftr`."""
+
+    def __init__(self, modelo):
+        self.modelo = modelo
+
+    def eval(self):
+        self.modelo.eval()
+        return self
+
+    def puntos(self, img_a, img_b):
+        preds = self.modelo.match(img_a, img_b)
+        parejas, _, _, _ = self.modelo.sample(preds, 5000)
+        ka, kb = self.modelo.to_pixel_coordinates(parejas, img_a.height, img_a.width, img_b.height, img_b.width)
+        return ka.cpu().numpy(), kb.cpu().numpy()
 
 
 #: Un verificador que falló una vez (sha256 sin rellenar, licencia sin
@@ -191,6 +256,9 @@ def _cargar(verificador):
         for v in lumi_pesos.quizas_purgar_por_presion(_cargados, _ultimo_uso, LIMPIEZA_PRESION, necesita_mb):
             _log("verificador %s desalojado por presion de memoria" % v)
 
+        for v in lumi_pesos.liberar_vram_para(_cargados, _ultimo_uso, necesita_mb):
+            _log("verificador %s desalojado por falta de VRAM" % v)
+
         ficha = lumi_pesos._ficha(verificador, REGISTRO)
         directorio = os.path.join(PESOS, verificador)
         ruta = os.path.join(directorio, "pesos.pth")
@@ -201,13 +269,27 @@ def _cargar(verificador):
         # básico de tensores, nada de pickling arbitrario) y por qué hace
         # falta `_construir` -- cargarlo tal cual y llamar `.eval()` fallaba
         # con "'collections.OrderedDict' object has no attribute 'eval'".
-        pesos = torch.load(ruta, map_location=DISPOSITIVO, weights_only=True)
+        if verificador == "efficient-loftr":
+            # Se publica como .safetensors (HF), no como pickle de torch.
+            from safetensors.torch import load_file
+            pesos = load_file(ruta)
+        else:
+            pesos = torch.load(ruta, map_location=DISPOSITIVO, weights_only=True)
         m = _construir(verificador, pesos)
     except Exception as e:
         # Cachear también el fallo: sin esto, un verificador roto se
         # reintentaba una vez por candidato (hasta 12 veces por análisis),
         # cada una desde el SHA-256 completo del fichero de pesos.
-        _fallidos[verificador] = e
+        # Salvo un OOM: es transitorio (depende de qué más haya en la GPU) y
+        # cachearlo dejaría al verificador muerto durante toda la vida de un
+        # proceso persistente.
+        try:
+            import lumi_pesos
+            oom = lumi_pesos.es_oom(e)
+        except Exception:
+            oom = False
+        if not oom:
+            _fallidos[verificador] = e
         raise
     # lightglue-aliked devuelve (extractor, matcher) en vez de un solo
     # módulo -- cada uno ya sale de _construir en modo eval, así que aquí
@@ -295,6 +377,26 @@ def _inliers(matcher, consulta, candidato, cache_redim=None):
             return 0
         kpts_a, kpts_b = matcher.to_pixel_coordinates(parejas, alto_a, ancho_a, alto_b, ancho_b)
         kpts_a, kpts_b = kpts_a.cpu().numpy(), kpts_b.cpu().numpy()
+    _, mascara = cv2.findFundamentalMat(
+        kpts_a, kpts_b, method=cv2.USAC_MAGSAC, ransacReprojThreshold=0.2, confidence=0.999999, maxIters=10000,
+    )
+    return int(np.sum(mascara)) if mascara is not None else 0
+
+
+def _inliers_puntos(m, consulta, candidato, cache_redim=None):
+    """Verificadores que dan puntos emparejados ya hechos (`_Loftr`,
+    `_RomaV2`): mismo RANSAC (MAGSAC, umbral/confianza/iteraciones de
+    `_inliers`) y misma salida, el número de inliers. El umbral que decide si
+    basta lo pone `umbral_inliers` de su ficha, no este fichero."""
+    import cv2
+    import numpy as np
+    import torch
+
+    img_a, img_b = _redimensionar(consulta, cache_redim), _redimensionar(candidato, cache_redim)
+    with torch.inference_mode():
+        kpts_a, kpts_b = m.puntos(img_a, img_b)
+    if len(kpts_a) < 8:
+        return 0
     _, mascara = cv2.findFundamentalMat(
         kpts_a, kpts_b, method=cv2.USAC_MAGSAC, ransacReprojThreshold=0.2, confidence=0.999999, maxIters=10000,
     )
@@ -392,6 +494,11 @@ def _verificar(job):
     # de un análisis no tienen por qué significar lo mismo en el siguiente).
     cache_redim = {}
     cache_feats_consulta = {}
+    # Quién dio al menos un veredicto y qué error tuvo cada uno que no: se
+    # avisa al final (`verificador_fallo`) para que el daemon degrade y se lo
+    # diga al usuario en vez de seguir en silencio.
+    dieron = set()
+    errores = {}
     for cand in job["candidatos"]:
         for verificador in verificadores:
             try:
@@ -401,14 +508,26 @@ def _verificar(job):
                 # verificador hoy o en el futuro cercano necesita dos redes,
                 # así que el tipo de `m` ya basta como señal, sin una tabla
                 # de despacho aparte.
-                n = _inliers_disperso(m, consulta, cand["ruta"], cache_redim, cache_feats_consulta) \
-                    if isinstance(m, tuple) else _inliers(m, consulta, cand["ruta"], cache_redim)
+                if isinstance(m, tuple):
+                    n = _inliers_disperso(m, consulta, cand["ruta"], cache_redim, cache_feats_consulta)
+                elif hasattr(m, "puntos"):
+                    n = _inliers_puntos(m, consulta, cand["ruta"], cache_redim)
+                else:
+                    n = _inliers(m, consulta, cand["ruta"], cache_redim)
             except Exception as e:
                 _log("verificador %s sobre %s: %s" % (verificador, cand["id"], e))
+                import lumi_pesos
+                errores.setdefault(verificador, (
+                    "sin memoria suficiente (VRAM): %s" if lumi_pesos.es_oom(e) else "%s") % e)
                 continue
+            dieron.add(verificador)
             fuera.append({"tipo": "verificado", "id": job["id"], "candidato": cand["id"],
                           "verificador": verificador, "inliers": n,
                           "lat": cand["lat"], "lng": cand["lng"]})
+    for verificador, motivo in errores.items():
+        if verificador not in dieron:
+            fuera.append({"tipo": "verificador_fallo", "id": job["id"],
+                          "verificador": verificador, "motivo": motivo})
     # Antes esto se llamaba tras CADA candidato (`finally` dentro del bucle):
     # `empty_cache()` sincroniza el dispositivo y devuelve los bloques al
     # driver, así que la siguiente asignación tiene que volver a `cudaMalloc`
